@@ -37,10 +37,11 @@ def test_fixture_parses_to_valid_unit(slug: str) -> None:
     assert result.unit.id == slug
 
 
-def test_spearmen_match_hand_authored_yaml() -> None:
-    """The importer reproduces the hand-authored reference unit."""
-    imported = parse_unit(load_fixture("elven-spearmen")).unit
-    path = DATA_DIR / "tow/armies/high-elf-realms/units/elven-spearmen.yaml"
+@pytest.mark.parametrize("slug", ["elven-spearmen", "elven-archers"])
+def test_reference_units_match_hand_authored_yaml(slug: str) -> None:
+    """The importer reproduces the hand-authored reference units."""
+    imported = parse_unit(load_fixture(slug)).unit
+    path = DATA_DIR / f"tow/armies/high-elf-realms/units/{slug}.yaml"
     hand = Unit.model_validate(yaml.safe_load(path.read_text()))
     assert imported == hand
 

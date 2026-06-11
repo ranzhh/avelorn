@@ -47,15 +47,23 @@ def text_of(node: Node, *, links_as_names: bool = False) -> str:
     )
 
 
-def linked_rule_names(node: Node) -> list[str]:
-    """Names of `rule` entries linked anywhere under `node`, in document order."""
+def linked_rule_names(node: Node, *, as_displayed: bool = False) -> list[str]:
+    """Names of `rule` entries linked anywhere under `node`, in document order.
+
+    By default this is the linked entry's canonical `name`; with
+    `as_displayed=True` it is the link's visible text instead — the name as
+    printed in context (e.g. the "Detachment" rule links to the entry named
+    "Detachment Special Rules", a rules-section page).
+    """
     names: list[str] = []
 
     def walk(n: Node) -> None:
         target = _link_target(n)
-        if target is not None:
+        if target is not None and _entry_content_type(target) == "rule":
             name = target.get("fields", {}).get("name")
-            if name and _entry_content_type(target) == "rule" and name not in names:
+            if as_displayed:
+                name = text_of(n).strip() or name
+            if name and name not in names:
                 names.append(name)
         for child in n.get("content", []):
             walk(child)

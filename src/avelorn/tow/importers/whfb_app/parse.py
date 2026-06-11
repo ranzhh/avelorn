@@ -60,8 +60,13 @@ def parse_unit(entry: Node) -> ImportResult:
         troop_type=_parse_troop_type(slug, fields, warnings),
         base_size=_parse_base_size(slug, fields.get("baseSize"), warnings),
         profiles=_parse_profiles(slug, _require(fields, slug, "unitProfile")),
+        # Equipment is prose, so display text is unusable ("thrusting
+        # spears"): use canonical entry names. The special-rules field is a
+        # bare list whose display text is the rule name as printed, which
+        # can differ from the linked entry ("Detachment" links to the
+        # "Detachment Special Rules" section).
         equipment=_rule_list(slug, "equipment", fields, warnings),
-        special_rules=_rule_list(slug, "specialRules", fields, warnings),
+        special_rules=_rule_list(slug, "specialRules", fields, warnings, as_displayed=True),
         options=_parse_options(slug, fields.get("options"), warnings),
     )
     return ImportResult(unit=unit, warnings=warnings)
@@ -124,14 +129,16 @@ def _parse_profiles(slug: str, raw_profiles: object) -> list[Profile]:
     return profiles
 
 
-def _rule_list(slug: str, key: str, fields: Node, warnings: list[str]) -> list[str]:
+def _rule_list(
+    slug: str, key: str, fields: Node, warnings: list[str], as_displayed: bool = False
+) -> list[str]:
     """Linked rule names of a rich-text field, verifying the visible text
     contains nothing beyond those links and separators."""
     doc = fields.get(key)
     if doc is None:
         return []
-    names = richtext.linked_rule_names(doc)
-    leftover = richtext.text_of(doc, links_as_names=True)
+    names = richtext.linked_rule_names(doc, as_displayed=as_displayed)
+    leftover = richtext.text_of(doc, links_as_names=not as_displayed)
     for name in names:
         leftover = leftover.replace(name, "", 1)
     leftover = re.sub(r"[\s,]|\band\b", "", leftover)
