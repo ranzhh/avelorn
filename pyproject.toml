@@ -6,3 +6,45 @@ authors = [{ name = "Matteo Ranzetti", email = "ranzetti.matteo@gmail.com" }]
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = []
+
+[dependency-groups]
+dev = ["pre-commit", "ruff>=0.15", "ty>=0.0.39"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+cache-dir = "~/.cache/ruff"
+line-length = 99
+
+[tool.ruff.lint]
+# preview is required for the DOC (pydoclint) rules, which are preview-only
+preview = true
+select = [
+    "ERA", # Eradicate: raises issues when it finds commented-out code.
+    "F",   # Pyflakes: general rules
+    "E",   # pycodestyle
+    "DOC", # pydoclint: ensures every documentation and args etc on functions
+    "D",   # pydocstyle: style of documentation and what can be undocumented
+    "I",   # isort: Sort imports
+    "UP",  # pyupgrade: stylistic upgrades for the current python-version
+    "B",   # flake8-bugbear
+    "G",   # flake8-logging-format
+    "T20", # flake8-print
+    "Q",   # flake8-quotes
+    "SIM", # flake8-simplify
+    "TRY", # tryceratops
+    "ANN401", # flake8-annotations: disallow typing.Any in annotations
+    "RUF001", # ruff: ambiguous unicode char in a string - prefer ASCII
+    "RUF002", # ruff: ambiguous unicode char in a docstring - prefer ASCII
+    "RUF003", # ruff: ambiguous unicode char in a comment - prefer ASCII
+]
+ignore = ["TRY003"]
+
+[tool.ruff.lint.flake8-annotations]
+# *args/**kwargs pass-throughs need Any to typecheck at the forwarding call site
+allow-star-arg-any = true
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
