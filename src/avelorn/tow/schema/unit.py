@@ -72,16 +72,16 @@ class TroopType(StrEnum):
     REGULAR_INFANTRY = "Regular Infantry"
     HEAVY_INFANTRY = "Heavy Infantry"
     MONSTROUS_INFANTRY = "Monstrous Infantry"
-    SWARMS = "Swarms"
+    SWARM = "Swarm"
     LIGHT_CAVALRY = "Light Cavalry"
     HEAVY_CAVALRY = "Heavy Cavalry"
     MONSTROUS_CAVALRY = "Monstrous Cavalry"
-    WAR_BEASTS = "War Beasts"
-    LIGHT_CHARIOTS = "Light Chariots"
-    HEAVY_CHARIOTS = "Heavy Chariots"
-    MONSTROUS_CREATURES = "Monstrous Creatures"
-    BEHEMOTHS = "Behemoths"
-    WAR_MACHINES = "War Machines"
+    WAR_BEAST = "War Beast"
+    LIGHT_CHARIOT = "Light Chariot"
+    HEAVY_CHARIOT = "Heavy Chariot"
+    MONSTROUS_CREATURE = "Monstrous Creature"
+    BEHEMOTH = "Behemoth"
+    WAR_MACHINE = "War Machine"
 
 
 class OptionKind(StrEnum):
