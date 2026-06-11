@@ -113,6 +113,12 @@ def shoot_unit(
         ValueError: if the attacker profile has no Ballistic Skill or the
             defender profile has no Toughness.
     """
+    # TODO: profile selection is naive. A unit that bought a champion
+    # shoots with the champion too (possibly at higher BS, e.g. an
+    # archers' Sentinel at BS 5), and units with split profiles need
+    # per-profile resolution with the volley combined. Requires a notion
+    # of unit composition (which models are actually fielded), which the
+    # schema does not have yet.
     ballistic_skill = attacker.profiles[0].ballistic_skill
     toughness = defender.profiles[0].toughness
     if ballistic_skill is None:

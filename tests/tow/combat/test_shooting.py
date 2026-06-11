@@ -64,6 +64,25 @@ def test_shoot_unit_archers_vs_spearmen() -> None:
     assert any("Valour of Ages" in note for note in result.notes)
 
 
+def test_defender_size_does_not_affect_wounds() -> None:
+    """Wounds depend on the shooters, not on how many models receive them.
+
+    Regression guard: 3 archers shooting 20 spearmen and 3 archers
+    shooting 30 spearmen must produce the identical wound distribution.
+    """
+    archers = load_unit("high-elf-realms", "elven-archers")
+    spearmen = load_unit("high-elf-realms", "elven-spearmen")
+    twenty = spearmen.model_copy(update={"unit_size": {"min": 20, "max": 20}}, deep=True)
+    thirty = spearmen.model_copy(update={"unit_size": {"min": 30, "max": 30}}, deep=True)
+
+    vs_twenty = shoot_unit(archers, twenty, shooters=3, weapon=LONGBOW)
+    vs_thirty = shoot_unit(archers, thirty, shooters=3, weapon=LONGBOW)
+
+    assert vs_twenty.p_unsaved == vs_thirty.p_unsaved
+    assert vs_twenty.distribution == vs_thirty.distribution
+    assert vs_twenty.expected_wounds == vs_thirty.expected_wounds
+
+
 def test_shoot_unit_rejects_missing_ballistic_skill() -> None:
     """A unit whose profile has BS "-" cannot shoot."""
     spearmen = load_unit("high-elf-realms", "elven-spearmen")
