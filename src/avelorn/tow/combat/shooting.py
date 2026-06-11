@@ -69,9 +69,12 @@ def shoot(
     Returns:
         The per-shot probabilities and the distribution of unsaved wounds.
     """
-    hit = shooting_hit_target(ballistic_skill, hit_modifier)
-    wound = wound_target(strength, toughness)
-    save = armour_save_target(armour_value, armour_piercing)
+if shots < 0:
+    raise ValueError("shots must be >= 0")
+
+hit = shooting_hit_target(ballistic_skill, hit_modifier)
+wound = wound_target(strength, toughness)
+save = armour_save_target(armour_value, armour_piercing)
 
     p_hit = hit_probability(hit)
     p_wound = p_d6_at_least(wound) if wound is not None else 0.0
