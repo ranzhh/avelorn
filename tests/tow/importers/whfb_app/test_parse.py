@@ -42,12 +42,7 @@ def test_spearmen_match_hand_authored_yaml() -> None:
     imported = parse_unit(load_fixture("elven-spearmen")).unit
     path = DATA_DIR / "tow/armies/high-elf-realms/units/elven-spearmen.yaml"
     hand = Unit.model_validate(yaml.safe_load(path.read_text()))
-
-    # Equipment naming differs in case only: the site's canonical rule
-    # entries are title case ("Hand Weapon"), the hand-authored file uses
-    # the book's sentence case ("Hand weapon"). Open data question.
-    assert [e.lower() for e in imported.equipment] == [e.lower() for e in hand.equipment]
-    assert imported.model_dump(exclude={"equipment"}) == hand.model_dump(exclude={"equipment"})
+    assert imported == hand
 
 
 def test_archers_parse_cleanly() -> None:
@@ -66,7 +61,7 @@ def test_archers_parse_cleanly() -> None:
 def test_war_machine_compound_base_size_left_unset() -> None:
     result = parse_unit(load_fixture("eagle-claw-bolt-thrower"))
     unit = result.unit
-    assert unit.troop_type is TroopType.WAR_MACHINES
+    assert unit.troop_type is TroopType.WAR_MACHINE
     assert unit.unit_size == UnitSize(min=1, max=1)
     assert unit.base_size is None
     assert any("base size" in w for w in result.warnings)

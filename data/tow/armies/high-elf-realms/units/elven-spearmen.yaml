@@ -12,9 +12,9 @@ profiles:
   - { name: Elven Spearman, M: 5, WS: 4, BS: 4, S: 3, T: 3, W: 1, I: 4, A: 1, Ld: 8 }
   - { name: Sentinel, M: 5, WS: 4, BS: 4, S: 3, T: 3, W: 1, I: 4, A: 2, Ld: 8 }
 equipment:
-  - Hand weapon
-  - Thrusting spear
-  - Light armour
+  - Hand Weapon
+  - Thrusting Spear
+  - Light Armour
   - Shield
 special_rules:
   - Close Order
