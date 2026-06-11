@@ -39,6 +39,11 @@ _Dumper.add_representer(
 
 
 def unit_to_yaml(unit: Unit, source_url: str | None = None) -> str:
+    """Serialize a unit for data/, with its source URL as a header comment.
+
+    Returns:
+        The YAML document text.
+    """
     doc: dict = {
         "id": unit.id,
         "name": unit.name,

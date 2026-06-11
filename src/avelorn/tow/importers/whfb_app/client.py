@@ -22,16 +22,26 @@ _USER_AGENT = "avelorn-importer/0.1 (unit data importer)"
 
 
 class WhfbAppError(Exception):
-    pass
+    """The site could not be reached or returned an unusable response."""
 
 
 class WhfbAppClient:
+    """Fetches whfb.app pages through the Next.js JSON data routes."""
+
     def __init__(self, base_url: str = BASE_URL) -> None:
+        """Create a client; the build id is discovered on first use."""
         self.base_url = base_url.rstrip("/")
         self._build_id: str | None = None
 
     def unit_entry(self, slug: str) -> dict:
-        """The fully resolved `armyListEntry` for a unit page."""
+        """Fetch the fully resolved `armyListEntry` for a unit page.
+
+        Returns:
+            The entry as embedded in the page payload.
+
+        Raises:
+            WhfbAppError: The page has no unit entry (e.g. unknown slug).
+        """
         props = self._page_props(f"unit/{slug}")
         entry = props.get("entry")
         if not entry:
@@ -39,7 +49,11 @@ class WhfbAppClient:
         return entry
 
     def army_unit_slugs(self, army_slug: str) -> list[str]:
-        """Slugs of every unit listed on an army page."""
+        """Fetch an army page and list its units.
+
+        Returns:
+            The slug of every unit listed on the page.
+        """
         props = self._page_props(f"army/{army_slug}")
         return [u["fields"]["slug"] for u in props.get("units", [])]
 

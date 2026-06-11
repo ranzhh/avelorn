@@ -6,13 +6,21 @@ from avelorn.tow.schema.unit import OptionKind
 
 
 def parse_line(text: str, limit: str | None = None) -> tuple:
+    """Parse one option line.
+
+    Returns:
+        The parsed option and any warnings.
+    """
     warnings: list[str] = []
     option = _parse_option_line("test", OptionLine(text=text, rules=[]), limit, warnings)
     return option, warnings
 
 
 def test_champion_upgrade() -> None:
-    option, warnings = parse_line("Upgrade one model to a Sentinel (champion) (+5 points per unit)")
+    """A "(champion)"-marked upgrade becomes a champion option."""
+    option, warnings = parse_line(
+        "Upgrade one model to a Sentinel (champion) (+5 points per unit)"
+    )
     assert warnings == []
     assert option.kind is OptionKind.CHAMPION
     assert option.name == "Sentinel"
@@ -21,6 +29,7 @@ def test_champion_upgrade() -> None:
 
 
 def test_standard_bearer_and_musician_upgrades() -> None:
+    """Command upgrades are recognised by role keyword."""
     bearer, _ = parse_line("Upgrade one model to a standard bearer (+5 points per unit)")
     assert bearer.kind is OptionKind.STANDARD_BEARER
     assert bearer.name == "Standard bearer"
@@ -30,12 +39,14 @@ def test_standard_bearer_and_musician_upgrades() -> None:
 
 
 def test_unknown_upgrade_target_warns() -> None:
+    """An upgrade to an unknown role degrades to kind=other."""
     option, warnings = parse_line("Upgrade one model to a Battle Goat (+5 points per unit)")
     assert option.kind is OptionKind.OTHER
     assert warnings
 
 
 def test_special_rule_purchase() -> None:
+    """Buying a special rule records it in adds_rules."""
     option, warnings = parse_line(
         "Any unit of Elven Spearmen may have the Shieldwall special rule (+10 points per unit)"
     )
@@ -47,6 +58,7 @@ def test_special_rule_purchase() -> None:
 
 
 def test_special_rule_swap() -> None:
+    """Replacing a rule records both sides and the group limit."""
     option, _ = parse_line(
         "Replace the Valour of Ages special rule with Veteran (+1 point per model)",
         limit="0-1 unit per 1000 points",
@@ -60,13 +72,17 @@ def test_special_rule_swap() -> None:
 
 
 def test_equipment_take() -> None:
-    option, warnings = parse_line("Any unit of Elven Archers may take Light Armour (+1 point per model)")
+    """Taking equipment records it in adds_equipment."""
+    option, warnings = parse_line(
+        "Any unit of Elven Archers may take Light Armour (+1 point per model)"
+    )
     assert warnings == []
     assert option.kind is OptionKind.EQUIPMENT
     assert option.name == "Light Armour"
 
 
 def test_magic_standard() -> None:
+    """A magic standard becomes a points budget, not a flat cost."""
     option, warnings = parse_line("Purchase a magic standard worth up to 50 points")
     assert warnings == []
     assert option.kind is OptionKind.MAGIC_STANDARD
@@ -75,6 +91,7 @@ def test_magic_standard() -> None:
 
 
 def test_unknown_line_kept_verbatim_with_warning() -> None:
+    """An unmatched line is kept verbatim with a warning."""
     option, warnings = parse_line("May ride a war hippogriff (+200 points per unit)")
     assert option.kind is OptionKind.OTHER
     assert option.name == "May ride a war hippogriff"
@@ -83,6 +100,7 @@ def test_unknown_line_kept_verbatim_with_warning() -> None:
 
 
 def test_group_limits() -> None:
+    """Group headers map to limits; unknown headers are kept verbatim."""
     warnings: list[str] = []
     assert _parse_group_limit("test", "Any unit may:", warnings) is None
     assert _parse_group_limit("test", "The entire unit may:", warnings) is None

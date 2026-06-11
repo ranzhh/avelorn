@@ -28,11 +28,14 @@ def _entry_content_type(entry: Node) -> str | None:
 
 
 def text_of(node: Node, *, links_as_names: bool = False) -> str:
-    """Visible text of a node.
+    """Render a node's visible text.
 
     Links render as their display text by default, or as the linked entry's
     canonical `name` with `links_as_names=True` (display text varies in case
     and number, e.g. "thrusting spears" linking to "Thrusting Spear").
+
+    Returns:
+        The concatenated text of the node's subtree.
     """
     if node.get("nodeType") == "text":
         return node["value"]
@@ -48,7 +51,11 @@ def text_of(node: Node, *, links_as_names: bool = False) -> str:
 
 
 def linked_rules(node: Node) -> list[tuple[str, str]]:
-    """(display text, entry name) of each `rule` link under `node`, in order."""
+    """Collect the `rule` links under `node`.
+
+    Returns:
+        A (display text, entry name) pair per link, in document order.
+    """
     pairs: list[tuple[str, str]] = []
 
     def walk(n: Node) -> None:
@@ -65,12 +72,15 @@ def linked_rules(node: Node) -> list[tuple[str, str]]:
 
 
 def linked_rule_names(node: Node, *, as_displayed: bool = False) -> list[str]:
-    """Names of `rule` entries linked anywhere under `node`, in document order.
+    """Name the `rule` entries linked anywhere under `node`.
 
     By default this is the linked entry's canonical `name`; with
     `as_displayed=True` it is the link's visible text instead — the name as
     printed in context (e.g. the "Detachment" rule links to the entry named
     "Detachment Special Rules", a rules-section page).
+
+    Returns:
+        The names in document order, deduplicated.
     """
     names: list[str] = []
     for display, name in linked_rules(node):
@@ -89,18 +99,28 @@ class OptionLine:
 
 
 def _own_line(item: Node) -> OptionLine:
-    """The item's own text and links, excluding any nested list."""
-    direct = [child for child in item.get("content", []) if child.get("nodeType") not in ("unordered-list", "ordered-list")]
+    """Render a list item without its nested list.
+
+    Returns:
+        The item's own text and links.
+    """
+    direct = [
+        child
+        for child in item.get("content", [])
+        if child.get("nodeType") not in ("unordered-list", "ordered-list")
+    ]
     wrapper: Node = {"content": direct}
     text = " ".join(text_of(wrapper, links_as_names=True).split())
     return OptionLine(text=text, rules=linked_rule_names(wrapper))
 
 
 def option_lines(doc: Node) -> list[tuple[OptionLine, list[OptionLine]]]:
-    """Top-level bullet items of an options document, each with its sub-items.
+    """Split an options document into its top-level bullet items.
 
-    A flat option is a `(line, [])` pair; a group ("Any unit may:" followed
-    by a nested list) is `(header, [sub-lines...])`.
+    Returns:
+        One (line, sub-items) pair per item: a flat option is `(line, [])`,
+        a group ("Any unit may:" followed by a nested list) is
+        `(header, [sub-lines...])`.
     """
     items: list[tuple[OptionLine, list[OptionLine]]] = []
     for block in doc.get("content", []):

@@ -1,8 +1,8 @@
 """Import units from tow.whfb.app into data/.
 
-    python -m avelorn.tow.importers.whfb_app unit elven-archers
-    python -m avelorn.tow.importers.whfb_app unit elven-archers --army high-elf-realms
-    python -m avelorn.tow.importers.whfb_app army high-elf-realms
+python -m avelorn.tow.importers.whfb_app unit elven-archers
+python -m avelorn.tow.importers.whfb_app unit elven-archers --army high-elf-realms
+python -m avelorn.tow.importers.whfb_app army high-elf-realms
 """
 
 from __future__ import annotations
@@ -17,6 +17,11 @@ from .yamlout import unit_to_yaml
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run the importer CLI.
+
+    Returns:
+        The process exit code.
+    """
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--data-dir", type=Path, default=Path("data"))
     common.add_argument("--dry-run", action="store_true", help="print YAML instead of writing")
@@ -26,7 +31,9 @@ def main(argv: list[str] | None = None) -> int:
 
     unit_cmd = sub.add_parser("unit", parents=[common], help="import a single unit by slug")
     unit_cmd.add_argument("slug")
-    unit_cmd.add_argument("--army", help="army slug; resolved from the unit's associations if omitted")
+    unit_cmd.add_argument(
+        "--army", help="army slug; resolved from the unit's associations if omitted"
+    )
 
     army_cmd = sub.add_parser("army", parents=[common], help="import every unit of an army")
     army_cmd.add_argument("slug")
@@ -93,6 +100,12 @@ def _resolve_army(client: WhfbAppClient, entry: dict) -> str:
 
     `association` mixes source books and armies (e.g. "Forces of Fantasy"
     and "High Elf Realms"); the army is the one whose page lists the unit.
+
+    Returns:
+        The army slug.
+
+    Raises:
+        WhfbAppError: No association page lists the unit.
     """
     slug = entry["fields"]["slug"]
     candidates = [a["fields"]["slug"] for a in reversed(entry["fields"].get("association", []))]

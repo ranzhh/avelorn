@@ -27,11 +27,17 @@ DATA_DIR = Path(__file__).parents[4] / "data"
 
 
 def load_fixture(slug: str) -> dict:
+    """Load a captured unit entry.
+
+    Returns:
+        The entry as a dict.
+    """
     return json.loads((FIXTURES / f"{slug}.json").read_text())
 
 
 @pytest.mark.parametrize("slug", [p.stem for p in FIXTURES.glob("*.json")])
 def test_fixture_parses_to_valid_unit(slug: str) -> None:
+    """Every captured payload maps onto a valid Unit."""
     result = parse_unit(load_fixture(slug))
     assert isinstance(result, ImportResult)
     assert result.unit.id == slug
@@ -47,6 +53,7 @@ def test_reference_units_match_hand_authored_yaml(slug: str) -> None:
 
 
 def test_archers_parse_cleanly() -> None:
+    """A regular regiment imports with zero warnings."""
     result = parse_unit(load_fixture("elven-archers"))
     assert result.warnings == []
     unit = result.unit
@@ -61,6 +68,7 @@ def test_archers_parse_cleanly() -> None:
 
 
 def test_war_machine_compound_base_size_left_unset() -> None:
+    """A compound base size is left unset and warned about."""
     result = parse_unit(load_fixture("eagle-claw-bolt-thrower"))
     unit = result.unit
     assert unit.troop_type is TroopType.WAR_MACHINE
@@ -77,6 +85,7 @@ def test_war_machine_compound_base_size_left_unset() -> None:
 
 
 def test_reavers_options_and_warnings() -> None:
+    """Cavalry options parse and schema gaps surface as warnings."""
     result = parse_unit(load_fixture("ellyrian-reavers"))
     unit = result.unit
     assert unit.troop_type is TroopType.LIGHT_CAVALRY
@@ -104,6 +113,7 @@ def test_reavers_options_and_warnings() -> None:
 
 
 def test_character_troop_type_is_unsupported() -> None:
+    """Characters are skipped, not mangled into units."""
     entry = load_fixture("elven-spearmen")
     entry["fields"]["troopType"][0]["fields"]["name"] = "Character"
     with pytest.raises(UnsupportedUnit):
@@ -111,6 +121,7 @@ def test_character_troop_type_is_unsupported() -> None:
 
 
 def test_unknown_troop_type_is_an_error() -> None:
+    """A troop type outside the enum fails loudly."""
     entry = load_fixture("elven-spearmen")
     entry["fields"]["troopType"][0]["fields"]["name"] = "Irregular Infantry"
     with pytest.raises(WhfbParseError):
@@ -118,6 +129,7 @@ def test_unknown_troop_type_is_an_error() -> None:
 
 
 def test_unparseable_unit_size_is_an_error() -> None:
+    """A unit size matching no known pattern fails loudly."""
     entry = load_fixture("elven-spearmen")
     entry["fields"]["unitSize"] = "varies"
     with pytest.raises(WhfbParseError):

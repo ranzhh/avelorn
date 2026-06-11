@@ -41,11 +41,21 @@ class UnsupportedUnit(Exception):
 
 @dataclass
 class ImportResult:
+    """A parsed unit plus everything the parser was unsure about."""
+
     unit: Unit
     warnings: list[str]
 
 
 def parse_unit(entry: Node) -> ImportResult:
+    """Parse a whfb.app `armyListEntry` into a Unit.
+
+    Returns:
+        The unit and the warnings raised while mapping it.
+
+    Raises:
+        WhfbParseError: A required field is missing or unparseable.
+    """
     fields = entry.get("fields", {})
     slug = fields.get("slug")
     if not slug:
@@ -54,12 +64,12 @@ def parse_unit(entry: Node) -> ImportResult:
 
     unit = Unit(
         id=slug,
-        name=_require(fields, slug, "name"),
-        points=_require(fields, slug, "cost"),
-        unit_size=_parse_unit_size(slug, _require(fields, slug, "unitSize")),
+        name=_require(fields, slug, "name", str),
+        points=_require(fields, slug, "cost", int),
+        unit_size=_parse_unit_size(slug, _require(fields, slug, "unitSize", object)),
         troop_type=_parse_troop_type(slug, fields, warnings),
         base_size=_parse_base_size(slug, fields.get("baseSize"), warnings),
-        profiles=_parse_profiles(slug, _require(fields, slug, "unitProfile")),
+        profiles=_parse_profiles(slug, _require(fields, slug, "unitProfile", list)),
         # Equipment is prose, so display text is unusable ("thrusting
         # spears"): use canonical entry names. The special-rules field is a
         # bare list whose display text is the rule name as printed, which
@@ -72,17 +82,19 @@ def parse_unit(entry: Node) -> ImportResult:
     return ImportResult(unit=unit, warnings=warnings)
 
 
-def _require(fields: Node, slug: str, key: str) -> object:
-    if key not in fields:
-        raise WhfbParseError(f"{slug}: missing required field {key!r}")
-    return fields[key]
+def _require[T](fields: Node, slug: str, key: str, kind: type[T]) -> T:
+    value = fields.get(key)
+    if not isinstance(value, kind):
+        raise WhfbParseError(f"{slug}: missing or invalid required field {key!r}")
+    return value
 
 
 def _parse_unit_size(slug: str, raw: object) -> UnitSize:
     text = str(raw).strip()
     if m := re.fullmatch(r"(\d+)\+", text):
         return UnitSize(min=int(m.group(1)))
-    if m := re.fullmatch(r"(\d+)\s*[-–]\s*(\d+)", text):
+    # the dash class covers both hyphen and en dash range separators
+    if m := re.fullmatch(r"(\d+)\s*[-\u2013]\s*(\d+)", text):
         return UnitSize(min=int(m.group(1)), max=int(m.group(2)))
     if m := re.fullmatch(r"\d+", text):
         return UnitSize(min=int(text), max=int(text))
@@ -93,7 +105,9 @@ def _parse_troop_type(slug: str, fields: Node, warnings: list[str]) -> TroopType
     names = [t["fields"]["name"] for t in fields.get("troopType", [])]
     unsupported = [n for n in names if n in _UNSUPPORTED_TROOP_TYPES]
     if unsupported:
-        raise UnsupportedUnit(f"{slug}: troop type {unsupported[0]!r} is not in the unit schema yet")
+        raise UnsupportedUnit(
+            f"{slug}: troop type {unsupported[0]!r} is not in the unit schema yet"
+        )
     try:
         types = [TroopType(n) for n in names]
     except ValueError:
@@ -124,22 +138,34 @@ def _parse_profiles(slug: str, raw_profiles: object) -> list[Profile]:
         raise WhfbParseError(f"{slug}: unitProfile is empty")
     profiles = []
     for row in raw_profiles:
+        if not isinstance(row, dict):
+            raise WhfbParseError(f"{slug}: malformed profile row {row!r}")
         data = {"name": row.get("Name", "")} | {k: row.get(k, "-") for k in _STAT_KEYS}
         profiles.append(Profile.model_validate(data))
     return profiles
 
 
 def _normalized(name: str) -> str:
-    """Case- and plural-insensitive form for comparing a link's display
-    text with its entry name."""
+    """Lowercase and de-pluralize a name.
+
+    Returns:
+        A form for case- and plural-insensitive comparison of a link's
+        display text with its entry name.
+    """
     return " ".join(w.removesuffix("s") for w in name.lower().split())
 
 
 def _rule_list(
     slug: str, key: str, fields: Node, warnings: list[str], as_displayed: bool = False
 ) -> list[str]:
-    """Linked rule names of a rich-text field, verifying the visible text
-    contains nothing beyond those links and separators."""
+    """Collect a rich-text field's linked rule names.
+
+    Verifies that the visible text contains nothing beyond those links and
+    separators.
+
+    Returns:
+        The linked names, in document order.
+    """
     doc = fields.get(key)
     if doc is None:
         return []
@@ -152,7 +178,8 @@ def _rule_list(
         for display, name in richtext.linked_rules(doc):
             if display and _normalized(display) != _normalized(name):
                 warnings.append(
-                    f"{slug}: {key} displayed as {display!r} but linked entry is {name!r}; kept {name!r}"
+                    f"{slug}: {key} displayed as {display!r} "
+                    f"but linked entry is {name!r}; kept {name!r}"
                 )
     leftover = richtext.text_of(doc, links_as_names=not as_displayed)
     for name in names:
@@ -176,7 +203,9 @@ _RULE_ADD_RE = re.compile(r"^have the\s+(.+?)\s+special rule$", re.I)
 _RULE_SWAP_RE = re.compile(r"^replace the\s+(.+?)\s+special rule with\s+(.+)$", re.I)
 _TAKE_RE = re.compile(r"^take\s+(.+)$", re.I)
 _EQUIP_SWAP_RE = re.compile(r"^replace\s+(.+?)\s+with\s+(.+)$", re.I)
-_MAGIC_STANDARD_RE = re.compile(r"^purchase a magic standard worth up to\s+([\d,]+)\s+points$", re.I)
+_MAGIC_STANDARD_RE = re.compile(
+    r"^purchase a magic standard worth up to\s+([\d,]+)\s+points$", re.I
+)
 _MAGIC_ITEMS_RE = re.compile(
     r"^an?\s+(.+?)\s+may purchase magic items up to a total of\s+([\d,]+)\s+points$", re.I
 )
@@ -221,7 +250,9 @@ def _parse_option_line(
     if text.endswith(" Or:"):
         # Mutually exclusive alternatives; the schema cannot express that yet.
         text = text.removesuffix(" Or:")
-        warnings.append(f"{slug}: option {text!r} is part of an either/or choice; exclusivity not recorded")
+        warnings.append(
+            f"{slug}: option {text!r} is part of an either/or choice; exclusivity not recorded"
+        )
 
     points: int | None = None
     per_model = False
@@ -320,7 +351,9 @@ def _upgrade_option(
     elif name.lower() == "musician":
         kind = OptionKind.MUSICIAN
     if kind is None:
-        warnings.append(f"{slug}: upgrade target {raw_name!r} has no known role; kind set to other")
+        warnings.append(
+            f"{slug}: upgrade target {raw_name!r} has no known role; kind set to other"
+        )
         kind = OptionKind.OTHER
     return UnitOption(
         name=_capitalized(name), kind=kind, points=points, per_model=per_model, limit=limit
