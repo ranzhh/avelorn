@@ -16,6 +16,7 @@ repos:
       - id: end-of-file-fixer # ensures that a file is either empty, or ends with one newline
       - id: mixed-line-ending # replaces or checks mixed line ending
       - id: name-tests-test # verifies that test files are named correctly
+        args: [--pytest-test-first] # repo convention is pytest-style test_*.py
       - id: trailing-whitespace # trims trailing whitespace
 
   # ruff and ty run from the project venv, so the versions come from uv.lock —

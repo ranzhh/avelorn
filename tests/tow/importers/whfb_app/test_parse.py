@@ -4,7 +4,7 @@ Fixtures are real `/_next/data/.../unit/<slug>.json` entries with
 Contentful boilerplate pruned and linked rule bodies stripped (the
 importer only reads rule names). Recapture with:
 
-    python -m avelorn.tow.importers.whfb_app unit <slug> --dry-run
+    uv run python scripts/import_whfb_app.py unit <slug> --dry-run
 """
 
 import json

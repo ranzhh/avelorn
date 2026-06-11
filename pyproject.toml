@@ -46,8 +46,8 @@ select = [
 ignore = ["TRY003"]
 
 [tool.ruff.lint.per-file-ignores]
-# The importer CLI reports to the terminal by design.
-"src/avelorn/tow/importers/whfb_app/__main__.py" = ["T20"]
+# CLI scripts report to the terminal by design.
+"scripts/*" = ["T20"]
 
 [tool.ruff.lint.flake8-annotations]
 # *args/**kwargs pass-throughs need Any to typecheck at the forwarding call site
