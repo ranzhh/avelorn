@@ -5,6 +5,7 @@ into roll targets, then use these helpers to turn targets into
 probabilities and distributions.
 """
 
+import random
 from math import comb
 
 
@@ -42,6 +43,20 @@ def binomial_distribution(trials: int, p: float) -> list[float]:
         A list of length ``trials + 1`` where index ``k`` is P(k successes).
     """
     return [binomial_pmf(k, trials, p) for k in range(trials + 1)]
+
+
+def sample(distribution: list[float], rng: random.Random | None = None) -> int:
+    """Draw one concrete outcome from a distribution (index k = P(outcome k)).
+
+    Sampling the computed distribution is statistically identical to
+    rolling the dice, which makes this the building block for "roll it
+    for me" actions. Pass a seeded ``rng`` for reproducible draws.
+
+    Returns:
+        The sampled outcome index, in 0..len(distribution) - 1.
+    """
+    generator = rng if rng is not None else random.Random()
+    return generator.choices(range(len(distribution)), weights=distribution, k=1)[0]
 
 
 def expected_value(distribution: list[float]) -> float:

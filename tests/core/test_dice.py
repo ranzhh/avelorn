@@ -1,8 +1,16 @@
 """Tests for the D6 probability primitives."""
 
+import random
+
 import pytest
 
-from avelorn.core.dice import binomial_distribution, binomial_pmf, expected_value, p_d6_at_least
+from avelorn.core.dice import (
+    binomial_distribution,
+    binomial_pmf,
+    expected_value,
+    p_d6_at_least,
+    sample,
+)
 
 
 @pytest.mark.parametrize(
@@ -31,3 +39,19 @@ def test_binomial_distribution_sums_to_one() -> None:
 def test_expected_value_matches_n_times_p() -> None:
     """E[Binomial(n, p)] = n * p."""
     assert expected_value(binomial_distribution(12, 0.25)) == pytest.approx(3.0)
+
+
+def test_sample_is_reproducible_with_seeded_rng() -> None:
+    """The same seed draws the same outcome."""
+    distribution = binomial_distribution(10, 0.5)
+    first = sample(distribution, random.Random(42))
+    second = sample(distribution, random.Random(42))
+    assert first == second
+
+
+def test_sample_respects_support() -> None:
+    """Draws never land on zero-probability outcomes."""
+    rng = random.Random(7)
+    assert all(sample([0.0, 0.0, 1.0], rng) == 2 for _ in range(50))
+    draws = [sample(binomial_distribution(3, 0.5), rng) for _ in range(200)]
+    assert all(0 <= draw <= 3 for draw in draws)
