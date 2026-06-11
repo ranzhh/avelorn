@@ -1,0 +1,1564 @@
+{
+ "sys": {
+  "id": "2qy0x9i70zBJtHVknnsR1C",
+  "type": "Entry",
+  "contentType": {
+   "sys": {
+    "type": "Link",
+    "id": "armyListEntry"
+   }
+  }
+ },
+ "fields": {
+  "name": "Eagle-Claw Bolt Thrower",
+  "slug": "eagle-claw-bolt-thrower",
+  "unitProfile": [
+   {
+    "A": "-",
+    "I": "-",
+    "M": "-",
+    "S": "-",
+    "T": "6",
+    "W": "2",
+    "BS": "-",
+    "Ld": "-",
+    "WS": "-",
+    "Name": "Eagle-Claw Bolt Thrower"
+   },
+   {
+    "A": "2",
+    "I": "4",
+    "M": "5",
+    "S": "3",
+    "T": "3",
+    "W": "2",
+    "BS": "4",
+    "Ld": "8",
+    "WS": "4",
+    "Name": "Sea Guard Crew"
+   }
+  ],
+  "pageReference": 178,
+  "cost": 80,
+  "baseSize": "50 x 50 mm (war machine), 25 x 25 mm (crew)",
+  "unitSize": "1",
+  "equipment": {
+   "data": {},
+   "content": [
+    {
+     "data": {},
+     "content": [
+      {
+       "data": {},
+       "marks": [],
+       "value": "",
+       "nodeType": "text"
+      },
+      {
+       "data": {
+        "target": {
+         "sys": {
+          "id": "rQ9pGMgsJ42zQPDD4ff21o",
+          "type": "Entry",
+          "contentType": {
+           "sys": {
+            "type": "Link",
+            "id": "rule"
+           }
+          }
+         },
+         "fields": {
+          "name": "Bolt Throwers",
+          "slug": "bolt-throwers",
+          "pageReference": 223,
+          "order": 20,
+          "description": {
+           "data": {},
+           "content": [
+            {
+             "data": {},
+             "content": [
+              {
+               "data": {},
+               "marks": [],
+               "value": "Bolt throwers are huge crossbows that shoot spear-sized missiles. They are relatively simple weapons, far less prone to malfunction than many, supposedly more advanced, war machines.",
+               "nodeType": "text"
+              }
+             ],
+             "nodeType": "paragraph"
+            }
+           ],
+           "nodeType": "document"
+          },
+          "relatedLinks": [
+           {
+            "sys": {
+             "type": "Link",
+             "id": "a7h5452o69yqq1khtZi2Fx"
+            }
+           },
+           {
+            "sys": {
+             "type": "Link",
+             "id": "Lup3i24UN70y96E0Xw46CW"
+            }
+           }
+          ],
+          "ruleType": [
+           {
+            "sys": {
+             "type": "Link",
+             "id": "nSuOMB57c0IBKPvjY8duB3"
+            }
+           }
+          ],
+          "association": [
+           {
+            "sys": {
+             "type": "Link",
+             "id": "1ajj5ld8tacvR3LPTz6t5S"
+            }
+           }
+          ],
+          "bodyIndex": "Bolt Thrower Cumbersome, Move or Shoot, Multiple Wounds (2), Through & Through Repeater Bolt Thrower Cumbersome, Move or Shoot, Multiple Wounds (2), Rapid Fire, Through & Through "
+         }
+        }
+       },
+       "content": [
+        {
+         "data": {},
+         "marks": [],
+         "value": "Repeater bolt thrower",
+         "nodeType": "text"
+        }
+       ],
+       "nodeType": "entry-hyperlink"
+      },
+      {
+       "data": {},
+       "marks": [],
+       "value": ", ",
+       "nodeType": "text"
+      },
+      {
+       "data": {
+        "target": {
+         "sys": {
+          "id": "1nSt99qo8L06tu33OybPEh",
+          "type": "Entry",
+          "contentType": {
+           "sys": {
+            "type": "Link",
+            "id": "rule"
+           }
+          }
+         },
+         "fields": {
+          "name": "Hand Weapon",
+          "slug": "hand-weapon",
+          "pageReference": 213,
+          "order": 40,
+          "relatedLinks": [
+           {
+            "sys": {
+             "type": "Link",
+             "id": "d1Znp84u876eCI72Odde7o"
+            }
+           }
+          ],
+          "ruleType": [
+           {
+            "sys": {
+             "type": "Link",
+             "id": "O6zJvMBw9RBlwd298TLnhX"
+            }
+           }
+          ],
+          "association": [
+           {
+            "sys": {
+             "type": "Link",
+             "id": "1ajj5ld8tacvR3LPTz6t5S"
+            }
+           }
+          ],
+          "bodyIndex": "Even the most poorly prepared warrior will arm themselves with a hand weapon, such as a simple sword or axe. It may even be that the model's natural weapons, such as teeth and claws, fulfil this role. Regardless of the form it takes, almost every model, even a cavalry mount, is considered to be armed with a hand weapon with the following profile: - Notes: Unless specified otherwise, all models are assumed to be equipped with a hand weapon."
+         }
+        }
+       },
+       "content": [
+        {
+         "data": {},
+         "marks": [],
+         "value": "hand weapons",
+         "nodeType": "text"
+        }
+       ],
+       "nodeType": "entry-hyperlink"
+      },
+      {
+       "data": {},
+       "marks": [],
+       "value": " and ",
+       "nodeType": "text"
+      },
+      {
+       "data": {
+        "target": {
+         "sys": {
+          "id": "9JYARf6715I8f9kG96E8cZ",
+          "type": "Entry",
+          "contentType": {
+           "sys": {
+            "type": "Link",
+            "id": "rule"
+           }
+          }
+         },
+         "fields": {
+          "name": "Light Armour",
+          "slug": "light-armour",
+          "pageReference": 220,
+          "order": 380,
+          "relatedLinks": [
+           {
+            "sys": {
+             "type": "Link",
+             "id": "Qm9I33oG8VJs16aw5Uid9t"
+            }
+           }
+          ],
+          "ruleType": [
+           {
+            "sys": {
+             "type": "Link",
+             "id": "O6zJvMBw9RBlwd298TLnhX"
+            }
+           }
+          ],
+          "association": [
+           {
+            "sys": {
+             "type": "Link",
+             "id": "1ajj5ld8tacvR3LPTz6t5S"
+            }
+           }
+          ],
+          "bodyIndex": "Armour Value: 6+ Representing incomplete suits of mail, occasional plates of armour and even the thick, calloused hides of some creatures, light armour offers a degree of protection to vital areas."
+         }
+        }
+       },
+       "content": [
+        {
+         "data": {},
+         "marks": [],
+         "value": "light armour",
+         "nodeType": "text"
+        }
+       ],
+       "nodeType": "entry-hyperlink"
+      },
+      {
+       "data": {},
+       "marks": [],
+       "value": "",
+       "nodeType": "text"
+      }
+     ],
+     "nodeType": "paragraph"
+    }
+   ],
+   "nodeType": "document"
+  },
+  "specialRules": {
+   "data": {},
+   "content": [
+    {
+     "data": {},
+     "content": [
+      {
+       "data": {
+        "target": {
+         "sys": {
+          "id": "4Y1nQZd5Df1HK5Z379k5Re",
+          "type": "Entry",
+          "contentType": {
+           "sys": {
+            "type": "Link",
+            "id": "rule"
+           }
+          }
+         },
+         "fields": {
+          "name": "Elven Reflexes",
+          "slug": "elven-reflexes",
+          "pageReference": 25,
+          "additionalReferences": [
+           {
+            "sys": {
+             "type": "Link",
+             "id": "YhIeTkD7SbHk7Kx9jHxXc"
+            }
+           }
+          ],
+          "order": 100,
+          "description": {
+           "data": {},
+           "content": [
+            {
+             "data": {},
+             "content": [
+              {
+               "data": {},
+               "marks": [],
+               "value": "Elves possess phenomenal speed and grace, striking at their enemies faster than the eye can see.",
+               "nodeType": "text"
+              }
+             ],
+             "nodeType": "paragraph"
+            }
+           ],
+           "nodeType": "document"
+          },
+          "ruleType": [
+           {
+            "sys": {
+             "type": "Link",
+             "id": "F47U30w0j5320cdHEb9jEJ"
+            }
+           }
+          ],
+          "association": [
+           {
+            "sys": {
+             "type": "Link",
+             "id": "4z8TnCYVKA7KbHJ8I5Dgd9"
+            }
+           },
+           {
+            "sys": {
+             "id": "ORvp2CwYP0XpAFTuEfUNq",
+             "type": "Entry",
+             "contentType": {
+              "sys": {
+               "type": "Link",
+               "id": "association"
+              }
+             }
+            },
+            "fields": {
+             "abbreviation": "HER",
+             "name": "High Elf Realms",
+             "slug": "high-elf-realms",
+             "order": 170,
+             "useArmyListEntry": true,
+             "status": "3"
+            }
+           },
+           {
+            "sys": {
+             "type": "Link",
+             "id": "1VTYhDeufox7WHFzuf7ff5"
+            }
+           },
+           {
+            "sys": {
+             "id": "Pr1j2CwFi8QxERaKAHUNd",
+             "type": "Entry",
+             "contentType": {
+              "sys": {
+               "type": "Link",
+               "id": "association"
+              }
+             }
+            },
+            "fields": {
+             "abbreviation": "FoF",
+             "name": "Forces of Fantasy",
+             "slug": "forces-of-fantasy",
+             "order": 20,
+             "hidden": [
+              "Yes"
+             ]
+            }
+           }
+          ],
+          "bodyIndex": "A model with this special rule (but not its mount) has a +1 modifier to its Initiative characteristic (to a maximum of 10) during the first round of any combat."
+         }
+        }
+       },
+       "content": [
+        {
+         "data": {},
+         "marks": [],
+         "value": "Elven Reflexes",
+         "nodeType": "text"
+        }
+       ],
+       "nodeType": "entry-hyperlink"
+      },
+      {
+       "data": {
+        "target": {
+         "sys": {
+          "id": "4464M49QUm79kGu7K7oU9T",
+          "type": "Entry",
+          "contentType": {
+           "sys": {
+            "type": "Link",
+            "id": "rule"
+           }
+          }
+         },
+         "fields": {
+          "name": "Skirmish Formation",
+          "slug": "skirmish-formation",
+          "pageReference": 184,
+          "order": 90,
+          "relatedLinks": [
+           {
+            "sys": {
+             "type": "Link",
+             "id": "06Cz1GPos23J0qN3u0H4OB"
+            }
+           },
+           {
+            "sys": {
+             "type": "Link",
+             "id": "Aq4541c6o9Lfpeu0O1P73S"
+            }
+           },
+           {
+            "sys": {
+             "type": "Link",
+             "id": "UpaZ27dCdR76p57j2GIlxX"
+            }
+           },
+           {
+            "sys": {
+             "type": "Link",
+             "id": "qv8Av43vF3PHfAX1OMeyO2"
+            }
+           },
+           {
+            "sys": {
+             "type": "Link",
+             "id": "F70WMPJ78EkMRcjw44tL4P"
+            }
+           },
+           {
+            "sys": {
+             "type": "Link",
+             "id": "uW0tvN55aXga8O5DVFHFZl"
+            }
+           },
+           {
+            "sys": {
+             "type": "Link",
+             "id": "78KsJLrwSdhpqev6Vj44tR"
+            }
+           },
+           {
+            "sys": {
+             "type": "Link",
+             "id": "iS32TK58e93Bxf2BhP6fFg"
+            }
+           },
+           {
+            "sys": {
+             "type": "Link",
+             "id": "679dM8XPndNtXh8PmG9Ml4"
+            }
+           },
+           {
+            "sys": {
+             "type": "Link",
+             "id": "7cp4DQd51Ax1j480urfsre"
+            }
+           },
+           {
+            "sys": {
+             "type": "Link",
+             "id": "v5oIG33C2D2Z0piodPg680"
+            }
+           },
+           {
+            "sys": {
+             "type": "Link",
+             "id": "p262Z6022Ux4abKf9nH4Fc"
+            }
+           }
+          ],
+          "ruleType": [
+           {
+            "sys": {
+             "type": "Link",
+             "id": "uvzvxr7w66UCZ80G3j1e80"
+            }
+           }
+          ],
+          "association": [
+           {
+            "sys": {
+             "type": "Link",
+             "id": "1ajj5ld8tacvR3LPTz6t5S"
+            }
+           }
+          ],
+          "bodyIndex": "A unit of models in Skirmish formation (often referred to as 'Skirmishers' in the rules that follow) never consists of rigid ranks and files. Instead, it moves as a single loose group or rough line. This enables Skirmishers to move quickly and take advantage of terrain to shelter from the enemy."
+         }
+        }
+       },
+       "content": [
+        {
+         "data": {},
+         "marks": [],
+         "value": "Skirmishers",
+         "nodeType": "text"
+        }
+       ],
+       "nodeType": "entry-hyperlink"
+      },
+      {
+       "data": {
+        "target": {
+         "sys": {
+          "id": "7ifigfYEYWleQ8FIOkIFPl",
+          "type": "Entry",
+          "contentType": {
+           "sys": {
+            "type": "Link",
+            "id": "rule"
+           }
+          }
+         },
+         "fields": {
+          "name": "Valour of Ages",
+          "slug": "valour-of-ages",
+          "pageReference": 185,
+          "order": 220,
+          "description": {
+           "data": {},
+           "content": [
+            {
+             "data": {},
+             "content": [
+              {
+               "data": {},
+               "marks": [],
+               "value": "Throughout the ages, the High Elves of Ulthuan have stood firm against the multitudinous forces of the ruinous powers. They have faced daemonic legions, hordes of black armoured Chaos warriors, and even their own treacherous kin, sacrificing all to defend their realms.",
+               "nodeType": "text"
+              }
+             ],
+             "nodeType": "paragraph"
+            }
+           ],
+           "nodeType": "document"
+          },
+          "ruleType": [
+           {
+            "sys": {
+             "type": "Link",
+             "id": "F47U30w0j5320cdHEb9jEJ"
+            }
+           }
+          ],
+          "association": [
+           {
+            "sys": {
+             "id": "Pr1j2CwFi8QxERaKAHUNd",
+             "type": "Entry",
+             "contentType": {
+              "sys": {
+               "type": "Link",
+               "id": "association"
+              }
+             }
+            },
+            "fields": {
+             "abbreviation": "FoF",
+             "name": "Forces of Fantasy",
+             "slug": "forces-of-fantasy",
+             "order": 20,
+             "hidden": [
+              "Yes"
+             ]
+            }
+           },
+           {
+            "sys": {
+             "id": "ORvp2CwYP0XpAFTuEfUNq",
+             "type": "Entry",
+             "contentType": {
+              "sys": {
+               "type": "Link",
+               "id": "association"
+              }
+             }
+            },
+            "fields": {
+             "abbreviation": "HER",
+             "name": "High Elf Realms",
+             "slug": "high-elf-realms",
+             "order": 170,
+             "useArmyListEntry": true,
+             "status": "3"
+            }
+           }
+          ],
+          "bodyIndex": "A unit with this special rule may re-roll any failed Panic test caused by taking heavy casualties or by being fled through by a friendly unit."
+         }
+        }
+       },
+       "content": [
+        {
+         "data": {},
+         "marks": [],
+         "value": "Valour of Ages",
+         "nodeType": "text"
+        }
+       ],
+       "nodeType": "entry-hyperlink"
+      }
+     ],
+     "nodeType": ""
+    }
+   ],
+   "nodeType": "document"
+  },
+  "troopType": [
+   {
+    "sys": {
+     "id": "37egcFTCWRqhkpcQVoHL8y",
+     "type": "Entry",
+     "contentType": {
+      "sys": {
+       "type": "Link",
+       "id": "troopType"
+      }
+     }
+    },
+    "fields": {
+     "name": "War Machine",
+     "slug": "war-machine",
+     "order": 0,
+     "abbreviation": "WM",
+     "rule": [
+      {
+       "sys": {
+        "id": "CNR3JVe2g6F7JI4zMU5C1W",
+        "type": "Entry",
+        "contentType": {
+         "sys": {
+          "type": "Link",
+          "id": "rule"
+         }
+        }
+       },
+       "fields": {
+        "name": "War Machines",
+        "slug": "war-machines",
+        "pageReference": 197,
+        "order": 340,
+        "relatedLinks": [
+         {
+          "sys": {
+           "id": "5ANcs01UPpT17No0l0q69z",
+           "type": "Entry",
+           "contentType": {
+            "sys": {
+             "type": "Link",
+             "id": "rule"
+            }
+           }
+          },
+          "fields": {
+           "name": "Split Profile (War Machine)",
+           "slug": "split-profile-war-machine",
+           "pageReference": 197,
+           "order": 350,
+           "relatedLinks": [
+            "[Circular]"
+           ],
+           "ruleType": [
+            {
+             "sys": {
+              "id": "1cxV0Jnvb1D701DgF8Y7Op",
+              "type": "Entry",
+              "contentType": {
+               "sys": {
+                "type": "Link",
+                "id": "ruleType"
+               }
+              }
+             },
+             "fields": {
+              "name": "Troop Types in Detail",
+              "slug": "troop-types-in-detail",
+              "pageReference": 188,
+              "order": 180,
+              "body": {
+               "data": {},
+               "content": [
+                {
+                 "data": {},
+                 "content": [
+                  {
+                   "data": {},
+                   "marks": [],
+                   "value": "All models have a troop type. These, along with the type of formation units of such models adopt, determine how they function throughout the rules. Troop types were explained in ",
+                   "nodeType": "text"
+                  },
+                  {
+                   "data": {
+                    "target": {
+                     "sys": {
+                      "id": "Tcha8069bRK24j1TGnQXWk",
+                      "type": "Link"
+                     }
+                    }
+                   },
+                   "content": [
+                    {
+                     "data": {},
+                     "marks": [],
+                     "value": "brief",
+                     "nodeType": "text"
+                    }
+                   ],
+                   "nodeType": "entry-hyperlink"
+                  },
+                  {
+                   "data": {},
+                   "marks": [],
+                   "value": ". The following sections cover them in greater detail and present any additional rules that may apply, as well as providing more in-depth descriptions of what they represent.",
+                   "nodeType": "text"
+                  }
+                 ],
+                 "nodeType": "paragraph"
+                }
+               ],
+               "nodeType": "document"
+              },
+              "bodyIndex": "All models have a troop type. These, along with the type of formation units of such models adopt, determine how they function throughout the rules. Troop types were explained in brief. The following sections cover them in greater detail and present any additional rules that may apply, as well as providing more in-depth descriptions of what they represent."
+             }
+            }
+           ],
+           "association": [
+            {
+             "sys": {
+              "id": "1ajj5ld8tacvR3LPTz6t5S",
+              "type": "Entry",
+              "contentType": {
+               "sys": {
+                "type": "Link",
+                "id": "association"
+               }
+              }
+             },
+             "fields": {
+              "abbreviation": "RB",
+              "name": "Rulebook",
+              "slug": "rulebook",
+              "order": 10
+             }
+            }
+           ],
+           "bodyIndex": "A war machine consists of several models – the war machine itself and the crew that operate it, together making a single model. To represent this, a war machine model has a split profile. In game terms, this works as follows: This model is treated as a single model and, unless noted otherwise, any special rules that apply to one element (war machine or crew) apply to the other as well. In combat, use the Toughness and Wounds characteristics of the crew. When not in combat, use the Toughness and Wounds characteristics of the war machine. For each Wound the crew loses, it suffers a -1 modifier to its Attacks characteristic. When this model makes an Armour Save roll, it uses the crew's armour value. If either the crew or the war machine is reduced to zero Wounds, the model as a whole is removed from play. "
+          }
+         },
+         {
+          "sys": {
+           "id": "m7jeqB4bY5bO0Ju9Xg0V4I",
+           "type": "Entry",
+           "contentType": {
+            "sys": {
+             "type": "Link",
+             "id": "rule"
+            }
+           }
+          },
+          "fields": {
+           "name": "\"We're Not Paid to Fight\"",
+           "slug": "were-not-paid-to-fight",
+           "pageReference": 197,
+           "order": 360,
+           "relatedLinks": [
+            "[Circular]"
+           ],
+           "ruleType": [
+            {
+             "sys": {
+              "id": "1cxV0Jnvb1D701DgF8Y7Op",
+              "type": "Entry",
+              "contentType": {
+               "sys": {
+                "type": "Link",
+                "id": "ruleType"
+               }
+              }
+             },
+             "fields": {
+              "name": "Troop Types in Detail",
+              "slug": "troop-types-in-detail",
+              "pageReference": 188,
+              "order": 180,
+              "body": {
+               "data": {},
+               "content": [
+                {
+                 "data": {},
+                 "content": [
+                  {
+                   "data": {},
+                   "marks": [],
+                   "value": "All models have a troop type. These, along with the type of formation units of such models adopt, determine how they function throughout the rules. Troop types were explained in ",
+                   "nodeType": "text"
+                  },
+                  {
+                   "data": {
+                    "target": {
+                     "sys": {
+                      "id": "Tcha8069bRK24j1TGnQXWk",
+                      "type": "Link"
+                     }
+                    }
+                   },
+                   "content": [
+                    {
+                     "data": {},
+                     "marks": [],
+                     "value": "brief",
+                     "nodeType": "text"
+                    }
+                   ],
+                   "nodeType": "entry-hyperlink"
+                  },
+                  {
+                   "data": {},
+                   "marks": [],
+                   "value": ". The following sections cover them in greater detail and present any additional rules that may apply, as well as providing more in-depth descriptions of what they represent.",
+                   "nodeType": "text"
+                  }
+                 ],
+                 "nodeType": "paragraph"
+                }
+               ],
+               "nodeType": "document"
+              },
+              "bodyIndex": "All models have a troop type. These, along with the type of formation units of such models adopt, determine how they function throughout the rules. Troop types were explained in brief. The following sections cover them in greater detail and present any additional rules that may apply, as well as providing more in-depth descriptions of what they represent."
+             }
+            }
+           ],
+           "association": [
+            {
+             "sys": {
+              "id": "1ajj5ld8tacvR3LPTz6t5S",
+              "type": "Entry",
+              "contentType": {
+               "sys": {
+                "type": "Link",
+                "id": "association"
+               }
+              }
+             },
+             "fields": {
+              "abbreviation": "RB",
+              "name": "Rulebook",
+              "slug": "rulebook",
+              "order": 10
+             }
+            }
+           ],
+           "bodyIndex": "Should a war machine ever Break and flee from combat, its crew will abandon it to be wrecked by the enemy and beat a hasty retreat. Treat the model as having been completely destroyed and remove it from play. Note that a war machine that loses a round of combat may Fall Back in Good Order or Give Ground as normal."
+          }
+         },
+         {
+          "sys": {
+           "id": "eSS36910fti51c3hRVY8qQ",
+           "type": "Entry",
+           "contentType": {
+            "sys": {
+             "type": "Link",
+             "id": "rule"
+            }
+           }
+          },
+          "fields": {
+           "name": "Weapon of War",
+           "slug": "weapon-of-war",
+           "pageReference": 197,
+           "order": 370,
+           "relatedLinks": [
+            "[Circular]"
+           ],
+           "ruleType": [
+            {
+             "sys": {
+              "id": "1cxV0Jnvb1D701DgF8Y7Op",
+              "type": "Entry",
+              "contentType": {
+               "sys": {
+                "type": "Link",
+                "id": "ruleType"
+               }
+              }
+             },
+             "fields": {
+              "name": "Troop Types in Detail",
+              "slug": "troop-types-in-detail",
+              "pageReference": 188,
+              "order": 180,
+              "body": {
+               "data": {},
+               "content": [
+                {
+                 "data": {},
+                 "content": [
+                  {
+                   "data": {},
+                   "marks": [],
+                   "value": "All models have a troop type. These, along with the type of formation units of such models adopt, determine how they function throughout the rules. Troop types were explained in ",
+                   "nodeType": "text"
+                  },
+                  {
+                   "data": {
+                    "target": {
+                     "sys": {
+                      "id": "Tcha8069bRK24j1TGnQXWk",
+                      "type": "Link"
+                     }
+                    }
+                   },
+                   "content": [
+                    {
+                     "data": {},
+                     "marks": [],
+                     "value": "brief",
+                     "nodeType": "text"
+                    }
+                   ],
+                   "nodeType": "entry-hyperlink"
+                  },
+                  {
+                   "data": {},
+                   "marks": [],
+                   "value": ". The following sections cover them in greater detail and present any additional rules that may apply, as well as providing more in-depth descriptions of what they represent.",
+                   "nodeType": "text"
+                  }
+                 ],
+                 "nodeType": "paragraph"
+                }
+               ],
+               "nodeType": "document"
+              },
+              "bodyIndex": "All models have a troop type. These, along with the type of formation units of such models adopt, determine how they function throughout the rules. Troop types were explained in brief. The following sections cover them in greater detail and present any additional rules that may apply, as well as providing more in-depth descriptions of what they represent."
+             }
+            }
+           ],
+           "association": [
+            {
+             "sys": {
+              "id": "1ajj5ld8tacvR3LPTz6t5S",
+              "type": "Entry",
+              "contentType": {
+               "sys": {
+                "type": "Link",
+                "id": "association"
+               }
+              }
+             },
+             "fields": {
+              "abbreviation": "RB",
+              "name": "Rulebook",
+              "slug": "rulebook",
+              "order": 10
+             }
+            }
+           ],
+           "bodyIndex": "War machines are built to be strong and durable rather than for speed and, as such, they are slow and cumbersome to move once erected. To represent this, war machines cannot march, declare a charge or make a pursuit move. Additionally, war machines suffer a -1 modifier to the result of any Flee roll they make (to a minimum of 1). However, a war machine can freely pivot about its centre immediately before shooting (the better to face the enemy) and may make a follow up move as normal. Should a war machine pivot, it does not count as having moved."
+          }
+         }
+        ],
+        "ruleType": [
+         {
+          "sys": {
+           "id": "1cxV0Jnvb1D701DgF8Y7Op",
+           "type": "Entry",
+           "contentType": {
+            "sys": {
+             "type": "Link",
+             "id": "ruleType"
+            }
+           }
+          },
+          "fields": {
+           "name": "Troop Types in Detail",
+           "slug": "troop-types-in-detail",
+           "pageReference": 188,
+           "order": 180,
+           "body": {
+            "data": {},
+            "content": [
+             {
+              "data": {},
+              "content": [
+               {
+                "data": {},
+                "marks": [],
+                "value": "All models have a troop type. These, along with the type of formation units of such models adopt, determine how they function throughout the rules. Troop types were explained in ",
+                "nodeType": "text"
+               },
+               {
+                "data": {
+                 "target": {
+                  "sys": {
+                   "id": "Tcha8069bRK24j1TGnQXWk",
+                   "type": "Link"
+                  }
+                 }
+                },
+                "content": [
+                 {
+                  "data": {},
+                  "marks": [],
+                  "value": "brief",
+                  "nodeType": "text"
+                 }
+                ],
+                "nodeType": "entry-hyperlink"
+               },
+               {
+                "data": {},
+                "marks": [],
+                "value": ". The following sections cover them in greater detail and present any additional rules that may apply, as well as providing more in-depth descriptions of what they represent.",
+                "nodeType": "text"
+               }
+              ],
+              "nodeType": "paragraph"
+             }
+            ],
+            "nodeType": "document"
+           },
+           "bodyIndex": "All models have a troop type. These, along with the type of formation units of such models adopt, determine how they function throughout the rules. Troop types were explained in brief. The following sections cover them in greater detail and present any additional rules that may apply, as well as providing more in-depth descriptions of what they represent."
+          }
+         }
+        ],
+        "association": [
+         {
+          "sys": {
+           "id": "1ajj5ld8tacvR3LPTz6t5S",
+           "type": "Entry",
+           "contentType": {
+            "sys": {
+             "type": "Link",
+             "id": "association"
+            }
+           }
+          },
+          "fields": {
+           "abbreviation": "RB",
+           "name": "Rulebook",
+           "slug": "rulebook",
+           "order": 10
+          }
+         }
+        ],
+        "bodyIndex": "War machines such as cannon and bolt throwers are powerful weapons on the field of battle, able to pulverise whole regiments, breach stone walls or even slay fearsome monsters with a single, well-placed shot. The most commonly seen types of war machine are dealt with as weapons in greater detail in their own section. War machines in general as a category of troop type have the following rules: Troop Type Models per Rank Maximum Rank Bonus Unit Strength per Model Special Rules War Machines - - As Starting Wounds Split Profile (War Machine) \"We're Not Paid to Fight\" Weapon of War "
+       }
+      }
+     ]
+    }
+   }
+  ],
+  "unitCategory": [
+   {
+    "sys": {
+     "id": "5NCATjTbvE8cgd216YZiYd",
+     "type": "Entry",
+     "contentType": {
+      "sys": {
+       "type": "Link",
+       "id": "unitCategory"
+      }
+     }
+    },
+    "fields": {
+     "name": "War Machine",
+     "slug": "war-machine",
+     "order": 80,
+     "rule": [
+      {
+       "sys": {
+        "id": "CNR3JVe2g6F7JI4zMU5C1W",
+        "type": "Entry",
+        "contentType": {
+         "sys": {
+          "type": "Link",
+          "id": "rule"
+         }
+        }
+       },
+       "fields": {
+        "name": "War Machines",
+        "slug": "war-machines",
+        "pageReference": 197,
+        "order": 340,
+        "relatedLinks": [
+         {
+          "sys": {
+           "id": "5ANcs01UPpT17No0l0q69z",
+           "type": "Entry",
+           "contentType": {
+            "sys": {
+             "type": "Link",
+             "id": "rule"
+            }
+           }
+          },
+          "fields": {
+           "name": "Split Profile (War Machine)",
+           "slug": "split-profile-war-machine",
+           "pageReference": 197,
+           "order": 350,
+           "relatedLinks": [
+            "[Circular]"
+           ],
+           "ruleType": [
+            {
+             "sys": {
+              "id": "1cxV0Jnvb1D701DgF8Y7Op",
+              "type": "Entry",
+              "contentType": {
+               "sys": {
+                "type": "Link",
+                "id": "ruleType"
+               }
+              }
+             },
+             "fields": {
+              "name": "Troop Types in Detail",
+              "slug": "troop-types-in-detail",
+              "pageReference": 188,
+              "order": 180,
+              "body": {
+               "data": {},
+               "content": [
+                {
+                 "data": {},
+                 "content": [
+                  {
+                   "data": {},
+                   "marks": [],
+                   "value": "All models have a troop type. These, along with the type of formation units of such models adopt, determine how they function throughout the rules. Troop types were explained in ",
+                   "nodeType": "text"
+                  },
+                  {
+                   "data": {
+                    "target": {
+                     "sys": {
+                      "id": "Tcha8069bRK24j1TGnQXWk",
+                      "type": "Link"
+                     }
+                    }
+                   },
+                   "content": [
+                    {
+                     "data": {},
+                     "marks": [],
+                     "value": "brief",
+                     "nodeType": "text"
+                    }
+                   ],
+                   "nodeType": "entry-hyperlink"
+                  },
+                  {
+                   "data": {},
+                   "marks": [],
+                   "value": ". The following sections cover them in greater detail and present any additional rules that may apply, as well as providing more in-depth descriptions of what they represent.",
+                   "nodeType": "text"
+                  }
+                 ],
+                 "nodeType": "paragraph"
+                }
+               ],
+               "nodeType": "document"
+              },
+              "bodyIndex": "All models have a troop type. These, along with the type of formation units of such models adopt, determine how they function throughout the rules. Troop types were explained in brief. The following sections cover them in greater detail and present any additional rules that may apply, as well as providing more in-depth descriptions of what they represent."
+             }
+            }
+           ],
+           "association": [
+            {
+             "sys": {
+              "id": "1ajj5ld8tacvR3LPTz6t5S",
+              "type": "Entry",
+              "contentType": {
+               "sys": {
+                "type": "Link",
+                "id": "association"
+               }
+              }
+             },
+             "fields": {
+              "abbreviation": "RB",
+              "name": "Rulebook",
+              "slug": "rulebook",
+              "order": 10
+             }
+            }
+           ],
+           "bodyIndex": "A war machine consists of several models – the war machine itself and the crew that operate it, together making a single model. To represent this, a war machine model has a split profile. In game terms, this works as follows: This model is treated as a single model and, unless noted otherwise, any special rules that apply to one element (war machine or crew) apply to the other as well. In combat, use the Toughness and Wounds characteristics of the crew. When not in combat, use the Toughness and Wounds characteristics of the war machine. For each Wound the crew loses, it suffers a -1 modifier to its Attacks characteristic. When this model makes an Armour Save roll, it uses the crew's armour value. If either the crew or the war machine is reduced to zero Wounds, the model as a whole is removed from play. "
+          }
+         },
+         {
+          "sys": {
+           "id": "m7jeqB4bY5bO0Ju9Xg0V4I",
+           "type": "Entry",
+           "contentType": {
+            "sys": {
+             "type": "Link",
+             "id": "rule"
+            }
+           }
+          },
+          "fields": {
+           "name": "\"We're Not Paid to Fight\"",
+           "slug": "were-not-paid-to-fight",
+           "pageReference": 197,
+           "order": 360,
+           "relatedLinks": [
+            "[Circular]"
+           ],
+           "ruleType": [
+            {
+             "sys": {
+              "id": "1cxV0Jnvb1D701DgF8Y7Op",
+              "type": "Entry",
+              "contentType": {
+               "sys": {
+                "type": "Link",
+                "id": "ruleType"
+               }
+              }
+             },
+             "fields": {
+              "name": "Troop Types in Detail",
+              "slug": "troop-types-in-detail",
+              "pageReference": 188,
+              "order": 180,
+              "body": {
+               "data": {},
+               "content": [
+                {
+                 "data": {},
+                 "content": [
+                  {
+                   "data": {},
+                   "marks": [],
+                   "value": "All models have a troop type. These, along with the type of formation units of such models adopt, determine how they function throughout the rules. Troop types were explained in ",
+                   "nodeType": "text"
+                  },
+                  {
+                   "data": {
+                    "target": {
+                     "sys": {
+                      "id": "Tcha8069bRK24j1TGnQXWk",
+                      "type": "Link"
+                     }
+                    }
+                   },
+                   "content": [
+                    {
+                     "data": {},
+                     "marks": [],
+                     "value": "brief",
+                     "nodeType": "text"
+                    }
+                   ],
+                   "nodeType": "entry-hyperlink"
+                  },
+                  {
+                   "data": {},
+                   "marks": [],
+                   "value": ". The following sections cover them in greater detail and present any additional rules that may apply, as well as providing more in-depth descriptions of what they represent.",
+                   "nodeType": "text"
+                  }
+                 ],
+                 "nodeType": "paragraph"
+                }
+               ],
+               "nodeType": "document"
+              },
+              "bodyIndex": "All models have a troop type. These, along with the type of formation units of such models adopt, determine how they function throughout the rules. Troop types were explained in brief. The following sections cover them in greater detail and present any additional rules that may apply, as well as providing more in-depth descriptions of what they represent."
+             }
+            }
+           ],
+           "association": [
+            {
+             "sys": {
+              "id": "1ajj5ld8tacvR3LPTz6t5S",
+              "type": "Entry",
+              "contentType": {
+               "sys": {
+                "type": "Link",
+                "id": "association"
+               }
+              }
+             },
+             "fields": {
+              "abbreviation": "RB",
+              "name": "Rulebook",
+              "slug": "rulebook",
+              "order": 10
+             }
+            }
+           ],
+           "bodyIndex": "Should a war machine ever Break and flee from combat, its crew will abandon it to be wrecked by the enemy and beat a hasty retreat. Treat the model as having been completely destroyed and remove it from play. Note that a war machine that loses a round of combat may Fall Back in Good Order or Give Ground as normal."
+          }
+         },
+         {
+          "sys": {
+           "id": "eSS36910fti51c3hRVY8qQ",
+           "type": "Entry",
+           "contentType": {
+            "sys": {
+             "type": "Link",
+             "id": "rule"
+            }
+           }
+          },
+          "fields": {
+           "name": "Weapon of War",
+           "slug": "weapon-of-war",
+           "pageReference": 197,
+           "order": 370,
+           "relatedLinks": [
+            "[Circular]"
+           ],
+           "ruleType": [
+            {
+             "sys": {
+              "id": "1cxV0Jnvb1D701DgF8Y7Op",
+              "type": "Entry",
+              "contentType": {
+               "sys": {
+                "type": "Link",
+                "id": "ruleType"
+               }
+              }
+             },
+             "fields": {
+              "name": "Troop Types in Detail",
+              "slug": "troop-types-in-detail",
+              "pageReference": 188,
+              "order": 180,
+              "body": {
+               "data": {},
+               "content": [
+                {
+                 "data": {},
+                 "content": [
+                  {
+                   "data": {},
+                   "marks": [],
+                   "value": "All models have a troop type. These, along with the type of formation units of such models adopt, determine how they function throughout the rules. Troop types were explained in ",
+                   "nodeType": "text"
+                  },
+                  {
+                   "data": {
+                    "target": {
+                     "sys": {
+                      "id": "Tcha8069bRK24j1TGnQXWk",
+                      "type": "Link"
+                     }
+                    }
+                   },
+                   "content": [
+                    {
+                     "data": {},
+                     "marks": [],
+                     "value": "brief",
+                     "nodeType": "text"
+                    }
+                   ],
+                   "nodeType": "entry-hyperlink"
+                  },
+                  {
+                   "data": {},
+                   "marks": [],
+                   "value": ". The following sections cover them in greater detail and present any additional rules that may apply, as well as providing more in-depth descriptions of what they represent.",
+                   "nodeType": "text"
+                  }
+                 ],
+                 "nodeType": "paragraph"
+                }
+               ],
+               "nodeType": "document"
+              },
+              "bodyIndex": "All models have a troop type. These, along with the type of formation units of such models adopt, determine how they function throughout the rules. Troop types were explained in brief. The following sections cover them in greater detail and present any additional rules that may apply, as well as providing more in-depth descriptions of what they represent."
+             }
+            }
+           ],
+           "association": [
+            {
+             "sys": {
+              "id": "1ajj5ld8tacvR3LPTz6t5S",
+              "type": "Entry",
+              "contentType": {
+               "sys": {
+                "type": "Link",
+                "id": "association"
+               }
+              }
+             },
+             "fields": {
+              "abbreviation": "RB",
+              "name": "Rulebook",
+              "slug": "rulebook",
+              "order": 10
+             }
+            }
+           ],
+           "bodyIndex": "War machines are built to be strong and durable rather than for speed and, as such, they are slow and cumbersome to move once erected. To represent this, war machines cannot march, declare a charge or make a pursuit move. Additionally, war machines suffer a -1 modifier to the result of any Flee roll they make (to a minimum of 1). However, a war machine can freely pivot about its centre immediately before shooting (the better to face the enemy) and may make a follow up move as normal. Should a war machine pivot, it does not count as having moved."
+          }
+         }
+        ],
+        "ruleType": [
+         {
+          "sys": {
+           "id": "1cxV0Jnvb1D701DgF8Y7Op",
+           "type": "Entry",
+           "contentType": {
+            "sys": {
+             "type": "Link",
+             "id": "ruleType"
+            }
+           }
+          },
+          "fields": {
+           "name": "Troop Types in Detail",
+           "slug": "troop-types-in-detail",
+           "pageReference": 188,
+           "order": 180,
+           "body": {
+            "data": {},
+            "content": [
+             {
+              "data": {},
+              "content": [
+               {
+                "data": {},
+                "marks": [],
+                "value": "All models have a troop type. These, along with the type of formation units of such models adopt, determine how they function throughout the rules. Troop types were explained in ",
+                "nodeType": "text"
+               },
+               {
+                "data": {
+                 "target": {
+                  "sys": {
+                   "id": "Tcha8069bRK24j1TGnQXWk",
+                   "type": "Link"
+                  }
+                 }
+                },
+                "content": [
+                 {
+                  "data": {},
+                  "marks": [],
+                  "value": "brief",
+                  "nodeType": "text"
+                 }
+                ],
+                "nodeType": "entry-hyperlink"
+               },
+               {
+                "data": {},
+                "marks": [],
+                "value": ". The following sections cover them in greater detail and present any additional rules that may apply, as well as providing more in-depth descriptions of what they represent.",
+                "nodeType": "text"
+               }
+              ],
+              "nodeType": "paragraph"
+             }
+            ],
+            "nodeType": "document"
+           },
+           "bodyIndex": "All models have a troop type. These, along with the type of formation units of such models adopt, determine how they function throughout the rules. Troop types were explained in brief. The following sections cover them in greater detail and present any additional rules that may apply, as well as providing more in-depth descriptions of what they represent."
+          }
+         }
+        ],
+        "association": [
+         {
+          "sys": {
+           "id": "1ajj5ld8tacvR3LPTz6t5S",
+           "type": "Entry",
+           "contentType": {
+            "sys": {
+             "type": "Link",
+             "id": "association"
+            }
+           }
+          },
+          "fields": {
+           "abbreviation": "RB",
+           "name": "Rulebook",
+           "slug": "rulebook",
+           "order": 10
+          }
+         }
+        ],
+        "bodyIndex": "War machines such as cannon and bolt throwers are powerful weapons on the field of battle, able to pulverise whole regiments, breach stone walls or even slay fearsome monsters with a single, well-placed shot. The most commonly seen types of war machine are dealt with as weapons in greater detail in their own section. War machines in general as a category of troop type have the following rules: Troop Type Models per Rank Maximum Rank Bonus Unit Strength per Model Special Rules War Machines - - As Starting Wounds Split Profile (War Machine) \"We're Not Paid to Fight\" Weapon of War "
+       }
+      }
+     ]
+    }
+   }
+  ],
+  "association": [
+   {
+    "sys": {
+     "id": "Pr1j2CwFi8QxERaKAHUNd",
+     "type": "Entry",
+     "contentType": {
+      "sys": {
+       "type": "Link",
+       "id": "association"
+      }
+     }
+    },
+    "fields": {
+     "abbreviation": "FoF",
+     "name": "Forces of Fantasy",
+     "slug": "forces-of-fantasy",
+     "order": 20,
+     "hidden": [
+      "Yes"
+     ]
+    }
+   },
+   {
+    "sys": {
+     "id": "ORvp2CwYP0XpAFTuEfUNq",
+     "type": "Entry",
+     "contentType": {
+      "sys": {
+       "type": "Link",
+       "id": "association"
+      }
+     }
+    },
+    "fields": {
+     "abbreviation": "HER",
+     "name": "High Elf Realms",
+     "slug": "high-elf-realms",
+     "order": 170,
+     "useArmyListEntry": true,
+     "status": "3"
+    }
+   }
+  ],
+  "nameSingular": "Eagle-Claw Bolt Thrower",
+  "armyLists": []
+ }
+}
