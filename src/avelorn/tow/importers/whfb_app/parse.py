@@ -27,24 +27,6 @@ from .richtext import Node, OptionLine
 
 _STAT_KEYS = ("M", "WS", "BS", "S", "T", "W", "I", "A", "Ld")
 
-# whfb.app names troop types in the singular; our enum mirrors the
-# rulebook's table, which pluralises some. Closed map: unknown is an error.
-_TROOP_TYPES = {
-    "Regular Infantry": TroopType.REGULAR_INFANTRY,
-    "Heavy Infantry": TroopType.HEAVY_INFANTRY,
-    "Monstrous Infantry": TroopType.MONSTROUS_INFANTRY,
-    "Swarm": TroopType.SWARMS,
-    "Light Cavalry": TroopType.LIGHT_CAVALRY,
-    "Heavy Cavalry": TroopType.HEAVY_CAVALRY,
-    "Monstrous Cavalry": TroopType.MONSTROUS_CAVALRY,
-    "War Beast": TroopType.WAR_BEASTS,
-    "Light Chariot": TroopType.LIGHT_CHARIOTS,
-    "Heavy Chariot": TroopType.HEAVY_CHARIOTS,
-    "Monstrous Creature": TroopType.MONSTROUS_CREATURES,
-    "Behemoth": TroopType.BEHEMOTHS,
-    "War Machine": TroopType.WAR_MACHINES,
-}
-
 # Troop types the unit schema cannot represent yet.
 _UNSUPPORTED_TROOP_TYPES = {"Character", "Named Character"}
 
@@ -107,12 +89,15 @@ def _parse_troop_type(slug: str, fields: Node, warnings: list[str]) -> TroopType
     unsupported = [n for n in names if n in _UNSUPPORTED_TROOP_TYPES]
     if unsupported:
         raise UnsupportedUnit(f"{slug}: troop type {unsupported[0]!r} is not in the unit schema yet")
-    unknown = [n for n in names if n not in _TROOP_TYPES]
-    if unknown or not names:
-        raise WhfbParseError(f"{slug}: unknown troop type(s) {names!r}")
-    if len(names) > 1:
+    try:
+        types = [TroopType(n) for n in names]
+    except ValueError:
+        raise WhfbParseError(f"{slug}: unknown troop type(s) {names!r}") from None
+    if not types:
+        raise WhfbParseError(f"{slug}: no troop type")
+    if len(types) > 1:
         warnings.append(f"{slug}: multiple troop types {names!r}; keeping {names[0]!r}")
-    return _TROOP_TYPES[names[0]]
+    return types[0]
 
 
 _BASE_SIZE_RE = re.compile(r"(\d+)\s*x\s*(\d+)\s*mm")
