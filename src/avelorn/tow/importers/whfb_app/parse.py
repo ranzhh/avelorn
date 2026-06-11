@@ -129,6 +129,12 @@ def _parse_profiles(slug: str, raw_profiles: object) -> list[Profile]:
     return profiles
 
 
+def _normalized(name: str) -> str:
+    """Case- and plural-insensitive form for comparing a link's display
+    text with its entry name."""
+    return " ".join(w.removesuffix("s") for w in name.lower().split())
+
+
 def _rule_list(
     slug: str, key: str, fields: Node, warnings: list[str], as_displayed: bool = False
 ) -> list[str]:
@@ -138,6 +144,16 @@ def _rule_list(
     if doc is None:
         return []
     names = richtext.linked_rule_names(doc, as_displayed=as_displayed)
+    if not as_displayed:
+        # Display text usually differs from the entry name only in case and
+        # number ("thrusting spears" -> "Thrusting Spear"); anything beyond
+        # that means the link points at a broader rules page ("Repeater bolt
+        # thrower" -> "Bolt Throwers") and deserves a human look.
+        for display, name in richtext.linked_rules(doc):
+            if display and _normalized(display) != _normalized(name):
+                warnings.append(
+                    f"{slug}: {key} displayed as {display!r} but linked entry is {name!r}; kept {name!r}"
+                )
     leftover = richtext.text_of(doc, links_as_names=not as_displayed)
     for name in names:
         leftover = leftover.replace(name, "", 1)

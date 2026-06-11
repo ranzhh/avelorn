@@ -67,6 +67,9 @@ def test_war_machine_compound_base_size_left_unset() -> None:
     assert unit.unit_size == UnitSize(min=1, max=1)
     assert unit.base_size is None
     assert any("base size" in w for w in result.warnings)
+    # The unit's printed weapon is more specific than the linked rules page.
+    assert "Bolt Throwers" in unit.equipment
+    assert any("'Repeater bolt thrower'" in w for w in result.warnings)
     # "-" stats in the war machine profile become None
     machine = unit.profiles[0]
     assert machine.movement is None

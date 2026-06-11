@@ -47,6 +47,23 @@ def text_of(node: Node, *, links_as_names: bool = False) -> str:
     )
 
 
+def linked_rules(node: Node) -> list[tuple[str, str]]:
+    """(display text, entry name) of each `rule` link under `node`, in order."""
+    pairs: list[tuple[str, str]] = []
+
+    def walk(n: Node) -> None:
+        target = _link_target(n)
+        if target is not None and _entry_content_type(target) == "rule":
+            name = target.get("fields", {}).get("name")
+            if name:
+                pairs.append((text_of(n).strip(), name))
+        for child in n.get("content", []):
+            walk(child)
+
+    walk(node)
+    return pairs
+
+
 def linked_rule_names(node: Node, *, as_displayed: bool = False) -> list[str]:
     """Names of `rule` entries linked anywhere under `node`, in document order.
 
@@ -56,19 +73,10 @@ def linked_rule_names(node: Node, *, as_displayed: bool = False) -> list[str]:
     "Detachment Special Rules", a rules-section page).
     """
     names: list[str] = []
-
-    def walk(n: Node) -> None:
-        target = _link_target(n)
-        if target is not None and _entry_content_type(target) == "rule":
-            name = target.get("fields", {}).get("name")
-            if as_displayed:
-                name = text_of(n).strip() or name
-            if name and name not in names:
-                names.append(name)
-        for child in n.get("content", []):
-            walk(child)
-
-    walk(node)
+    for display, name in linked_rules(node):
+        value = (display or name) if as_displayed else name
+        if value not in names:
+            names.append(value)
     return names
 
 
