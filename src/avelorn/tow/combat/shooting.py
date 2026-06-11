@@ -23,7 +23,7 @@ from avelorn.tow.schema.unit import Unit
 
 # Equipment whose armour contribution is verified against the rulebook,
 # as improvements over the unarmoured value of 7+. Keys use the canonical
-# Title Case form the whfb.app importer writes into data/.
+# Title Case from the whfb.app importer writes into data/.
 _ARMOUR_IMPROVEMENTS = {"Light Armour": 1, "Shield": 1}
 
 
