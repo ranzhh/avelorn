@@ -6,9 +6,9 @@ long names.
 """
 
 from enum import StrEnum
-from typing import Annotated
+from typing import Annotated, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.functional_validators import BeforeValidator
 
 
@@ -48,7 +48,13 @@ class UnitSize(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     min: int = Field(ge=1)
-    max: int | None = None  # None = no upper limit
+    max: int | None = Field(default=None, ge=1)  # None = no upper limit
+
+    @model_validator(mode="after")
+    def _max_not_below_min(self) -> Self:
+        if self.max is not None and self.max < self.min:
+            raise ValueError(f"max ({self.max}) must be >= min ({self.min})")
+        return self
 
 
 class BaseSize(BaseModel):
@@ -56,8 +62,8 @@ class BaseSize(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    width_mm: int
-    depth_mm: int
+    width_mm: int = Field(ge=1)
+    depth_mm: int = Field(ge=1)
 
 
 class TroopType(StrEnum):
@@ -102,9 +108,9 @@ class UnitOption(BaseModel):
 
     name: str
     kind: OptionKind = OptionKind.OTHER
-    points: int | None = None
+    points: int | None = Field(default=None, ge=0)
     per_model: bool = False
-    points_budget: int | None = None
+    points_budget: int | None = Field(default=None, ge=1)
     adds_rules: list[str] = Field(default_factory=list)
     removes_rules: list[str] = Field(default_factory=list)
     adds_equipment: list[str] = Field(default_factory=list)
@@ -112,6 +118,15 @@ class UnitOption(BaseModel):
     # Availability restriction, free text for now (e.g. "0-1 unit per
     # 1000 points"); becomes structured when the validation engine needs it.
     limit: str | None = None
+
+    # Interim guard until cost shapes become a discriminated union.
+    @model_validator(mode="after")
+    def _exactly_one_cost_shape(self) -> Self:
+        if (self.points is None) == (self.points_budget is None):
+            raise ValueError("exactly one of points or points_budget must be set")
+        if self.per_model and self.points is None:
+            raise ValueError("per_model applies to points, not points_budget")
+        return self
 
 
 class Unit(BaseModel):
