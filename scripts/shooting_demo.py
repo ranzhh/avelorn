@@ -3,7 +3,7 @@
 Loads both units from the data/ YAML tree, resolves the shooting chain,
 and prints the kill distribution.
 
-Usage: python -m avelorn.tow.combat [shooters]
+Usage: uv run python scripts/shooting_demo.py [shooters]
 """
 
 import sys
@@ -15,7 +15,7 @@ from avelorn.tow.combat.shooting import shoot_unit
 from avelorn.tow.combat.weapons import LONGBOW
 from avelorn.tow.schema.unit import Unit
 
-_DATA_DIR = Path(__file__).parents[4] / "data"
+_DATA_DIR = Path(__file__).parents[1] / "data"
 
 
 def _load_unit(army: str, slug: str) -> Unit:

@@ -1,8 +1,8 @@
 """Import units from tow.whfb.app into data/.
 
-python -m avelorn.tow.importers.whfb_app unit elven-archers
-python -m avelorn.tow.importers.whfb_app unit elven-archers --army high-elf-realms
-python -m avelorn.tow.importers.whfb_app army high-elf-realms
+uv run python scripts/import_whfb_app.py unit elven-archers
+uv run python scripts/import_whfb_app.py unit elven-archers --army high-elf-realms
+uv run python scripts/import_whfb_app.py army high-elf-realms
 """
 
 from __future__ import annotations
@@ -11,9 +11,9 @@ import argparse
 import sys
 from pathlib import Path
 
-from .client import BASE_URL, WhfbAppClient, WhfbAppError
-from .parse import UnsupportedUnit, WhfbParseError, parse_unit
-from .yamlout import unit_to_yaml
+from avelorn.tow.importers.whfb_app.client import BASE_URL, WhfbAppClient, WhfbAppError
+from avelorn.tow.importers.whfb_app.parse import UnsupportedUnit, WhfbParseError, parse_unit
+from avelorn.tow.importers.whfb_app.yamlout import unit_to_yaml
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -26,7 +26,7 @@ def main(argv: list[str] | None = None) -> int:
     common.add_argument("--data-dir", type=Path, default=Path("data"))
     common.add_argument("--dry-run", action="store_true", help="print YAML instead of writing")
 
-    parser = argparse.ArgumentParser(prog="python -m avelorn.tow.importers.whfb_app")
+    parser = argparse.ArgumentParser(prog="import_whfb_app")
     sub = parser.add_subparsers(dest="command", required=True)
 
     unit_cmd = sub.add_parser("unit", parents=[common], help="import a single unit by slug")
