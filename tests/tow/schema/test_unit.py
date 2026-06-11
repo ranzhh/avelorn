@@ -6,7 +6,7 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from avelorn.tow.schema.unit import Profile, Unit
+from avelorn.tow.schema.unit import Profile, Unit, UnitOption, UnitSize
 
 DATA_DIR = Path(__file__).parents[3] / "data"
 UNIT_FILES = sorted(DATA_DIR.glob("tow/armies/*/units/*.yaml"))
@@ -30,6 +30,11 @@ def elven_spearmen() -> dict:
         The unit as a plain dict.
     """
     return load_unit("high-elf-realms", "elven-spearmen")
+
+
+def test_unit_files_discovered() -> None:
+    """The data/ glob finds unit files; guards the parametrized test below."""
+    assert UNIT_FILES
 
 
 @pytest.mark.parametrize("path", UNIT_FILES, ids=lambda p: p.stem)
@@ -57,3 +62,25 @@ def test_unknown_troop_type_rejected(elven_spearmen: dict) -> None:
     bad = dict(elven_spearmen, troop_type="Irregular Infantry")
     with pytest.raises(ValidationError):
         Unit.model_validate(bad)
+
+
+def test_unit_size_max_below_min_rejected() -> None:
+    """A unit size range with max below min fails validation."""
+    with pytest.raises(ValidationError):
+        UnitSize.model_validate({"min": 5, "max": 4})
+
+
+@pytest.mark.parametrize(
+    "option",
+    [
+        {"name": "Both shapes", "points": 5, "points_budget": 50},
+        {"name": "No cost"},
+        {"name": "Negative", "points": -5},
+        {"name": "Per-model budget", "points_budget": 50, "per_model": True},
+    ],
+    ids=["both-costs", "no-cost", "negative-points", "per-model-budget"],
+)
+def test_invalid_option_cost_shapes_rejected(option: dict) -> None:
+    """Options must have exactly one non-negative cost shape."""
+    with pytest.raises(ValidationError):
+        UnitOption.model_validate(option)
