@@ -33,6 +33,7 @@ options:
     kind: equipment
     points: 1
     per_model: true
+    adds_equipment: [Light armour]
   - name: Veteran
     kind: special_rule
     points: 1

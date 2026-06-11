@@ -101,6 +101,8 @@ class UnitOption(BaseModel):
     points_budget: int | None = None
     adds_rules: list[str] = Field(default_factory=list)
     removes_rules: list[str] = Field(default_factory=list)
+    adds_equipment: list[str] = Field(default_factory=list)
+    removes_equipment: list[str] = Field(default_factory=list)
     # Availability restriction, free text for now (e.g. "0-1 unit per
     # 1000 points"); becomes structured when the validation engine needs it.
     limit: str | None = None
