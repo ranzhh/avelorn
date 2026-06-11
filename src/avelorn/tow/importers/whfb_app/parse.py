@@ -251,16 +251,21 @@ def _parse_option_line(
             kind=OptionKind.EQUIPMENT,
             points=points,
             per_model=per_model,
+            adds_equipment=[m.group(1)],
             limit=limit,
         )
     if m := _EQUIP_SWAP_RE.fullmatch(body):
-        # Equipment swaps ("Replace Cavalry Spear with shortbows") have no
-        # structured shape yet; the verbatim phrase carries the meaning.
+        # The gained side is often plain text rather than a rule link
+        # ("Replace Cavalry Spear with shortbows"), so its name may not be
+        # the canonical entry name; the YAML reviewer sees it either way.
+        gained = _capitalized(m.group(2))
         return UnitOption(
-            name=_capitalized(body),
+            name=gained,
             kind=OptionKind.EQUIPMENT,
             points=points,
             per_model=per_model,
+            adds_equipment=[gained],
+            removes_equipment=[m.group(1)],
             limit=limit,
         )
 

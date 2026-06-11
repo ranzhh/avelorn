@@ -56,6 +56,7 @@ def test_archers_parse_cleanly() -> None:
     assert armour.kind is OptionKind.EQUIPMENT
     assert armour.points == 1
     assert armour.per_model is True
+    assert armour.adds_equipment == ["Light Armour"]
 
 
 def test_war_machine_compound_base_size_left_unset() -> None:
@@ -85,10 +86,12 @@ def test_reavers_options_and_warnings() -> None:
     items = by_name["Harbinger magic items"]
     assert items.points_budget == 25
 
-    swap = by_name["Replace Cavalry Spear with shortbows"]
+    swap = by_name["Shortbows"]
     assert swap.kind is OptionKind.EQUIPMENT
     assert swap.points == 1
     assert swap.per_model is True
+    assert swap.adds_equipment == ["Shortbows"]
+    assert swap.removes_equipment == ["Cavalry Spear"]
 
     # The rider/steed equipment structure and the either/or shortbow
     # choice exceed the schema; both must surface as warnings.

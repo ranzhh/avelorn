@@ -85,6 +85,10 @@ def _option_row(option: UnitOption) -> dict:
         row["adds_rules"] = _FlowList(option.adds_rules)
     if option.removes_rules:
         row["removes_rules"] = _FlowList(option.removes_rules)
+    if option.adds_equipment:
+        row["adds_equipment"] = _FlowList(option.adds_equipment)
+    if option.removes_equipment:
+        row["removes_equipment"] = _FlowList(option.removes_equipment)
     if option.limit is not None:
         row["limit"] = option.limit
     return row
