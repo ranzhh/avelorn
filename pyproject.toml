@@ -5,10 +5,13 @@ description = "Tabletop wargame toolkit: unit database, army list planner, and c
 authors = [{ name = "Matteo Ranzetti", email = "ranzetti.matteo@gmail.com" }]
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "pydantic>=2.13.4",
+    "pyyaml>=6.0.3",
+]
 
 [dependency-groups]
-dev = ["pre-commit", "ruff>=0.15", "ty>=0.0.39"]
+dev = ["pre-commit", "pytest>=9.0.3", "ruff>=0.15", "ty>=0.0.39"]
 
 [build-system]
 requires = ["hatchling"]
