@@ -23,9 +23,9 @@ Stat = Annotated[int | None, BeforeValidator(_dash_to_none)]
 
 
 class Profile(BaseModel):
-    """One row of a characteristic profile (a unit may have several,
+    """One row of a characteristic profile.
 
-    e.g. rank-and-file plus champion).
+    A unit may have several, e.g. rank-and-file plus champion.
     """
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
@@ -43,6 +43,8 @@ class Profile(BaseModel):
 
 
 class UnitSize(BaseModel):
+    """Allowed model count for a unit."""
+
     model_config = ConfigDict(extra="forbid")
 
     min: int = Field(ge=1)
@@ -50,6 +52,8 @@ class UnitSize(BaseModel):
 
 
 class BaseSize(BaseModel):
+    """Base footprint of a single model, in millimetres."""
+
     model_config = ConfigDict(extra="forbid")
 
     width_mm: int
@@ -75,6 +79,8 @@ class TroopType(StrEnum):
 
 
 class OptionKind(StrEnum):
+    """Coarse category of a unit option."""
+
     CHAMPION = "champion"
     STANDARD_BEARER = "standard_bearer"
     MUSICIAN = "musician"
@@ -109,6 +115,8 @@ class UnitOption(BaseModel):
 
 
 class Unit(BaseModel):
+    """A unit entry as printed in an army's list."""
+
     model_config = ConfigDict(extra="forbid")
 
     id: str  # stable slug, e.g. "elven-spearmen"
