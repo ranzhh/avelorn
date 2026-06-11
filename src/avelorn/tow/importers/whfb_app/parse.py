@@ -12,6 +12,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from pydantic import ValidationError
+
 from avelorn.tow.schema.unit import (
     BaseSize,
     OptionKind,
@@ -145,14 +147,13 @@ def _parse_profiles(slug: str, raw_profiles: object) -> list[Profile]:
     return profiles
 
 
-def _normalized(name: str) -> str:
-    """Lowercase and de-pluralize a name.
+def _slugified(text: str) -> str:
+    """Slugify a name the way the site builds entry slugs.
 
     Returns:
-        A form for case- and plural-insensitive comparison of a link's
-        display text with its entry name.
+        Lowercase text with non-alphanumeric runs collapsed to hyphens.
     """
-    return " ".join(w.removesuffix("s") for w in name.lower().split())
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
 
 
 def _rule_list(
@@ -171,12 +172,13 @@ def _rule_list(
         return []
     names = richtext.linked_rule_names(doc, as_displayed=as_displayed)
     if not as_displayed:
-        # Display text usually differs from the entry name only in case and
-        # number ("thrusting spears" -> "Thrusting Spear"); anything beyond
-        # that means the link points at a broader rules page ("Repeater bolt
-        # thrower" -> "Bolt Throwers") and deserves a human look.
+        # A benign display text merely extends the entry name: a plural
+        # "s" or trailing words ("thrusting spears" vs "Thrusting Spear").
+        # One that does not start with the name points at a broader rules
+        # page ("Repeater bolt thrower" -> "Bolt Throwers") and deserves a
+        # human look.
         for display, name in richtext.linked_rules(doc):
-            if display and _normalized(display) != _normalized(name):
+            if display and not _slugified(display).startswith(_slugified(name)):
                 warnings.append(
                     f"{slug}: {key} displayed as {display!r} "
                     f"but linked entry is {name!r}; kept {name!r}"
@@ -217,12 +219,24 @@ def _parse_options(slug: str, doc: Node | None, warnings: list[str]) -> list[Uni
     options: list[UnitOption] = []
     for header, children in richtext.option_lines(doc):
         if not children:
-            options.append(_parse_option_line(slug, header, limit=None, warnings=warnings))
+            _append_option(options, slug, header, limit=None, warnings=warnings)
             continue
         limit = _parse_group_limit(slug, header.text, warnings)
         for child in children:
-            options.append(_parse_option_line(slug, child, limit=limit, warnings=warnings))
+            _append_option(options, slug, child, limit=limit, warnings=warnings)
     return options
+
+
+def _append_option(
+    options: list[UnitOption], slug: str, line: OptionLine, limit: str | None, warnings: list[str]
+) -> None:
+    try:
+        options.append(_parse_option_line(slug, line, limit=limit, warnings=warnings))
+    except ValidationError:
+        # e.g. a verbatim-fallback line with no parseable cost, which the
+        # schema's points-xor-budget rule rejects. Dropping it silently
+        # would hide source data, so say exactly what is missing.
+        warnings.append(f"{slug}: option not representable by the schema, DROPPED: {line.text!r}")
 
 
 def _parse_group_limit(slug: str, header: str, warnings: list[str]) -> str | None:

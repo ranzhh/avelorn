@@ -1,6 +1,10 @@
 """Option-line grammar tests on plain strings (no rich-text plumbing)."""
 
-from avelorn.tow.importers.whfb_app.parse import _parse_group_limit, _parse_option_line
+from avelorn.tow.importers.whfb_app.parse import (
+    _parse_group_limit,
+    _parse_option_line,
+    _parse_options,
+)
 from avelorn.tow.importers.whfb_app.richtext import OptionLine
 from avelorn.tow.schema.unit import OptionKind
 
@@ -97,6 +101,19 @@ def test_unknown_line_kept_verbatim_with_warning() -> None:
     assert option.name == "May ride a war hippogriff"
     assert option.points == 200
     assert warnings
+
+
+def test_schema_invalid_option_dropped_with_warning() -> None:
+    """A line the schema cannot hold (no parseable cost) is dropped loudly."""
+    text_node = {"nodeType": "text", "value": "Repeater Pistol (Free)", "marks": [], "data": {}}
+    paragraph = {"nodeType": "paragraph", "content": [text_node], "data": {}}
+    item = {"nodeType": "list-item", "content": [paragraph], "data": {}}
+    doc = {"nodeType": "document", "content": [{"nodeType": "unordered-list", "content": [item]}]}
+
+    warnings: list[str] = []
+    options = _parse_options("test", doc, warnings)
+    assert options == []
+    assert any("DROPPED" in w and "Repeater Pistol" in w for w in warnings)
 
 
 def test_group_limits() -> None:
