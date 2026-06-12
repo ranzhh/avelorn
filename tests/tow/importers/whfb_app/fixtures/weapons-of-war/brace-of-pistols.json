@@ -1,0 +1,275 @@
+{
+ "fields": {
+  "name": "Brace of Pistols",
+  "slug": "brace-of-pistols",
+  "body": {
+   "data": {},
+   "content": [
+    {
+     "data": {},
+     "content": [
+      {
+       "data": {},
+       "marks": [
+        {
+         "type": "bold"
+        }
+       ],
+       "value": "Ranged:",
+       "nodeType": "text"
+      }
+     ],
+     "nodeType": "paragraph"
+    },
+    {
+     "data": {
+      "target": {
+       "sys": {
+        "contentType": {
+         "sys": {
+          "id": "weaponProfile"
+         }
+        }
+       },
+       "fields": {
+        "name": "Brace of Pistols Ranged (Profile)",
+        "slug": "brace-of-pistols-ranged-profile",
+        "range": "12\"",
+        "strength": "4",
+        "armourPiercing": "-1",
+        "specialRules": {
+         "data": {},
+         "content": [
+          {
+           "data": {},
+           "content": [
+            {
+             "data": {},
+             "marks": [],
+             "value": "",
+             "nodeType": "text"
+            },
+            {
+             "data": {
+              "target": {
+               "sys": {
+                "type": "Link"
+               }
+              }
+             },
+             "content": [
+              {
+               "data": {},
+               "marks": [],
+               "value": "Armour Bane (1)",
+               "nodeType": "text"
+              }
+             ],
+             "nodeType": "entry-hyperlink"
+            },
+            {
+             "data": {},
+             "marks": [],
+             "value": ", ",
+             "nodeType": "text"
+            },
+            {
+             "data": {
+              "target": {
+               "sys": {
+                "type": "Link"
+               }
+              }
+             },
+             "content": [
+              {
+               "data": {},
+               "marks": [],
+               "value": "Multiple Shots (2)",
+               "nodeType": "text"
+              }
+             ],
+             "nodeType": "entry-hyperlink"
+            },
+            {
+             "data": {},
+             "marks": [],
+             "value": ", ",
+             "nodeType": "text"
+            },
+            {
+             "data": {
+              "target": {
+               "sys": {
+                "type": "Link"
+               }
+              }
+             },
+             "content": [
+              {
+               "data": {},
+               "marks": [],
+               "value": "Quick Shot",
+               "nodeType": "text"
+              }
+             ],
+             "nodeType": "entry-hyperlink"
+            },
+            {
+             "data": {},
+             "marks": [],
+             "value": "",
+             "nodeType": "text"
+            }
+           ],
+           "nodeType": "paragraph"
+          }
+         ],
+         "nodeType": "document"
+        },
+        "bodyIndex": "Armour Bane (1), Multiple Shots (2), Quick Shot"
+       }
+      }
+     },
+     "content": [],
+     "nodeType": "embedded-entry-block"
+    },
+    {
+     "data": {},
+     "content": [
+      {
+       "data": {},
+       "marks": [
+        {
+         "type": "bold"
+        }
+       ],
+       "value": "Combat:",
+       "nodeType": "text"
+      }
+     ],
+     "nodeType": "paragraph"
+    },
+    {
+     "data": {
+      "target": {
+       "sys": {
+        "contentType": {
+         "sys": {
+          "id": "weaponProfile"
+         }
+        }
+       },
+       "fields": {
+        "name": "Brace of Pistols Combat (Profile)",
+        "slug": "brace-of-pistols-combat-profile",
+        "range": "Combat",
+        "strength": "S",
+        "armourPiercing": "-",
+        "specialRules": {
+         "data": {},
+         "content": [
+          {
+           "data": {},
+           "content": [
+            {
+             "data": {},
+             "marks": [],
+             "value": "",
+             "nodeType": "text"
+            },
+            {
+             "data": {
+              "target": {
+               "sys": {
+                "type": "Link"
+               }
+              }
+             },
+             "content": [
+              {
+               "data": {},
+               "marks": [],
+               "value": "Extra Attacks (+1)",
+               "nodeType": "text"
+              }
+             ],
+             "nodeType": "entry-hyperlink"
+            },
+            {
+             "data": {},
+             "marks": [],
+             "value": ", ",
+             "nodeType": "text"
+            },
+            {
+             "data": {
+              "target": {
+               "sys": {
+                "type": "Link"
+               }
+              }
+             },
+             "content": [
+              {
+               "data": {},
+               "marks": [],
+               "value": "Requires Two Hands",
+               "nodeType": "text"
+              }
+             ],
+             "nodeType": "entry-hyperlink"
+            },
+            {
+             "data": {},
+             "marks": [],
+             "value": "",
+             "nodeType": "text"
+            }
+           ],
+           "nodeType": "paragraph"
+          }
+         ],
+         "nodeType": "document"
+        },
+        "bodyIndex": "Extra Attacks (+1), Requires Two Hands"
+       }
+      }
+     },
+     "content": [],
+     "nodeType": "embedded-entry-block"
+    },
+    {
+     "data": {},
+     "content": [
+      {
+       "data": {},
+       "marks": [
+        {
+         "type": "italic"
+        },
+        {
+         "type": "bold"
+        }
+       ],
+       "value": "Notes:",
+       "nodeType": "text"
+      },
+      {
+       "data": {},
+       "marks": [
+        {
+         "type": "italic"
+        }
+       ],
+       "value": " A brace of pistols has two profiles, representing how the weapons are used in combat.",
+       "nodeType": "text"
+      }
+     ],
+     "nodeType": "paragraph"
+    }
+   ],
+   "nodeType": "document"
+  }
+ }
+}

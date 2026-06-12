@@ -1,0 +1,40 @@
+{
+ "fields": {
+  "name": "Light Armour",
+  "slug": "light-armour",
+  "body": {
+   "data": {},
+   "content": [
+    {
+     "data": {},
+     "content": [
+      {
+       "data": {},
+       "marks": [
+        {
+         "type": "bold"
+        }
+       ],
+       "value": "Armour Value: 6+",
+       "nodeType": "text"
+      }
+     ],
+     "nodeType": "paragraph"
+    },
+    {
+     "data": {},
+     "content": [
+      {
+       "data": {},
+       "marks": [],
+       "value": "Representing incomplete suits of mail, occasional plates of armour and even the thick, calloused hides of some creatures, light armour offers a degree of protection to vital areas.",
+       "nodeType": "text"
+      }
+     ],
+     "nodeType": "paragraph"
+    }
+   ],
+   "nodeType": "document"
+  }
+ }
+}

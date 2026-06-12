@@ -1,0 +1,89 @@
+{
+ "fields": {
+  "name": "Warbow",
+  "slug": "warbow",
+  "body": {
+   "data": {},
+   "content": [
+    {
+     "data": {
+      "target": {
+       "sys": {
+        "contentType": {
+         "sys": {
+          "id": "weaponProfile"
+         }
+        }
+       },
+       "fields": {
+        "name": "Warbow (Profile)",
+        "slug": "warbow-profile",
+        "range": "24\"",
+        "strength": "S",
+        "armourPiercing": "-",
+        "specialRules": {
+         "data": {},
+         "content": [
+          {
+           "data": {},
+           "content": [
+            {
+             "data": {},
+             "marks": [],
+             "value": "",
+             "nodeType": "text"
+            },
+            {
+             "data": {
+              "target": {
+               "sys": {
+                "type": "Link"
+               }
+              }
+             },
+             "content": [
+              {
+               "data": {},
+               "marks": [],
+               "value": "Volley Fire",
+               "nodeType": "text"
+              }
+             ],
+             "nodeType": "entry-hyperlink"
+            },
+            {
+             "data": {},
+             "marks": [],
+             "value": "",
+             "nodeType": "text"
+            }
+           ],
+           "nodeType": "paragraph"
+          }
+         ],
+         "nodeType": "document"
+        },
+        "bodyIndex": "Volley Fire"
+       }
+      }
+     },
+     "content": [],
+     "nodeType": "embedded-entry-block"
+    },
+    {
+     "data": {},
+     "content": [
+      {
+       "data": {},
+       "marks": [],
+       "value": "",
+       "nodeType": "text"
+      }
+     ],
+     "nodeType": "paragraph"
+    }
+   ],
+   "nodeType": "document"
+  }
+ }
+}

@@ -1,0 +1,94 @@
+{
+ "fields": {
+  "name": "Hand Weapon",
+  "slug": "hand-weapon",
+  "body": {
+   "data": {},
+   "content": [
+    {
+     "data": {},
+     "content": [
+      {
+       "data": {},
+       "marks": [],
+       "value": "Even the most poorly prepared warrior will arm themselves with a hand weapon, such as a simple sword or axe. It may even be that the model's natural weapons, such as teeth and claws, fulfil this role. Regardless of the form it takes, almost every model, even a cavalry mount, is considered to be armed with a hand weapon with the following profile:",
+       "nodeType": "text"
+      }
+     ],
+     "nodeType": "paragraph"
+    },
+    {
+     "data": {
+      "target": {
+       "sys": {
+        "contentType": {
+         "sys": {
+          "id": "weaponProfile"
+         }
+        }
+       },
+       "fields": {
+        "name": "Hand Weapon (Profile)",
+        "slug": "hand-weapon-profile",
+        "range": "Combat",
+        "strength": "S",
+        "armourPiercing": "-",
+        "specialRules": {
+         "data": {},
+         "content": [
+          {
+           "data": {},
+           "content": [
+            {
+             "data": {},
+             "marks": [],
+             "value": "-",
+             "nodeType": "text"
+            }
+           ],
+           "nodeType": "paragraph"
+          }
+         ],
+         "nodeType": "document"
+        },
+        "bodyIndex": "-"
+       }
+      }
+     },
+     "content": [],
+     "nodeType": "embedded-entry-block"
+    },
+    {
+     "data": {},
+     "content": [
+      {
+       "data": {},
+       "marks": [
+        {
+         "type": "italic"
+        },
+        {
+         "type": "bold"
+        }
+       ],
+       "value": "Notes:",
+       "nodeType": "text"
+      },
+      {
+       "data": {},
+       "marks": [
+        {
+         "type": "italic"
+        }
+       ],
+       "value": " Unless specified otherwise, all models are assumed to be equipped with a hand weapon.",
+       "nodeType": "text"
+      }
+     ],
+     "nodeType": "paragraph"
+    }
+   ],
+   "nodeType": "document"
+  }
+ }
+}

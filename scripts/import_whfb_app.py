@@ -1,8 +1,10 @@
-"""Import units from tow.whfb.app into data/.
+"""Import units, weapons, and armour from tow.whfb.app into data/.
 
 uv run python scripts/import_whfb_app.py unit elven-archers
 uv run python scripts/import_whfb_app.py unit elven-archers --army high-elf-realms
 uv run python scripts/import_whfb_app.py army high-elf-realms
+uv run python scripts/import_whfb_app.py weapon longbow
+uv run python scripts/import_whfb_app.py armour light-armour
 """
 
 from __future__ import annotations
@@ -12,8 +14,9 @@ import sys
 from pathlib import Path
 
 from avelorn.tow.importers.whfb_app.client import BASE_URL, WhfbAppClient, WhfbAppError
+from avelorn.tow.importers.whfb_app.equipment import parse_armour, parse_weapon
 from avelorn.tow.importers.whfb_app.parse import UnsupportedUnit, WhfbParseError, parse_unit
-from avelorn.tow.importers.whfb_app.yamlout import unit_to_yaml
+from avelorn.tow.importers.whfb_app.yamlout import armour_to_yaml, unit_to_yaml, weapon_to_yaml
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -38,17 +41,52 @@ def main(argv: list[str] | None = None) -> int:
     army_cmd = sub.add_parser("army", parents=[common], help="import every unit of an army")
     army_cmd.add_argument("slug")
 
+    weapon_cmd = sub.add_parser("weapon", parents=[common], help="import a weapon by slug")
+    weapon_cmd.add_argument("slug")
+
+    armour_cmd = sub.add_parser("armour", parents=[common], help="import an armour item by slug")
+    armour_cmd.add_argument("slug")
+
     args = parser.parse_args(argv)
     client = WhfbAppClient()
     try:
         if args.command == "unit":
             ok = _import_unit(client, args.slug, args.army, args.data_dir, args.dry_run)
-        else:
+        elif args.command == "army":
             ok = _import_army(client, args.slug, args.data_dir, args.dry_run)
+        else:
+            ok = _import_equipment(client, args.command, args.slug, args.data_dir, args.dry_run)
     except WhfbAppError as err:
         print(f"error: {err}", file=sys.stderr)
         return 1
     return 0 if ok else 1
+
+
+def _import_equipment(
+    client: WhfbAppClient, kind: str, slug: str, data_dir: Path, dry_run: bool
+) -> bool:
+    entry = client.weapons_of_war_entry(slug)
+    try:
+        if kind == "weapon":
+            result = parse_weapon(entry)
+            text = weapon_to_yaml(result.weapon, source_url=f"{BASE_URL}/weapons-of-war/{slug}")
+        else:
+            result = parse_armour(entry)
+            text = armour_to_yaml(result.armour, source_url=f"{BASE_URL}/weapons-of-war/{slug}")
+    except WhfbParseError as err:
+        print(f"{slug}: FAILED ({err})", file=sys.stderr)
+        return False
+    for warning in result.warnings:
+        print(f"warning: {warning}", file=sys.stderr)
+    if dry_run:
+        print(text)
+        return True
+    subdir = "weapons" if kind == "weapon" else "armour"
+    path = data_dir / "tow" / subdir / f"{slug}.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+    print(f"wrote {path}")
+    return True
 
 
 def _import_unit(
