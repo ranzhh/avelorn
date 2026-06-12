@@ -19,5 +19,15 @@ class MissileWeapon:
     special_rules: tuple[str, ...] = ()
 
 
-LONGBOW = MissileWeapon(name="Longbow", range_inches=30, strength=3)
-WARBOW = MissileWeapon(name="Warbow", range_inches=24, strength=None)
+LONGBOW = MissileWeapon(
+    name="Longbow",
+    range_inches=30,
+    strength=3,
+    special_rules=("Armour Bane (1)", "Volley Fire"),
+)
+WARBOW = MissileWeapon(
+    name="Warbow",
+    range_inches=24,
+    strength=None,
+    special_rules=("Volley Fire",),
+)
