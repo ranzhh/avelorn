@@ -1,0 +1,53 @@
+# Source: https://tow.whfb.app/unit/lothern-sea-guard
+id: lothern-sea-guard
+name: Lothern Sea Guard
+points: 11
+unit_size:
+  min: 5
+troop_type: Regular Infantry
+base_size:
+  width_mm: 25
+  depth_mm: 25
+profiles:
+  - { name: Sea Guard, M: 5, WS: 4, BS: 4, S: 3, T: 3, W: 1, I: 4, A: 1, Ld: 8 }
+  - { name: Sea Master, M: 5, WS: 4, BS: 5, S: 3, T: 3, W: 1, I: 4, A: 2, Ld: 8 }
+equipment:
+  - Hand Weapon
+  - Thrusting Spear
+  - Warbow
+  - Light Armour
+special_rules:
+  - Close Order
+  - Elven Reflexes
+  - Martial Prowess
+  - Naval Discipline
+  - Valour of Ages
+options:
+  - name: Shield
+    kind: equipment
+    points: 1
+    per_model: true
+    adds_equipment: [Shield]
+  - name: Sea Master
+    kind: champion
+    points: 7
+  - name: Standard Bearer
+    kind: standard_bearer
+    points: 5
+  - name: Musician
+    kind: musician
+    points: 5
+  - name: Sea Master magic items
+    kind: other
+    points_budget: 25
+  - name: Veteran
+    kind: special_rule
+    points: 1
+    per_model: true
+    adds_rules: [Veteran]
+    removes_rules: [Valour of Ages]
+    limit: 0-1 unit per 1000 points
+  - name: Magic standard
+    kind: magic_standard
+    points_budget: 50
+    limit: 0-1 unit per 1000 points
