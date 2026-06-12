@@ -26,7 +26,7 @@ options:
   - name: Sentinel
     kind: champion
     points: 5
-  - name: Standard bearer
+  - name: Standard Bearer
     kind: standard_bearer
     points: 5
   - name: Musician

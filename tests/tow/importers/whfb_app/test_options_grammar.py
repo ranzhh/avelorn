@@ -36,7 +36,7 @@ def test_standard_bearer_and_musician_upgrades() -> None:
     """Command upgrades are recognised by role keyword."""
     bearer, _ = parse_line("Upgrade one model to a standard bearer (+5 points per unit)")
     assert bearer.kind is OptionKind.STANDARD_BEARER
-    assert bearer.name == "Standard bearer"
+    assert bearer.name == "Standard Bearer"
     musician, _ = parse_line("Upgrade one model to a musician (+5 points per unit)")
     assert musician.kind is OptionKind.MUSICIAN
     assert musician.name == "Musician"

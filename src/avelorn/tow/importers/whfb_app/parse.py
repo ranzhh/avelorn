@@ -361,6 +361,8 @@ def _upgrade_option(
         name = m.group(1)
         kind = OptionKind.CHAMPION
     elif name.lower() == "standard bearer":
+        # The source prose is lowercase; use the printed name as-is.
+        name = "Standard Bearer"
         kind = OptionKind.STANDARD_BEARER
     elif name.lower() == "musician":
         kind = OptionKind.MUSICIAN
