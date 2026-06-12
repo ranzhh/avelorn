@@ -6,7 +6,7 @@ import pytest
 import yaml
 
 from avelorn.tow.combat.shooting import shoot, shoot_unit
-from avelorn.tow.combat.weapons import LONGBOW
+from avelorn.tow.combat.weapons import LONGBOW, WARBOW
 from avelorn.tow.schema.unit import Unit
 
 DATA_DIR = Path(__file__).parents[3] / "data"
@@ -81,6 +81,30 @@ def test_defender_size_does_not_affect_wounds() -> None:
     assert vs_twenty.p_unsaved == vs_thirty.p_unsaved
     assert vs_twenty.distribution == vs_thirty.distribution
     assert vs_twenty.expected_wounds == vs_thirty.expected_wounds
+
+
+def test_shoot_unit_warbow_uses_wielders_strength() -> None:
+    """End-to-end from data files: Lothern Sea Guard shoot Elven Spearmen.
+
+    The warbow's printed Strength is "S", so shots resolve at the Sea
+    Guard's S3 vs T3: wound on 4+, same 2/9 per-shot chain as the longbow
+    golden test (spearmen save on 5+, no AP).
+    """
+    sea_guard = load_unit("high-elf-realms", "lothern-sea-guard")
+    spearmen = load_unit("high-elf-realms", "elven-spearmen")
+    result = shoot_unit(sea_guard, spearmen, shooters=3, weapon=WARBOW)
+    assert result.hit_target == 3  # BS 4
+    assert result.wound_target == 4  # wielder's S3 vs T3
+    assert result.expected_wounds == pytest.approx(2 / 3)
+
+
+def test_shoot_unit_rejects_wielder_strength_weapon_without_strength() -> None:
+    """A "Strength: S" weapon cannot resolve if the wielder has no S."""
+    spearmen = load_unit("high-elf-realms", "elven-spearmen")
+    strengthless = spearmen.model_copy(deep=True)
+    object.__setattr__(strengthless.profiles[0], "strength", None)
+    with pytest.raises(ValueError, match="wielder's Strength"):
+        shoot_unit(strengthless, spearmen, shooters=1, weapon=WARBOW)
 
 
 def test_shoot_unit_rejects_missing_ballistic_skill() -> None:

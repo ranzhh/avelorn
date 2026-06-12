@@ -116,8 +116,9 @@ def shoot_unit(
         The shooting outcome.
 
     Raises:
-        ValueError: if the attacker profile has no Ballistic Skill or the
-            defender profile has no Toughness.
+        ValueError: if the attacker profile has no Ballistic Skill, the
+            defender profile has no Toughness, or the weapon shoots at the
+            wielder's Strength and the attacker profile has none.
     """
     # TODO: profile selection is naive. A unit that bought a champion
     # shoots with the champion too (possibly at higher BS, e.g. an
@@ -132,6 +133,12 @@ def shoot_unit(
     if toughness is None:
         raise ValueError(f"{defender.name} has no Toughness; it cannot be wounded")
 
+    strength = weapon.strength if weapon.strength is not None else attacker.profiles[0].strength
+    if strength is None:
+        raise ValueError(
+            f"{weapon.name} shoots at the wielder's Strength, but {attacker.name} has none"
+        )
+
     armour_value, notes = _defender_armour(defender)
     for unit in (attacker, defender):
         notes.extend(
@@ -144,7 +151,7 @@ def shoot_unit(
     return shoot(
         shots=shooters,
         ballistic_skill=ballistic_skill,
-        strength=weapon.strength,
+        strength=strength,
         toughness=toughness,
         armour_value=armour_value,
         armour_piercing=weapon.armour_piercing,
