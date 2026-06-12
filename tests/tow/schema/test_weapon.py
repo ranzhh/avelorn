@@ -1,10 +1,55 @@
-"""Weapon and armour schema tests: printed-convention parsing."""
+"""Weapon and armour schema tests: printed-convention parsing and data/ validation."""
+
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
+from avelorn.core.loading import load_yaml, load_yaml_dir
 from avelorn.tow.schema.armour import Armour
+from avelorn.tow.schema.unit import Unit
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile, WeaponStrength
+
+DATA_DIR = Path(__file__).parents[3] / "data"
+WEAPON_FILES = sorted(DATA_DIR.glob("tow/weapons/*.yaml"))
+ARMOUR_FILES = sorted(DATA_DIR.glob("tow/armour/*.yaml"))
+UNIT_FILES = sorted(DATA_DIR.glob("tow/armies/*/units/*.yaml"))
+
+
+def test_data_globs_find_files() -> None:
+    """The data/ globs find files; guards the parametrized tests below."""
+    assert WEAPON_FILES
+    assert ARMOUR_FILES
+
+
+@pytest.mark.parametrize("path", WEAPON_FILES, ids=lambda p: p.stem)
+def test_weapon_yaml_is_valid(path: Path) -> None:
+    """Every weapon YAML under data/ validates against the schema."""
+    weapon = load_yaml(path, Weapon)
+    assert weapon.id == path.stem
+
+
+@pytest.mark.parametrize("path", ARMOUR_FILES, ids=lambda p: p.stem)
+def test_armour_yaml_is_valid(path: Path) -> None:
+    """Every armour YAML under data/ validates against the schema."""
+    armour = load_yaml(path, Armour)
+    assert armour.id == path.stem
+
+
+@pytest.mark.parametrize("path", UNIT_FILES, ids=lambda p: p.stem)
+def test_unit_equipment_resolves(path: Path) -> None:
+    """Every equipment name a unit can carry exists under data/.
+
+    Covers base equipment and option-granted equipment; resolution is by
+    exact printed name.
+    """
+    known = {item.name for item in load_yaml_dir(DATA_DIR / "tow/weapons", Weapon)}
+    known |= {item.name for item in load_yaml_dir(DATA_DIR / "tow/armour", Armour)}
+    unit = load_yaml(path, Unit)
+    carried = set(unit.equipment)
+    for option in unit.options:
+        carried |= set(option.adds_equipment) | set(option.removes_equipment)
+    assert carried <= known, f"unknown equipment: {sorted(carried - known)}"
 
 
 @pytest.mark.parametrize(

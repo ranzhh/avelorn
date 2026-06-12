@@ -1,0 +1,5 @@
+# Source: https://tow.whfb.app/weapons-of-war/warbow
+id: warbow
+name: Warbow
+profiles:
+  - { R: 24, S: S, AP: '-', special_rules: [Volley Fire] }

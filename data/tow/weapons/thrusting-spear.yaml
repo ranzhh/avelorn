@@ -1,0 +1,8 @@
+# Source: https://tow.whfb.app/weapons-of-war/thrusting-spear
+id: thrusting-spear
+name: Thrusting Spear
+profiles:
+  - { R: Combat, S: S, AP: '-', special_rules: [Fight In Extra Rank] }
+notes: Models whose troop type is infantry only. A model wielding a thrusting spear cannot make a supporting attack during
+  a turn in which it charged. During a turn in which it was charged in its front arc, a model wielding a thrusting spear gains
+  a +1 modifier to its Initiative against the charging unit(s).
