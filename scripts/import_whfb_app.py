@@ -10,13 +10,17 @@ uv run python scripts/import_whfb_app.py armour light-armour
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
+from avelorn.core.logging import configure_logging
 from avelorn.tow.importers.whfb_app.client import BASE_URL, WhfbAppClient, WhfbAppError
 from avelorn.tow.importers.whfb_app.equipment import parse_armour, parse_weapon
 from avelorn.tow.importers.whfb_app.parse import UnsupportedUnit, WhfbParseError, parse_unit
 from avelorn.tow.importers.whfb_app.yamlout import armour_to_yaml, unit_to_yaml, weapon_to_yaml
+
+logger = logging.getLogger(__name__)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -48,6 +52,7 @@ def main(argv: list[str] | None = None) -> int:
     armour_cmd.add_argument("slug")
 
     args = parser.parse_args(argv)
+    configure_logging()
     client = WhfbAppClient()
     try:
         if args.command == "unit":
@@ -56,8 +61,8 @@ def main(argv: list[str] | None = None) -> int:
             ok = _import_army(client, args.slug, args.data_dir, args.dry_run)
         else:
             ok = _import_equipment(client, args.command, args.slug, args.data_dir, args.dry_run)
-    except WhfbAppError as err:
-        print(f"error: {err}", file=sys.stderr)
+    except WhfbAppError:
+        logger.exception("import failed")
         return 1
     return 0 if ok else 1
 
@@ -73,19 +78,19 @@ def _import_equipment(
         else:
             result = parse_armour(entry)
             text = armour_to_yaml(result.armour, source_url=f"{BASE_URL}/weapons-of-war/{slug}")
-    except WhfbParseError as err:
-        print(f"{slug}: FAILED ({err})", file=sys.stderr)
+    except WhfbParseError:
+        logger.exception("%s: parse failed", slug)
         return False
     for warning in result.warnings:
-        print(f"warning: {warning}", file=sys.stderr)
+        logger.warning("%s: %s", slug, warning)
     if dry_run:
-        print(text)
+        print(text)  # generated YAML is the program's payload -> stdout
         return True
     subdir = "weapons" if kind == "weapon" else "armour"
     path = data_dir / "tow" / subdir / f"{slug}.yaml"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text)
-    print(f"wrote {path}")
+    logger.info("wrote %s", path)
     return True
 
 
@@ -95,14 +100,14 @@ def _import_unit(
     entry = client.unit_entry(slug)
     if army is None:
         army = _resolve_army(client, entry)
-        print(f"{slug}: army resolved to {army!r}", file=sys.stderr)
+        logger.info("%s: army resolved to %r", slug, army)
     return _write_unit(entry, army, data_dir, dry_run)
 
 
 def _import_army(client: WhfbAppClient, army: str, data_dir: Path, dry_run: bool) -> bool:
     slugs = client.army_unit_slugs(army)
     if not slugs:
-        print(f"error: army {army!r} lists no units", file=sys.stderr)
+        logger.error("army %r lists no units", army)
         return False
     ok = True
     for slug in slugs:
@@ -115,21 +120,21 @@ def _write_unit(entry: dict, army: str, data_dir: Path, dry_run: bool) -> bool:
     try:
         result = parse_unit(entry)
     except UnsupportedUnit as err:
-        print(f"{slug}: skipped ({err})", file=sys.stderr)
+        logger.warning("%s: skipped (%s)", slug, err)
         return True
-    except WhfbParseError as err:
-        print(f"{slug}: FAILED ({err})", file=sys.stderr)
+    except WhfbParseError:
+        logger.exception("%s: parse failed", slug)
         return False
     for warning in result.warnings:
-        print(f"warning: {warning}", file=sys.stderr)
+        logger.warning("%s: %s", slug, warning)
     text = unit_to_yaml(result.unit, source_url=f"{BASE_URL}/unit/{slug}")
     if dry_run:
-        print(text)
+        print(text)  # generated YAML is the program's payload -> stdout
         return True
     path = data_dir / "tow" / "armies" / army / "units" / f"{slug}.yaml"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text)
-    print(f"wrote {path}")
+    logger.info("wrote %s", path)
     return True
 
 
