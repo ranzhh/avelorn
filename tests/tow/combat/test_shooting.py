@@ -108,6 +108,78 @@ def test_defender_size_does_not_affect_wounds() -> None:
     assert vs_twenty.expected_wounds == vs_thirty.expected_wounds
 
 
+def test_shoot_caps_casualties_at_target_size() -> None:
+    """A volley cannot remove more models than the unit contains.
+
+    10 shots at p = 1/2 against a 2-model unit: the wound distribution
+    keeps all 11 outcomes, but casualties collapse to 0, 1, or 2, with
+    P(2) absorbing every outcome of 2+ wounds.
+    """
+    result = shoot(10, ballistic_skill=4, strength=3, toughness=3, targets=2)
+    assert len(result.distribution) == 11
+    assert len(result.casualties) == 3
+    assert result.casualties[2] == pytest.approx(sum(result.distribution[2:]))
+    assert sum(result.casualties) == pytest.approx(1.0)
+    assert result.expected_casualties < result.expected_wounds
+
+
+def test_shoot_casualties_equal_wounds_when_uncapped() -> None:
+    """With no target size, casualties are exactly the wound distribution."""
+    result = shoot(3, ballistic_skill=4, strength=3, toughness=3, armour_value=5)
+    assert result.target_models is None
+    assert result.casualties == result.distribution
+    assert result.expected_casualties == pytest.approx(result.expected_wounds)
+
+
+def test_shoot_rejects_negative_targets() -> None:
+    """A negative target count is meaningless."""
+    with pytest.raises(ValueError, match="targets must be >= 0"):
+        shoot(3, ballistic_skill=4, strength=3, toughness=3, targets=-1)
+
+
+def test_shoot_unit_caps_casualties_but_not_wounds() -> None:
+    """``defenders`` bounds casualties while leaving the wound math intact.
+
+    30 archers into 5 spearmen: the wound distribution is unbounded over
+    30 shots, but the spearmen unit can lose at most 5 models.
+    """
+    archers = load_unit("high-elf-realms", "elven-archers")
+    spearmen = load_unit("high-elf-realms", "elven-spearmen")
+    result = shoot_unit(
+        archers, spearmen, shooters=30, weapon=load_weapon("longbow"), armoury=ARMOURY, defenders=5
+    )
+    assert result.target_models == 5
+    assert len(result.distribution) == 31
+    assert len(result.casualties) == 6
+    assert result.expected_casualties < result.expected_wounds
+    assert any("panic test at 25%" in note for note in result.notes)
+
+
+def test_shoot_unit_withholds_size_cap_for_multi_wound_target() -> None:
+    """A W>1 target is noted and left uncapped, not capped wound-for-model.
+
+    Capping wounds at the model count would conflate wounds with kills for
+    multi-wound models, so the cap is withheld even when a count is given:
+    casualties stay equal to the wound distribution and a note explains.
+    """
+    archers = load_unit("high-elf-realms", "elven-archers")
+    spearmen = load_unit("high-elf-realms", "elven-spearmen")
+    multi_wound = spearmen.model_copy(deep=True)
+    object.__setattr__(multi_wound.profiles[0], "wounds", 3)
+    result = shoot_unit(
+        archers,
+        multi_wound,
+        shooters=30,
+        weapon=load_weapon("longbow"),
+        armoury=ARMOURY,
+        defenders=5,
+    )
+    assert any("1 Wound per model" in note and "Wounds 3" in note for note in result.notes)
+    assert result.target_models is None  # cap withheld despite defenders=5
+    assert result.casualties == result.distribution
+    assert not any("panic" in note for note in result.notes)
+
+
 def test_shoot_unit_warbow_uses_wielders_strength() -> None:
     """End-to-end from data files: Lothern Sea Guard shoot Elven Spearmen.
 

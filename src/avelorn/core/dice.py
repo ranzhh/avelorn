@@ -45,6 +45,26 @@ def binomial_distribution(trials: int, p: float) -> list[float]:
     return [binomial_pmf(k, trials, p) for k in range(trials + 1)]
 
 
+def cap_distribution(distribution: list[float], cap: int) -> list[float]:
+    """Fold all probability mass at or above ``cap`` onto index ``cap``.
+
+    Models a ceiling on a count: a volley cannot remove more models than a
+    unit contains, so every outcome of ``cap`` or more collapses to exactly
+    ``cap``. Pure redistribution — the returned masses still sum to 1.
+
+    Returns:
+        A list of length ``min(len(distribution), cap + 1)``.
+
+    Raises:
+        ValueError: ``cap`` is negative.
+    """
+    if cap < 0:
+        raise ValueError("cap must be >= 0")
+    if cap >= len(distribution) - 1:
+        return list(distribution)
+    return [*distribution[:cap], sum(distribution[cap:])]
+
+
 def sample(distribution: list[float], rng: random.Random | None = None) -> int:
     """Draw one concrete outcome from a distribution (index k = P(outcome k)).
 

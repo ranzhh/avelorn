@@ -4,8 +4,9 @@ Loads units, weapons, and armour from the data/ YAML tree, picks the
 shooter's missile weapon from its equipment, resolves the shooting
 chain, and prints the kill distribution.
 
-Usage: uv run python scripts/shooting_demo.py [shooters] [attacker] [defender]
-       (unit slugs default to elven-archers and elven-spearmen)
+Usage: uv run python scripts/shooting_demo.py [shooters] [attacker] [defender] [defenders]
+       (unit slugs default to elven-archers and elven-spearmen; with no
+       defender count the kill distribution is left uncapped)
 """
 
 import sys
@@ -42,23 +43,35 @@ def main() -> None:
     armoury = {a.name: a for a in load_yaml_dir(_DATA_DIR / "tow/armour", Armour)}
     attacker = _load_unit("high-elf-realms", attacker_slug)
     defender = _load_unit("high-elf-realms", defender_slug)
+    # No count given: leave the unit unbounded and report the raw kill
+    # distribution. A count caps casualties at the unit on the table.
+    defenders = int(sys.argv[4]) if len(sys.argv) > 4 else None
     weapon = _missile_weapon(attacker, weapons)
-    result = shoot_unit(attacker, defender, shooters=shooters, weapon=weapon, armoury=armoury)
+    result = shoot_unit(
+        attacker, defender, shooters=shooters, weapon=weapon, armoury=armoury, defenders=defenders
+    )
 
     def fmt_target(target: int | None) -> str:
         return f"{target}+" if target is not None else "-"
 
-    print(f"{shooters} {attacker.name} shoot {defender.name} with {weapon.name}s")
+    target = f"{defenders} " if defenders is not None else ""
+    print(f"{shooters} {attacker.name} shoot {target}{defender.name} with {weapon.name}s")
     print(f"  to hit:  {fmt_target(result.hit_target)}   (p = {result.p_hit:.3f})")
     print(f"  to wound: {fmt_target(result.wound_target)}  (p = {result.p_wound:.3f})")
     print(f"  armour:  {fmt_target(result.save_target)}")
     print(f"  per-shot unsaved wound: p = {result.p_unsaved:.3f}")
-    print(f"  expected kills: {result.expected_wounds:.2f}")
+    if defenders is not None:
+        print(
+            f"  expected casualties: {result.expected_casualties:.2f} of {defenders}"
+            f"   ({defenders - result.expected_casualties:.2f} survive)"
+        )
+    else:
+        print(f"  expected kills: {result.expected_casualties:.2f}")
     print()
-    print("  kills  probability")
-    for kills, p in enumerate(result.distribution):
+    print("  killed  probability")
+    for killed, p in enumerate(result.casualties):
         bar = "#" * round(p * 40)
-        print(f"  {kills:>5}  {p:>10.3f}  {bar}")
+        print(f"  {killed:>6}  {p:>10.3f}  {bar}")
     if result.notes:
         print()
         print("  not factored into the math:")
