@@ -7,6 +7,7 @@ import pytest
 from avelorn.core.dice import (
     binomial_distribution,
     binomial_pmf,
+    cap_distribution,
     expected_value,
     p_d6_at_least,
     sample,
@@ -39,6 +40,35 @@ def test_binomial_distribution_sums_to_one() -> None:
 def test_expected_value_matches_n_times_p() -> None:
     """E[Binomial(n, p)] = n * p."""
     assert expected_value(binomial_distribution(12, 0.25)) == pytest.approx(3.0)
+
+
+def test_cap_distribution_folds_tail_onto_cap() -> None:
+    """Mass at or above the cap collapses onto the cap; total is preserved."""
+    distribution = binomial_distribution(5, 0.5)
+    capped = cap_distribution(distribution, 2)
+    assert len(capped) == 3
+    assert capped[:2] == pytest.approx(distribution[:2])
+    assert capped[2] == pytest.approx(sum(distribution[2:]))
+    assert sum(capped) == pytest.approx(1.0)
+
+
+def test_cap_distribution_no_op_when_cap_exceeds_support() -> None:
+    """A cap the outcome can never reach returns the distribution unchanged."""
+    distribution = binomial_distribution(3, 0.5)
+    assert cap_distribution(distribution, 3) == distribution
+    assert cap_distribution(distribution, 10) == distribution
+
+
+def test_cap_distribution_zero_cap_is_certain_zero() -> None:
+    """Capping at zero means zero outcomes with certainty."""
+    capped = cap_distribution(binomial_distribution(4, 0.5), 0)
+    assert capped == pytest.approx([1.0])
+
+
+def test_cap_distribution_rejects_negative_cap() -> None:
+    """A negative ceiling is meaningless."""
+    with pytest.raises(ValueError, match="cap must be >= 0"):
+        cap_distribution([0.5, 0.5], -1)
 
 
 def test_sample_is_reproducible_with_seeded_rng() -> None:
