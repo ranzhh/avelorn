@@ -29,8 +29,11 @@ enforce this.
 
 import logging
 
-_LOG_FORMAT = "%(asctime)s %(levelname)-8s %(name)s: %(message)s"
-_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+# Each field is bracketed so the timestamp, level, and logger name stay
+# unambiguous delimiters; the message is left bare because it is free text
+# that may itself contain brackets or quotes. No explicit datefmt, so the
+# default formatter appends milliseconds (e.g. 16:51:11,432).
+_LOG_FORMAT = "[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s"
 
 
 def configure_logging(level: int = logging.INFO) -> None:
@@ -53,7 +56,7 @@ def configure_logging(level: int = logging.INFO) -> None:
             runs. Defaults to ``logging.INFO``.
     """
     handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter(_LOG_FORMAT, datefmt=_DATE_FORMAT))
+    handler.setFormatter(logging.Formatter(_LOG_FORMAT))
 
     root = logging.getLogger()
     root.handlers = [handler]
