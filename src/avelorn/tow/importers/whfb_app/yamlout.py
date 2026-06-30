@@ -1,4 +1,4 @@
-"""Serialize a Unit to YAML in the hand-authored style used under data/.
+"""Serialize imported models to YAML in the hand-authored style used under data/.
 
 Profiles are emitted as one flow mapping per line (mirroring the printed
 stat line), defaults and empty fields are omitted, and "-" stands in for
@@ -11,7 +11,9 @@ import re
 
 import yaml
 
+from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.unit import Profile, Unit, UnitOption
+from avelorn.tow.schema.weapon import Weapon, WeaponProfile
 
 
 class _FlowMap(dict):
@@ -64,7 +66,39 @@ def unit_to_yaml(unit: Unit, source_url: str | None = None) -> str:
         doc["special_rules"] = list(unit.special_rules)
     if unit.options:
         doc["options"] = [_option_row(o) for o in unit.options]
+    return _dump(doc, source_url)
 
+
+def weapon_to_yaml(weapon: Weapon, source_url: str | None = None) -> str:
+    """Serialize a weapon for data/, with its source URL as a header comment.
+
+    Returns:
+        The YAML document text.
+    """
+    doc: dict = {"id": weapon.id, "name": weapon.name}
+    doc["profiles"] = [_weapon_profile_row(p) for p in weapon.profiles]
+    if weapon.notes is not None:
+        doc["notes"] = weapon.notes
+    return _dump(doc, source_url)
+
+
+def armour_to_yaml(armour: Armour, source_url: str | None = None) -> str:
+    """Serialize an armour item for data/, with its source URL as a header comment.
+
+    Returns:
+        The YAML document text.
+    """
+    doc: dict = {"id": armour.id, "name": armour.name}
+    if armour.armour_value is not None:
+        doc["armour_value"] = armour.armour_value
+    if armour.armour_value_improvement is not None:
+        doc["armour_value_improvement"] = armour.armour_value_improvement
+    if armour.notes is not None:
+        doc["notes"] = armour.notes
+    return _dump(doc, source_url)
+
+
+def _dump(doc: dict, source_url: str | None) -> str:
     text = yaml.dump(doc, Dumper=_Dumper, sort_keys=False, allow_unicode=True, width=120)
     # Pad flow-mapping braces ({ name: ... }) to match the hand-authored style.
     text = re.sub(r"^(\s*- )\{(.*)\}$", r"\1{ \2 }", text, flags=re.M)
@@ -76,6 +110,19 @@ def unit_to_yaml(unit: Unit, source_url: str | None = None) -> str:
 def _profile_row(profile: Profile) -> _FlowMap:
     row = profile.model_dump(by_alias=True)
     return _FlowMap({k: "-" if v is None else v for k, v in row.items()})
+
+
+def _weapon_profile_row(profile: WeaponProfile) -> _FlowMap:
+    row: dict = {}
+    if profile.name is not None:
+        row["name"] = profile.name
+    row["R"] = profile.range
+    strength = profile.strength
+    row["S"] = strength.base if not strength.is_relative else strength.printed
+    row["AP"] = profile.armour_piercing or "-"
+    if profile.special_rules:
+        row["special_rules"] = _FlowList(profile.special_rules)
+    return _FlowMap(row)
 
 
 def _option_row(option: UnitOption) -> dict:

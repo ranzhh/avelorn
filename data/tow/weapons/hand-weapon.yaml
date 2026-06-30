@@ -1,0 +1,6 @@
+# Source: https://tow.whfb.app/weapons-of-war/hand-weapon
+id: hand-weapon
+name: Hand Weapon
+profiles:
+  - { R: Combat, S: S, AP: '-' }
+notes: Unless specified otherwise, all models are assumed to be equipped with a hand weapon.

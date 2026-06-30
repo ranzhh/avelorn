@@ -1,0 +1,5 @@
+# Source: https://tow.whfb.app/weapons-of-war/shield
+id: shield
+name: Shield
+armour_value_improvement: 1
+notes: Note that if a model uses a weapon that has the Requires Two Hands special rule in combat, it cannot also use a shield.

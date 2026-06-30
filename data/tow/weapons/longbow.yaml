@@ -1,0 +1,5 @@
+# Source: https://tow.whfb.app/weapons-of-war/longbow
+id: longbow
+name: Longbow
+profiles:
+  - { R: 30, S: 3, AP: '-', special_rules: [Armour Bane (1), Volley Fire] }

@@ -48,6 +48,21 @@ class WhfbAppClient:
             raise WhfbAppError(f"no unit entry in response for {slug!r}")
         return entry
 
+    def weapons_of_war_entry(self, slug: str) -> dict:
+        """Fetch the rule entry for a Weapons of War page (weapon or armour).
+
+        Returns:
+            The entry as embedded in the page payload.
+
+        Raises:
+            WhfbAppError: The page has no entry (e.g. unknown slug).
+        """
+        props = self._page_props(f"weapons-of-war/{slug}")
+        entry = props.get("entry")
+        if not entry:
+            raise WhfbAppError(f"no weapons-of-war entry in response for {slug!r}")
+        return entry
+
     def army_unit_slugs(self, army_slug: str) -> list[str]:
         """Fetch an army page and list its units.
 

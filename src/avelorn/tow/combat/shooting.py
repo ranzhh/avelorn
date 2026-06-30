@@ -6,6 +6,7 @@ unrecognised equipment) is reported in ``ShootingResult.notes`` rather
 than silently ignored.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from avelorn.core.dice import binomial_distribution, expected_value, p_d6_at_least
@@ -18,13 +19,9 @@ from avelorn.tow.combat.charts import (
     shooting_hit_target,
     wound_target,
 )
-from avelorn.tow.combat.weapons import MissileWeapon
+from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.unit import Unit
-
-# Equipment whose armour contribution is verified against the rulebook,
-# as improvements over the unarmoured value of 7+. Keys use the canonical
-# Title Case from the whfb.app importer writes into data/.
-_ARMOUR_IMPROVEMENTS = {"Light Armour": 1, "Shield": 1}
+from avelorn.tow.schema.weapon import Weapon
 
 
 @dataclass(frozen=True)
@@ -103,22 +100,27 @@ def shoot_unit(
     attacker: Unit,
     defender: Unit,
     shooters: int,
-    weapon: MissileWeapon,
+    weapon: Weapon,
+    *,
+    armoury: Mapping[str, Armour] | None = None,
     hit_modifier: int = 0,
 ) -> ShootingResult:
     """Resolve ``shooters`` models of ``attacker`` shooting ``weapon`` at ``defender``.
 
-    One shot per model, using each unit's first (rank-and-file) profile.
-    Special rules and unrecognised equipment are not factored into the
-    math; they are listed in the result's notes.
+    One shot per model, using each unit's first (rank-and-file) profile
+    and the weapon's missile profile. ``armoury`` maps printed equipment
+    names to armour items; defender equipment it does not resolve — and
+    every special rule — is not factored into the math but listed in the
+    result's notes.
 
     Returns:
         The shooting outcome.
 
     Raises:
-        ValueError: if the attacker profile has no Ballistic Skill, the
-            defender profile has no Toughness, or the weapon shoots at the
-            wielder's Strength and the attacker profile has none.
+        ValueError: if the weapon has no missile profile, the attacker
+            profile has no Ballistic Skill, the defender profile has no
+            Toughness, or the weapon shoots at the wielder's Strength and
+            the attacker profile has none.
     """
     # TODO: profile selection is naive. A unit that bought a champion
     # shoots with the champion too (possibly at higher BS, e.g. an
@@ -126,6 +128,9 @@ def shoot_unit(
     # per-profile resolution with the volley combined. Requires a notion
     # of unit composition (which models are actually fielded), which the
     # schema does not have yet.
+    profile = weapon.missile_profile
+    if profile is None:
+        raise ValueError(f"{weapon.name} has no missile profile; it cannot shoot")
     ballistic_skill = attacker.profiles[0].ballistic_skill
     toughness = defender.profiles[0].toughness
     if ballistic_skill is None:
@@ -133,20 +138,23 @@ def shoot_unit(
     if toughness is None:
         raise ValueError(f"{defender.name} has no Toughness; it cannot be wounded")
 
-    strength = weapon.strength if weapon.strength is not None else attacker.profiles[0].strength
-    if strength is None:
+    wielder_strength = attacker.profiles[0].strength
+    if profile.strength.is_relative and wielder_strength is None:
         raise ValueError(
             f"{weapon.name} shoots at the wielder's Strength, but {attacker.name} has none"
         )
+    strength = profile.strength.resolve(wielder_strength or 0)
 
-    armour_value, notes = _defender_armour(defender)
+    armour_value, notes = _defender_armour(defender, armoury or {})
     for unit in (attacker, defender):
         notes.extend(
             f"special rule not factored: {rule} ({unit.name})" for rule in unit.special_rules
         )
     notes.extend(
-        f"weapon rule not factored: {rule} ({weapon.name})" for rule in weapon.special_rules
+        f"weapon rule not factored: {rule} ({weapon.name})" for rule in profile.special_rules
     )
+    if weapon.notes is not None:
+        notes.append(f"weapon notes not factored ({weapon.name}): {weapon.notes}")
 
     return shoot(
         shots=shooters,
@@ -154,20 +162,25 @@ def shoot_unit(
         strength=strength,
         toughness=toughness,
         armour_value=armour_value,
-        armour_piercing=weapon.armour_piercing,
+        armour_piercing=profile.armour_piercing,
         hit_modifier=hit_modifier,
         notes=tuple(notes),
     )
 
 
-def _defender_armour(defender: Unit) -> tuple[int | None, list[str]]:
+def _defender_armour(
+    defender: Unit, armoury: Mapping[str, Armour]
+) -> tuple[int | None, list[str]]:
+    suit = UNARMOURED
     improvement = 0
     notes: list[str] = []
     for item in defender.equipment:
-        bonus = _ARMOUR_IMPROVEMENTS.get(item)
-        if bonus is None:
+        armour = armoury.get(item)
+        if armour is None:
             notes.append(f"equipment not factored: {item} ({defender.name})")
-        else:
-            improvement += bonus
-    value = max(UNARMOURED - improvement, BEST_ARMOUR_VALUE)
+        elif armour.armour_value is not None:
+            suit = min(suit, armour.armour_value)
+        elif armour.armour_value_improvement is not None:
+            improvement += armour.armour_value_improvement
+    value = max(suit - improvement, BEST_ARMOUR_VALUE)
     return (value if value < UNARMOURED else None), notes

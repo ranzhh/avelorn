@@ -8,11 +8,8 @@ from avelorn.tow.combat.charts import (
     wound_target,
 )
 from avelorn.tow.combat.shooting import ShootingResult, shoot, shoot_unit
-from avelorn.tow.combat.weapons import LONGBOW, MissileWeapon
 
 __all__ = [
-    "LONGBOW",
-    "MissileWeapon",
     "ShootingResult",
     "armour_save_target",
     "hit_probability",

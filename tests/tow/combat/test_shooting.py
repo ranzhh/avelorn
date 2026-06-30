@@ -3,13 +3,16 @@
 from pathlib import Path
 
 import pytest
-import yaml
 
+from avelorn.core.loading import load_yaml, load_yaml_dir
 from avelorn.tow.combat.shooting import shoot, shoot_unit
-from avelorn.tow.combat.weapons import LONGBOW, WARBOW
+from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.unit import Unit
+from avelorn.tow.schema.weapon import Weapon
 
 DATA_DIR = Path(__file__).parents[3] / "data"
+
+ARMOURY = {a.name: a for a in load_yaml_dir(DATA_DIR / "tow/armour", Armour)}
 
 
 def load_unit(army: str, slug: str) -> Unit:
@@ -18,8 +21,16 @@ def load_unit(army: str, slug: str) -> Unit:
     Returns:
         The parsed unit model.
     """
-    path = DATA_DIR / f"tow/armies/{army}/units/{slug}.yaml"
-    return Unit.model_validate(yaml.safe_load(path.read_text()))
+    return load_yaml(DATA_DIR / f"tow/armies/{army}/units/{slug}.yaml", Unit)
+
+
+def load_weapon(slug: str) -> Weapon:
+    """Load and validate a weapon from the data/ tree.
+
+    Returns:
+        The parsed weapon model.
+    """
+    return load_yaml(DATA_DIR / f"tow/weapons/{slug}.yaml", Weapon)
 
 
 def test_shoot_golden_chain() -> None:
@@ -51,17 +62,30 @@ def test_shoot_impossible_wound_kills_nothing() -> None:
 def test_shoot_unit_archers_vs_spearmen() -> None:
     """End-to-end from data files: 3 Elven Archers shoot Elven Spearmen.
 
-    Spearmen carry light armour and shield (verified contributions), so
-    they save on 5+; the longbow has no AP. Expected kills = 3 * 2/9.
+    Spearmen carry light armour (6+) and a shield (+1), so they save on
+    5+; the longbow has no AP. Expected kills = 3 * 2/9.
     """
     archers = load_unit("high-elf-realms", "elven-archers")
     spearmen = load_unit("high-elf-realms", "elven-spearmen")
-    result = shoot_unit(archers, spearmen, shooters=3, weapon=LONGBOW)
+    result = shoot_unit(
+        archers, spearmen, shooters=3, weapon=load_weapon("longbow"), armoury=ARMOURY
+    )
     assert result.hit_target == 3  # BS 4
     assert result.save_target == 5  # 7 - light armour - shield
     assert result.expected_wounds == pytest.approx(2 / 3)
     assert any("Hand Weapon" in note for note in result.notes)  # melee gear unfactored
     assert any("Valour of Ages" in note for note in result.notes)
+    assert any("Armour Bane (1)" in note for note in result.notes)  # weapon rule unfactored
+
+
+def test_shoot_unit_without_armoury_degrades_visibly() -> None:
+    """No armoury means no save — but every ignored item is reported."""
+    archers = load_unit("high-elf-realms", "elven-archers")
+    spearmen = load_unit("high-elf-realms", "elven-spearmen")
+    result = shoot_unit(archers, spearmen, shooters=3, weapon=load_weapon("longbow"))
+    assert result.save_target is None
+    assert any("Light Armour" in note for note in result.notes)
+    assert any("Shield" in note for note in result.notes)
 
 
 def test_defender_size_does_not_affect_wounds() -> None:
@@ -72,11 +96,12 @@ def test_defender_size_does_not_affect_wounds() -> None:
     """
     archers = load_unit("high-elf-realms", "elven-archers")
     spearmen = load_unit("high-elf-realms", "elven-spearmen")
+    longbow = load_weapon("longbow")
     twenty = spearmen.model_copy(update={"unit_size": {"min": 20, "max": 20}}, deep=True)
     thirty = spearmen.model_copy(update={"unit_size": {"min": 30, "max": 30}}, deep=True)
 
-    vs_twenty = shoot_unit(archers, twenty, shooters=3, weapon=LONGBOW)
-    vs_thirty = shoot_unit(archers, thirty, shooters=3, weapon=LONGBOW)
+    vs_twenty = shoot_unit(archers, twenty, shooters=3, weapon=longbow, armoury=ARMOURY)
+    vs_thirty = shoot_unit(archers, thirty, shooters=3, weapon=longbow, armoury=ARMOURY)
 
     assert vs_twenty.p_unsaved == vs_thirty.p_unsaved
     assert vs_twenty.distribution == vs_thirty.distribution
@@ -92,7 +117,9 @@ def test_shoot_unit_warbow_uses_wielders_strength() -> None:
     """
     sea_guard = load_unit("high-elf-realms", "lothern-sea-guard")
     spearmen = load_unit("high-elf-realms", "elven-spearmen")
-    result = shoot_unit(sea_guard, spearmen, shooters=3, weapon=WARBOW)
+    result = shoot_unit(
+        sea_guard, spearmen, shooters=3, weapon=load_weapon("warbow"), armoury=ARMOURY
+    )
     assert result.hit_target == 3  # BS 4
     assert result.wound_target == 4  # wielder's S3 vs T3
     assert result.expected_wounds == pytest.approx(2 / 3)
@@ -104,7 +131,14 @@ def test_shoot_unit_rejects_wielder_strength_weapon_without_strength() -> None:
     strengthless = spearmen.model_copy(deep=True)
     object.__setattr__(strengthless.profiles[0], "strength", None)
     with pytest.raises(ValueError, match="wielder's Strength"):
-        shoot_unit(strengthless, spearmen, shooters=1, weapon=WARBOW)
+        shoot_unit(strengthless, spearmen, shooters=1, weapon=load_weapon("warbow"))
+
+
+def test_shoot_unit_rejects_pure_melee_weapon() -> None:
+    """A weapon with no missile profile cannot shoot."""
+    spearmen = load_unit("high-elf-realms", "elven-spearmen")
+    with pytest.raises(ValueError, match="missile profile"):
+        shoot_unit(spearmen, spearmen, shooters=1, weapon=load_weapon("hand-weapon"))
 
 
 def test_shoot_unit_rejects_missing_ballistic_skill() -> None:
@@ -113,4 +147,4 @@ def test_shoot_unit_rejects_missing_ballistic_skill() -> None:
     crewless = spearmen.model_copy(deep=True)
     object.__setattr__(crewless.profiles[0], "ballistic_skill", None)
     with pytest.raises(ValueError, match="Ballistic Skill"):
-        shoot_unit(crewless, spearmen, shooters=1, weapon=LONGBOW)
+        shoot_unit(crewless, spearmen, shooters=1, weapon=load_weapon("longbow"))
