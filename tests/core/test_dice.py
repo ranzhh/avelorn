@@ -9,6 +9,7 @@ from avelorn.core.dice import (
     binomial_pmf,
     cap_distribution,
     expected_value,
+    group_distribution,
     p_d6_at_least,
     sample,
 )
@@ -69,6 +70,36 @@ def test_cap_distribution_rejects_negative_cap() -> None:
     """A negative ceiling is meaningless."""
     with pytest.raises(ValueError, match="cap must be >= 0"):
         cap_distribution([0.5, 0.5], -1)
+
+
+def test_group_distribution_buckets_by_integer_division() -> None:
+    """Outcomes 0..6 grouped by 3: whole groups are 0 (0-2), 1 (3-5), 2 (6)."""
+    # index = wounds; value tagged so the fold is easy to verify by hand.
+    dist = [0.1, 0.1, 0.1, 0.2, 0.2, 0.1, 0.2]  # sums to 1.0
+    grouped = group_distribution(dist, 3)
+    assert grouped == pytest.approx([0.3, 0.5, 0.2])  # {0,1,2},{3,4,5},{6}
+    assert sum(grouped) == pytest.approx(1.0)
+
+
+def test_group_distribution_identity_for_size_one() -> None:
+    """Grouping by 1 is a no-op copy (one wound per model)."""
+    dist = binomial_distribution(4, 0.5)
+    grouped = group_distribution(dist, 1)
+    assert grouped == dist
+    assert grouped is not dist
+
+
+def test_group_distribution_length_rounds_up() -> None:
+    """5 outcomes (0..4) grouped by 3 span buckets 0 and 1."""
+    grouped = group_distribution(binomial_distribution(4, 0.5), 3)
+    assert len(grouped) == 2  # (5 - 1) // 3 + 1
+    assert sum(grouped) == pytest.approx(1.0)
+
+
+def test_group_distribution_rejects_non_positive_size() -> None:
+    """A group size below 1 is meaningless."""
+    with pytest.raises(ValueError, match="group_size must be >= 1"):
+        group_distribution([0.5, 0.5], 0)
 
 
 def test_sample_is_reproducible_with_seeded_rng() -> None:

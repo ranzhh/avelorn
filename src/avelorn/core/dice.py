@@ -70,6 +70,32 @@ def cap_distribution(distribution: list[float], cap: int) -> list[float]:
     return [*distribution[:cap], sum(distribution[cap:])]
 
 
+def group_distribution(distribution: list[float], group_size: int) -> list[float]:
+    """Collapse each ``group_size`` consecutive outcomes into one bucket.
+
+    Outcome ``k`` maps to bucket ``k // group_size`` — the number of whole
+    groups it completes. This models, for example, unsaved wounds
+    accumulating into whole slain multi-Wound models (three wounds per
+    Ogre), where the leftover wounds sit on a survivor. Pure
+    redistribution — the returned masses still sum to 1.
+
+    Returns:
+        A list of length ``(len(distribution) - 1) // group_size + 1``.
+
+    Raises:
+        ValueError: ``group_size`` is less than 1.
+    """
+    if group_size < 1:
+        raise ValueError("group_size must be >= 1")
+    if group_size == 1:
+        return list(distribution)
+    buckets = [0.0] * ((len(distribution) - 1) // group_size + 1)
+    for outcome, mass in enumerate(distribution):
+        buckets[outcome // group_size] += mass
+    logger.debug("grouping distribution by %d into %d buckets", group_size, len(buckets))
+    return buckets
+
+
 def sample(distribution: list[float], rng: random.Random | None = None) -> int:
     """Draw one concrete outcome from a distribution (index k = P(outcome k)).
 

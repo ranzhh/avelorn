@@ -1,9 +1,12 @@
 """The shooting attack chain: hit, wound, armour save, ward save.
 
-Works on 1-Wound rank-and-file targets; multi-wound carry-over is not
-modelled yet. Anything the math cannot honour (special rules,
-unrecognised equipment) is reported in ``ShootingResult.notes`` rather
-than silently ignored.
+Targets are treated as a unit of identical models with a shared Wounds
+value; unsaved wounds accumulate into whole slain models (carry-over
+within the unit), and casualties cap at the unit's size. Heterogeneous
+units (e.g. a champion with a different profile) still resolve off the
+rank-and-file profile only. Anything the math cannot honour (special
+rules, unrecognised equipment) is reported in ``ShootingResult.notes``
+rather than silently ignored.
 """
 
 import logging
@@ -14,6 +17,7 @@ from avelorn.core.dice import (
     binomial_distribution,
     cap_distribution,
     expected_value,
+    group_distribution,
 )
 from avelorn.tow.combat.charts import (
     BEST_ARMOUR_VALUE,
@@ -34,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class ShootingResult:
-    """Outcome of a volley of shooting attacks against 1-Wound models."""
+    """Outcome of a volley of shooting attacks against a unit."""
 
     shots: int
     hit_target: int
@@ -82,27 +86,33 @@ def shoot(
     armour_piercing: int = 0,
     ward_target: int | None = None,
     hit_modifier: int = 0,
+    wounds_per_model: int = 1,
     targets: int | None = None,
     notes: tuple[str, ...] = (),
 ) -> ShootingResult:
     """Resolve a volley of identical shooting attacks probabilistically.
 
-    ``targets`` is the number of 1-Wound models in the target unit. When
-    given, the casualty distribution caps at it — a volley cannot remove
+    ``wounds_per_model`` is the target's Wounds: unsaved wounds accumulate
+    into whole slain models (three wounds fell one Ogre), with leftover
+    wounds sitting on a survivor. ``targets`` is the number of models in
+    the unit; when given, casualties cap at it — a volley cannot remove
     more models than the unit contains. The unsaved-wound ``distribution``
-    is unaffected; it never depends on how many models receive the wounds.
+    is unaffected by either; it never depends on the receiving unit.
 
     Returns:
         The per-shot probabilities, the distribution of unsaved wounds, and
-        the casualty distribution (identical to the former when uncapped).
+        the casualty (models-removed) distribution.
 
     Raises:
-        ValueError: `shots` is negative, or `targets` is negative.
+        ValueError: `shots` is negative, `targets` is negative, or
+            `wounds_per_model` is less than 1.
     """
     if shots < 0:
         raise ValueError("shots must be >= 0")
     if targets is not None and targets < 0:
         raise ValueError("targets must be >= 0")
+    if wounds_per_model < 1:
+        raise ValueError("wounds_per_model must be >= 1")
 
     hit = shooting_hit_target(ballistic_skill, hit_modifier)
     wound = wound_target(strength, toughness)
@@ -123,7 +133,11 @@ def shoot(
     )
 
     distribution = binomial_distribution(shots, p_unsaved)
-    casualties = list(distribution) if targets is None else cap_distribution(distribution, targets)
+    # Fold unsaved wounds into slain models by Wounds-per-model, then cap at
+    # the unit's size. For 1-Wound targets the fold is a no-op, so casualties
+    # equal the wound distribution up to the cap.
+    models = group_distribution(distribution, wounds_per_model)
+    casualties = models if targets is None else cap_distribution(models, targets)
 
     return ShootingResult(
         shots=shots,
@@ -217,19 +231,10 @@ def shoot_unit(
     if weapon.notes is not None:
         notes.append(f"weapon notes not factored ({weapon.name}): {weapon.notes}")
 
-    # Capping wounds at the model count is only meaningful for 1-Wound
-    # models. For a multi-wound target it would conflate wounds with
-    # kills, yielding a figure that is neither — so the cap is withheld
-    # (casualties stay equal to the wound distribution) and the note below
-    # explains why, rather than reporting a confidently wrong number.
-    defender_wounds = defender.profiles[0].wounds
-    multi_wound = defender_wounds is not None and defender_wounds > 1
-    if multi_wound:
-        notes.append(
-            f"casualties assume 1 Wound per model; {defender.name} has Wounds "
-            f"{defender_wounds} (multi-wound carry-over not modelled, size cap not applied)"
-        )
-    if defenders is not None and not multi_wound:
+    # Wounds accumulate into whole slain models; a profile with no printed
+    # Wounds ("-") is treated as a single-Wound model.
+    defender_wounds = defender.profiles[0].wounds or 1
+    if defenders is not None:
         notes.append("panic test at 25% casualties not modelled")
 
     return shoot(
@@ -240,7 +245,8 @@ def shoot_unit(
         armour_value=armour_value,
         armour_piercing=profile.armour_piercing,
         hit_modifier=hit_modifier,
-        targets=None if multi_wound else defenders,
+        wounds_per_model=defender_wounds,
+        targets=defenders,
         notes=tuple(notes),
     )
 
