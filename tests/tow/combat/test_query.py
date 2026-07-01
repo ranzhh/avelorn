@@ -42,6 +42,12 @@ def test_mode_breaks_ties_low() -> None:
     assert Distribution("flat", (0.25, 0.25, 0.25, 0.25)).mode() == 0
 
 
+def test_mode_undefined_for_empty_distribution() -> None:
+    """Mode has no answer with no outcomes; it says so rather than crashing raw."""
+    with pytest.raises(ValueError, match="empty distribution"):
+        Distribution("empty", ()).mode()
+
+
 @pytest.mark.parametrize(
     ("op", "value", "upper", "expected"),
     [
@@ -126,6 +132,13 @@ def test_query_result_answers_at_most_survive() -> None:
     """
     result = shoot(10, ballistic_skill=4, strength=3, toughness=3, targets=5)
     p = query_result(result, "survivors", Predicate(Comparator.AT_MOST, 3))
+
+    # Independent golden: per shot p_unsaved = (4/6)*(1/2) = 1/3 (no save, no
+    # ward). "<=3 of 5 survive" == ">=2 of 10 shots wound" == 1 - P(0) - P(1),
+    # and the cap at 5 does not touch the 0- and 1-wound masses.
+    expected = 1 - (2 / 3) ** 10 - 10 * (1 / 3) * (2 / 3) ** 9
+    assert p == pytest.approx(expected)
+
     casualties = result_distributions(result)["casualties"]
     assert p == pytest.approx(casualties.at_least(2))  # <=3 survive <=> >=2 of 5 die
 

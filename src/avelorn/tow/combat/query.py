@@ -23,10 +23,13 @@ MCP tool) translates a natural-language question into a structured
 probability. The arithmetic never leaves deterministic code.
 """
 
+import logging
 from dataclasses import dataclass
 from enum import StrEnum
 
 from avelorn.tow.combat.shooting import ShootingResult
+
+logger = logging.getLogger(__name__)
 
 
 class Comparator(StrEnum):
@@ -133,7 +136,12 @@ class Distribution:
 
         Returns:
             The index of maximum mass (the lowest such index on a tie).
+
+        Raises:
+            ValueError: the distribution has no outcomes (empty pmf).
         """
+        if not self.pmf:
+            raise ValueError("mode is undefined for an empty distribution")
         return max(range(len(self.pmf)), key=self.pmf.__getitem__)
 
 
@@ -149,14 +157,22 @@ def evaluate(distribution: Distribution, predicate: Predicate) -> float:
     """
     match predicate.op:
         case Comparator.AT_MOST:
-            return distribution.at_most(predicate.value)
+            probability = distribution.at_most(predicate.value)
         case Comparator.AT_LEAST:
-            return distribution.at_least(predicate.value)
+            probability = distribution.at_least(predicate.value)
         case Comparator.EXACTLY:
-            return distribution.exactly(predicate.value)
+            probability = distribution.exactly(predicate.value)
         case Comparator.BETWEEN:
             assert predicate.upper is not None  # guaranteed by Predicate
-            return distribution.between(predicate.value, predicate.upper)
+            probability = distribution.between(predicate.value, predicate.upper)
+    logger.debug(
+        "P(%s %s %s) = %.4f",
+        distribution.name,
+        predicate.op,
+        predicate.value if predicate.upper is None else f"{predicate.value}..{predicate.upper}",
+        probability,
+    )
+    return probability
 
 
 def result_distributions(result: ShootingResult) -> dict[str, Distribution]:
@@ -186,6 +202,7 @@ def result_distributions(result: ShootingResult) -> dict[str, Distribution]:
         for removed, mass in enumerate(result.casualties):
             survivors[size - removed] = mass
         distributions["survivors"] = Distribution("survivors", tuple(survivors))
+        logger.debug("survivors distribution mirrored over unit size %d", size)
     return distributions
 
 
