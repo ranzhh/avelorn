@@ -7,6 +7,7 @@ from avelorn.tow.combat.charts import (
     hit_probability,
     save_probability,
     shooting_hit_target,
+    wound_probability,
     wound_target,
 )
 
@@ -81,3 +82,11 @@ def test_save_probability_none_means_no_save() -> None:
     """No save target means the wound always goes through."""
     assert save_probability(None) == 0.0
     assert save_probability(5) == pytest.approx(2 / 6)
+
+
+def test_wound_probability() -> None:
+    """Wound probabilities follow the target; None (cannot wound) is 0."""
+    assert wound_probability(None) == 0.0
+    assert wound_probability(4) == pytest.approx(3 / 6)
+    assert wound_probability(2) == pytest.approx(5 / 6)
+    assert wound_probability(6) == pytest.approx(1 / 6)

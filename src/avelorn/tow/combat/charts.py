@@ -6,7 +6,11 @@ the-shooting-phase/determining-armour-value,
 the-shooting-phase/armour-piercing.
 """
 
+import logging
+
 from avelorn.core.dice import p_d6_at_least
+
+logger = logging.getLogger(__name__)
 
 # Target 7+ resolves as a natural 6 re-rolled at this target; 10+ is impossible.
 _CONFIRM_TARGETS = {7: 4, 8: 5, 9: 6}
@@ -14,6 +18,11 @@ _CONFIRM_TARGETS = {7: 4, 8: 5, 9: 6}
 # A model wearing no armour counts as 7+ for modifier purposes; improvements cap at 2+.
 UNARMOURED = 7
 BEST_ARMOUR_VALUE = 2
+
+
+def _fmt_target(target: int | None) -> str:
+    # Render a roll target the way the rulebook prints it: "5+", or "-" for no roll.
+    return f"{target}+" if target is not None else "-"
 
 
 def shooting_hit_target(ballistic_skill: int, modifier: int = 0) -> int:
@@ -29,7 +38,11 @@ def shooting_hit_target(ballistic_skill: int, modifier: int = 0) -> int:
     Returns:
         The required roll; may exceed 6 (see :func:`hit_probability`).
     """
-    return 7 - ballistic_skill - modifier
+    target = 7 - ballistic_skill - modifier
+    logger.debug(
+        "to-hit: BS %d, modifier %d -> %s", ballistic_skill, modifier, _fmt_target(target)
+    )
+    return target
 
 
 def wound_target(strength: int, toughness: int) -> int | None:
@@ -40,9 +53,9 @@ def wound_target(strength: int, toughness: int) -> int | None:
         (Toughness exceeds Strength by 6 or more: cannot wound).
     """
     difference = toughness - strength
-    if difference >= 6:
-        return None
-    return min(max(4 + difference, 2), 6)
+    target = None if difference >= 6 else min(max(4 + difference, 2), 6)
+    logger.debug("to-wound: S %d vs T %d -> %s", strength, toughness, _fmt_target(target))
+    return target
 
 
 def armour_save_target(armour_value: int | None, armour_piercing: int = 0) -> int | None:
@@ -57,9 +70,14 @@ def armour_save_target(armour_value: int | None, armour_piercing: int = 0) -> in
         or the modified target exceeds 6).
     """
     if armour_value is None or armour_value >= UNARMOURED:
-        return None
-    effective = armour_value - armour_piercing
-    return effective if effective <= 6 else None
+        target = None
+    else:
+        effective = armour_value - armour_piercing
+        target = effective if effective <= 6 else None
+    logger.debug(
+        "armour save: AV %s, AP %d -> %s", armour_value, armour_piercing, _fmt_target(target)
+    )
+    return target
 
 
 def hit_probability(target: int) -> float:
@@ -73,11 +91,24 @@ def hit_probability(target: int) -> float:
         The hit probability, in [0.0, 5/6].
     """
     if target <= 6:
-        return p_d6_at_least(max(target, 2))
-    confirm = _CONFIRM_TARGETS.get(target)
-    if confirm is None:
-        return 0.0
-    return (1 / 6) * p_d6_at_least(confirm)
+        p = p_d6_at_least(max(target, 2))
+    else:
+        confirm = _CONFIRM_TARGETS.get(target)
+        p = 0.0 if confirm is None else (1 / 6) * p_d6_at_least(confirm)
+    logger.debug("hit %s -> p=%.3f", _fmt_target(target), p)
+    return p
+
+
+def wound_probability(target: int | None) -> float:
+    """Probability that one wound roll succeeds; a natural 1 always fails.
+
+    Returns:
+        The success probability, or 0.0 when ``target`` is None (the
+        chart shows "-": the attack cannot wound).
+    """
+    p = 0.0 if target is None else p_d6_at_least(target)
+    logger.debug("wound %s -> p=%.3f", _fmt_target(target), p)
+    return p
 
 
 def save_probability(target: int | None) -> float:
@@ -86,6 +117,6 @@ def save_probability(target: int | None) -> float:
     Returns:
         The success probability, or 0.0 when ``target`` is None (no save).
     """
-    if target is None:
-        return 0.0
-    return p_d6_at_least(max(target, 2))
+    p = 0.0 if target is None else p_d6_at_least(max(target, 2))
+    logger.debug("save %s -> p=%.3f", _fmt_target(target), p)
+    return p

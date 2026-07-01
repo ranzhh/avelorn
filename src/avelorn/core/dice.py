@@ -5,8 +5,11 @@ into roll targets, then use these helpers to turn targets into
 probabilities and distributions.
 """
 
+import logging
 import random
 from math import comb
+
+logger = logging.getLogger(__name__)
 
 
 def p_d6_at_least(target: int) -> float:
@@ -42,6 +45,7 @@ def binomial_distribution(trials: int, p: float) -> list[float]:
     Returns:
         A list of length ``trials + 1`` where index ``k`` is P(k successes).
     """
+    logger.debug("binomial distribution over %d trials, p=%.3f", trials, p)
     return [binomial_pmf(k, trials, p) for k in range(trials + 1)]
 
 
@@ -62,6 +66,7 @@ def cap_distribution(distribution: list[float], cap: int) -> list[float]:
         raise ValueError("cap must be >= 0")
     if cap >= len(distribution) - 1:
         return list(distribution)
+    logger.debug("capping distribution at %d (length %d)", cap, len(distribution))
     return [*distribution[:cap], sum(distribution[cap:])]
 
 
@@ -76,7 +81,9 @@ def sample(distribution: list[float], rng: random.Random | None = None) -> int:
         The sampled outcome index, in 0..len(distribution) - 1.
     """
     generator = rng if rng is not None else random.Random()
-    return generator.choices(range(len(distribution)), weights=distribution, k=1)[0]
+    outcome = generator.choices(range(len(distribution)), weights=distribution, k=1)[0]
+    logger.debug("sampled %d from a %d-outcome distribution", outcome, len(distribution))
+    return outcome
 
 
 def expected_value(distribution: list[float]) -> float:

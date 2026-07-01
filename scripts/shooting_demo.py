@@ -7,12 +7,16 @@ chain, and prints the kill distribution.
 Usage: uv run python scripts/shooting_demo.py [shooters] [attacker] [defender] [defenders]
        (unit slugs default to elven-archers and elven-spearmen; with no
        defender count the kill distribution is left uncapped)
+
+Pass -v/--verbose to also emit the DEBUG math trace to stderr.
 """
 
-import sys
+import argparse
+import logging
 from pathlib import Path
 
 from avelorn.core.loading import load_yaml, load_yaml_dir
+from avelorn.core.logging import configure_logging
 from avelorn.tow.combat.shooting import shoot_unit
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.unit import Unit
@@ -34,18 +38,33 @@ def _missile_weapon(unit: Unit, weapons: dict[str, Weapon]) -> Weapon:
 
 
 def main() -> None:
-    """Run the demo with optional shooter count and unit slugs from argv."""
-    shooters = int(sys.argv[1]) if len(sys.argv) > 1 else 3
-    attacker_slug = sys.argv[2] if len(sys.argv) > 2 else "elven-archers"
-    defender_slug = sys.argv[3] if len(sys.argv) > 3 else "elven-spearmen"
+    """Parse argv, resolve one unit shooting another, and print the kill distribution."""
+    parser = argparse.ArgumentParser(description="Shooting demo: one unit shoots another.")
+    parser.add_argument(
+        "shooters", nargs="?", type=int, default=3, help="number of shooting models"
+    )
+    parser.add_argument("attacker", nargs="?", default="elven-archers", help="attacker unit slug")
+    parser.add_argument("defender", nargs="?", default="elven-spearmen", help="defender unit slug")
+    parser.add_argument(
+        "defenders",
+        nargs="?",
+        type=int,
+        default=None,
+        help="models in the target unit; caps casualties (uncapped if omitted)",
+    )
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="emit the DEBUG math trace to stderr"
+    )
+    args = parser.parse_args()
+    if args.verbose:
+        configure_logging(logging.DEBUG)
 
+    shooters = args.shooters
+    defenders = args.defenders
     weapons = {w.name: w for w in load_yaml_dir(_DATA_DIR / "tow/weapons", Weapon)}
     armoury = {a.name: a for a in load_yaml_dir(_DATA_DIR / "tow/armour", Armour)}
-    attacker = _load_unit("high-elf-realms", attacker_slug)
-    defender = _load_unit("high-elf-realms", defender_slug)
-    # No count given: leave the unit unbounded and report the raw kill
-    # distribution. A count caps casualties at the unit on the table.
-    defenders = int(sys.argv[4]) if len(sys.argv) > 4 else None
+    attacker = _load_unit("high-elf-realms", args.attacker)
+    defender = _load_unit("high-elf-realms", args.defender)
     weapon = _missile_weapon(attacker, weapons)
     result = shoot_unit(
         attacker, defender, shooters=shooters, weapon=weapon, armoury=armoury, defenders=defenders

@@ -5,6 +5,7 @@ from avelorn.tow.combat.charts import (
     hit_probability,
     save_probability,
     shooting_hit_target,
+    wound_probability,
     wound_target,
 )
 from avelorn.tow.combat.shooting import ShootingResult, shoot, shoot_unit
@@ -17,5 +18,6 @@ __all__ = [
     "shoot",
     "shoot_unit",
     "shooting_hit_target",
+    "wound_probability",
     "wound_target",
 ]

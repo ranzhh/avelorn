@@ -6,6 +6,7 @@ unrecognised equipment) is reported in ``ShootingResult.notes`` rather
 than silently ignored.
 """
 
+import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
 
@@ -13,7 +14,6 @@ from avelorn.core.dice import (
     binomial_distribution,
     cap_distribution,
     expected_value,
-    p_d6_at_least,
 )
 from avelorn.tow.combat.charts import (
     BEST_ARMOUR_VALUE,
@@ -22,11 +22,14 @@ from avelorn.tow.combat.charts import (
     hit_probability,
     save_probability,
     shooting_hit_target,
+    wound_probability,
     wound_target,
 )
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.unit import Unit
 from avelorn.tow.schema.weapon import Weapon
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -106,10 +109,18 @@ def shoot(
     save = armour_save_target(armour_value, armour_piercing)
 
     p_hit = hit_probability(hit)
-    p_wound = p_d6_at_least(wound) if wound is not None else 0.0
+    p_wound = wound_probability(wound)
     p_save_fail = 1.0 - save_probability(save)
     p_ward_fail = 1.0 - save_probability(ward_target)
     p_unsaved = p_hit * p_wound * p_save_fail * p_ward_fail
+    logger.debug(
+        "per-shot unsaved wound: p=%.3f = hit %.3f x wound %.3f x save-fail %.3f x ward-fail %.3f",
+        p_unsaved,
+        p_hit,
+        p_wound,
+        p_save_fail,
+        p_ward_fail,
+    )
 
     distribution = binomial_distribution(shots, p_unsaved)
     casualties = list(distribution) if targets is None else cap_distribution(distribution, targets)
@@ -183,6 +194,17 @@ def shoot_unit(
             f"{weapon.name} shoots at the wielder's Strength, but {attacker.name} has none"
         )
     strength = profile.strength.resolve(wielder_strength or 0)
+    logger.debug(
+        "resolving %d %s (BS %d) shooting %s at %s (T %d), S %d AP %d",
+        shooters,
+        attacker.name,
+        ballistic_skill,
+        weapon.name,
+        defender.name,
+        toughness,
+        strength,
+        profile.armour_piercing,
+    )
 
     armour_value, notes = _defender_armour(defender, armoury or {})
     for unit in (attacker, defender):
