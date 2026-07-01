@@ -17,6 +17,7 @@ from pathlib import Path
 
 from avelorn.core.loading import load_yaml, load_yaml_dir
 from avelorn.core.logging import configure_logging
+from avelorn.tow.combat.query import Comparator, Predicate, query_result
 from avelorn.tow.combat.shooting import shoot_unit
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.unit import Unit
@@ -91,6 +92,20 @@ def main() -> None:
     for killed, p in enumerate(result.casualties):
         bar = "#" * round(p * 40)
         print(f"  {killed:>6}  {p:>10.3f}  {bar}")
+
+    # Exact distributional queries — the questions the game actually turns
+    # on, not the average. Each is one structured predicate over a named
+    # variable; the querying layer returns the exact probability.
+    if defenders is not None:
+        print()
+        print("  exact queries:")
+        wiped = query_result(result, "survivors", Predicate(Comparator.EXACTLY, 0))
+        any_kill = query_result(result, "casualties", Predicate(Comparator.AT_LEAST, 1))
+        at_most_3 = query_result(result, "survivors", Predicate(Comparator.AT_MOST, 3))
+        print(f"  - P(at least one falls):       {any_kill:.3f}")
+        print(f"  - P(at most 3 survive):        {at_most_3:.3f}")
+        print(f"  - P(unit wiped out):           {wiped:.3f}")
+
     if result.notes:
         print()
         print("  not factored into the math:")
