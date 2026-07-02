@@ -102,11 +102,15 @@ def hit_probability(target: int) -> float:
 def wound_probability(target: int | None) -> float:
     """Probability that one wound roll succeeds; a natural 1 always fails.
 
+    "Rolls of a Natural 1" (p.140): a natural 1 on a roll To Wound is a
+    fail regardless of modifiers — hence the clamp, even though the
+    unmodified chart never produces a target below 2.
+
     Returns:
         The success probability, or 0.0 when ``target`` is None (the
         chart shows "-": the attack cannot wound).
     """
-    p = 0.0 if target is None else p_d6_at_least(target)
+    p = 0.0 if target is None else p_d6_at_least(max(target, 2))
     logger.debug("wound %s -> p=%.3f", _fmt_target(target), p)
     return p
 

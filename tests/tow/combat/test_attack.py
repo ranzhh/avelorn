@@ -233,3 +233,25 @@ def test_automatic_wounds_cannot_killing_blow() -> None:
     resolution = resolve_attack(profile, [double])
     assert resolution.p_of(Outcome.INSTANT_KILL) == 0
     assert resolution.p_of(Outcome.UNSAVED_WOUND) == Fraction(4, 6) * Fraction(4, 6)
+
+
+def test_wound_modifier_cannot_defeat_the_natural_one() -> None:
+    """A transform driving the wound target to 1 still fails on a natural 1.
+
+    "Rolls of a Natural 1" (p.140): a roll To Wound of a natural 1 is
+    always a fail, regardless of modifiers. A "+1 to wound" against a
+    2+ target must yield 5/6, not 6/6.
+    """
+    profile = AttackProfile(
+        hit_target=RollState.AUTOMATIC,
+        wound_target=2,
+        save_target=RollState.IMPOSSIBLE,
+        ward_target=RollState.IMPOSSIBLE,
+    )
+
+    def improve_wound(p: AttackProfile) -> AttackProfile:
+        assert isinstance(p.wound_target, int)
+        return replace(p, wound_target=p.wound_target - 1)
+
+    plus_one = Transform(stage=Stage.ROLL_TO_WOUND, modify_targets=improve_wound)
+    assert resolve_attack(profile, [plus_one]).p_unsaved == Fraction(5, 6)

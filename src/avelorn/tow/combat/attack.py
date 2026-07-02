@@ -176,7 +176,7 @@ def walk(
             hooked[Stage.ROLL_TO_WOUND],
             _on_success(hooked[Stage.ROLL_TO_HIT], hit_face, hit_profile),
         )
-        for p_wound, wound_face, wounded in _roll(wound_profile.wound_target, clamp=False):
+        for p_wound, wound_face, wounded in _roll(wound_profile.wound_target):
             if not wounded:
                 yield p_hit * p_wound, Outcome.NONE
                 continue
@@ -184,12 +184,12 @@ def walk(
                 hooked[Stage.MAKE_ARMOUR_SAVES],
                 _on_success(hooked[Stage.ROLL_TO_WOUND], wound_face, wound_profile),
             )
-            for p_save, _, saved in _roll(save_profile.save_target, clamp=True):
+            for p_save, _, saved in _roll(save_profile.save_target):
                 if saved:
                     yield p_hit * p_wound * p_save, Outcome.NONE
                     continue
                 ward_profile = _modify(hooked[Stage.WARD_SAVES], save_profile)
-                for p_ward, _, warded in _roll(ward_profile.ward_target, clamp=True):
+                for p_ward, _, warded in _roll(ward_profile.ward_target):
                     yield (
                         p_hit * p_wound * p_save * p_ward,
                         Outcome.NONE if warded else ward_profile.unsaved_outcome,
@@ -222,7 +222,7 @@ def _roll_to_hit(target: RollTarget) -> Iterator[tuple[Fraction, int, bool]]:
     # 7+ resolve as a natural 6 confirmed at CONFIRM_TARGETS[target]; 10+
     # is impossible. The yielded face is the natural die.
     if isinstance(target, RollState) or target <= 6:
-        yield from _roll(target, clamp=True)
+        yield from _roll(target)
         return
     confirm = CONFIRM_TARGETS.get(target)
     for face in _FACES:
@@ -233,18 +233,19 @@ def _roll_to_hit(target: RollTarget) -> Iterator[tuple[Fraction, int, bool]]:
                 yield _FACE * _FACE, face, confirm_face >= confirm
 
 
-def _roll(target: RollTarget, *, clamp: bool) -> Iterator[tuple[Fraction, int, bool]]:
+def _roll(target: RollTarget) -> Iterator[tuple[Fraction, int, bool]]:
     # A RollState is decided without a die: one certain branch, face 0
     # (never a natural anything, so face-triggered transforms cannot
-    # fire). ``clamp`` mirrors the charts' "a natural 1 always fails"
-    # handling; wound targets come pre-clamped by the chart, so their
-    # roll is unclamped.
+    # fire). Every rolled die clamps at 2+: a natural 1 always fails,
+    # "regardless of modifiers" — the rulebook states it per roll (e.g.
+    # "Rolls of a Natural 1", p.140, for rolls To Wound), and transforms
+    # may push any target below 2.
     if target is RollState.IMPOSSIBLE:
         yield Fraction(1), 0, False
         return
     if target is RollState.AUTOMATIC:
         yield Fraction(1), 0, True
         return
-    threshold = max(target, 2) if clamp else target
+    threshold = max(target, 2)
     for face in _FACES:
         yield _FACE, face, face >= threshold
