@@ -23,20 +23,12 @@ from enum import StrEnum
 from fractions import Fraction
 
 from avelorn.tow.combat.charts import CONFIRM_TARGETS
+from avelorn.tow.schema.stage import Stage
 
 logger = logging.getLogger(__name__)
 
 _FACE = Fraction(1, 6)
 _FACES = range(1, 7)
-
-
-class Stage(StrEnum):
-    """The attack sequence's stages, named as the rulebook prints them."""
-
-    ROLL_TO_HIT = "roll-to-hit"
-    ROLL_TO_WOUND = "roll-to-wound"
-    MAKE_ARMOUR_SAVES = "make-armour-saves"
-    WARD_SAVES = "ward-saves"
 
 
 class Outcome(StrEnum):

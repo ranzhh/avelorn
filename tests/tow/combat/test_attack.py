@@ -14,12 +14,12 @@ from avelorn.tow.combat.attack import (
     Outcome,
     RollState,
     RollTarget,
-    Stage,
     Transform,
     resolve_attack,
     walk,
 )
 from avelorn.tow.combat.charts import hit_probability, save_probability, wound_probability
+from avelorn.tow.schema.stage import Stage
 
 # Every shape the charts can hand the resolver: impossible (0, 10+) and
 # clamped (1) hit targets, the 7+ confirmation band, "-" wound rows and
