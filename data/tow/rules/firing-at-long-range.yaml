@@ -1,0 +1,8 @@
+# Source: https://tow.whfb.app/the-shooting-phase/firing-at-long-range
+id: firing-at-long-range
+name: Firing at Long Range
+page: 139
+category: The Shooting Phase
+paragraphs:
+  - Missiles lose power and accuracy at long range, so any shots taken at an enemy that is further away than half the weapon's
+    maximum range suffer a -1 To Hit modifier.

@@ -1,0 +1,8 @@
+# Source: https://tow.whfb.app/the-shooting-phase/moving-and-shooting
+id: moving-and-shooting
+name: Moving and Shooting
+page: 139
+category: The Shooting Phase
+paragraphs:
+  - Models that have moved for any reason during this turn (including rallying and reforming) have less time to aim and suffer
+    a -1 To Hit modifier.
