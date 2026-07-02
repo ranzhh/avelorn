@@ -10,7 +10,7 @@ from avelorn.tow.combat.attack import AttackProfile, Outcome, RollState, Transfo
 from avelorn.tow.combat.shooting import _remove_casualties, shoot, shoot_unit
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.stage import Stage
-from avelorn.tow.schema.unit import Unit
+from avelorn.tow.schema.unit import Characteristic, Unit
 from avelorn.tow.schema.weapon import Weapon
 
 DATA_DIR = Path(__file__).parents[3] / "data"
@@ -191,7 +191,7 @@ def test_shoot_unit_folds_multi_wound_casualties_and_caps() -> None:
     archers = load_unit("high-elf-realms", "elven-archers")
     spearmen = load_unit("high-elf-realms", "elven-spearmen")
     multi_wound = spearmen.model_copy(deep=True)
-    object.__setattr__(multi_wound.profiles[0], "wounds", 3)
+    multi_wound.profiles[0].characteristics[Characteristic.WOUNDS] = 3
     result = shoot_unit(
         archers,
         multi_wound,
@@ -229,7 +229,7 @@ def test_shoot_unit_rejects_wielder_strength_weapon_without_strength() -> None:
     """A "Strength: S" weapon cannot resolve if the wielder has no S."""
     spearmen = load_unit("high-elf-realms", "elven-spearmen")
     strengthless = spearmen.model_copy(deep=True)
-    object.__setattr__(strengthless.profiles[0], "strength", None)
+    strengthless.profiles[0].characteristics[Characteristic.STRENGTH] = None
     with pytest.raises(ValueError, match="wielder's Strength"):
         shoot_unit(strengthless, spearmen, shooters=1, weapon=load_weapon("warbow"))
 
@@ -245,7 +245,7 @@ def test_shoot_unit_rejects_missing_ballistic_skill() -> None:
     """A unit whose profile has BS "-" cannot shoot."""
     spearmen = load_unit("high-elf-realms", "elven-spearmen")
     crewless = spearmen.model_copy(deep=True)
-    object.__setattr__(crewless.profiles[0], "ballistic_skill", None)
+    crewless.profiles[0].characteristics[Characteristic.BALLISTIC_SKILL] = None
     with pytest.raises(ValueError, match="Ballistic Skill"):
         shoot_unit(crewless, spearmen, shooters=1, weapon=load_weapon("longbow"))
 

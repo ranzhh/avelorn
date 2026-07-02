@@ -13,7 +13,7 @@ import yaml
 
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
-from avelorn.tow.schema.unit import Profile, Unit, UnitOption
+from avelorn.tow.schema.unit import Characteristic, Profile, Unit, UnitOption
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile
 
 
@@ -132,8 +132,11 @@ def _dump(doc: dict, source_url: str | None) -> str:
 
 
 def _profile_row(profile: Profile) -> _FlowMap:
-    row = profile.model_dump(by_alias=True)
-    return _FlowMap({k: "-" if v is None else v for k, v in row.items()})
+    row: dict = {"name": profile.name}
+    for characteristic in Characteristic:
+        value = profile[characteristic]
+        row[characteristic.value] = "-" if value is None else value
+    return _FlowMap(row)
 
 
 def _weapon_profile_row(profile: WeaponProfile) -> _FlowMap:

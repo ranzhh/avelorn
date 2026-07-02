@@ -42,7 +42,7 @@ from avelorn.tow.combat.context import EngagementContext
 from avelorn.tow.combat.rules import compile_rules
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
-from avelorn.tow.schema.unit import Unit
+from avelorn.tow.schema.unit import Characteristic, Unit
 from avelorn.tow.schema.weapon import Weapon
 
 logger = logging.getLogger(__name__)
@@ -279,14 +279,14 @@ def shoot_unit(
     profile = weapon.missile_profile
     if profile is None:
         raise ValueError(f"{weapon.name} has no missile profile; it cannot shoot")
-    ballistic_skill = attacker.profiles[0].ballistic_skill
-    toughness = defender.profiles[0].toughness
+    ballistic_skill = attacker.profiles[0][Characteristic.BALLISTIC_SKILL]
+    toughness = defender.profiles[0][Characteristic.TOUGHNESS]
     if ballistic_skill is None:
         raise ValueError(f"{attacker.name} has no Ballistic Skill; it cannot shoot")
     if toughness is None:
         raise ValueError(f"{defender.name} has no Toughness; it cannot be wounded")
 
-    wielder_strength = attacker.profiles[0].strength
+    wielder_strength = attacker.profiles[0][Characteristic.STRENGTH]
     if profile.strength.is_relative and wielder_strength is None:
         raise ValueError(
             f"{weapon.name} shoots at the wielder's Strength, but {attacker.name} has none"
@@ -336,7 +336,7 @@ def shoot_unit(
 
     # Wounds accumulate into whole slain models; a profile with no printed
     # Wounds ("-") is treated as a single-Wound model.
-    defender_wounds = defender.profiles[0].wounds or 1
+    defender_wounds = defender.profiles[0][Characteristic.WOUNDS] or 1
     if defenders is not None:
         notes.append("panic test at 25% casualties not modelled")
 

@@ -22,24 +22,62 @@ def _dash_to_none(value: object) -> object:
 Stat = Annotated[int | None, BeforeValidator(_dash_to_none)]
 
 
-class Profile(BaseModel):
-    """One row of a characteristic profile.
+class Characteristic(StrEnum):
+    """The profile characteristics; values are the printed abbreviations.
 
-    A unit may have several, e.g. rank-and-file plus champion.
+    The single declaration of the vocabulary: profile rows are keyed by
+    it, tests match on it, and rule effects will name it.
     """
 
-    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+    MOVEMENT = "M"
+    WEAPON_SKILL = "WS"
+    BALLISTIC_SKILL = "BS"
+    STRENGTH = "S"
+    TOUGHNESS = "T"
+    WOUNDS = "W"
+    INITIATIVE = "I"
+    ATTACKS = "A"
+    LEADERSHIP = "Ld"
+
+
+class Profile(BaseModel):
+    """One row of a characteristic profile, keyed by the printed abbreviations.
+
+    A unit may have several rows, e.g. rank-and-file plus champion. The
+    row is written flat in the printed form ({ name: ..., M: 5, ... });
+    a validator gathers the abbreviation keys into ``characteristics``,
+    so the vocabulary is declared once, on :class:`Characteristic`.
+    """
+
+    model_config = ConfigDict(extra="forbid")
 
     name: str
-    movement: Stat = Field(alias="M")
-    weapon_skill: Stat = Field(alias="WS")
-    ballistic_skill: Stat = Field(alias="BS")
-    strength: Stat = Field(alias="S")
-    toughness: Stat = Field(alias="T")
-    wounds: Stat = Field(alias="W")
-    initiative: Stat = Field(alias="I")
-    attacks: Stat = Field(alias="A")
-    leadership: Stat = Field(alias="Ld")
+    characteristics: dict[Characteristic, Stat]
+
+    @model_validator(mode="before")
+    @classmethod
+    def _gather_printed_row(cls, data: object) -> object:
+        if isinstance(data, dict) and "characteristics" not in data:
+            data = dict(data)
+            data["characteristics"] = {
+                key: data.pop(key) for key in list(data) if key in Characteristic
+            }
+        return data
+
+    @model_validator(mode="after")
+    def _complete_row(self) -> Self:
+        missing = [c.value for c in Characteristic if c not in self.characteristics]
+        if missing:
+            raise ValueError(f"profile row is missing characteristics: {missing}")
+        return self
+
+    def __getitem__(self, characteristic: Characteristic) -> int | None:
+        """The row's value for a characteristic.
+
+        Returns:
+            The characteristic's value, or None for a printed "-".
+        """
+        return self.characteristics[characteristic]
 
 
 class UnitSize(BaseModel):
@@ -144,3 +182,18 @@ class Unit(BaseModel):
     equipment: list[str] = Field(default_factory=list)
     special_rules: list[str] = Field(default_factory=list)  # rule names, as printed
     options: list[UnitOption] = Field(default_factory=list)
+
+    def highest(self, characteristic: Characteristic) -> int | None:
+        """The unit's highest value for a characteristic.
+
+        The printed selection rule for tests: "where a model (or unit)
+        has more than one value for the same characteristic, use the
+        highest value" (model-profiles/characteristic-tests; stated for
+        Leadership too).
+
+        Returns:
+            The highest value across the unit's profiles, or None when
+            no profile has one.
+        """
+        values = [value for p in self.profiles if (value := p[characteristic]) is not None]
+        return max(values) if values else None
