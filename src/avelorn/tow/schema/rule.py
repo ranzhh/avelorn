@@ -43,7 +43,8 @@ class EffectCondition(BaseModel):
 
     @model_validator(mode="after")
     def _asks_something(self) -> Self:
-        if self.moved is None and self.at_long_range is None:
+        # Field-agnostic: new condition fields participate automatically.
+        if all(getattr(self, name) is None for name in type(self).model_fields):
             raise ValueError("a condition must set at least one field")
         return self
 

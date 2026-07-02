@@ -145,13 +145,13 @@ def _compile_effect(
 def _condition_applies(
     when: EffectCondition | None, conditions: Mapping[str, bool | None]
 ) -> bool | None:
+    # Iterates the condition's set fields by introspection: a field added
+    # to EffectCondition is automatically required here — never silently
+    # ignored because a hand-kept name list went stale.
     if when is None:
         return True
     verdict = True
-    for name in ("moved", "at_long_range"):
-        required = getattr(when, name)
-        if required is None:
-            continue
+    for name, required in when.model_dump(exclude_none=True).items():
         actual = conditions.get(name)
         if actual is None:
             return None  # unknown fact: the rule cannot be honoured

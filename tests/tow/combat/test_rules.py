@@ -8,7 +8,7 @@ import pytest
 from avelorn.core.loading import load_yaml, load_yaml_dir
 from avelorn.tow.combat.attack import AttackProfile, RollState, resolve_attack
 from avelorn.tow.combat.context import EngagementContext
-from avelorn.tow.combat.rules import compile_rules, resolve_rule
+from avelorn.tow.combat.rules import _condition_applies, compile_rules, resolve_rule
 from avelorn.tow.combat.shooting import shoot_unit
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
@@ -212,3 +212,20 @@ def test_move_in_or_stay_out_is_a_wash() -> None:
     assert stay.hit_target == move_in.hit_target == 4
     assert stay.p_unsaved == pytest.approx(move_in.p_unsaved)
     assert stay.casualties == pytest.approx(move_in.casualties)
+
+
+def test_every_condition_field_is_consulted() -> None:
+    """Each EffectCondition field, when set, must gate on the context.
+
+    Drift guard: a condition field added to the schema but absent from
+    the engagement facts must make the rule unevaluatable (None), never
+    be silently ignored. Iterates the model's fields so new ones are
+    covered automatically.
+    """
+    from avelorn.tow.schema.rule import EffectCondition
+
+    for name in EffectCondition.model_fields:
+        when = EffectCondition.model_validate({name: True})
+        assert _condition_applies(when, {}) is None, name
+        assert _condition_applies(when, {name: True}) is True, name
+        assert _condition_applies(when, {name: False}) is False, name
