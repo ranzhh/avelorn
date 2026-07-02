@@ -12,6 +12,7 @@ import re
 import yaml
 
 from avelorn.tow.schema.armour import Armour
+from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.unit import Profile, Unit, UnitOption
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile
 
@@ -95,6 +96,23 @@ def armour_to_yaml(armour: Armour, source_url: str | None = None) -> str:
         doc["armour_value_improvement"] = armour.armour_value_improvement
     if armour.notes is not None:
         doc["notes"] = armour.notes
+    return _dump(doc, source_url)
+
+
+def rule_to_yaml(rule: Rule, source_url: str | None = None) -> str:
+    """Serialize a rule for data/, with its source URL as a header comment.
+
+    Returns:
+        The YAML document text.
+    """
+    doc: dict = {"id": rule.id, "name": rule.name}
+    if rule.page is not None:
+        doc["page"] = rule.page
+    if rule.category is not None:
+        doc["category"] = rule.category
+    if rule.flavour is not None:
+        doc["flavour"] = rule.flavour
+    doc["paragraphs"] = list(rule.paragraphs)
     return _dump(doc, source_url)
 
 
