@@ -13,7 +13,7 @@ from avelorn.core.dice import p_d6_at_least
 logger = logging.getLogger(__name__)
 
 # Target 7+ resolves as a natural 6 re-rolled at this target; 10+ is impossible.
-_CONFIRM_TARGETS = {7: 4, 8: 5, 9: 6}
+CONFIRM_TARGETS = {7: 4, 8: 5, 9: 6}
 
 # A model wearing no armour counts as 7+ for modifier purposes; improvements cap at 2+.
 UNARMOURED = 7
@@ -93,7 +93,7 @@ def hit_probability(target: int) -> float:
     if target <= 6:
         p = p_d6_at_least(max(target, 2))
     else:
-        confirm = _CONFIRM_TARGETS.get(target)
+        confirm = CONFIRM_TARGETS.get(target)
         p = 0.0 if confirm is None else (1 / 6) * p_d6_at_least(confirm)
     logger.debug("hit %s -> p=%.3f", _fmt_target(target), p)
     return p
@@ -102,11 +102,15 @@ def hit_probability(target: int) -> float:
 def wound_probability(target: int | None) -> float:
     """Probability that one wound roll succeeds; a natural 1 always fails.
 
+    "Rolls of a Natural 1" (p.140): a natural 1 on a roll To Wound is a
+    fail regardless of modifiers — hence the clamp, even though the
+    unmodified chart never produces a target below 2.
+
     Returns:
         The success probability, or 0.0 when ``target`` is None (the
         chart shows "-": the attack cannot wound).
     """
-    p = 0.0 if target is None else p_d6_at_least(target)
+    p = 0.0 if target is None else p_d6_at_least(max(target, 2))
     logger.debug("wound %s -> p=%.3f", _fmt_target(target), p)
     return p
 

@@ -7,6 +7,7 @@ probabilities and distributions.
 
 import logging
 import random
+from collections.abc import Iterator, Sequence
 from math import comb
 
 logger = logging.getLogger(__name__)
@@ -47,6 +48,42 @@ def binomial_distribution(trials: int, p: float) -> list[float]:
     """
     logger.debug("binomial distribution over %d trials, p=%.3f", trials, p)
     return [binomial_pmf(k, trials, p) for k in range(trials + 1)]
+
+
+def multinomial_outcomes(
+    trials: int, probabilities: Sequence[float]
+) -> Iterator[tuple[tuple[int, ...], float]]:
+    """Enumerate class-count vectors of a multinomial with their probabilities.
+
+    ``probabilities`` are the per-trial probabilities of each class; any
+    remaining mass is an implicit "nothing" class whose count is not
+    reported. With one class this reduces to the binomial.
+
+    Yields:
+        ``(counts, probability)`` per distinct count vector, where
+        ``counts[i]`` is how many of the ``trials`` fell in class ``i``.
+        The probabilities of all vectors sum to 1.
+
+    Raises:
+        ValueError: ``trials`` is negative.
+    """
+    if trials < 0:
+        raise ValueError("trials must be >= 0")
+    p_rest = 1.0 - sum(probabilities)
+
+    def _vectors(
+        remaining: int, index: int, counts: tuple[int, ...], mass: float
+    ) -> Iterator[tuple[tuple[int, ...], float]]:
+        if index == len(probabilities):
+            yield counts, mass * p_rest**remaining
+            return
+        p = probabilities[index]
+        for k in range(remaining + 1):
+            yield from _vectors(
+                remaining - k, index + 1, (*counts, k), mass * comb(remaining, k) * p**k
+            )
+
+    yield from _vectors(trials, 0, (), 1.0)
 
 
 def cap_distribution(distribution: list[float], cap: int) -> list[float]:

@@ -10,7 +10,7 @@ rather than silently ignored.
 """
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from avelorn.core.dice import (
@@ -18,6 +18,15 @@ from avelorn.core.dice import (
     cap_distribution,
     expected_value,
     group_distribution,
+    multinomial_outcomes,
+)
+from avelorn.tow.combat.attack import (
+    AttackProfile,
+    Outcome,
+    RollState,
+    RollTarget,
+    Transform,
+    resolve_attack,
 )
 from avelorn.tow.combat.charts import (
     BEST_ARMOUR_VALUE,
@@ -88,16 +97,22 @@ def shoot(
     hit_modifier: int = 0,
     wounds_per_model: int = 1,
     targets: int | None = None,
+    transforms: Sequence[Transform] = (),
     notes: tuple[str, ...] = (),
 ) -> ShootingResult:
     """Resolve a volley of identical shooting attacks probabilistically.
 
     ``wounds_per_model`` is the target's Wounds: unsaved wounds accumulate
     into whole slain models (three wounds fell one Ogre), with leftover
-    wounds sitting on a survivor. ``targets`` is the number of models in
-    the unit; when given, casualties cap at it — a volley cannot remove
-    more models than the unit contains. The unsaved-wound ``distribution``
-    is unaffected by either; it never depends on the receiving unit.
+    wounds sitting on a survivor; an instant kill removes a model outright
+    regardless of its Wounds. ``targets`` is the number of models in the
+    unit; when given, casualties cap at it — a volley cannot remove more
+    models than the unit contains. The unsaved-wound ``distribution`` is
+    unaffected by either; it never depends on the receiving unit.
+
+    ``transforms`` are rule hooks applied to each attack's dice walk —
+    the seam the rules compiler will wire; nothing in production passes
+    any yet.
 
     Returns:
         The per-shot probabilities, the distribution of unsaved wounds, and
@@ -118,26 +133,48 @@ def shoot(
     wound = wound_target(strength, toughness)
     save = armour_save_target(armour_value, armour_piercing)
 
+    # The per-shot probabilities come from the exact dice walk; the chart
+    # probabilities remain as the reported per-stage figures. The charts
+    # speak the printed convention (None for "-"/no save); the walk speaks
+    # roll states — converted here.
+    resolution = resolve_attack(
+        AttackProfile(
+            hit_target=hit,
+            wound_target=_roll_target(wound),
+            save_target=_roll_target(save),
+            ward_target=_roll_target(ward_target),
+        ),
+        transforms,
+    )
+    p_unsaved = float(resolution.p_unsaved)
+    p_kill = float(resolution.p_of(Outcome.INSTANT_KILL))
     p_hit = hit_probability(hit)
     p_wound = wound_probability(wound)
-    p_save_fail = 1.0 - save_probability(save)
-    p_ward_fail = 1.0 - save_probability(ward_target)
-    p_unsaved = p_hit * p_wound * p_save_fail * p_ward_fail
     logger.debug(
         "per-shot unsaved wound: p=%.3f = hit %.3f x wound %.3f x save-fail %.3f x ward-fail %.3f",
         p_unsaved,
         p_hit,
         p_wound,
-        p_save_fail,
-        p_ward_fail,
+        1.0 - save_probability(save),
+        1.0 - save_probability(ward_target),
     )
 
-    distribution = binomial_distribution(shots, p_unsaved)
-    # Fold unsaved wounds into slain models by Wounds-per-model, then cap at
-    # the unit's size. For 1-Wound targets the fold is a no-op, so casualties
-    # equal the wound distribution up to the cap.
-    models = group_distribution(distribution, wounds_per_model)
-    casualties = models if targets is None else cap_distribution(models, targets)
+    if p_kill == 0.0:
+        # Single outcome class: the multinomial degenerates to the binomial,
+        # so keep the established path. Fold unsaved wounds into slain
+        # models by Wounds-per-model, then cap at the unit's size; for
+        # 1-Wound targets the fold is a no-op.
+        distribution = binomial_distribution(shots, p_unsaved)
+        models = group_distribution(distribution, wounds_per_model)
+        casualties = models if targets is None else cap_distribution(models, targets)
+    else:
+        distribution, casualties = _remove_casualties(
+            shots,
+            p_wound_only=p_unsaved - p_kill,
+            p_kill=p_kill,
+            wounds_per_model=wounds_per_model,
+            targets=targets,
+        )
 
     return ShootingResult(
         shots=shots,
@@ -153,6 +190,35 @@ def shoot(
         notes=notes,
         target_models=targets,
     )
+
+
+def _roll_target(target: int | None) -> RollTarget:
+    # The charts' printed convention: None means the roll is not taken
+    # and cannot succeed ("-" on the wound chart; no save).
+    return RollState.IMPOSSIBLE if target is None else target
+
+
+def _remove_casualties(
+    shots: int,
+    *,
+    p_wound_only: float,
+    p_kill: float,
+    wounds_per_model: int,
+    targets: int | None,
+) -> tuple[list[float], list[float]]:
+    # Class-aware aggregation, named after the printed "Remove Casualties"
+    # step: enumerate (wounds, instant kills) counts over the volley by
+    # multinomial. A kill removes a model outright; plain wounds accumulate
+    # by Wounds-per-model. The unsaved-wound distribution counts both
+    # classes (a Killing Blow is still an unsaved wound).
+    distribution = [0.0] * (shots + 1)
+    size = shots if targets is None else targets
+    casualties = [0.0] * (size + 1)
+    for (n_wound, n_kill), mass in multinomial_outcomes(shots, (p_wound_only, p_kill)):
+        distribution[n_wound + n_kill] += mass
+        killed = min(n_kill + n_wound // wounds_per_model, size)
+        casualties[killed] += mass
+    return distribution, casualties
 
 
 def shoot_unit(
