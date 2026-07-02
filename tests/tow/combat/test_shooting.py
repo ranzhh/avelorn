@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from avelorn.core.loading import load_yaml, load_yaml_dir
-from avelorn.tow.combat.attack import AttackProfile, Outcome, Stage, Transform
+from avelorn.tow.combat.attack import AttackProfile, Outcome, RollState, Stage, Transform
 from avelorn.tow.combat.shooting import _remove_casualties, shoot, shoot_unit
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.unit import Unit
@@ -253,7 +253,9 @@ def _killing_blow_double() -> Transform:
     def escalate(face: int, profile: AttackProfile) -> AttackProfile:
         if face != 6:
             return profile
-        return replace(profile, save_target=None, unsaved_outcome=Outcome.INSTANT_KILL)
+        return replace(
+            profile, save_target=RollState.IMPOSSIBLE, unsaved_outcome=Outcome.INSTANT_KILL
+        )
 
     return Transform(stage=Stage.ROLL_TO_WOUND, on_success=escalate)
 

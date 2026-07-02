@@ -20,7 +20,14 @@ from avelorn.core.dice import (
     group_distribution,
     multinomial_outcomes,
 )
-from avelorn.tow.combat.attack import AttackProfile, Outcome, Transform, resolve_attack
+from avelorn.tow.combat.attack import (
+    AttackProfile,
+    Outcome,
+    RollState,
+    RollTarget,
+    Transform,
+    resolve_attack,
+)
 from avelorn.tow.combat.charts import (
     BEST_ARMOUR_VALUE,
     UNARMOURED,
@@ -127,10 +134,15 @@ def shoot(
     save = armour_save_target(armour_value, armour_piercing)
 
     # The per-shot probabilities come from the exact dice walk; the chart
-    # probabilities remain as the reported per-stage figures.
+    # probabilities remain as the reported per-stage figures. The charts
+    # speak the printed convention (None for "-"/no save); the walk speaks
+    # roll states — converted here.
     resolution = resolve_attack(
         AttackProfile(
-            hit_target=hit, wound_target=wound, save_target=save, ward_target=ward_target
+            hit_target=hit,
+            wound_target=_roll_target(wound),
+            save_target=_roll_target(save),
+            ward_target=_roll_target(ward_target),
         ),
         transforms,
     )
@@ -178,6 +190,12 @@ def shoot(
         notes=notes,
         target_models=targets,
     )
+
+
+def _roll_target(target: int | None) -> RollTarget:
+    # The charts' printed convention: None means the roll is not taken
+    # and cannot succeed ("-" on the wound chart; no save).
+    return RollState.IMPOSSIBLE if target is None else target
 
 
 def _remove_casualties(

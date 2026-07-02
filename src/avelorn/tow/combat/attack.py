@@ -51,19 +51,39 @@ class Outcome(StrEnum):
     INSTANT_KILL = "instant-kill"
 
 
+class RollState(StrEnum):
+    """A roll that is not decided by a die.
+
+    ``IMPOSSIBLE`` cannot succeed and takes no roll: the wound chart's
+    printed "-" ("Too Tough to Wound"), or a model with no save.
+    ``AUTOMATIC`` succeeds without a roll: the printed "Automatic Hits"
+    and attacks that "wound automatically". No die means no natural
+    face, so face-triggered rules cannot fire — which is exactly the
+    printed Killing Blow note ("if an attack wounds automatically, this
+    special rule cannot be used"), emerging from the model.
+    """
+
+    IMPOSSIBLE = "impossible"
+    AUTOMATIC = "automatic"
+
+
+type RollTarget = int | RollState
+
+
 @dataclass(frozen=True)
 class AttackProfile:
     """Roll targets and outcome semantics for one attack.
 
+    Each target is either the required roll or a :class:`RollState`.
     ``unsaved_outcome`` is the class an unsaved wound resolves to;
     transforms escalate it (a Killing Blow turns it into an instant
     kill for the rest of the walk).
     """
 
-    hit_target: int
-    wound_target: int | None
-    save_target: int | None
-    ward_target: int | None
+    hit_target: RollTarget
+    wound_target: RollTarget
+    save_target: RollTarget
+    ward_target: RollTarget
     unsaved_outcome: Outcome = Outcome.UNSAVED_WOUND
 
 
@@ -197,11 +217,11 @@ def _on_success(transforms: list[Transform], face: int, profile: AttackProfile) 
     return profile
 
 
-def _roll_to_hit(target: int) -> Iterator[tuple[Fraction, int, bool]]:
+def _roll_to_hit(target: RollTarget) -> Iterator[tuple[Fraction, int, bool]]:
     # Mirrors charts.hit_probability: a natural 1 always fails; targets of
     # 7+ resolve as a natural 6 confirmed at CONFIRM_TARGETS[target]; 10+
     # is impossible. The yielded face is the natural die.
-    if target <= 6:
+    if isinstance(target, RollState) or target <= 6:
         yield from _roll(target, clamp=True)
         return
     confirm = CONFIRM_TARGETS.get(target)
@@ -213,14 +233,17 @@ def _roll_to_hit(target: int) -> Iterator[tuple[Fraction, int, bool]]:
                 yield _FACE * _FACE, face, confirm_face >= confirm
 
 
-def _roll(target: int | None, *, clamp: bool) -> Iterator[tuple[Fraction, int, bool]]:
-    # A None target is a roll that cannot succeed (no save; a "-" on the
-    # wound chart): one certain branch, no die consumed (the face is never
-    # read on a failed branch). ``clamp`` mirrors the charts' "a natural 1
-    # always fails" handling; wound targets come pre-clamped by the chart,
-    # so their roll is unclamped.
-    if target is None:
+def _roll(target: RollTarget, *, clamp: bool) -> Iterator[tuple[Fraction, int, bool]]:
+    # A RollState is decided without a die: one certain branch, face 0
+    # (never a natural anything, so face-triggered transforms cannot
+    # fire). ``clamp`` mirrors the charts' "a natural 1 always fails"
+    # handling; wound targets come pre-clamped by the chart, so their
+    # roll is unclamped.
+    if target is RollState.IMPOSSIBLE:
         yield Fraction(1), 0, False
+        return
+    if target is RollState.AUTOMATIC:
+        yield Fraction(1), 0, True
         return
     threshold = max(target, 2) if clamp else target
     for face in _FACES:
