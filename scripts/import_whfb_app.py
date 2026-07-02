@@ -1,10 +1,11 @@
-"""Import units, weapons, and armour from tow.whfb.app into data/.
+"""Import units, weapons, armour, and rules from tow.whfb.app into data/.
 
 uv run python scripts/import_whfb_app.py unit elven-archers
 uv run python scripts/import_whfb_app.py unit elven-archers --army high-elf-realms
 uv run python scripts/import_whfb_app.py army high-elf-realms
 uv run python scripts/import_whfb_app.py weapon longbow
 uv run python scripts/import_whfb_app.py armour light-armour
+uv run python scripts/import_whfb_app.py rule armour-bane
 """
 
 from __future__ import annotations
@@ -18,7 +19,13 @@ from avelorn.core.logging import configure_logging
 from avelorn.tow.importers.whfb_app.client import BASE_URL, WhfbAppClient, WhfbAppError
 from avelorn.tow.importers.whfb_app.equipment import parse_armour, parse_weapon
 from avelorn.tow.importers.whfb_app.parse import UnsupportedUnit, WhfbParseError, parse_unit
-from avelorn.tow.importers.whfb_app.yamlout import armour_to_yaml, unit_to_yaml, weapon_to_yaml
+from avelorn.tow.importers.whfb_app.rules import parse_special_rule
+from avelorn.tow.importers.whfb_app.yamlout import (
+    armour_to_yaml,
+    rule_to_yaml,
+    unit_to_yaml,
+    weapon_to_yaml,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +58,9 @@ def main(argv: list[str] | None = None) -> int:
     armour_cmd = sub.add_parser("armour", parents=[common], help="import an armour item by slug")
     armour_cmd.add_argument("slug")
 
+    rule_cmd = sub.add_parser("rule", parents=[common], help="import a special rule by slug")
+    rule_cmd.add_argument("slug")
+
     args = parser.parse_args(argv)
     configure_logging()
     client = WhfbAppClient()
@@ -59,6 +69,8 @@ def main(argv: list[str] | None = None) -> int:
             ok = _import_unit(client, args.slug, args.army, args.data_dir, args.dry_run)
         elif args.command == "army":
             ok = _import_army(client, args.slug, args.data_dir, args.dry_run)
+        elif args.command == "rule":
+            ok = _import_rule(client, args.slug, args.data_dir, args.dry_run)
         else:
             ok = _import_equipment(client, args.command, args.slug, args.data_dir, args.dry_run)
     except WhfbAppError:
@@ -88,6 +100,26 @@ def _import_equipment(
         return True
     subdir = "weapons" if kind == "weapon" else "armour"
     path = data_dir / "tow" / subdir / f"{slug}.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+    logger.info("wrote %s", path)
+    return True
+
+
+def _import_rule(client: WhfbAppClient, slug: str, data_dir: Path, dry_run: bool) -> bool:
+    entry = client.special_rule_entry(slug)
+    try:
+        result = parse_special_rule(entry)
+    except WhfbParseError:
+        logger.exception("%s: parse failed", slug)
+        return False
+    for warning in result.warnings:
+        logger.warning("%s: %s", slug, warning)
+    text = rule_to_yaml(result.rule, source_url=f"{BASE_URL}/special-rules/{slug}")
+    if dry_run:
+        print(text)  # generated YAML is the program's payload -> stdout
+        return True
+    path = data_dir / "tow" / "rules" / f"{slug}.yaml"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text)
     logger.info("wrote %s", path)
