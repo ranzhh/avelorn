@@ -21,7 +21,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 
 from avelorn.tow.combat.attack import AttackProfile, RollState, Transform
-from avelorn.tow.schema.rule import Rule, RuleEffect
+from avelorn.tow.schema.rule import ArmourPiercingEffect, Rule, RuleEffect
 
 logger = logging.getLogger(__name__)
 
@@ -91,19 +91,26 @@ def _compile(resolved: ResolvedRule) -> list[Transform] | None:
 
 
 def _compile_effect(effect: RuleEffect, parameter: int | None) -> Transform | None:
-    # Dispatches on the effect kind; grows a match as kinds join. Every
-    # registry stage is hookable today; when the registry outgrows the
-    # walk (a named seam the engine does not hook yet), a
-    # named-but-unhooked check returns None here — not modelled, not an
-    # error.
-    amount = parameter if effect.amount == "X" else effect.amount
-    if amount is None or effect.on_natural is None:
-        # "X" without a printed parameter, or an unconditional AP change
-        # (which belongs on the chart-side AP, not a walk transform).
-        return None
-    return Transform(
-        stage=effect.stage, on_success=_worsen_save_on_natural(effect.on_natural, amount)
-    )
+    # Dispatches on the effect kind; grows as kinds join. Every registry
+    # stage is hookable today; when the registry outgrows the walk (a
+    # named seam the engine does not hook yet), a named-but-unhooked
+    # check returns None here — not modelled, not an error.
+    match effect:
+        case ArmourPiercingEffect():
+            amount = parameter if effect.amount == "X" else effect.amount
+            if amount is None or effect.on_natural is None:
+                # "X" without a printed parameter, or an unconditional AP
+                # change (which belongs on the chart-side AP, not a walk
+                # transform).
+                return None
+            return Transform(
+                stage=effect.stage,
+                on_success=_worsen_save_on_natural(effect.on_natural, amount),
+            )
+        case _:
+            # to-hit effects condition on the engagement context, which the
+            # compiler does not receive yet — inert until it does.
+            return None
 
 
 def _worsen_save_on_natural(
