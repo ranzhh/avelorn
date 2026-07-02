@@ -19,6 +19,7 @@ from avelorn.core.dice import (
     expected_value,
     group_distribution,
 )
+from avelorn.tow.combat.attack import AttackProfile, resolve_attack
 from avelorn.tow.combat.charts import (
     BEST_ARMOUR_VALUE,
     UNARMOURED,
@@ -118,18 +119,23 @@ def shoot(
     wound = wound_target(strength, toughness)
     save = armour_save_target(armour_value, armour_piercing)
 
+    # The per-shot probability comes from the exact dice walk; the chart
+    # probabilities remain as the reported per-stage figures.
+    resolution = resolve_attack(
+        AttackProfile(
+            hit_target=hit, wound_target=wound, save_target=save, ward_target=ward_target
+        )
+    )
+    p_unsaved = float(resolution.p_unsaved)
     p_hit = hit_probability(hit)
     p_wound = wound_probability(wound)
-    p_save_fail = 1.0 - save_probability(save)
-    p_ward_fail = 1.0 - save_probability(ward_target)
-    p_unsaved = p_hit * p_wound * p_save_fail * p_ward_fail
     logger.debug(
         "per-shot unsaved wound: p=%.3f = hit %.3f x wound %.3f x save-fail %.3f x ward-fail %.3f",
         p_unsaved,
         p_hit,
         p_wound,
-        p_save_fail,
-        p_ward_fail,
+        1.0 - save_probability(save),
+        1.0 - save_probability(ward_target),
     )
 
     distribution = binomial_distribution(shots, p_unsaved)
