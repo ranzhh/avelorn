@@ -21,7 +21,13 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 
 from avelorn.tow.combat.attack import AttackProfile, RollState, Transform
-from avelorn.tow.schema.rule import ArmourPiercingEffect, Rule, RuleEffect
+from avelorn.tow.schema.rule import (
+    ArmourPiercingEffect,
+    EffectCondition,
+    Rule,
+    RuleEffect,
+    ToHitEffect,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -57,40 +63,58 @@ def resolve_rule(printed: str, rules: Mapping[str, Rule]) -> ResolvedRule | None
 
 
 def compile_rules(
-    printed_rules: Sequence[str], rules: Mapping[str, Rule]
+    printed_rules: Sequence[str],
+    rules: Mapping[str, Rule],
+    conditions: Mapping[str, bool | None] | None = None,
 ) -> tuple[list[Transform], list[str]]:
     """Compile printed rule names into transforms.
+
+    ``conditions`` are the evaluated engagement facts by condition-field
+    name (``moved``, ``at_long_range``); None means unknown. A rule
+    whose condition needs an unknown fact is unfactored and reported; a
+    rule whose condition evaluates False is honoured by not applying —
+    no transform, no note.
 
     Returns:
         The compiled transforms, and the printed names that could not be
         factored into the math (unresolved, effect-less, or carrying an
         effect the engine cannot honour yet) — the caller reports those.
     """
+    conditions = conditions or {}
     transforms: list[Transform] = []
     unfactored: list[str] = []
     for printed in printed_rules:
         resolved = resolve_rule(printed, rules)
-        compiled = _compile(resolved) if resolved is not None else None
-        if compiled:
-            logger.debug("rule factored: %s -> %d transform(s)", printed, len(compiled))
-            transforms.extend(compiled)
-        else:
+        compiled = _compile(resolved, conditions) if resolved is not None else None
+        if compiled is None:
             unfactored.append(printed)
+        else:
+            if compiled:
+                logger.debug("rule factored: %s -> %d transform(s)", printed, len(compiled))
+            transforms.extend(compiled)
     return transforms, unfactored
 
 
-def _compile(resolved: ResolvedRule) -> list[Transform] | None:
-    # All-or-nothing: every effect must compile, or the rule is unfactored.
-    transforms = []
+def _compile(
+    resolved: ResolvedRule, conditions: Mapping[str, bool | None]
+) -> list[Transform] | None:
+    # All-or-nothing: every effect must compile, or the rule is
+    # unfactored. An effect whose condition evaluates False compiles to
+    # no transforms — honoured, not unfactored.
+    if not resolved.rule.effects:
+        return None
+    transforms: list[Transform] = []
     for effect in resolved.rule.effects:
-        transform = _compile_effect(effect, resolved.parameter)
-        if transform is None:
+        compiled = _compile_effect(effect, resolved.parameter, conditions)
+        if compiled is None:
             return None
-        transforms.append(transform)
-    return transforms or None
+        transforms.extend(compiled)
+    return transforms
 
 
-def _compile_effect(effect: RuleEffect, parameter: int | None) -> Transform | None:
+def _compile_effect(
+    effect: RuleEffect, parameter: int | None, conditions: Mapping[str, bool | None]
+) -> list[Transform] | None:
     # Dispatches on the effect kind; grows as kinds join. Every registry
     # stage is hookable today; when the registry outgrows the walk (a
     # named seam the engine does not hook yet), a named-but-unhooked
@@ -103,14 +127,47 @@ def _compile_effect(effect: RuleEffect, parameter: int | None) -> Transform | No
                 # change (which belongs on the chart-side AP, not a walk
                 # transform).
                 return None
-            return Transform(
-                stage=effect.stage,
-                on_success=_worsen_save_on_natural(effect.on_natural, amount),
-            )
-        case _:
-            # to-hit effects condition on the engagement context, which the
-            # compiler does not receive yet — inert until it does.
-            return None
+            return [
+                Transform(
+                    stage=effect.stage,
+                    on_success=_worsen_save_on_natural(effect.on_natural, amount),
+                )
+            ]
+        case ToHitEffect():
+            applies = _condition_applies(effect.when, conditions)
+            if applies is None:
+                return None  # the context cannot answer the condition
+            if not applies:
+                return []  # honoured: the situation does not arise
+            return [Transform(stage=effect.stage, modify_targets=_shift_hit(effect.amount))]
+
+
+def _condition_applies(
+    when: EffectCondition | None, conditions: Mapping[str, bool | None]
+) -> bool | None:
+    if when is None:
+        return True
+    verdict = True
+    for name in ("moved", "at_long_range"):
+        required = getattr(when, name)
+        if required is None:
+            continue
+        actual = conditions.get(name)
+        if actual is None:
+            return None  # unknown fact: the rule cannot be honoured
+        if actual != required:
+            verdict = False
+    return verdict
+
+
+def _shift_hit(amount: int) -> Callable[[AttackProfile], AttackProfile]:
+    # Printed sign convention: a -1 To Hit modifier raises the target by 1.
+    def apply(profile: AttackProfile) -> AttackProfile:
+        if not isinstance(profile.hit_target, int):
+            return profile
+        return replace(profile, hit_target=profile.hit_target - amount)
+
+    return apply
 
 
 def _worsen_save_on_natural(

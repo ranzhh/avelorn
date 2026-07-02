@@ -38,6 +38,7 @@ from avelorn.tow.combat.charts import (
     wound_probability,
     wound_target,
 )
+from avelorn.tow.combat.context import EngagementContext
 from avelorn.tow.combat.rules import compile_rules
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
@@ -45,6 +46,9 @@ from avelorn.tow.schema.unit import Unit
 from avelorn.tow.schema.weapon import Weapon
 
 logger = logging.getLogger(__name__)
+
+# Rules filed under the shooting phase chapter apply to every volley.
+_SHOOTING_PHASE = "The Shooting Phase"
 
 
 @dataclass(frozen=True)
@@ -231,6 +235,7 @@ def shoot_unit(
     *,
     armoury: Mapping[str, Armour] | None = None,
     rules: Mapping[str, Rule] | None = None,
+    context: EngagementContext | None = None,
     hit_modifier: int = 0,
     defenders: int | None = None,
 ) -> ShootingResult:
@@ -242,6 +247,11 @@ def shoot_unit(
     entries, whose effects compile into the dice walk. Anything either
     mapping does not resolve — and every unit special rule — is not
     factored into the math but listed in the result's notes.
+
+    ``context`` is the engagement's situation (moved, distance); rules
+    conditioned on facts it leaves unknown stay unfactored and noted.
+    Rules whose category is the shooting phase chapter apply to every
+    volley, gated by their conditions.
 
     ``defenders`` is the number of models actually fielded in the target
     unit — the schema models only the *allowed* size, not what is on the
@@ -295,10 +305,28 @@ def shoot_unit(
         notes.extend(
             f"special rule not factored: {rule} ({unit.name})" for rule in unit.special_rules
         )
+    # The engagement facts, by condition-field name; None = unknown.
+    # Long range is printed as "further away than half the weapon's
+    # maximum range".
+    at_long_range = None
+    if context is not None and context.distance is not None and isinstance(profile.range, int):
+        at_long_range = context.distance > profile.range / 2
+    conditions = {
+        "moved": context.moved if context is not None else None,
+        "at_long_range": at_long_range,
+    }
+
     # Weapon rules with compiled effects join the dice walk; the rest are
-    # reported, exactly as before.
-    transforms, unfactored = compile_rules(profile.special_rules, rules or {})
+    # reported, exactly as before. Shooting-phase chapter rules (Firing
+    # at Long Range, Moving and Shooting) apply to every volley.
+    transforms, unfactored = compile_rules(profile.special_rules, rules or {}, conditions)
     notes.extend(f"weapon rule not factored: {rule} ({weapon.name})" for rule in unfactored)
+    phase_rules = sorted(
+        r.name for r in (rules or {}).values() if r.category == _SHOOTING_PHASE and r.effects
+    )
+    phase_transforms, phase_unfactored = compile_rules(phase_rules, rules or {}, conditions)
+    transforms.extend(phase_transforms)
+    notes.extend(f"core rule not factored: {name}" for name in phase_unfactored)
     if weapon.notes is not None:
         notes.append(f"weapon notes not factored ({weapon.name}): {weapon.notes}")
 
