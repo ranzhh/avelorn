@@ -3,9 +3,10 @@
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from avelorn.core.loading import load_yaml
-from avelorn.tow.schema.rule import Rule
+from avelorn.tow.schema.rule import Rule, RuleEffect
 
 DATA_DIR = Path(__file__).parents[3] / "data"
 RULE_FILES = sorted(DATA_DIR.glob("tow/rules/*.yaml"))
@@ -22,3 +23,25 @@ def test_rule_yaml_is_valid(path: Path) -> None:
     rule = load_yaml(path, Rule)
     assert rule.id == path.stem
     assert rule.paragraphs
+
+
+def test_effect_rejects_unknown_stage() -> None:
+    """A stage outside the registry is a data error, not a silent inert."""
+    with pytest.raises(ValidationError, match="stage"):
+        RuleEffect.model_validate(
+            {"kind": "armour-piercing", "stage": "roll-to-wnd", "on_natural": 6, "amount": 1}
+        )
+
+
+def test_effect_rejects_unknown_kind() -> None:
+    """A kind outside the closed vocabulary is a data error."""
+    with pytest.raises(ValidationError, match="kind"):
+        RuleEffect.model_validate(
+            {"kind": "reroll", "stage": "roll-to-wound", "on_natural": 6, "amount": 1}
+        )
+
+
+def test_effect_requires_its_kind_fields() -> None:
+    """A kind's required fields are enforced by the schema, not a validator."""
+    with pytest.raises(ValidationError, match="amount"):
+        RuleEffect.model_validate({"kind": "armour-piercing", "stage": "roll-to-wound"})

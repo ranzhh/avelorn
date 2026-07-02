@@ -6,9 +6,10 @@ from pathlib import Path
 import pytest
 
 from avelorn.core.loading import load_yaml, load_yaml_dir
-from avelorn.tow.combat.attack import AttackProfile, Outcome, RollState, Stage, Transform
+from avelorn.tow.combat.attack import AttackProfile, Outcome, RollState, Transform
 from avelorn.tow.combat.shooting import _remove_casualties, shoot, shoot_unit
 from avelorn.tow.schema.armour import Armour
+from avelorn.tow.schema.stage import Stage
 from avelorn.tow.schema.unit import Unit
 from avelorn.tow.schema.weapon import Weapon
 

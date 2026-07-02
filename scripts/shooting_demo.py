@@ -20,6 +20,7 @@ from avelorn.core.logging import configure_logging
 from avelorn.tow.combat.query import Comparator, Predicate, query_result
 from avelorn.tow.combat.shooting import shoot_unit
 from avelorn.tow.schema.armour import Armour
+from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.unit import Unit
 from avelorn.tow.schema.weapon import Weapon
 
@@ -64,11 +65,18 @@ def main() -> None:
     defenders = args.defenders
     weapons = {w.name: w for w in load_yaml_dir(_DATA_DIR / "tow/weapons", Weapon)}
     armoury = {a.name: a for a in load_yaml_dir(_DATA_DIR / "tow/armour", Armour)}
+    rules = {r.name: r for r in load_yaml_dir(_DATA_DIR / "tow/rules", Rule)}
     attacker = _load_unit("high-elf-realms", args.attacker)
     defender = _load_unit("high-elf-realms", args.defender)
     weapon = _missile_weapon(attacker, weapons)
     result = shoot_unit(
-        attacker, defender, shooters=shooters, weapon=weapon, armoury=armoury, defenders=defenders
+        attacker,
+        defender,
+        shooters=shooters,
+        weapon=weapon,
+        armoury=armoury,
+        rules=rules,
+        defenders=defenders,
     )
 
     def fmt_target(target: int | None) -> str:
