@@ -113,7 +113,13 @@ def rule_to_yaml(rule: Rule, source_url: str | None = None) -> str:
     if rule.flavour is not None:
         doc["flavour"] = rule.flavour
     doc["paragraphs"] = list(rule.paragraphs)
-    return _dump(doc, source_url)
+    if rule.effects:
+        doc["effects"] = [e.model_dump(mode="json", exclude_none=True) for e in rule.effects]
+    text = _dump(doc, source_url)
+    # Effects are hand-authored, not scraped; mark them as such in the file.
+    return text.replace(
+        "\neffects:", "\n# Hand-authored, diffable against the paragraphs above.\neffects:"
+    )
 
 
 def _dump(doc: dict, source_url: str | None) -> str:
