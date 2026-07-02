@@ -107,7 +107,7 @@ def _import_equipment(
 
 
 def _import_rule(client: WhfbAppClient, slug: str, data_dir: Path, dry_run: bool) -> bool:
-    entry = client.special_rule_entry(slug)
+    entry = client.rule_entry(slug)
     try:
         result = parse_special_rule(entry)
     except WhfbParseError:
@@ -115,11 +115,14 @@ def _import_rule(client: WhfbAppClient, slug: str, data_dir: Path, dry_run: bool
         return False
     for warning in result.warnings:
         logger.warning("%s: %s", slug, warning)
-    text = rule_to_yaml(result.rule, source_url=f"{BASE_URL}/special-rules/{slug}")
+    page_path = slug if "/" in slug else f"special-rules/{slug}"
+    text = rule_to_yaml(result.rule, source_url=f"{BASE_URL}/{page_path}")
     if dry_run:
         print(text)  # generated YAML is the program's payload -> stdout
         return True
-    path = data_dir / "tow" / "rules" / f"{slug}.yaml"
+    # The file is named by the rule's own slug; a chapter-page path like
+    # "the-shooting-phase/firing-at-long-range" still lands flat in rules/.
+    path = data_dir / "tow" / "rules" / f"{result.rule.id}.yaml"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text)
     logger.info("wrote %s", path)

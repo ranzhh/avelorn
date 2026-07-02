@@ -17,6 +17,7 @@ from pathlib import Path
 
 from avelorn.core.loading import load_yaml, load_yaml_dir
 from avelorn.core.logging import configure_logging
+from avelorn.tow.combat.context import EngagementContext
 from avelorn.tow.combat.query import Comparator, Predicate, query_result
 from avelorn.tow.combat.shooting import shoot_unit
 from avelorn.tow.schema.armour import Armour
@@ -55,6 +56,15 @@ def main() -> None:
         help="models in the target unit; caps casualties (uncapped if omitted)",
     )
     parser.add_argument(
+        "--distance", type=int, default=None, help="inches to the target (enables range rules)"
+    )
+    parser.add_argument(
+        "--moved",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="whether the shooters moved this turn (omit = unknown)",
+    )
+    parser.add_argument(
         "-v", "--verbose", action="store_true", help="emit the DEBUG math trace to stderr"
     )
     args = parser.parse_args()
@@ -69,6 +79,7 @@ def main() -> None:
     attacker = _load_unit("high-elf-realms", args.attacker)
     defender = _load_unit("high-elf-realms", args.defender)
     weapon = _missile_weapon(attacker, weapons)
+    context = EngagementContext(moved=args.moved, distance=args.distance)
     result = shoot_unit(
         attacker,
         defender,
@@ -76,6 +87,7 @@ def main() -> None:
         weapon=weapon,
         armoury=armoury,
         rules=rules,
+        context=context,
         defenders=defenders,
     )
 

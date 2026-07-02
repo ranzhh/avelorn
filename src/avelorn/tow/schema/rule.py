@@ -19,11 +19,34 @@ stays unmodelled (and is reported by the engine) rather than
 approximated.
 """
 
-from typing import Literal
+from typing import Annotated, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from avelorn.tow.schema.stage import Stage
+
+
+class EffectCondition(BaseModel):
+    """The situation an effect requires — the "when" over the engagement.
+
+    Set fields are conjunctive: every one must match the engagement
+    context for the effect to apply. A context that cannot answer a set
+    field (unknown) leaves the whole rule unfactored and reported; a
+    context that answers it False simply means the rule does not apply
+    (no note — a unit that did not move is correctly unpenalised).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    moved: bool | None = None  # "moved for any reason during this turn"
+    at_long_range: bool | None = None  # "further away than half the weapon's maximum range"
+
+    @model_validator(mode="after")
+    def _asks_something(self) -> Self:
+        # Field-agnostic: new condition fields participate automatically.
+        if all(getattr(self, name) is None for name in type(self).model_fields):
+            raise ValueError("a condition must set at least one field")
+        return self
 
 
 class ArmourPiercingEffect(BaseModel):
@@ -47,10 +70,24 @@ class ArmourPiercingEffect(BaseModel):
     amount: int | Literal["X"]
 
 
-# Becomes a discriminated union (Field(discriminator="kind")) when the
-# second effect kind joins; the data format already carries the
-# discriminator, so authored files never change shape.
-RuleEffect = ArmourPiercingEffect
+class ToHitEffect(BaseModel):
+    """Modify the To Hit roll, as the printed To Hit Modifiers do.
+
+    ``amount`` follows the printed sign convention: penalties are
+    negative ("-1 To Hit modifier" is ``amount: -1``). ``when`` gates
+    the effect on the engagement (long range, having moved); without it
+    the modifier applies to every attack.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["to-hit"]
+    stage: Stage
+    amount: int
+    when: EffectCondition | None = None
+
+
+RuleEffect = Annotated[ArmourPiercingEffect | ToHitEffect, Field(discriminator="kind")]
 
 
 class Rule(BaseModel):

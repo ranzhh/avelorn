@@ -63,8 +63,12 @@ class WhfbAppClient:
             raise WhfbAppError(f"no weapons-of-war entry in response for {slug!r}")
         return entry
 
-    def special_rule_entry(self, slug: str) -> dict:
-        """Fetch the rule entry for a Special Rules page.
+    def rule_entry(self, slug: str) -> dict:
+        """Fetch a rule entry: a Special Rules page, or any rules page by path.
+
+        A bare slug reads the Special Rules chapter (``special-rules/<slug>``);
+        a slug containing "/" is a full page path, so core rules sections can
+        be imported too (e.g. ``the-shooting-phase/firing-at-long-range``).
 
         Returns:
             The entry as embedded in the page payload.
@@ -72,10 +76,11 @@ class WhfbAppClient:
         Raises:
             WhfbAppError: The page has no entry (e.g. unknown slug).
         """
-        props = self._page_props(f"special-rules/{slug}")
+        path = slug if "/" in slug else f"special-rules/{slug}"
+        props = self._page_props(path)
         entry = props.get("entry")
         if not entry:
-            raise WhfbAppError(f"no special-rules entry in response for {slug!r}")
+            raise WhfbAppError(f"no rule entry in response for {slug!r}")
         return entry
 
     def army_unit_slugs(self, army_slug: str) -> list[str]:
