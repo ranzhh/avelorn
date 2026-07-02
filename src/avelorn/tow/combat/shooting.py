@@ -38,7 +38,9 @@ from avelorn.tow.combat.charts import (
     wound_probability,
     wound_target,
 )
+from avelorn.tow.combat.rules import compile_rules
 from avelorn.tow.schema.armour import Armour
+from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.unit import Unit
 from avelorn.tow.schema.weapon import Weapon
 
@@ -228,6 +230,7 @@ def shoot_unit(
     weapon: Weapon,
     *,
     armoury: Mapping[str, Armour] | None = None,
+    rules: Mapping[str, Rule] | None = None,
     hit_modifier: int = 0,
     defenders: int | None = None,
 ) -> ShootingResult:
@@ -235,9 +238,10 @@ def shoot_unit(
 
     One shot per model, using each unit's first (rank-and-file) profile
     and the weapon's missile profile. ``armoury`` maps printed equipment
-    names to armour items; defender equipment it does not resolve — and
-    every special rule — is not factored into the math but listed in the
-    result's notes.
+    names to armour items; ``rules`` maps printed rule names to rule
+    entries, whose effects compile into the dice walk. Anything either
+    mapping does not resolve — and every unit special rule — is not
+    factored into the math but listed in the result's notes.
 
     ``defenders`` is the number of models actually fielded in the target
     unit — the schema models only the *allowed* size, not what is on the
@@ -291,9 +295,10 @@ def shoot_unit(
         notes.extend(
             f"special rule not factored: {rule} ({unit.name})" for rule in unit.special_rules
         )
-    notes.extend(
-        f"weapon rule not factored: {rule} ({weapon.name})" for rule in profile.special_rules
-    )
+    # Weapon rules with compiled effects join the dice walk; the rest are
+    # reported, exactly as before.
+    transforms, unfactored = compile_rules(profile.special_rules, rules or {})
+    notes.extend(f"weapon rule not factored: {rule} ({weapon.name})" for rule in unfactored)
     if weapon.notes is not None:
         notes.append(f"weapon notes not factored ({weapon.name}): {weapon.notes}")
 
@@ -313,6 +318,7 @@ def shoot_unit(
         hit_modifier=hit_modifier,
         wounds_per_model=defender_wounds,
         targets=defenders,
+        transforms=transforms,
         notes=tuple(notes),
     )
 
