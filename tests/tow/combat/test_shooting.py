@@ -1,11 +1,13 @@
 """Shooting chain tests, golden values hand-computed from the rulebook charts."""
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from avelorn.core.loading import load_yaml, load_yaml_dir
-from avelorn.tow.combat.shooting import shoot, shoot_unit
+from avelorn.tow.combat.attack import AttackProfile, Outcome, Stage, Transform
+from avelorn.tow.combat.shooting import _remove_casualties, shoot, shoot_unit
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.unit import Unit
 from avelorn.tow.schema.weapon import Weapon
@@ -245,3 +247,72 @@ def test_shoot_unit_rejects_missing_ballistic_skill() -> None:
     object.__setattr__(crewless.profiles[0], "ballistic_skill", None)
     with pytest.raises(ValueError, match="Ballistic Skill"):
         shoot_unit(crewless, spearmen, shooters=1, weapon=load_weapon("longbow"))
+
+
+def _killing_blow_double() -> Transform:
+    def escalate(face: int, profile: AttackProfile) -> AttackProfile:
+        if face != 6:
+            return profile
+        return replace(profile, save_target=None, unsaved_outcome=Outcome.INSTANT_KILL)
+
+    return Transform(stage=Stage.ROLL_TO_WOUND, on_success=escalate)
+
+
+def test_shoot_instant_kills_remove_multi_wound_models_outright() -> None:
+    """Two attacks can only fell both Wounds-3 models via two kills.
+
+    Hit 3+, wound 4+, save 5+ with the kill double: p_kill = 1/9 per
+    attack and plain wounds (at most 2 < 3) fell nobody, so casualties
+    are Binomial(2, 1/9): P(2) = 1/81.
+    """
+    result = shoot(
+        2,
+        ballistic_skill=4,
+        strength=3,
+        toughness=3,
+        armour_value=5,
+        wounds_per_model=3,
+        targets=2,
+        transforms=[_killing_blow_double()],
+    )
+    assert result.casualties[2] == pytest.approx(1 / 81)
+    assert result.casualties[1] == pytest.approx(2 * (1 / 9) * (8 / 9))
+    assert result.casualties[0] == pytest.approx((8 / 9) ** 2)
+    assert sum(result.casualties) == pytest.approx(1.0)
+
+
+def test_shoot_instant_kills_match_the_spike_distribution() -> None:
+    """12 attacks vs 2 Wounds-3 models reproduce the class-aware spike.
+
+    Spike values (verified there against Monte Carlo): P(0)=0.165,
+    P(1)=0.342, P(2)=0.493.
+    """
+    result = shoot(
+        12,
+        ballistic_skill=4,
+        strength=3,
+        toughness=3,
+        armour_value=5,
+        wounds_per_model=3,
+        targets=2,
+        transforms=[_killing_blow_double()],
+    )
+    assert result.casualties[0] == pytest.approx(0.165, abs=5e-4)
+    assert result.casualties[1] == pytest.approx(0.342, abs=5e-4)
+    assert result.casualties[2] == pytest.approx(0.493, abs=5e-4)
+    assert sum(result.casualties) == pytest.approx(1.0)
+    assert sum(result.distribution) == pytest.approx(1.0)
+
+
+def test_remove_casualties_with_no_kill_mass_matches_binomial_path() -> None:
+    """The class-aware fold degenerates to binomial -> group -> cap."""
+    from avelorn.core.dice import binomial_distribution, cap_distribution, group_distribution
+
+    p = 2 / 9
+    distribution, casualties = _remove_casualties(
+        10, p_wound_only=p, p_kill=0.0, wounds_per_model=3, targets=2
+    )
+    expected_distribution = binomial_distribution(10, p)
+    expected_casualties = cap_distribution(group_distribution(expected_distribution, 3), 2)
+    assert distribution == pytest.approx(expected_distribution)
+    assert casualties == pytest.approx(expected_casualties)

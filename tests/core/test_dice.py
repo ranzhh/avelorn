@@ -10,6 +10,7 @@ from avelorn.core.dice import (
     cap_distribution,
     expected_value,
     group_distribution,
+    multinomial_outcomes,
     p_d6_at_least,
     sample,
 )
@@ -116,3 +117,33 @@ def test_sample_respects_support() -> None:
     assert all(sample([0.0, 0.0, 1.0], rng) == 2 for _ in range(50))
     draws = [sample(binomial_distribution(3, 0.5), rng) for _ in range(200)]
     assert all(0 <= draw <= 3 for draw in draws)
+
+
+def test_multinomial_one_class_reduces_to_binomial() -> None:
+    """With a single class, each count's mass is the binomial PMF."""
+    masses = {counts[0]: mass for counts, mass in multinomial_outcomes(6, (1 / 3,))}
+    for k, mass in masses.items():
+        assert mass == pytest.approx(binomial_pmf(k, 6, 1 / 3))
+    assert sum(masses.values()) == pytest.approx(1.0)
+
+
+def test_multinomial_two_classes_sum_to_one_with_golden() -> None:
+    """Two-class vectors cover the space; a hand value pins the PMF.
+
+    2 trials at p=(1/2, 1/3): P(one of each) = 2 * 1/2 * 1/3 = 1/3.
+    """
+    outcomes = dict(multinomial_outcomes(2, (1 / 2, 1 / 3)))
+    assert sum(outcomes.values()) == pytest.approx(1.0)
+    assert len(outcomes) == 6  # count vectors with n1 + n2 <= 2
+    assert outcomes[(1, 1)] == pytest.approx(1 / 3)
+
+
+def test_multinomial_zero_trials_is_certain_empty() -> None:
+    """No trials: one all-zero vector with probability 1."""
+    assert dict(multinomial_outcomes(0, (0.5, 0.2))) == {(0, 0): pytest.approx(1.0)}
+
+
+def test_multinomial_rejects_negative_trials() -> None:
+    """A negative trial count is meaningless."""
+    with pytest.raises(ValueError, match="trials must be >= 0"):
+        list(multinomial_outcomes(-1, (0.5,)))

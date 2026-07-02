@@ -9,7 +9,14 @@ from fractions import Fraction
 
 import pytest
 
-from avelorn.tow.combat.attack import AttackProfile, Stage, Transform, resolve_attack, walk
+from avelorn.tow.combat.attack import (
+    AttackProfile,
+    Outcome,
+    Stage,
+    Transform,
+    resolve_attack,
+    walk,
+)
 from avelorn.tow.combat.charts import hit_probability, save_probability, wound_probability
 
 # Every shape the charts can hand the resolver: impossible (0, 10+) and
@@ -125,3 +132,39 @@ def test_transforms_absent_leave_walk_unchanged() -> None:
     profile = AttackProfile(hit_target=3, wound_target=4, save_target=5, ward_target=4)
     assert resolve_attack(profile, []).p_unsaved == resolve_attack(profile).p_unsaved
     assert sum(p for p, _ in walk(profile, [])) == Fraction(1)
+
+
+def _killing_blow(face: int, profile: AttackProfile) -> AttackProfile:
+    # The Killing Blow shape: a natural 6 To Wound skips the armour save
+    # (Ward Saves attempted as normal) and the unsaved wound removes the
+    # model outright.
+    if face != 6:
+        return profile
+    return replace(profile, save_target=None, unsaved_outcome=Outcome.INSTANT_KILL)
+
+
+def test_instant_kill_double_reproduces_spike_classes() -> None:
+    """Hit 3+, wound 4+, save 5+: classes are none 21/27, wound 4/27, kill 1/9."""
+    profile = AttackProfile(hit_target=3, wound_target=4, save_target=5, ward_target=None)
+    double = Transform(stage=Stage.ROLL_TO_WOUND, on_success=_killing_blow)
+    resolution = resolve_attack(profile, [double])
+    assert resolution.p_of(Outcome.INSTANT_KILL) == Fraction(1, 9)
+    assert resolution.p_of(Outcome.UNSAVED_WOUND) == Fraction(4, 27)
+    assert resolution.p_unsaved == Fraction(1, 9) + Fraction(4, 27)
+    assert sum(resolution.outcomes.values()) == Fraction(1)
+
+
+def test_ward_save_applies_to_instant_kills() -> None:
+    """A 5+ ward scales the kill class by its failure chance (4/6)."""
+    profile = AttackProfile(hit_target=3, wound_target=4, save_target=5, ward_target=5)
+    double = Transform(stage=Stage.ROLL_TO_WOUND, on_success=_killing_blow)
+    resolution = resolve_attack(profile, [double])
+    assert resolution.p_of(Outcome.INSTANT_KILL) == Fraction(1, 9) * Fraction(4, 6)
+
+
+def test_outcomes_without_transforms_have_no_kill_class() -> None:
+    """The vanilla walk never produces an instant kill."""
+    profile = AttackProfile(hit_target=3, wound_target=4, save_target=5, ward_target=None)
+    resolution = resolve_attack(profile)
+    assert resolution.p_of(Outcome.INSTANT_KILL) == 0
+    assert resolution.p_unsaved == Fraction(2, 9)

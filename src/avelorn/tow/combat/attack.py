@@ -10,13 +10,15 @@ to float at the caller's edge.
 
 Rules hook the walk as :class:`Transform`s: target modifications apply
 before a stage's roll, on-success effects see the natural face and
-shape the rest of the walk. No rules ship yet; the hooks are exercised
-by test doubles.
+shape the rest of the walk. An attack ends in an :class:`Outcome`
+class — nothing, an unsaved wound, or the rulebook's "Instant Kills"
+shape ("loses all of its remaining Wounds") — which transforms may
+escalate. No rules ship yet; the hooks are exercised by test doubles.
 """
 
 import logging
-from collections.abc import Callable, Iterator, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from dataclasses import dataclass, field
 from enum import StrEnum
 from fractions import Fraction
 
@@ -37,14 +39,32 @@ class Stage(StrEnum):
     WARD_SAVES = "ward-saves"
 
 
+class Outcome(StrEnum):
+    """What one attack ends as.
+
+    ``INSTANT_KILL`` is named after the rulebook's "Instant Kills"
+    section: the model is removed regardless of its remaining Wounds.
+    """
+
+    NONE = "none"
+    UNSAVED_WOUND = "unsaved-wound"
+    INSTANT_KILL = "instant-kill"
+
+
 @dataclass(frozen=True)
 class AttackProfile:
-    """Roll targets for one attack, as produced by the charts."""
+    """Roll targets and outcome semantics for one attack.
+
+    ``unsaved_outcome`` is the class an unsaved wound resolves to;
+    transforms escalate it (a Killing Blow turns it into an instant
+    kill for the rest of the walk).
+    """
 
     hit_target: int
     wound_target: int | None
     save_target: int | None
     ward_target: int | None
+    unsaved_outcome: Outcome = Outcome.UNSAVED_WOUND
 
 
 @dataclass(frozen=True)
@@ -71,9 +91,29 @@ class Transform:
 
 @dataclass(frozen=True)
 class AttackResolution:
-    """Exact outcome probabilities of a single attack."""
+    """Exact outcome-class probabilities of a single attack."""
 
-    p_unsaved: Fraction
+    outcomes: Mapping[Outcome, Fraction] = field(default_factory=dict)
+
+    @property
+    def p_unsaved(self) -> Fraction:
+        """Probability of an unsaved wound of any class.
+
+        A Killing Blow is still an unsaved wound ("suffers an unsaved
+        wound from a Killing Blow"), so this sums both classes.
+
+        Returns:
+            The unsaved-wound plus instant-kill mass.
+        """
+        return self.p_of(Outcome.UNSAVED_WOUND) + self.p_of(Outcome.INSTANT_KILL)
+
+    def p_of(self, outcome: Outcome) -> Fraction:
+        """Probability of one outcome class.
+
+        Returns:
+            The class's mass, or 0 if the walk never reached it.
+        """
+        return self.outcomes.get(outcome, Fraction(0))
 
 
 def resolve_attack(
@@ -82,31 +122,35 @@ def resolve_attack(
     """Resolve one attack by walking its dice exactly.
 
     Returns:
-        The exact per-attack outcome probabilities; today just the
-        unsaved wound.
+        The exact per-attack outcome-class probabilities.
     """
-    unsaved = sum(
-        (p_path for p_path, wound_lands in walk(profile, transforms) if wound_lands),
-        start=Fraction(0),
+    outcomes: dict[Outcome, Fraction] = {}
+    for p_path, outcome in walk(profile, transforms):
+        outcomes[outcome] = outcomes.get(outcome, Fraction(0)) + p_path
+    resolution = AttackResolution(outcomes=outcomes)
+    logger.debug(
+        "attack walk: p_unsaved = %s = %.4f (instant kill %s)",
+        resolution.p_unsaved,
+        float(resolution.p_unsaved),
+        resolution.p_of(Outcome.INSTANT_KILL),
     )
-    logger.debug("attack walk: p_unsaved = %s = %.4f", unsaved, float(unsaved))
-    return AttackResolution(p_unsaved=unsaved)
+    return resolution
 
 
 def walk(
     profile: AttackProfile, transforms: Sequence[Transform] = ()
-) -> Iterator[tuple[Fraction, bool]]:
+) -> Iterator[tuple[Fraction, Outcome]]:
     """Enumerate every dice path of one attack, applying transforms.
 
     Yields:
-        ``(probability, unsaved_wound)`` per path; the probabilities of
-        all paths sum to exactly 1.
+        ``(probability, outcome)`` per path; the probabilities of all
+        paths sum to exactly 1.
     """
     hooked = _by_stage(transforms)
     hit_profile = _modify(hooked[Stage.ROLL_TO_HIT], profile)
     for p_hit, hit_face, hit in _roll_to_hit(hit_profile.hit_target):
         if not hit:
-            yield p_hit, False
+            yield p_hit, Outcome.NONE
             continue
         wound_profile = _modify(
             hooked[Stage.ROLL_TO_WOUND],
@@ -114,7 +158,7 @@ def walk(
         )
         for p_wound, wound_face, wounded in _roll(wound_profile.wound_target, clamp=False):
             if not wounded:
-                yield p_hit * p_wound, False
+                yield p_hit * p_wound, Outcome.NONE
                 continue
             save_profile = _modify(
                 hooked[Stage.MAKE_ARMOUR_SAVES],
@@ -122,11 +166,14 @@ def walk(
             )
             for p_save, _, saved in _roll(save_profile.save_target, clamp=True):
                 if saved:
-                    yield p_hit * p_wound * p_save, False
+                    yield p_hit * p_wound * p_save, Outcome.NONE
                     continue
                 ward_profile = _modify(hooked[Stage.WARD_SAVES], save_profile)
                 for p_ward, _, warded in _roll(ward_profile.ward_target, clamp=True):
-                    yield p_hit * p_wound * p_save * p_ward, not warded
+                    yield (
+                        p_hit * p_wound * p_save * p_ward,
+                        Outcome.NONE if warded else ward_profile.unsaved_outcome,
+                    )
 
 
 def _by_stage(transforms: Sequence[Transform]) -> dict[Stage, list[Transform]]:
