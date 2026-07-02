@@ -113,11 +113,11 @@ def _import_rule(client: WhfbAppClient, slug: str, data_dir: Path, dry_run: bool
     try:
         result = parse_special_rule(entry)
         path = data_dir / "tow" / "rules" / f"{result.rule.id}.yaml"
-        rule = with_existing_effects(result.rule, path)
+        rule, merge_warnings = with_existing_effects(result.rule, path)
     except WhfbParseError:
         logger.exception("%s: import failed", slug)
         return False
-    for warning in result.warnings:
+    for warning in (*result.warnings, *merge_warnings):
         logger.warning("%s: %s", slug, warning)
     if rule.effects:
         logger.info("%s: preserved %d hand-authored effect(s)", slug, len(rule.effects))
