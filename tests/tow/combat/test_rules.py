@@ -7,6 +7,7 @@ import pytest
 
 from avelorn.core.loading import load_yaml, load_yaml_dir
 from avelorn.tow.combat.attack import AttackProfile, RollState, resolve_attack
+from avelorn.tow.combat.context import EngagementContext
 from avelorn.tow.combat.rules import compile_rules, resolve_rule
 from avelorn.tow.combat.shooting import shoot_unit
 from avelorn.tow.schema.armour import Armour
@@ -109,3 +110,105 @@ def test_shoot_unit_without_rules_is_unchanged() -> None:
     )
     assert result.p_unsaved == pytest.approx(2 / 9)
     assert any("Armour Bane (1)" in note for note in result.notes)
+
+
+def test_long_range_penalty_applies_from_data() -> None:
+    """Beyond half range the To Hit target worsens by the printed -1.
+
+    Archers at 20" with 30" longbows: 20 > 15, so hit 4+ instead of 3+;
+    with Armour Bane live, p = 1/2 * (2/6 * 2/3 + 1/6 * 5/6) = 13/72.
+    """
+    result = shoot_unit(
+        _load_unit("elven-archers"),
+        _load_unit("elven-spearmen"),
+        shooters=3,
+        weapon=_load_weapon("longbow"),
+        armoury=ARMOURY,
+        rules=RULES,
+        context=EngagementContext(moved=False, distance=20),
+    )
+    assert result.p_unsaved == pytest.approx(13 / 72)
+    assert not any("core rule" in note for note in result.notes)
+
+
+def test_condition_false_applies_no_penalty_and_no_note() -> None:
+    """Within half range and stationary: no modifier, and no note either.
+
+    A rule whose condition evaluates False is honoured by not applying.
+    """
+    result = shoot_unit(
+        _load_unit("elven-archers"),
+        _load_unit("elven-spearmen"),
+        shooters=3,
+        weapon=_load_weapon("longbow"),
+        armoury=ARMOURY,
+        rules=RULES,
+        context=EngagementContext(moved=False, distance=10),
+    )
+    assert result.p_unsaved == pytest.approx(13 / 54)
+    assert not any("core rule" in note for note in result.notes)
+
+
+def test_unknown_context_leaves_core_rules_unfactored() -> None:
+    """Without an engagement context the phase rules cannot be evaluated."""
+    result = shoot_unit(
+        _load_unit("elven-archers"),
+        _load_unit("elven-spearmen"),
+        shooters=3,
+        weapon=_load_weapon("longbow"),
+        armoury=ARMOURY,
+        rules=RULES,
+    )
+    assert result.p_unsaved == pytest.approx(13 / 54)
+    assert any("core rule not factored: Firing at Long Range" in n for n in result.notes)
+    assert any("core rule not factored: Moving and Shooting" in n for n in result.notes)
+
+
+def test_both_penalties_stack() -> None:
+    """Moved and at long range: -1 and -1, hit 5+."""
+    result = shoot_unit(
+        _load_unit("elven-archers"),
+        _load_unit("elven-spearmen"),
+        shooters=3,
+        weapon=_load_weapon("longbow"),
+        armoury=ARMOURY,
+        rules=RULES,
+        context=EngagementContext(moved=True, distance=20),
+    )
+    assert result.hit_target == 5
+
+
+def test_move_in_or_stay_out_is_a_wash() -> None:
+    """Warbows at 15": staying (long range -1) equals closing (moved -1).
+
+    Warbow range is 24", so 15" is beyond half range; closing inside 12"
+    removes that penalty but "moved for any reason during this turn"
+    imposes its own -1. Both plans hit on 4+ with identical
+    distributions — computed from the printed rules, not judgement.
+    """
+    sea_guard = _load_unit("lothern-sea-guard")
+    spearmen = _load_unit("elven-spearmen")
+    warbow = _load_weapon("warbow")
+    stay = shoot_unit(
+        sea_guard,
+        spearmen,
+        shooters=10,
+        weapon=warbow,
+        armoury=ARMOURY,
+        rules=RULES,
+        context=EngagementContext(moved=False, distance=15),
+        defenders=10,
+    )
+    move_in = shoot_unit(
+        sea_guard,
+        spearmen,
+        shooters=10,
+        weapon=warbow,
+        armoury=ARMOURY,
+        rules=RULES,
+        context=EngagementContext(moved=True, distance=12),
+        defenders=10,
+    )
+    assert stay.hit_target == move_in.hit_target == 4
+    assert stay.p_unsaved == pytest.approx(move_in.p_unsaved)
+    assert stay.casualties == pytest.approx(move_in.casualties)

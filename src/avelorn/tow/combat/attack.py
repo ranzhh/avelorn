@@ -103,9 +103,16 @@ class Transform:
 
 @dataclass(frozen=True)
 class AttackResolution:
-    """Exact outcome-class probabilities of a single attack."""
+    """Exact outcome-class probabilities of a single attack.
+
+    ``hit_target`` is the effective Roll to Hit target after transforms'
+    pre-roll modifications — the figure to report alongside the
+    probabilities. (Later stages' targets can depend on earlier dice, so
+    only the first stage's effective target is well defined up front.)
+    """
 
     outcomes: Mapping[Outcome, Fraction] = field(default_factory=dict)
+    hit_target: RollTarget = 0
 
     @property
     def p_unsaved(self) -> Fraction:
@@ -139,7 +146,8 @@ def resolve_attack(
     outcomes: dict[Outcome, Fraction] = {}
     for p_path, outcome in walk(profile, transforms):
         outcomes[outcome] = outcomes.get(outcome, Fraction(0)) + p_path
-    resolution = AttackResolution(outcomes=outcomes)
+    effective = _modify(_by_stage(transforms)[Stage.ROLL_TO_HIT], profile)
+    resolution = AttackResolution(outcomes=outcomes, hit_target=effective.hit_target)
     logger.debug(
         "attack walk: p_unsaved = %s = %.4f (instant kill %s)",
         resolution.p_unsaved,

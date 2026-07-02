@@ -154,6 +154,10 @@ def shoot(
     )
     p_unsaved = float(resolution.p_unsaved)
     p_kill = float(resolution.p_of(Outcome.INSTANT_KILL))
+    # Report the walk's effective To Hit target (transforms included) so
+    # the printed target matches the math; other stages keep chart values.
+    if isinstance(resolution.hit_target, int):
+        hit = resolution.hit_target
     p_hit = hit_probability(hit)
     p_wound = wound_probability(wound)
     logger.debug(
