@@ -229,3 +229,18 @@ def test_every_condition_field_is_consulted() -> None:
         assert _condition_applies(when, {}) is None, name
         assert _condition_applies(when, {name: True}) is True, name
         assert _condition_applies(when, {name: False}) is False, name
+
+
+def test_conjunctive_condition_with_known_false_member_does_not_apply() -> None:
+    """One known-False conjunct settles it, even beside an unknown one.
+
+    {moved: True, at_long_range: True} against a stationary unit at an
+    unknown distance definitely does not apply — silent no-op, not
+    "cannot be evaluated".
+    """
+    from avelorn.tow.schema.rule import EffectCondition
+
+    both = EffectCondition(moved=True, at_long_range=True)
+    assert _condition_applies(both, {"moved": False, "at_long_range": None}) is False
+    assert _condition_applies(both, {"moved": True, "at_long_range": None}) is None
+    assert _condition_applies(both, {"moved": True, "at_long_range": True}) is True

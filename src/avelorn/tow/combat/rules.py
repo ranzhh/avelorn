@@ -147,17 +147,19 @@ def _condition_applies(
 ) -> bool | None:
     # Iterates the condition's set fields by introspection: a field added
     # to EffectCondition is automatically required here — never silently
-    # ignored because a hand-kept name list went stale.
+    # ignored because a hand-kept name list went stale. Conjunction: one
+    # known-False member settles "does not apply" even if others are
+    # unknown; unknown decides only when nothing is known-False.
     if when is None:
         return True
-    verdict = True
+    unknown = False
     for name, required in when.model_dump(exclude_none=True).items():
         actual = conditions.get(name)
         if actual is None:
-            return None  # unknown fact: the rule cannot be honoured
-        if actual != required:
-            verdict = False
-    return verdict
+            unknown = True
+        elif actual != required:
+            return False  # definitely does not apply, whatever the unknowns
+    return None if unknown else True
 
 
 def _shift_hit(amount: int) -> Callable[[AttackProfile], AttackProfile]:

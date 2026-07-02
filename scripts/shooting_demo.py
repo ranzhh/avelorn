@@ -58,7 +58,12 @@ def main() -> None:
     parser.add_argument(
         "--distance", type=int, default=None, help="inches to the target (enables range rules)"
     )
-    parser.add_argument("--moved", action="store_true", help="the shooters moved this turn")
+    parser.add_argument(
+        "--moved",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="whether the shooters moved this turn (omit = unknown)",
+    )
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="emit the DEBUG math trace to stderr"
     )
