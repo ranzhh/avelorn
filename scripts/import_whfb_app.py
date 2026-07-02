@@ -19,7 +19,7 @@ from avelorn.core.logging import configure_logging
 from avelorn.tow.importers.whfb_app.client import BASE_URL, WhfbAppClient, WhfbAppError
 from avelorn.tow.importers.whfb_app.equipment import parse_armour, parse_weapon
 from avelorn.tow.importers.whfb_app.parse import UnsupportedUnit, WhfbParseError, parse_unit
-from avelorn.tow.importers.whfb_app.rules import parse_special_rule
+from avelorn.tow.importers.whfb_app.rules import parse_special_rule, with_existing_effects
 from avelorn.tow.importers.whfb_app.yamlout import (
     armour_to_yaml,
     rule_to_yaml,
@@ -108,21 +108,24 @@ def _import_equipment(
 
 def _import_rule(client: WhfbAppClient, slug: str, data_dir: Path, dry_run: bool) -> bool:
     entry = client.rule_entry(slug)
+    # The file is named by the rule's own slug; a chapter-page path like
+    # "the-shooting-phase/firing-at-long-range" still lands flat in rules/.
     try:
         result = parse_special_rule(entry)
+        path = data_dir / "tow" / "rules" / f"{result.rule.id}.yaml"
+        rule = with_existing_effects(result.rule, path)
     except WhfbParseError:
-        logger.exception("%s: parse failed", slug)
+        logger.exception("%s: import failed", slug)
         return False
     for warning in result.warnings:
         logger.warning("%s: %s", slug, warning)
+    if rule.effects:
+        logger.info("%s: preserved %d hand-authored effect(s)", slug, len(rule.effects))
     page_path = slug if "/" in slug else f"special-rules/{slug}"
-    text = rule_to_yaml(result.rule, source_url=f"{BASE_URL}/{page_path}")
+    text = rule_to_yaml(rule, source_url=f"{BASE_URL}/{page_path}")
     if dry_run:
         print(text)  # generated YAML is the program's payload -> stdout
         return True
-    # The file is named by the rule's own slug; a chapter-page path like
-    # "the-shooting-phase/firing-at-long-range" still lands flat in rules/.
-    path = data_dir / "tow" / "rules" / f"{result.rule.id}.yaml"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text)
     logger.info("wrote %s", path)
