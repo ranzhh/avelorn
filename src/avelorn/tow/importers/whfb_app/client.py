@@ -21,6 +21,10 @@ _NEXT_DATA_RE = re.compile(
     r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', re.S
 )
 
+# Internal links on the homepage; the site's own rules index. Anchors,
+# query strings and off-site links are excluded by the pattern itself.
+_HREF_RE = re.compile(r'href="(/[^"#?]*)"')
+
 
 class WhfbAppError(Exception):
     """The site could not be reached or returned an unusable response."""
@@ -92,6 +96,30 @@ class WhfbAppClient:
         if not entry:
             raise WhfbAppError(f"no rule entry in response for {slug!r}")
         return entry
+
+    def index(self) -> list[str]:
+        """List every page path in the site's rules index.
+
+        The homepage *is* the index: its HTML links every chapter,
+        rules-section and army page, so the importer can enumerate pages
+        (e.g. an FAQ/errata reread over every rules section) instead of
+        hard-coding slugs. Static assets and file links are dropped, and
+        the leading slash is stripped so each path feeds :meth:`rule_entry`
+        directly. Per-unit pages (``/unit/<slug>``) are not linked here —
+        they are reached from an army page via :meth:`army_unit_slugs`.
+
+        Returns:
+            The unique page paths, sorted.
+        """
+        html = self._get(self.base_url + "/").decode("utf-8")
+        paths = set()
+        for href in _HREF_RE.findall(html):
+            if href == "/" or href.startswith("/_next/"):
+                continue
+            if "." in href.rsplit("/", 1)[-1]:  # a file, not a page
+                continue
+            paths.add(href.lstrip("/"))
+        return sorted(paths)
 
     def army_unit_slugs(self, army_slug: str) -> list[str]:
         """Fetch an army page and list its units.
