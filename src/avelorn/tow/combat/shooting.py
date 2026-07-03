@@ -14,6 +14,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from avelorn.core.dice import expected_value
+from avelorn.tow.combat.armour import defender_armour
 from avelorn.tow.combat.attack import (
     AttackProfile,
     HitRoll,
@@ -25,8 +26,6 @@ from avelorn.tow.combat.attack import (
 )
 from avelorn.tow.combat.casualties import wound_and_casualties
 from avelorn.tow.combat.charts import (
-    BEST_ARMOUR_VALUE,
-    UNARMOURED,
     armour_save_target,
     hit_probability,
     save_probability,
@@ -269,7 +268,7 @@ def shoot_unit(
         profile.armour_piercing,
     )
 
-    armour_value, notes = _defender_armour(defender, armoury or {})
+    armour_value, notes = defender_armour(defender, armoury or {})
     for unit in (attacker, defender):
         notes.extend(
             f"special rule not factored: {rule} ({unit.name})" for rule in unit.special_rules
@@ -316,21 +315,3 @@ def shoot_unit(
         transforms=transforms,
         notes=tuple(notes),
     )
-
-
-def _defender_armour(
-    defender: Unit, armoury: Mapping[str, Armour]
-) -> tuple[int | None, list[str]]:
-    suit = UNARMOURED
-    improvement = 0
-    notes: list[str] = []
-    for item in defender.equipment:
-        armour = armoury.get(item)
-        if armour is None:
-            notes.append(f"equipment not factored: {item} ({defender.name})")
-        elif armour.armour_value is not None:
-            suit = min(suit, armour.armour_value)
-        elif armour.armour_value_improvement is not None:
-            improvement += armour.armour_value_improvement
-    value = max(suit - improvement, BEST_ARMOUR_VALUE)
-    return (value if value < UNARMOURED else None), notes
