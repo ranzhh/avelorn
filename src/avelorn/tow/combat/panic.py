@@ -18,10 +18,15 @@ casualty outcome branches through the trigger and the test, exactly.
 """
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from avelorn.tow.combat.characteristic_tests import unit_pass_probability
+from avelorn.tow.combat.rules import resolve_rule
 from avelorn.tow.combat.shooting import ShootingResult
+from avelorn.tow.schema.psychology import PanicCause
+from avelorn.tow.schema.rule import RerollEffect, Rule
+from avelorn.tow.schema.stage import Stage
 from avelorn.tow.schema.unit import Characteristic, Unit
 
 logger = logging.getLogger(__name__)
@@ -36,16 +41,25 @@ class PanicResult:
     p_falls_back: float  # failed with more than half its battle strength left
     p_flees: float  # failed at half its battle strength or less
     p_destroyed: float  # every model lost: no unit remains to test
+    reroll_from: str | None = None  # the rule that re-rolls a failed test, if any
 
 
 def make_panic_tests(
-    result: ShootingResult, defender: Unit, *, battle_strength: int | None = None
+    result: ShootingResult,
+    defender: Unit,
+    *,
+    rules: Mapping[str, Rule] | None = None,
+    battle_strength: int | None = None,
 ) -> PanicResult:
     """Resolve the panic step for one volley's casualty distribution.
 
-    ``battle_strength`` is the unit's model count at the start of the
-    battle, governing the printed Fall Back or Flee split; it defaults
-    to the start-of-phase count — a unit yet to take any casualties.
+    ``rules`` maps printed rule names to rule entries: a re-roll effect
+    on this seam whose cause filter admits heavy casualties (this
+    seam's only cause) re-rolls a failed test — once, whatever the
+    source, per the printed re-roll rules. ``battle_strength`` is the
+    unit's model count at the start of the battle, governing the
+    printed Fall Back or Flee split; it defaults to the start-of-phase
+    count — a unit yet to take any casualties.
 
     Returns:
         The exact probabilities of each panic outcome.
@@ -62,6 +76,11 @@ def make_panic_tests(
         raise ValueError(f"battle strength ({battle}) cannot be below current size ({size})")
 
     p_pass = float(unit_pass_probability(defender, Characteristic.LEADERSHIP))
+    reroll_from = _reroll_grant(defender, rules or {}, PanicCause.HEAVY_CASUALTIES)
+    if reroll_from is not None:
+        # A failed test is taken again: both dice, same natural bounds,
+        # never more than once whatever the source.
+        p_pass = p_pass + (1.0 - p_pass) * p_pass
     tested = holds = falls_back = flees = destroyed = 0.0
     for killed, mass in enumerate(result.casualties):
         if killed == size:
@@ -91,4 +110,23 @@ def make_panic_tests(
         p_falls_back=falls_back,
         p_flees=flees,
         p_destroyed=destroyed,
+        reroll_from=reroll_from,
     )
+
+
+def _reroll_grant(defender: Unit, rules: Mapping[str, Rule], cause: PanicCause) -> str | None:
+    # The first of the defender's rules granting a re-roll on this seam
+    # for this cause; one grant is all a test can ever use.
+    for printed in defender.special_rules:
+        resolved = resolve_rule(printed, rules)
+        if resolved is None:
+            continue
+        for effect in resolved.rule.effects:
+            if (
+                isinstance(effect, RerollEffect)
+                and effect.stage is Stage.MAKE_PANIC_TESTS
+                and (not effect.causes or cause in effect.causes)
+            ):
+                logger.debug("panic re-roll granted by %s", printed)
+                return printed
+    return None
