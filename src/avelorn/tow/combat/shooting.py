@@ -337,8 +337,6 @@ def shoot_unit(
     # Wounds accumulate into whole slain models; a profile with no printed
     # Wounds ("-") is treated as a single-Wound model.
     defender_wounds = defender.profiles[0][Characteristic.WOUNDS] or 1
-    if defenders is not None:
-        notes.append("panic test at 25% casualties not modelled")
 
     return shoot(
         shots=shooters,

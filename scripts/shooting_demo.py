@@ -18,6 +18,7 @@ from pathlib import Path
 from avelorn.core.loading import load_yaml, load_yaml_dir
 from avelorn.core.logging import configure_logging
 from avelorn.tow.combat.context import EngagementContext
+from avelorn.tow.combat.panic import make_panic_tests
 from avelorn.tow.combat.query import Comparator, Predicate, query_result
 from avelorn.tow.combat.shooting import shoot_unit
 from avelorn.tow.schema.armour import Armour
@@ -63,6 +64,12 @@ def main() -> None:
         action=argparse.BooleanOptionalAction,
         default=None,
         help="whether the shooters moved this turn (omit = unknown)",
+    )
+    parser.add_argument(
+        "--battle-strength",
+        type=int,
+        default=None,
+        help="defender models at the start of the battle (default: as fielded now)",
     )
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="emit the DEBUG math trace to stderr"
@@ -125,6 +132,15 @@ def main() -> None:
         print(f"  - P(at least one falls):       {any_kill:.3f}")
         print(f"  - P(at most 3 survive):        {at_most_3:.3f}")
         print(f"  - P(unit wiped out):           {wiped:.3f}")
+
+        panic = make_panic_tests(result, defender, battle_strength=args.battle_strength)
+        print()
+        print("  make panic tests:")
+        print(f"  - P(test forced):              {panic.p_test:.3f}")
+        print(f"  - P(holds):                    {panic.p_holds:.3f}")
+        print(f"  - P(falls back in good order): {panic.p_falls_back:.3f}")
+        print(f"  - P(flees):                    {panic.p_flees:.3f}")
+        print(f"  - P(destroyed):                {panic.p_destroyed:.3f}")
 
     if result.notes:
         print()

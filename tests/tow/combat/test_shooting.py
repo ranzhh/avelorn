@@ -155,7 +155,6 @@ def test_shoot_unit_caps_casualties_but_not_wounds() -> None:
     assert len(result.distribution) == 31
     assert len(result.casualties) == 6
     assert result.expected_casualties < result.expected_wounds
-    assert any("panic test at 25%" in note for note in result.notes)
 
 
 def test_shoot_folds_wounds_into_multi_wound_models() -> None:
@@ -186,7 +185,7 @@ def test_shoot_unit_folds_multi_wound_casualties_and_caps() -> None:
 
     30 archers into 5 Wounds-3 models: casualties are models removed (three
     wounds each), capped at 5, and fewer than the wounds inflicted. The
-    old "carry-over not modelled" disclaimer is gone; the panic note stays.
+    old "carry-over not modelled" disclaimer is gone.
     """
     archers = load_unit("high-elf-realms", "elven-archers")
     spearmen = load_unit("high-elf-realms", "elven-spearmen")
@@ -204,7 +203,6 @@ def test_shoot_unit_folds_multi_wound_casualties_and_caps() -> None:
     assert len(result.casualties) == 6  # 0..5 models
     assert result.expected_casualties < result.expected_wounds
     assert sum(result.casualties) == pytest.approx(1.0)
-    assert any("panic" in note for note in result.notes)
     assert not any("carry-over" in note for note in result.notes)
 
 
