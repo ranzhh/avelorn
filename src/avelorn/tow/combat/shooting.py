@@ -22,6 +22,7 @@ from avelorn.core.dice import (
 )
 from avelorn.tow.combat.attack import (
     AttackProfile,
+    HitRoll,
     Outcome,
     RollState,
     RollTarget,
@@ -151,6 +152,7 @@ def shoot(
             ward_target=_roll_target(ward_target),
         ),
         transforms,
+        hit_roll=HitRoll.SHOOTING,
     )
     p_unsaved = float(resolution.p_unsaved)
     p_kill = float(resolution.p_of(Outcome.INSTANT_KILL))
