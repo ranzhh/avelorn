@@ -132,6 +132,21 @@ def hit_probability(target: int) -> float:
     return p
 
 
+def melee_hit_probability(target: int) -> float:
+    """Probability that one close-combat attack hits, given its To Hit target.
+
+    A natural 1 always fails and a natural 6 always hits (regardless of
+    modifiers), and there is no 7+ confirmation: a target above 6 still
+    hits one time in six (the-combat-phase/roll-to-hit-combat).
+
+    Returns:
+        The hit probability, in [1/6, 5/6].
+    """
+    p = p_d6_at_least(max(target, 2)) if target <= 6 else 1 / 6
+    logger.debug("melee hit %s -> p=%.3f", _fmt_target(target), p)
+    return p
+
+
 def wound_probability(target: int | None) -> float:
     """Probability that one wound roll succeeds; a natural 1 always fails.
 

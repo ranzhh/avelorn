@@ -5,6 +5,7 @@ import pytest
 from avelorn.tow.combat.charts import (
     armour_save_target,
     hit_probability,
+    melee_hit_probability,
     melee_hit_target,
     save_probability,
     shooting_hit_target,
@@ -30,6 +31,23 @@ from avelorn.tow.combat.charts import (
 def test_melee_hit_target(weapon_skill: int, target_weapon_skill: int, expected: int) -> None:
     """Spot checks against the verbatim WS-vs-WS close-combat To Hit chart."""
     assert melee_hit_target(weapon_skill, target_weapon_skill) == expected
+
+
+@pytest.mark.parametrize(
+    ("target", "expected"),
+    [
+        (2, 5 / 6),
+        (3, 4 / 6),
+        (4, 3 / 6),
+        (6, 1 / 6),
+        (7, 1 / 6),  # no confirm: only a natural 6, still 1/6
+        (9, 1 / 6),
+        (1, 5 / 6),  # natural 1 always fails
+    ],
+)
+def test_melee_hit_probability(target: int, expected: float) -> None:
+    """Natural 6 always hits, natural 1 always fails, no 7+ confirmation."""
+    assert melee_hit_probability(target) == pytest.approx(expected)
 
 
 @pytest.mark.parametrize(
