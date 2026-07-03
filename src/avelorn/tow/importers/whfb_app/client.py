@@ -13,12 +13,13 @@ import re
 import urllib.request
 from urllib.error import HTTPError
 
+from avelorn._settings import get_settings
+
 BASE_URL = "https://tow.whfb.app"
 
 _NEXT_DATA_RE = re.compile(
     r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', re.S
 )
-_USER_AGENT = "avelorn-importer/0.1 (unit data importer)"
 
 
 class WhfbAppError(Exception):
@@ -28,10 +29,19 @@ class WhfbAppError(Exception):
 class WhfbAppClient:
     """Fetches whfb.app pages through the Next.js JSON data routes."""
 
-    def __init__(self, base_url: str = BASE_URL) -> None:
-        """Create a client; the build id is discovered on first use."""
+    def __init__(self, base_url: str = BASE_URL, *, contact_email: str | None = None) -> None:
+        """Create a client; the build id is discovered on first use.
+
+        Args:
+            base_url: The site root to fetch from.
+            contact_email: The e-mail to advertise in the User-Agent. When
+                omitted, it is read from ``ATTRIBUTION_EMAIL`` in the
+                environment or the ``.env`` file (see :mod:`avelorn._settings`).
+        """
         self.base_url = base_url.rstrip("/")
         self._build_id: str | None = None
+        email = contact_email or get_settings().attribution_email
+        self._user_agent = f"ranzhh/avelorn ({email})"
 
     def unit_entry(self, slug: str) -> dict:
         """Fetch the fully resolved `armyListEntry` for a unit page.
@@ -114,6 +124,6 @@ class WhfbAppClient:
         return json.loads(m.group(1))["buildId"]
 
     def _get(self, url: str) -> bytes:
-        request = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
+        request = urllib.request.Request(url, headers={"User-Agent": self._user_agent})
         with urllib.request.urlopen(request, timeout=30) as response:
             return response.read()

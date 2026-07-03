@@ -14,3 +14,6 @@ avelorn.db
 
 # macOS
 .DS_Store
+
+# environment files
+.env
