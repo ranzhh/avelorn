@@ -23,6 +23,7 @@ from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from avelorn.tow.schema.psychology import PanicCause
 from avelorn.tow.schema.stage import Stage
 
 
@@ -87,7 +88,26 @@ class ToHitEffect(BaseModel):
     when: EffectCondition | None = None
 
 
-RuleEffect = Annotated[ArmourPiercingEffect | ToHitEffect, Field(discriminator="kind")]
+class RerollEffect(BaseModel):
+    """Re-roll a failed test, under the printed re-roll rules.
+
+    A re-roll happens at most once whatever its source ("no single dice
+    can be re-rolled more than once, regardless of the source"), and a
+    multi-dice roll re-rolls all its dice. ``causes`` restricts the
+    grant to specific panic causes (Valour of Ages re-rolls only heavy
+    casualties and fled through); empty means any cause.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["re-roll"]
+    stage: Stage
+    causes: list[PanicCause] = Field(default_factory=list)
+
+
+RuleEffect = Annotated[
+    ArmourPiercingEffect | ToHitEffect | RerollEffect, Field(discriminator="kind")
+]
 
 
 class Rule(BaseModel):
