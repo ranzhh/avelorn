@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from avelorn.core.loading import load_yaml
+from avelorn.core.loading import load_yaml, load_yaml_dir
 from avelorn.tow.combat.panic import make_panic_tests
 from avelorn.tow.combat.shooting import ShootingResult
 from avelorn.tow.schema.psychology import PanicCause
@@ -151,3 +151,12 @@ def test_no_registry_means_no_reroll() -> None:
     panic = make_panic_tests(result, _spearmen())
     assert panic.reroll_from is None
     assert panic.p_holds == pytest.approx(P_PASS)
+
+
+def test_valour_of_ages_applies_from_the_data_file() -> None:
+    """End to end: the authored effect re-rolls the spearmen's panic test."""
+    registry = {r.name: r for r in load_yaml_dir(DATA_DIR / "tow/rules", Rule)}
+    result = _result([0.0, 0.0, 0.0, 1.0], size=8)
+    panic = make_panic_tests(result, _spearmen(), rules=registry)
+    assert panic.reroll_from == "Valour of Ages"
+    assert panic.p_holds == pytest.approx(P_PASS + (1 - P_PASS) * P_PASS)

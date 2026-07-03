@@ -133,7 +133,9 @@ def main() -> None:
         print(f"  - P(at most 3 survive):        {at_most_3:.3f}")
         print(f"  - P(unit wiped out):           {wiped:.3f}")
 
-        panic = make_panic_tests(result, defender, battle_strength=args.battle_strength)
+        panic = make_panic_tests(
+            result, defender, rules=rules, battle_strength=args.battle_strength
+        )
         print()
         print("  make panic tests:")
         print(f"  - P(test forced):              {panic.p_test:.3f}")
@@ -141,6 +143,8 @@ def main() -> None:
         print(f"  - P(falls back in good order): {panic.p_falls_back:.3f}")
         print(f"  - P(flees):                    {panic.p_flees:.3f}")
         print(f"  - P(destroyed):                {panic.p_destroyed:.3f}")
+        if panic.reroll_from is not None:
+            print(f"  (failed tests re-rolled: {panic.reroll_from})")
 
     if result.notes:
         print()

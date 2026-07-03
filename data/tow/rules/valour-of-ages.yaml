@@ -1,0 +1,16 @@
+# Source: https://tow.whfb.app/special-rules/valour-of-ages
+id: valour-of-ages
+name: Valour of Ages
+page: 185
+category: Special Rules
+flavour: Throughout the ages, the High Elves of Ulthuan have stood firm against the multitudinous forces of the ruinous powers.
+  They have faced daemonic legions, hordes of black armoured Chaos warriors, and even their own treacherous kin, sacrificing
+  all to defend their realms.
+paragraphs:
+  - A unit with this special rule may re-roll any failed Panic test caused by taking heavy casualties or by being fled through
+    by a friendly unit.
+# Hand-authored, diffable against the paragraphs above.
+effects:
+  - kind: re-roll
+    stage: make-panic-tests
+    causes: [heavy-casualties, fled-through]
