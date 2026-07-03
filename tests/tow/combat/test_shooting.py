@@ -7,7 +7,7 @@ import pytest
 
 from avelorn.core.loading import load_yaml, load_yaml_dir
 from avelorn.tow.combat.attack import AttackProfile, Outcome, RollState, Transform
-from avelorn.tow.combat.shooting import _remove_casualties, shoot, shoot_unit
+from avelorn.tow.combat.shooting import shoot, shoot_unit
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.stage import Stage
 from avelorn.tow.schema.unit import Characteristic, Unit
@@ -303,17 +303,3 @@ def test_shoot_instant_kills_match_the_spike_distribution() -> None:
     assert result.casualties[2] == pytest.approx(0.493, abs=5e-4)
     assert sum(result.casualties) == pytest.approx(1.0)
     assert sum(result.distribution) == pytest.approx(1.0)
-
-
-def test_remove_casualties_with_no_kill_mass_matches_binomial_path() -> None:
-    """The class-aware fold degenerates to binomial -> group -> cap."""
-    from avelorn.core.dice import binomial_distribution, cap_distribution, group_distribution
-
-    p = 2 / 9
-    distribution, casualties = _remove_casualties(
-        10, p_wound_only=p, p_kill=0.0, wounds_per_model=3, targets=2
-    )
-    expected_distribution = binomial_distribution(10, p)
-    expected_casualties = cap_distribution(group_distribution(expected_distribution, 3), 2)
-    assert distribution == pytest.approx(expected_distribution)
-    assert casualties == pytest.approx(expected_casualties)
