@@ -6,7 +6,7 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from avelorn.tow.schema.unit import Profile, Unit, UnitOption, UnitSize
+from avelorn.tow.schema.unit import Characteristic, Profile, Unit, UnitOption, UnitSize
 
 DATA_DIR = Path(__file__).parents[3] / "data"
 UNIT_FILES = sorted(DATA_DIR.glob("tow/armies/*/units/*.yaml"))
@@ -47,7 +47,7 @@ def test_dash_stat_becomes_none() -> None:
     """A "-" characteristic in source material is coerced to None."""
     stats = {"M": 4, "WS": 3, "BS": "-", "S": 3, "T": 3, "W": 1, "I": 3, "A": 1, "Ld": 7}
     profile = Profile.model_validate({"name": "Crew", **stats})
-    assert profile.ballistic_skill is None
+    assert profile[Characteristic.BALLISTIC_SKILL] is None
 
 
 def test_unknown_field_rejected(elven_spearmen: dict) -> None:
@@ -84,3 +84,17 @@ def test_invalid_option_cost_shapes_rejected(option: dict) -> None:
     """Options must have exactly one non-negative cost shape."""
     with pytest.raises(ValidationError):
         UnitOption.model_validate(option)
+
+
+def test_profile_requires_every_characteristic() -> None:
+    """A row missing a printed column is a data error."""
+    stats = {"M": 4, "WS": 3, "S": 3, "T": 3, "W": 1, "I": 3, "A": 1, "Ld": 7}  # no BS
+    with pytest.raises(ValidationError, match="missing characteristics.*BS"):
+        Profile.model_validate({"name": "Crew", **stats})
+
+
+def test_profile_rejects_unknown_abbreviation() -> None:
+    """A key outside the characteristic vocabulary is a data error."""
+    stats = {"M": 4, "WS": 3, "BS": 3, "S": 3, "T": 3, "W": 1, "I": 3, "A": 1, "Ld": 7}
+    with pytest.raises(ValidationError):
+        Profile.model_validate({"name": "Crew", "Sv": 5, **stats})

@@ -24,3 +24,4 @@ class Stage(StrEnum):
     ROLL_TO_WOUND = "roll-to-wound"
     MAKE_ARMOUR_SAVES = "make-armour-saves"
     WARD_SAVES = "ward-saves"
+    MAKE_PANIC_TESTS = "make-panic-tests"

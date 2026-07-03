@@ -64,3 +64,24 @@ def test_condition_must_ask_something() -> None:
         _EFFECT.validate_python(
             {"kind": "to-hit", "stage": "roll-to-hit", "amount": -1, "when": {}}
         )
+
+
+def test_reroll_effect_parses_with_causes() -> None:
+    """The re-roll kind carries its seam and the printed cause filter."""
+    effect = _EFFECT.validate_python(
+        {
+            "kind": "re-roll",
+            "stage": "make-panic-tests",
+            "causes": ["heavy-casualties", "fled-through"],
+        }
+    )
+    assert effect.stage == "make-panic-tests"
+    assert len(effect.causes) == 2
+
+
+def test_reroll_effect_rejects_unknown_cause() -> None:
+    """A cause outside the printed taxonomy is a data error."""
+    with pytest.raises(ValidationError, match="causes"):
+        _EFFECT.validate_python(
+            {"kind": "re-roll", "stage": "make-panic-tests", "causes": ["bad-day"]}
+        )

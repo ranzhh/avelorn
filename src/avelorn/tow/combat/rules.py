@@ -140,6 +140,11 @@ def _compile_effect(
             if not applies:
                 return []  # honoured: the situation does not arise
             return [Transform(stage=effect.stage, modify_targets=_shift_hit(effect.amount))]
+        case _:
+            # Effects for other seams (e.g. re-rolls on make-panic-tests)
+            # are not attack transforms; their seams consume them
+            # directly. As a weapon rule they are honestly unfactored.
+            return None
 
 
 def _condition_applies(
