@@ -5,11 +5,31 @@ import pytest
 from avelorn.tow.combat.charts import (
     armour_save_target,
     hit_probability,
+    melee_hit_target,
     save_probability,
     shooting_hit_target,
     wound_probability,
     wound_target,
 )
+
+
+@pytest.mark.parametrize(
+    ("weapon_skill", "target_weapon_skill", "expected"),
+    [
+        (4, 4, 4),  # equal WS: 4+
+        (5, 4, 3),  # higher, not double: 3+
+        (7, 3, 2),  # more than double (7 > 6): 2+
+        (6, 3, 3),  # exactly double is not "more than": 3+
+        (3, 7, 5),  # target more than double (7 > 6): 5+
+        (3, 6, 4),  # target exactly double is not "more than": 4+
+        (1, 1, 4),  # chart corner
+        (10, 1, 2),  # far corner
+        (1, 10, 5),  # far corner
+    ],
+)
+def test_melee_hit_target(weapon_skill: int, target_weapon_skill: int, expected: int) -> None:
+    """Spot checks against the verbatim WS-vs-WS close-combat To Hit chart."""
+    assert melee_hit_target(weapon_skill, target_weapon_skill) == expected
 
 
 @pytest.mark.parametrize(
