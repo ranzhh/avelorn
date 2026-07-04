@@ -19,10 +19,9 @@ from avelorn.tow.combat.attack import (
     AttackProfile,
     HitRoll,
     Outcome,
-    RollState,
-    RollTarget,
     Transform,
     resolve_attack,
+    roll_target,
 )
 from avelorn.tow.combat.casualties import wound_and_casualties
 from avelorn.tow.combat.charts import (
@@ -141,9 +140,9 @@ def shoot(
     resolution = resolve_attack(
         AttackProfile(
             hit_target=hit,
-            wound_target=_roll_target(wound),
-            save_target=_roll_target(save),
-            ward_target=_roll_target(ward_target),
+            wound_target=roll_target(wound),
+            save_target=roll_target(save),
+            ward_target=roll_target(ward_target),
         ),
         transforms,
         hit_roll=HitRoll.SHOOTING,
@@ -187,12 +186,6 @@ def shoot(
         notes=notes,
         target_models=targets,
     )
-
-
-def _roll_target(target: int | None) -> RollTarget:
-    # The charts' printed convention: None means the roll is not taken
-    # and cannot succeed ("-" on the wound chart; no save).
-    return RollState.IMPOSSIBLE if target is None else target
 
 
 def _at_long_range(profile: WeaponProfile, context: EngagementContext | None) -> bool | None:
