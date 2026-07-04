@@ -21,25 +21,15 @@ Pass -v/--verbose to also emit the DEBUG math trace to stderr.
 
 import argparse
 import logging
-from pathlib import Path
 
 from avelorn.core.dice import expected_value
-from avelorn.core.loading import load_yaml, load_yaml_dir
 from avelorn.core.logging import configure_logging
 from avelorn.tow.combat.charge import stand_and_shoot
 from avelorn.tow.combat.melee import Charge, ChargeArc, Contingent, combat_result, fight
 from avelorn.tow.combat.morale import break_test
 from avelorn.tow.combat.query import Comparator, Predicate, evaluate, fight_distributions
-from avelorn.tow.schema.armour import Armour
-from avelorn.tow.schema.rule import Rule
-from avelorn.tow.schema.unit import Characteristic, Unit
-from avelorn.tow.schema.weapon import Weapon
-
-_DATA_DIR = Path(__file__).parents[1] / "data"
-
-
-def _load_unit(slug: str) -> Unit:
-    return load_yaml(_DATA_DIR / f"tow/armies/high-elf-realms/units/{slug}.yaml", Unit)
+from avelorn.tow.data import TOWRepository
+from avelorn.tow.schema.unit import Characteristic
 
 
 def _print_casualties(label: str, casualties: list[float], models: int) -> None:
@@ -66,30 +56,28 @@ def main() -> None:
     if args.verbose:
         configure_logging(logging.DEBUG)
 
-    weapons = {w.name: w for w in load_yaml_dir(_DATA_DIR / "tow/weapons", Weapon)}
-    armoury = {a.name: a for a in load_yaml_dir(_DATA_DIR / "tow/armour", Armour)}
-    rules = {r.name: r for r in load_yaml_dir(_DATA_DIR / "tow/rules", Rule)}
-    spearmen_unit = _load_unit("elven-spearmen")
-    archers_unit = _load_unit("elven-archers")
+    repo = TOWRepository()
+    spearmen_unit = repo.units["elven-spearmen"]
+    archers_unit = repo.units["elven-archers"]
     # The scene fixes each unit's weapon for the phase it acts in: the
     # Archers shoot the Longbow, then defend with a Hand Weapon; the Spearmen
     # charge home with the Thrusting Spear.
-    spear = weapons["Thrusting Spear"]
-    hand_weapon = weapons["Hand Weapon"]
-    longbow = weapons["Longbow"]
+    spear = repo.weapons["thrusting-spear"]
+    hand_weapon = repo.weapons["hand-weapon"]
+    longbow = repo.weapons["longbow"]
 
     spearmen = Contingent(spearmen_unit, args.spearmen, charge=Charge(args.charge_inches))
     archers = Contingent(archers_unit, args.archers)
 
-    reaction = stand_and_shoot(archers, spearmen, longbow, armoury=armoury, rules=rules)
+    reaction = stand_and_shoot(archers, spearmen, longbow, armoury=repo.armoury, rules=repo.rules)
     melee = fight(
         spearmen,
         archers,
         a_weapon=spear,
         b_weapon=hand_weapon,
         a_prior_losses=reaction.casualties,
-        armoury=armoury,
-        rules=rules,
+        armoury=repo.armoury,
+        rules=repo.rules,
     )
     scored = combat_result(melee)
     breaks = break_test(scored, spearmen_unit, archers_unit)

@@ -1,27 +1,21 @@
 """Morale tests: hand-computed goldens over synthetic distributions."""
 
 from fractions import Fraction
-from pathlib import Path
 
 import pytest
 
-from avelorn.core.loading import load_yaml, load_yaml_dir
 from avelorn.tow.combat.melee import CombatResult
 from avelorn.tow.combat.morale import SideBreak, break_test, make_panic_tests
 from avelorn.tow.combat.shooting import ShootingResult
+from avelorn.tow.data import TOWRepository
 from avelorn.tow.schema.psychology import PanicCause
 from avelorn.tow.schema.rule import RerollEffect, Rule
 from avelorn.tow.schema.stage import Stage
-from avelorn.tow.schema.unit import Unit
 
-DATA_DIR = Path(__file__).parents[3] / "data"
+REPO = TOWRepository()
 
 # Elven Spearmen carry Ld 8: a Leadership test passes 26/36.
 P_PASS = float(Fraction(26, 36))
-
-
-def _spearmen() -> Unit:
-    return load_yaml(DATA_DIR / "tow/armies/high-elf-realms/units/elven-spearmen.yaml", Unit)
 
 
 def _result(casualties: list[float], size: int) -> ShootingResult:
@@ -44,14 +38,14 @@ def _result(casualties: list[float], size: int) -> ShootingResult:
 
 def test_a_quarter_exactly_does_not_test() -> None:
     """The trigger is strictly more than 25%: 2 of 8 lost is no test."""
-    panic = make_panic_tests(_result([0.0, 0.0, 1.0], size=8), _spearmen())
+    panic = make_panic_tests(_result([0.0, 0.0, 1.0], size=8), REPO.units["elven-spearmen"])
     assert panic.p_test == 0.0
     assert panic.p_holds == 1.0
 
 
 def test_more_than_a_quarter_tests_against_leadership() -> None:
     """3 of 8 lost forces the test; holding means passing it (Ld 8)."""
-    panic = make_panic_tests(_result([0.0, 0.0, 0.0, 1.0], size=8), _spearmen())
+    panic = make_panic_tests(_result([0.0, 0.0, 0.0, 1.0], size=8), REPO.units["elven-spearmen"])
     assert panic.p_test == 1.0
     assert panic.p_holds == pytest.approx(P_PASS)
     assert panic.p_falls_back == pytest.approx(1 - P_PASS)  # 5 of 8 remain: > half
@@ -64,11 +58,15 @@ def test_fall_back_or_flee_splits_on_half_the_battle_strength() -> None:
     "More than half (50%) ... still remain" is strict: exactly half
     flees.
     """
-    six_remain = make_panic_tests(_result([0.0] * 4 + [1.0], size=10), _spearmen())
+    six_remain = make_panic_tests(
+        _result([0.0] * 4 + [1.0], size=10), REPO.units["elven-spearmen"]
+    )
     assert six_remain.p_falls_back == pytest.approx(1 - P_PASS)
     assert six_remain.p_flees == 0.0
 
-    five_remain = make_panic_tests(_result([0.0] * 5 + [1.0], size=10), _spearmen())
+    five_remain = make_panic_tests(
+        _result([0.0] * 5 + [1.0], size=10), REPO.units["elven-spearmen"]
+    )
     assert five_remain.p_falls_back == 0.0
     assert five_remain.p_flees == pytest.approx(1 - P_PASS)
 
@@ -79,14 +77,14 @@ def test_battle_strength_governs_the_split() -> None:
     10 remain of a 24-model battle line; losing 3 leaves 7 <= 12: flee.
     """
     result = _result([0.0, 0.0, 0.0, 1.0], size=10)
-    panic = make_panic_tests(result, _spearmen(), battle_strength=24)
+    panic = make_panic_tests(result, REPO.units["elven-spearmen"], battle_strength=24)
     assert panic.p_flees == pytest.approx(1 - P_PASS)
     assert panic.p_falls_back == 0.0
 
 
 def test_a_wiped_unit_is_destroyed_not_tested() -> None:
     """Losing every model leaves nothing to test."""
-    panic = make_panic_tests(_result([0.0, 0.0, 1.0], size=2), _spearmen())
+    panic = make_panic_tests(_result([0.0, 0.0, 1.0], size=2), REPO.units["elven-spearmen"])
     assert panic.p_destroyed == 1.0
     assert panic.p_test == 0.0
 
@@ -94,7 +92,7 @@ def test_a_wiped_unit_is_destroyed_not_tested() -> None:
 def test_outcomes_partition_the_distribution() -> None:
     """Across a spread of casualty masses the outcomes sum to 1."""
     spread = [0.2, 0.1, 0.3, 0.25, 0.15]  # 0..4 of 4
-    panic = make_panic_tests(_result(spread, size=4), _spearmen())
+    panic = make_panic_tests(_result(spread, size=4), REPO.units["elven-spearmen"])
     total = panic.p_holds + panic.p_falls_back + panic.p_flees + panic.p_destroyed
     assert total == pytest.approx(1.0)
 
@@ -102,13 +100,15 @@ def test_outcomes_partition_the_distribution() -> None:
 def test_missing_or_zero_size_rejected() -> None:
     """The panic step needs a real unit size."""
     with pytest.raises(ValueError, match="unit's size"):
-        make_panic_tests(_result([1.0], size=0), _spearmen())
+        make_panic_tests(_result([1.0], size=0), REPO.units["elven-spearmen"])
 
 
 def test_battle_strength_below_current_size_rejected() -> None:
     """A unit cannot outnumber its own start-of-battle strength."""
     with pytest.raises(ValueError, match="battle strength"):
-        make_panic_tests(_result([1.0, 0.0], size=10), _spearmen(), battle_strength=5)
+        make_panic_tests(
+            _result([1.0, 0.0], size=10), REPO.units["elven-spearmen"], battle_strength=5
+        )
 
 
 def _valour(causes: list[PanicCause]) -> dict[str, Rule]:
@@ -130,7 +130,7 @@ def test_reroll_effect_lifts_the_pass_probability() -> None:
     """
     result = _result([0.0, 0.0, 0.0, 1.0], size=8)
     rules = _valour([PanicCause.HEAVY_CASUALTIES, PanicCause.FLED_THROUGH])
-    panic = make_panic_tests(result, _spearmen(), rules=rules)
+    panic = make_panic_tests(result, REPO.units["elven-spearmen"], rules=rules)
     lifted = P_PASS + (1 - P_PASS) * P_PASS
     assert panic.reroll_from == "Valour of Ages"
     assert panic.p_holds == pytest.approx(lifted)
@@ -141,7 +141,7 @@ def test_reroll_restricted_to_other_causes_does_not_apply() -> None:
     """A fled-through-only re-roll grants nothing on a heavy-casualties test."""
     result = _result([0.0, 0.0, 0.0, 1.0], size=8)
     rules = _valour([PanicCause.FLED_THROUGH])
-    panic = make_panic_tests(result, _spearmen(), rules=rules)
+    panic = make_panic_tests(result, REPO.units["elven-spearmen"], rules=rules)
     assert panic.reroll_from is None
     assert panic.p_holds == pytest.approx(P_PASS)
 
@@ -149,16 +149,16 @@ def test_reroll_restricted_to_other_causes_does_not_apply() -> None:
 def test_no_registry_means_no_reroll() -> None:
     """Without the rules registry the listed rule stays inert."""
     result = _result([0.0, 0.0, 0.0, 1.0], size=8)
-    panic = make_panic_tests(result, _spearmen())
+    panic = make_panic_tests(result, REPO.units["elven-spearmen"])
     assert panic.reroll_from is None
     assert panic.p_holds == pytest.approx(P_PASS)
 
 
 def test_valour_of_ages_applies_from_the_data_file() -> None:
     """End to end: the authored effect re-rolls the spearmen's panic test."""
-    registry = {r.name: r for r in load_yaml_dir(DATA_DIR / "tow/rules", Rule)}
+    registry = REPO.rules
     result = _result([0.0, 0.0, 0.0, 1.0], size=8)
-    panic = make_panic_tests(result, _spearmen(), rules=registry)
+    panic = make_panic_tests(result, REPO.units["elven-spearmen"], rules=registry)
     assert panic.reroll_from == "Valour of Ages"
     assert panic.p_holds == pytest.approx(P_PASS + (1 - P_PASS) * P_PASS)
 
@@ -179,7 +179,9 @@ def test_break_test_three_outcomes_at_a_fixed_margin() -> None:
     natural+3 > 8, i.e. 6,7,8) = 16/36. Give Ground (the rest, incl. the
     double 1) = 10/36. A is the winner, so it takes no test at all.
     """
-    result = break_test(_combat({3: 1.0}), _spearmen(), _spearmen())
+    result = break_test(
+        _combat({3: 1.0}), REPO.units["elven-spearmen"], REPO.units["elven-spearmen"]
+    )
     assert result.b.p_breaks == pytest.approx(10 / 36)
     assert result.b.p_falls_back == pytest.approx(16 / 36)
     assert result.b.p_gives_ground == pytest.approx(10 / 36)
@@ -194,7 +196,9 @@ def test_break_test_double_one_always_gives_ground() -> None:
     Back, so Give Ground is exactly the 1/36 double 1 — proof the override
     fires.
     """
-    result = break_test(_combat({100: 1.0}), _spearmen(), _spearmen())
+    result = break_test(
+        _combat({100: 1.0}), REPO.units["elven-spearmen"], REPO.units["elven-spearmen"]
+    )
     assert result.b.p_gives_ground == pytest.approx(1 / 36)
     assert result.b.p_breaks == pytest.approx(10 / 36)
     assert result.b.p_falls_back == pytest.approx(25 / 36)
@@ -202,7 +206,9 @@ def test_break_test_double_one_always_gives_ground() -> None:
 
 def test_break_test_draw_takes_no_test() -> None:
     """A drawn combat: neither side tests."""
-    result = break_test(_combat({0: 1.0}), _spearmen(), _spearmen())
+    result = break_test(
+        _combat({0: 1.0}), REPO.units["elven-spearmen"], REPO.units["elven-spearmen"]
+    )
     assert result.p_draw == pytest.approx(1.0)
     assert result.a == SideBreak(0.0, 0.0, 0.0)
     assert result.b == SideBreak(0.0, 0.0, 0.0)
@@ -215,7 +221,9 @@ def test_break_test_scores_whichever_side_lost() -> None:
     each side's loser-outcomes are identical and each side loses half the
     time. The six outcome masses and the (zero) draw sum to 1.
     """
-    result = break_test(_combat({2: 0.5, -2: 0.5}), _spearmen(), _spearmen())
+    result = break_test(
+        _combat({2: 0.5, -2: 0.5}), REPO.units["elven-spearmen"], REPO.units["elven-spearmen"]
+    )
     assert result.a == result.b
     a_lost = result.a.p_gives_ground + result.a.p_falls_back + result.a.p_breaks
     b_lost = result.b.p_gives_ground + result.b.p_falls_back + result.b.p_breaks

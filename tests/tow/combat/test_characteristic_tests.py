@@ -1,15 +1,14 @@
 """Characteristic and Leadership test probabilities: exact counts."""
 
 from fractions import Fraction
-from pathlib import Path
 
 import pytest
 
-from avelorn.core.loading import load_yaml
 from avelorn.tow.combat.characteristic_tests import pass_probability, unit_pass_probability
-from avelorn.tow.schema.unit import Characteristic, Unit
+from avelorn.tow.data import TOWRepository
+from avelorn.tow.schema.unit import Characteristic
 
-DATA_DIR = Path(__file__).parents[3] / "data"
+REPO = TOWRepository()
 
 Ld = Characteristic.LEADERSHIP
 
@@ -52,7 +51,7 @@ def test_zero_or_dash_fails_automatically() -> None:
 
 def test_unit_tests_against_its_highest_value() -> None:
     """A unit with mixed values uses the highest it contains (printed)."""
-    spearmen = load_yaml(DATA_DIR / "tow/armies/high-elf-realms/units/elven-spearmen.yaml", Unit)
+    spearmen = REPO.units["elven-spearmen"]
     assert spearmen.highest(Ld) == 8
     assert unit_pass_probability(spearmen, Ld) == Fraction(26, 36)
     stripped = spearmen.model_copy(deep=True)

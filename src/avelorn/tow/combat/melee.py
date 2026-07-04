@@ -43,7 +43,7 @@ from avelorn.tow.combat.charts import (
 from avelorn.tow.combat.rules import compile_rules
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
-from avelorn.tow.schema.unit import Characteristic, Unit
+from avelorn.tow.schema.unit import Characteristic, Complement, Unit
 from avelorn.tow.schema.weapon import Weapon
 
 logger = logging.getLogger(__name__)
@@ -417,6 +417,13 @@ class Contingent:
     strikes first in :func:`fight`, and a contingent that did not charge
     (any shooter among them) leaves it None.
 
+    Construct one directly — ``Contingent(unit, models, charge)`` — for an
+    arbitrary body on the table: a post-casualty remnant, or an isolated count
+    for analysis, neither of which need be a legal army-list size. To field a
+    mustered list entry instead, use :meth:`deploy`, which takes a
+    :class:`~avelorn.tow.schema.unit.Complement` (list-legal size, chosen
+    options) and bakes its loadout into the datasheet the engine reads.
+
     The weapon in use is *not* carried here: it is a per-action choice, so
     the same contingent shoots with its bow one moment and fights the
     ensuing melee with a hand weapon the next. Each action takes the chosen
@@ -434,6 +441,30 @@ class Contingent:
     unit: Unit
     models: int
     charge: Charge | None = None
+
+    @classmethod
+    def deploy(cls, complement: Complement, charge: Charge | None = None) -> "Contingent":
+        """Field a :class:`~avelorn.tow.schema.unit.Complement` as a contingent.
+
+        The complement's chosen loadout — its equipment and special rules
+        after its options' adds and removes — is baked into the datasheet the
+        engine reads, so the contingent fights with what was bought, not the
+        printed profile. The chosen ``size`` becomes ``models``.
+
+        Args:
+            complement: The list entry to field.
+            charge: The charge this contingent made this turn, if any.
+
+        Returns:
+            The fielded contingent.
+        """
+        fielded = complement.unit.model_copy(
+            update={
+                "equipment": complement.equipment,
+                "special_rules": complement.special_rules,
+            }
+        )
+        return cls(fielded, complement.size, charge)
 
 
 @dataclass(frozen=True)

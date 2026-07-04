@@ -1,44 +1,27 @@
 """End-to-end close-combat demo: two units fight a round.
 
-Loads both units, their close-combat weapons, armour, and rules from the
-data/ YAML tree, resolves one round of combat (strike order, the return
-strike, combat result, and each side's Break test), and prints the
-outcome distributions.
+Loads both units, armour, and rules from the data/ YAML tree, resolves one
+round of combat (strike order, the return strike, combat result, and each
+side's Break test) with both sides wielding the weapon given by --weapon,
+and prints the outcome distributions.
 
 Usage: uv run python scripts/melee_demo.py [a_fighters] [unit_a] [unit_b] [b_fighters]
-       (unit slugs default to elven-spearmen on both sides)
+       (unit slugs default to elven-spearmen on both sides; the weapon
+       defaults to the thrusting spear, overridable with --weapon)
 
 Pass -v/--verbose to also emit the DEBUG math trace to stderr.
 """
 
 import argparse
 import logging
-from pathlib import Path
 
 from avelorn.core.dice import expected_value
-from avelorn.core.loading import load_yaml, load_yaml_dir
 from avelorn.core.logging import configure_logging
 from avelorn.tow.combat.melee import Contingent, combat_result, fight
 from avelorn.tow.combat.morale import break_test
 from avelorn.tow.combat.query import Comparator, Predicate, evaluate, fight_distributions
-from avelorn.tow.schema.armour import Armour
-from avelorn.tow.schema.rule import Rule
-from avelorn.tow.schema.unit import Characteristic, Unit
-from avelorn.tow.schema.weapon import Weapon
-
-_DATA_DIR = Path(__file__).parents[1] / "data"
-
-
-def _load_unit(army: str, slug: str) -> Unit:
-    return load_yaml(_DATA_DIR / f"tow/armies/{army}/units/{slug}.yaml", Unit)
-
-
-def _combat_weapon(unit: Unit, weapons: dict[str, Weapon]) -> Weapon:
-    for item in unit.equipment:
-        weapon = weapons.get(item)
-        if weapon is not None and weapon.combat_profile is not None:
-            return weapon
-    raise SystemExit(f"{unit.name} carries no close-combat weapon known under data/tow/weapons/")
+from avelorn.tow.data import TOWRepository
+from avelorn.tow.schema.unit import Characteristic
 
 
 def _print_casualties(label: str, casualties: list[float], fighters: int) -> None:
@@ -62,23 +45,25 @@ def main() -> None:
         "b_fighters", nargs="?", type=int, default=5, help="models fighting on side B"
     )
     parser.add_argument(
+        "--weapon", default="thrusting-spear", help="weapon slug both sides fight with"
+    )
+    parser.add_argument(
         "-v", "--verbose", action="store_true", help="emit the DEBUG math trace to stderr"
     )
     args = parser.parse_args()
     if args.verbose:
         configure_logging(logging.DEBUG)
 
-    weapons = {w.name: w for w in load_yaml_dir(_DATA_DIR / "tow/weapons", Weapon)}
-    armoury = {a.name: a for a in load_yaml_dir(_DATA_DIR / "tow/armour", Armour)}
-    rules = {r.name: r for r in load_yaml_dir(_DATA_DIR / "tow/rules", Rule)}
-    unit_a = _load_unit("high-elf-realms", args.unit_a)
-    unit_b = _load_unit("high-elf-realms", args.unit_b)
-    weapon_a = _combat_weapon(unit_a, weapons)
-    weapon_b = _combat_weapon(unit_b, weapons)
+    repo = TOWRepository()
+    unit_a = repo.units[args.unit_a]
+    unit_b = repo.units[args.unit_b]
+    weapon_a = weapon_b = repo.weapons[args.weapon]
 
     a = Contingent(unit_a, args.a_fighters)
     b = Contingent(unit_b, args.b_fighters)
-    result = fight(a, b, a_weapon=weapon_a, b_weapon=weapon_b, armoury=armoury, rules=rules)
+    result = fight(
+        a, b, a_weapon=weapon_a, b_weapon=weapon_b, armoury=repo.armoury, rules=repo.rules
+    )
     scored = combat_result(result)
     breaks = break_test(scored, unit_a, unit_b)
 
