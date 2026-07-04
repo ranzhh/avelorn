@@ -56,8 +56,13 @@ def test_unit_files_discovered() -> None:
 
 @pytest.mark.parametrize("path", UNIT_FILES, ids=lambda p: p.stem)
 def test_unit_file_parses(path: Path) -> None:
-    """Every unit YAML under data/ validates against the schema."""
-    Unit.model_validate(yaml.safe_load(path.read_text()))
+    """Every unit YAML under data/ validates and carries its filename as id.
+
+    The id/stem match is what lets TOWRepository key the unit registry
+    by filename — the same guarantee the weapon and armour tests pin.
+    """
+    unit = Unit.model_validate(yaml.safe_load(path.read_text()))
+    assert unit.id == path.stem
 
 
 def test_dash_stat_becomes_none() -> None:
