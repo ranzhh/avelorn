@@ -237,6 +237,56 @@ def test_fight_rejects_negative_models() -> None:
         )
 
 
+# --- fight(): pre-combat losses folded in (a_prior_losses / b_prior_losses) ---
+
+
+def test_fight_degenerate_prior_losses_equal_a_plain_fight() -> None:
+    """A pmf certain no models were lost reproduces the plain-fight joint."""
+    spearmen = load_unit("high-elf-realms", "elven-spearmen")
+    spear = load_weapon("thrusting-spear")
+    a, b = Contingent(spearmen, 3), Contingent(spearmen, 3)
+    plain = fight(a, b, a_weapon=spear, b_weapon=spear, armoury=ARMOURY)
+    with_prior = fight(a, b, a_weapon=spear, b_weapon=spear, a_prior_losses=[1.0], armoury=ARMOURY)
+    assert with_prior.losses == plain.losses
+
+
+def test_fight_prior_losses_mix_the_round_over_entering_strength() -> None:
+    """A 50/50 prior on A mixes a full-strength round with an A-absent one.
+
+    1v1 simultaneous spearmen: at full strength each falls independently on
+    1/6. If A already lost its one model (prob 1/2) it makes no attack and
+    takes none, so all that branch's mass sits at (0, 0). Each side's melee
+    loss then halves to 1/12.
+    """
+    spearmen = load_unit("high-elf-realms", "elven-spearmen")
+    spear = load_weapon("thrusting-spear")
+    a, b = Contingent(spearmen, 1), Contingent(spearmen, 1)
+    result = fight(
+        a, b, a_weapon=spear, b_weapon=spear, a_prior_losses=[0.5, 0.5], armoury=ARMOURY
+    )
+    assert result.a_casualties[1] == pytest.approx(0.5 * 1 / 6)  # only the full branch
+    assert result.b_casualties[1] == pytest.approx(0.5 * 1 / 6)
+    assert sum(sum(row) for row in result.losses) == pytest.approx(1.0)
+
+
+def test_fight_prior_losses_reject_more_losses_than_models() -> None:
+    """A pmf longer than the side's models + 1 cannot describe its losses."""
+    spearmen = load_unit("high-elf-realms", "elven-spearmen")
+    spear = load_weapon("thrusting-spear")
+    a, b = Contingent(spearmen, 2), Contingent(spearmen, 2)
+    with pytest.raises(ValueError, match="a_prior_losses covers more losses"):
+        fight(a, b, a_weapon=spear, b_weapon=spear, a_prior_losses=[0.25, 0.25, 0.25, 0.25])
+
+
+def test_fight_prior_losses_reject_a_non_distribution() -> None:
+    """A prior-loss pmf that is not a probability distribution is rejected."""
+    spearmen = load_unit("high-elf-realms", "elven-spearmen")
+    spear = load_weapon("thrusting-spear")
+    a, b = Contingent(spearmen, 2), Contingent(spearmen, 2)
+    with pytest.raises(ValueError, match="must sum to 1"):
+        fight(a, b, a_weapon=spear, b_weapon=spear, b_prior_losses=[0.5, 0.2])
+
+
 # --- Charge: the Combat-phase Initiative bonus that decides striking order ---
 
 

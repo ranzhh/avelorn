@@ -18,6 +18,7 @@ import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
+from math import isclose
 
 from avelorn.core.dice import expected_value
 from avelorn.tow.combat.armour import defender_armour
@@ -474,12 +475,30 @@ def _effective_initiative(contingent: Contingent) -> int:
     return min(base + bonus, 10)
 
 
+def _prior_loss_pmf(pmf: Sequence[float] | None, models: int, name: str) -> Sequence[float]:
+    # A side's pre-combat loss distribution: pmf[k] = P(k models lost before
+    # any blows are struck. None means none were lost — certainty at zero. A
+    # side cannot lose more models than it fields, and the mass must be a
+    # distribution.
+    if pmf is None:
+        return (1.0,)
+    if len(pmf) > models + 1:
+        raise ValueError(f"{name} covers more losses ({len(pmf) - 1}) than models ({models})")
+    if any(p < 0 for p in pmf):
+        raise ValueError(f"{name} has a negative probability")
+    if not isclose(sum(pmf), 1.0):
+        raise ValueError(f"{name} must sum to 1, got {sum(pmf)}")
+    return pmf
+
+
 def fight(
     a: Contingent,
     b: Contingent,
     *,
     a_weapon: Weapon,
     b_weapon: Weapon,
+    a_prior_losses: Sequence[float] | None = None,
+    b_prior_losses: Sequence[float] | None = None,
     armoury: Mapping[str, Armour] | None = None,
     rules: Mapping[str, Rule] | None = None,
 ) -> FightResult:
@@ -502,6 +521,14 @@ def fight(
     orders them. Resolution happens in strike order and the joint is
     oriented back to the ``(a, b)`` axes the caller passed.
 
+    ``a_prior_losses`` / ``b_prior_losses`` let a side enter already thinned:
+    a pmf whose index ``k`` is P(that side lost ``k`` models *before* any
+    blows — a Stand & Shoot volley on the chargers, say). The round is
+    resolved at each surviving strength and mixed over these two
+    (independent) distributions, exactly; omitted, a side enters at full
+    ``models``. The returned ``losses`` count only this round's melee
+    casualties, so pre-combat losses never inflate the combat result.
+
     Deferred and noted, not modelled here: Always Strikes First/Last and
     the Initiative modifiers granted by special rules (Elven Reflexes) or
     weapons (a Thrusting Spear's bonus when charged) — surfaced in the
@@ -515,33 +542,36 @@ def fight(
         ``losses[a_lost][b_lost]`` matches the contingents as passed.
 
     Raises:
-        ValueError: either model count is negative (plus the matchup
-            errors raised by the underlying resolution).
+        ValueError: either model count is negative, or a prior-loss pmf
+            covers more losses than the side has models, carries a negative
+            probability, or does not sum to 1 (plus the matchup errors
+            raised by the underlying resolution).
     """
     if a.models < 0 or b.models < 0:
         raise ValueError("model counts must be >= 0")
+    a_lost_before = _prior_loss_pmf(a_prior_losses, a.models, "a_prior_losses")
+    b_lost_before = _prior_loss_pmf(b_prior_losses, b.models, "b_prior_losses")
     armoury = armoury or {}
     rules = rules or {}
     a_strikes = _engage(a.unit, b.unit, a_weapon, armoury=armoury, rules=rules, hit_modifier=0)
     b_strikes = _engage(b.unit, a.unit, b_weapon, armoury=armoury, rules=rules, hit_modifier=0)
-    initiative_a = _effective_initiative(a)
-    initiative_b = _effective_initiative(b)
+    a_first = _strikes_first(_effective_initiative(a), _effective_initiative(b))
 
-    if initiative_a == initiative_b:
-        losses = _independent(a_strikes, a.models, b_strikes, b.models)
-        first_striker: Contingent | None = None
-    else:
-        # The higher-Initiative side strikes first; resolve in that order,
-        # then orient the joint back to the (a, b) axes.
-        a_first = initiative_a > initiative_b
-        striker, target = (a, b) if a_first else (b, a)
-        striker_strikes, target_strikes = (
-            (a_strikes, b_strikes) if a_first else (b_strikes, a_strikes)
-        )
-        joint = _sequenced(striker_strikes, striker.models, target_strikes, target.models)
-        losses = joint if a_first else _transpose(joint)
-        first_striker = striker
+    # Each side may enter already thinned by pre-combat casualties (a Stand &
+    # Shoot volley, say); the two are independent, so the round is the
+    # fixed-count joint mixed over the product of the loss distributions.
+    losses = [[0.0] * (b.models + 1) for _ in range(a.models + 1)]
+    for pre_a, p_a in enumerate(a_lost_before):
+        for pre_b, p_b in enumerate(b_lost_before):
+            weight = p_a * p_b
+            if weight == 0.0:
+                continue
+            joint = _round_joint(a_strikes, a.models - pre_a, b_strikes, b.models - pre_b, a_first)
+            for a_lost, row in enumerate(joint):
+                for b_lost, mass in enumerate(row):
+                    losses[a_lost][b_lost] += weight * mass
 
+    first_striker = None if a_first is None else (a if a_first else b)
     notes = tuple(dict.fromkeys([*a_strikes.notes, *b_strikes.notes]))
     logger.debug(
         "fight: %s vs %s, first=%s",
@@ -601,6 +631,32 @@ def _sequenced(
 def _transpose(joint: list[list[float]]) -> list[list[float]]:
     # Swap axes: [second_lost][first_lost] -> [first_lost][second_lost].
     return [list(row) for row in zip(*joint, strict=True)]
+
+
+def _strikes_first(initiative_a: int, initiative_b: int) -> bool | None:
+    # Who strikes first by Initiative: True if A does, False if B, None when
+    # equal Initiative makes the blows simultaneous.
+    if initiative_a == initiative_b:
+        return None
+    return initiative_a > initiative_b
+
+
+def _round_joint(
+    a_strikes: _Engagement,
+    a_models: int,
+    b_strikes: _Engagement,
+    b_models: int,
+    a_first: bool | None,
+) -> list[list[float]]:
+    # One round's joint casualty distribution at fixed model counts, oriented
+    # to (a, b). Equal Initiative (a_first is None) strikes simultaneously —
+    # independent losses; otherwise the first striker thins the other before
+    # it swings back, and the sequenced joint is oriented back to (a, b).
+    if a_first is None:
+        return _independent(a_strikes, a_models, b_strikes, b_models)
+    if a_first:
+        return _sequenced(a_strikes, a_models, b_strikes, b_models)
+    return _transpose(_sequenced(b_strikes, b_models, a_strikes, a_models))
 
 
 _UNMODELLED_COMBAT_RESULT: tuple[str, ...] = (
