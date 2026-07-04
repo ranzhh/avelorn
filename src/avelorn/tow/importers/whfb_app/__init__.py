@@ -16,8 +16,8 @@ structured data, not scraped HTML:
 - `yamlout` serializes a `Unit` in the hand-authored style used under
   `data/`.
 
-Usage:
+The CLI lives in ``scripts/import_whfb_app.py``:
 
-    python -m avelorn.tow.importers.whfb_app unit elven-archers
-    python -m avelorn.tow.importers.whfb_app army high-elf-realms
+    uv run python scripts/import_whfb_app.py unit elven-archers
+    uv run python scripts/import_whfb_app.py army high-elf-realms
 """
