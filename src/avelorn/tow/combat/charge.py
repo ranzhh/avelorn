@@ -8,8 +8,8 @@ Combat-phase Initiative bonus lives on :class:`~avelorn.tow.combat.melee.Charge`
 """
 
 import logging
-from collections.abc import Mapping
 
+from avelorn.core.registry import Registry
 from avelorn.tow.combat.context import EngagementContext
 from avelorn.tow.combat.melee import Contingent
 from avelorn.tow.combat.shooting import ShootingResult, shoot_unit
@@ -29,8 +29,8 @@ def stand_and_shoot(
     target: Contingent,
     weapon: Weapon,
     *,
-    armoury: Mapping[str, Armour] | None = None,
-    rules: Mapping[str, Rule] | None = None,
+    armoury: Registry[Armour] | None = None,
+    rules: Registry[Rule] | None = None,
 ) -> ShootingResult:
     """Resolve a Stand & Shoot charge reaction: ``shooter`` shoots the ``target``.
 

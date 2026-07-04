@@ -27,6 +27,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from itertools import product
 
+from avelorn.core.registry import Registry
 from avelorn.tow.combat.characteristic_tests import unit_pass_probability
 from avelorn.tow.combat.melee import CombatResult
 from avelorn.tow.combat.rules import resolve_rule
@@ -55,7 +56,7 @@ def make_panic_tests(
     result: ShootingResult,
     defender: Unit,
     *,
-    rules: Mapping[str, Rule] | None = None,
+    rules: Registry[Rule] | None = None,
     battle_strength: int | None = None,
 ) -> PanicResult:
     """Resolve the panic step for one volley's casualty distribution.
@@ -83,7 +84,7 @@ def make_panic_tests(
         raise ValueError(f"battle strength ({battle}) cannot be below current size ({size})")
 
     p_pass = float(unit_pass_probability(defender, Characteristic.LEADERSHIP))
-    reroll_from = _reroll_grant(defender, rules or {}, PanicCause.HEAVY_CASUALTIES)
+    reroll_from = _reroll_grant(defender, rules or Registry[Rule](), PanicCause.HEAVY_CASUALTIES)
     if reroll_from is not None:
         # A failed test is taken again: both dice, same natural bounds,
         # never more than once whatever the source.
@@ -121,7 +122,7 @@ def make_panic_tests(
     )
 
 
-def _reroll_grant(defender: Unit, rules: Mapping[str, Rule], cause: PanicCause) -> str | None:
+def _reroll_grant(defender: Unit, rules: Registry[Rule], cause: PanicCause) -> str | None:
     # The first of the defender's rules granting a re-roll on this seam
     # for this cause; one grant is all a test can ever use.
     for printed in defender.special_rules:

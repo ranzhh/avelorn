@@ -60,7 +60,7 @@ def test_compile_effectless_rule_stays_unfactored() -> None:
 
 def test_compile_parameter_placeholder_without_value_stays_unfactored() -> None:
     """The X placeholder needs a bracketed number in the printed name."""
-    rule = REPO.rules["Armour Bane (X)"]
+    rule = REPO.rules["armour-bane"]
     transforms, unfactored = compile_rules(["Armour Bane (X)"], REPO.rules)
     assert rule.effects and transforms == []
     assert unfactored == ["Armour Bane (X)"]
