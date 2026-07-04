@@ -417,6 +417,13 @@ class Contingent:
     strikes first in :func:`fight`, and a contingent that did not charge
     (any shooter among them) leaves it None.
 
+    Construct one directly — ``Contingent(unit, models, charge)`` — for an
+    arbitrary body on the table: a post-casualty remnant, or an isolated count
+    for analysis, neither of which need be a legal army-list size. To field a
+    mustered list entry instead, use :meth:`deploy`, which takes a
+    :class:`~avelorn.tow.schema.unit.Complement` (list-legal size, chosen
+    options) and bakes its loadout into the datasheet the engine reads.
+
     The weapon in use is *not* carried here: it is a per-action choice, so
     the same contingent shoots with its bow one moment and fights the
     ensuing melee with a hand weapon the next. Each action takes the chosen
