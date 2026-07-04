@@ -2,11 +2,13 @@
 
 import pytest
 
+from avelorn.tow.combat.melee import FightResult
 from avelorn.tow.combat.query import (
     Comparator,
     Distribution,
     Predicate,
     evaluate,
+    fight_distributions,
     query_result,
     result_distributions,
 )
@@ -148,3 +150,20 @@ def test_query_result_rejects_unavailable_variable() -> None:
     result = shoot(3, ballistic_skill=4, strength=3, toughness=3)
     with pytest.raises(KeyError, match="survivors"):
         query_result(result, "survivors", Predicate(Comparator.AT_MOST, 3))
+
+
+def test_fight_distributions_expose_per_side_counts() -> None:
+    """A fight's joint losses surface as per-side casualty and survivor PMFs.
+
+    Joint over (a_lost, b_lost) for 1 fighter each; marginals are
+    a_casualties = (0.8, 0.2), b_casualties = (0.85, 0.15), and survivors
+    mirror them over each side's size of 1.
+    """
+    result = FightResult(losses=[[0.7, 0.1], [0.15, 0.05]], first_striker=None)
+    dists = fight_distributions(result)
+    assert set(dists) == {"a_casualties", "a_survivors", "b_casualties", "b_survivors"}
+    assert dists["a_casualties"].pmf == pytest.approx((0.8, 0.2))
+    assert dists["a_survivors"].pmf == pytest.approx((0.2, 0.8))  # mirror of casualties
+    assert dists["b_casualties"].pmf == pytest.approx((0.85, 0.15))
+    # Queried the same way as shooting: P(B loses its whole model).
+    assert evaluate(dists["b_survivors"], Predicate(Comparator.EXACTLY, 0)) == pytest.approx(0.15)

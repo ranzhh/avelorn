@@ -27,6 +27,7 @@ import logging
 from dataclasses import dataclass
 from enum import StrEnum
 
+from avelorn.tow.combat.melee import FightResult
 from avelorn.tow.combat.shooting import ShootingResult
 
 logger = logging.getLogger(__name__)
@@ -193,17 +194,27 @@ def result_distributions(result: ShootingResult) -> dict[str, Distribution]:
     }
     size = result.target_models
     if size is not None:
-        # survivors = size - casualties: P(survivors == s) == P(casualties
-        # == size - s). casualties may be shorter than size + 1 (a volley
-        # too small to reach the unit's size never bites the cap), so build
-        # the full 0..size support and place each casualty mass at its
-        # mirror index, leaving unreachable survivor counts at zero.
-        survivors = [0.0] * (size + 1)
-        for removed, mass in enumerate(result.casualties):
-            survivors[size - removed] = mass
-        distributions["survivors"] = Distribution("survivors", tuple(survivors))
-        logger.debug("survivors distribution mirrored over unit size %d", size)
+        distributions["survivors"] = _mirror_survivors("survivors", result.casualties, size)
     return distributions
+
+
+def _mirror_survivors(name: str, casualties: list[float], size: int) -> Distribution:
+    """Mirror a casualty distribution into a survivors distribution over 0..size.
+
+    survivors = size - casualties: P(survivors == s) == P(casualties ==
+    size - s). ``casualties`` may be shorter than ``size + 1`` (a volley too
+    small to reach the unit's size never bites the cap), so the full 0..size
+    support is built and each casualty mass placed at its mirror index,
+    leaving unreachable survivor counts at zero.
+
+    Returns:
+        The survivors distribution.
+    """
+    survivors = [0.0] * (size + 1)
+    for removed, mass in enumerate(casualties):
+        survivors[size - removed] = mass
+    logger.debug("survivors distribution mirrored over size %d", size)
+    return Distribution(name, tuple(survivors))
 
 
 def query_result(result: ShootingResult, variable: str, predicate: Predicate) -> float:
@@ -226,3 +237,25 @@ def query_result(result: ShootingResult, variable: str, predicate: Predicate) ->
         available = ", ".join(sorted(distributions))
         raise KeyError(f"no variable {variable!r} for this result (available: {available})")
     return evaluate(distribution, predicate)
+
+
+def fight_distributions(result: FightResult) -> dict[str, Distribution]:
+    """Expose a close-combat round's outcomes as named, queryable distributions.
+
+    The second producer of queryable distributions: a :class:`FightResult`
+    exposes, per side, its models-removed (``a_casualties``/``b_casualties``)
+    and models-surviving (``a_survivors``/``b_survivors``) counts — queried
+    with the same :func:`evaluate` and :class:`Predicate` as shooting. Each
+    side's size is the length of its casualty marginal.
+
+    Returns:
+        A mapping of variable name to :class:`Distribution`.
+    """
+    distributions: dict[str, Distribution] = {}
+    for side, casualties in (("a", result.a_casualties), ("b", result.b_casualties)):
+        size = len(casualties) - 1
+        distributions[f"{side}_casualties"] = Distribution(f"{side}_casualties", tuple(casualties))
+        distributions[f"{side}_survivors"] = _mirror_survivors(
+            f"{side}_survivors", casualties, size
+        )
+    return distributions
