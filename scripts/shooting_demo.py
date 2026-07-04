@@ -5,8 +5,7 @@ shooting chain, and prints the kill distribution.
 
 Usage: uv run python scripts/shooting_demo.py [shooters] [attacker] [defender] [defenders]
        (unit slugs default to elven-archers and elven-spearmen; the weapon
-       defaults to the longbow, overridable with --weapon; with no defender
-       count the kill distribution is left uncapped)
+       defaults to the longbow, overridable with --weapon)
 
 Pass -v/--verbose to also emit the DEBUG math trace to stderr.
 """
@@ -20,6 +19,7 @@ from avelorn.tow.combat.morale import make_panic_tests
 from avelorn.tow.combat.query import Comparator, Predicate, query_result
 from avelorn.tow.combat.shooting import shoot_unit
 from avelorn.tow.data import TOWRepository
+from avelorn.tow.muster import Contingent
 
 
 def main() -> None:
@@ -34,8 +34,8 @@ def main() -> None:
         "defenders",
         nargs="?",
         type=int,
-        default=None,
-        help="models in the target unit; caps casualties (uncapped if omitted)",
+        default=10,
+        help="models in the target unit; caps casualties",
     )
     parser.add_argument("--weapon", default="longbow", help="weapon slug the attacker shoots with")
     parser.add_argument(
@@ -60,40 +60,35 @@ def main() -> None:
     if args.verbose:
         configure_logging(logging.DEBUG)
 
-    shooters = args.shooters
-    defenders = args.defenders
     repo = TOWRepository()
-    attacker = repo.units[args.attacker]
-    defender = repo.units[args.defender]
+    attacker = Contingent(repo.units[args.attacker], args.shooters)
+    defender = Contingent(repo.units[args.defender], args.defenders)
     weapon = repo.weapons[args.weapon]
     context = EngagementContext(moved=args.moved, distance=args.distance)
     result = shoot_unit(
         attacker,
         defender,
-        shooters=shooters,
-        weapon=weapon,
+        weapon,
         armoury=repo.armoury,
         rules=repo.rules,
         context=context,
-        defenders=defenders,
     )
 
     def fmt_target(target: int | None) -> str:
         return f"{target}+" if target is not None else "-"
 
-    target = f"{defenders} " if defenders is not None else ""
-    print(f"{shooters} {attacker.name} shoot {target}{defender.name} with {weapon.name}s")
+    print(
+        f"{attacker.models} {attacker.unit.name} shoot "
+        f"{defender.models} {defender.unit.name} with {weapon.name}s"
+    )
     print(f"  to hit:  {fmt_target(result.hit_target)}   (p = {result.p_hit:.3f})")
     print(f"  to wound: {fmt_target(result.wound_target)}  (p = {result.p_wound:.3f})")
     print(f"  armour:  {fmt_target(result.save_target)}")
     print(f"  per-shot unsaved wound: p = {result.p_unsaved:.3f}")
-    if defenders is not None:
-        print(
-            f"  expected casualties: {result.expected_casualties:.2f} of {defenders}"
-            f"   ({defenders - result.expected_casualties:.2f} survive)"
-        )
-    else:
-        print(f"  expected kills: {result.expected_casualties:.2f}")
+    print(
+        f"  expected casualties: {result.expected_casualties:.2f} of {defender.models}"
+        f"   ({defender.models - result.expected_casualties:.2f} survive)"
+    )
     print()
     print("  killed  probability")
     for killed, p in enumerate(result.casualties):
@@ -103,28 +98,27 @@ def main() -> None:
     # Exact distributional queries — the questions the game actually turns
     # on, not the average. Each is one structured predicate over a named
     # variable; the querying layer returns the exact probability.
-    if defenders is not None:
-        print()
-        print("  exact queries:")
-        wiped = query_result(result, "survivors", Predicate(Comparator.EXACTLY, 0))
-        any_kill = query_result(result, "casualties", Predicate(Comparator.AT_LEAST, 1))
-        at_most_3 = query_result(result, "survivors", Predicate(Comparator.AT_MOST, 3))
-        print(f"  - P(at least one falls):       {any_kill:.3f}")
-        print(f"  - P(at most 3 survive):        {at_most_3:.3f}")
-        print(f"  - P(unit wiped out):           {wiped:.3f}")
+    print()
+    print("  exact queries:")
+    wiped = query_result(result, "survivors", Predicate(Comparator.EXACTLY, 0))
+    any_kill = query_result(result, "casualties", Predicate(Comparator.AT_LEAST, 1))
+    at_most_3 = query_result(result, "survivors", Predicate(Comparator.AT_MOST, 3))
+    print(f"  - P(at least one falls):       {any_kill:.3f}")
+    print(f"  - P(at most 3 survive):        {at_most_3:.3f}")
+    print(f"  - P(unit wiped out):           {wiped:.3f}")
 
-        panic = make_panic_tests(
-            result, defender, rules=repo.rules, battle_strength=args.battle_strength
-        )
-        print()
-        print("  make panic tests:")
-        print(f"  - P(test forced):              {panic.p_test:.3f}")
-        print(f"  - P(holds):                    {panic.p_holds:.3f}")
-        print(f"  - P(falls back in good order): {panic.p_falls_back:.3f}")
-        print(f"  - P(flees):                    {panic.p_flees:.3f}")
-        print(f"  - P(destroyed):                {panic.p_destroyed:.3f}")
-        if panic.reroll_from is not None:
-            print(f"  (failed tests re-rolled: {panic.reroll_from})")
+    panic = make_panic_tests(
+        result, defender.unit, rules=repo.rules, battle_strength=args.battle_strength
+    )
+    print()
+    print("  make panic tests:")
+    print(f"  - P(test forced):              {panic.p_test:.3f}")
+    print(f"  - P(holds):                    {panic.p_holds:.3f}")
+    print(f"  - P(falls back in good order): {panic.p_falls_back:.3f}")
+    print(f"  - P(flees):                    {panic.p_flees:.3f}")
+    print(f"  - P(destroyed):                {panic.p_destroyed:.3f}")
+    if panic.reroll_from is not None:
+        print(f"  (failed tests re-rolled: {panic.reroll_from})")
 
     if result.notes:
         print()

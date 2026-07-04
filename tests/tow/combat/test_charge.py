@@ -15,7 +15,11 @@ def test_stand_and_shoot_applies_the_minus_one_to_hit() -> None:
     """Archers standing and shooting hit at -1: BS4 (3+) becomes 4+."""
     archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
     plain = shoot_unit(
-        archers, spearmen, 10, REPO.weapons["longbow"], armoury=REPO.armoury, rules=REPO.rules
+        Contingent(archers, 10),
+        Contingent(spearmen, 10),
+        REPO.weapons["longbow"],
+        armoury=REPO.armoury,
+        rules=REPO.rules,
     )
     reaction = stand_and_shoot(
         Contingent(archers, 10),
@@ -37,7 +41,11 @@ def test_stand_and_shoot_is_exempt_from_firing_at_long_range() -> None:
     """
     archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
     plain = shoot_unit(
-        archers, spearmen, 10, REPO.weapons["longbow"], armoury=REPO.armoury, rules=REPO.rules
+        Contingent(archers, 10),
+        Contingent(spearmen, 10),
+        REPO.weapons["longbow"],
+        armoury=REPO.armoury,
+        rules=REPO.rules,
     )
     reaction = stand_and_shoot(
         Contingent(archers, 10),
@@ -157,9 +165,8 @@ def test_force_short_range_honours_long_range_as_a_no_op() -> None:
     """shoot_unit's force_short_range treats the shot as within half range."""
     archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
     forced = shoot_unit(
-        archers,
-        spearmen,
-        10,
+        Contingent(archers, 10),
+        Contingent(spearmen, 10),
         REPO.weapons["longbow"],
         armoury=REPO.armoury,
         rules=REPO.rules,

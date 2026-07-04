@@ -62,14 +62,12 @@ def stand_and_shoot(
     """
     logger.debug("stand & shoot: %s fires on charging %s", shooter.unit.name, target.unit.name)
     return shoot_unit(
-        shooter.unit,
-        target.unit,
-        shooter.models,
+        shooter,
+        target,
         weapon,
         armoury=armoury,
         rules=rules,
         context=EngagementContext(moved=False),
         hit_modifier=_STAND_AND_SHOOT_TO_HIT,
         force_short_range=True,
-        defenders=target.models,
     )

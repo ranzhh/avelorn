@@ -7,6 +7,7 @@ import pytest
 from avelorn.tow.combat.attack import AttackProfile, Outcome, RollState, Transform
 from avelorn.tow.combat.shooting import _engagement_conditions, shoot, shoot_unit
 from avelorn.tow.data import TOWRepository
+from avelorn.tow.muster import Contingent
 from avelorn.tow.schema.rule import Condition
 from avelorn.tow.schema.stage import Stage
 from avelorn.tow.schema.unit import Characteristic
@@ -49,7 +50,10 @@ def test_shoot_unit_archers_vs_spearmen() -> None:
     archers = REPO.units["elven-archers"]
     spearmen = REPO.units["elven-spearmen"]
     result = shoot_unit(
-        archers, spearmen, shooters=3, weapon=REPO.weapons["longbow"], armoury=REPO.armoury
+        Contingent(archers, 3),
+        Contingent(spearmen, 10),
+        REPO.weapons["longbow"],
+        armoury=REPO.armoury,
     )
     assert result.hit_target == 3  # BS 4
     assert result.save_target == 5  # 7 - light armour - shield
@@ -63,7 +67,7 @@ def test_shoot_unit_without_armoury_degrades_visibly() -> None:
     """No armoury means no save — but every ignored item is reported."""
     archers = REPO.units["elven-archers"]
     spearmen = REPO.units["elven-spearmen"]
-    result = shoot_unit(archers, spearmen, shooters=3, weapon=REPO.weapons["longbow"])
+    result = shoot_unit(Contingent(archers, 3), Contingent(spearmen, 10), REPO.weapons["longbow"])
     assert result.save_target is None
     assert any("Light Armour" in note for note in result.notes)
     assert any("Shield" in note for note in result.notes)
@@ -75,14 +79,12 @@ def test_defender_size_does_not_affect_wounds() -> None:
     Regression guard: 3 archers shooting 20 spearmen and 3 archers
     shooting 30 spearmen must produce the identical wound distribution.
     """
-    archers = REPO.units["elven-archers"]
+    archers = Contingent(REPO.units["elven-archers"], 3)
     spearmen = REPO.units["elven-spearmen"]
     longbow = REPO.weapons["longbow"]
-    twenty = spearmen.model_copy(update={"unit_size": {"min": 20, "max": 20}}, deep=True)
-    thirty = spearmen.model_copy(update={"unit_size": {"min": 30, "max": 30}}, deep=True)
 
-    vs_twenty = shoot_unit(archers, twenty, shooters=3, weapon=longbow, armoury=REPO.armoury)
-    vs_thirty = shoot_unit(archers, thirty, shooters=3, weapon=longbow, armoury=REPO.armoury)
+    vs_twenty = shoot_unit(archers, Contingent(spearmen, 20), longbow, armoury=REPO.armoury)
+    vs_thirty = shoot_unit(archers, Contingent(spearmen, 30), longbow, armoury=REPO.armoury)
 
     assert vs_twenty.p_unsaved == vs_thirty.p_unsaved
     assert vs_twenty.distribution == vs_thirty.distribution
@@ -127,12 +129,10 @@ def test_shoot_unit_caps_casualties_but_not_wounds() -> None:
     archers = REPO.units["elven-archers"]
     spearmen = REPO.units["elven-spearmen"]
     result = shoot_unit(
-        archers,
-        spearmen,
-        shooters=30,
-        weapon=REPO.weapons["longbow"],
+        Contingent(archers, 30),
+        Contingent(spearmen, 5),
+        REPO.weapons["longbow"],
         armoury=REPO.armoury,
-        defenders=5,
     )
     assert result.target_models == 5
     assert len(result.distribution) == 31
@@ -175,12 +175,10 @@ def test_shoot_unit_folds_multi_wound_casualties_and_caps() -> None:
     multi_wound = spearmen.model_copy(deep=True)
     multi_wound.profiles[0].characteristics[Characteristic.WOUNDS] = 3
     result = shoot_unit(
-        archers,
-        multi_wound,
-        shooters=30,
-        weapon=REPO.weapons["longbow"],
+        Contingent(archers, 30),
+        Contingent(multi_wound, 5),
+        REPO.weapons["longbow"],
         armoury=REPO.armoury,
-        defenders=5,
     )
     assert result.target_models == 5  # cap now applied
     assert len(result.casualties) == 6  # 0..5 models
@@ -199,7 +197,10 @@ def test_shoot_unit_warbow_uses_wielders_strength() -> None:
     sea_guard = REPO.units["lothern-sea-guard"]
     spearmen = REPO.units["elven-spearmen"]
     result = shoot_unit(
-        sea_guard, spearmen, shooters=3, weapon=REPO.weapons["warbow"], armoury=REPO.armoury
+        Contingent(sea_guard, 3),
+        Contingent(spearmen, 10),
+        REPO.weapons["warbow"],
+        armoury=REPO.armoury,
     )
     assert result.hit_target == 3  # BS 4
     assert result.wound_target == 4  # wielder's S3 vs T3
@@ -212,14 +213,14 @@ def test_shoot_unit_rejects_wielder_strength_weapon_without_strength() -> None:
     strengthless = spearmen.model_copy(deep=True)
     strengthless.profiles[0].characteristics[Characteristic.STRENGTH] = None
     with pytest.raises(ValueError, match="wielder's Strength"):
-        shoot_unit(strengthless, spearmen, shooters=1, weapon=REPO.weapons["warbow"])
+        shoot_unit(Contingent(strengthless, 1), Contingent(spearmen, 10), REPO.weapons["warbow"])
 
 
 def test_shoot_unit_rejects_pure_melee_weapon() -> None:
     """A weapon with no missile profile cannot shoot."""
     spearmen = REPO.units["elven-spearmen"]
     with pytest.raises(ValueError, match="missile profile"):
-        shoot_unit(spearmen, spearmen, shooters=1, weapon=REPO.weapons["hand-weapon"])
+        shoot_unit(Contingent(spearmen, 1), Contingent(spearmen, 10), REPO.weapons["hand-weapon"])
 
 
 def test_shoot_unit_rejects_missing_ballistic_skill() -> None:
@@ -228,7 +229,7 @@ def test_shoot_unit_rejects_missing_ballistic_skill() -> None:
     crewless = spearmen.model_copy(deep=True)
     crewless.profiles[0].characteristics[Characteristic.BALLISTIC_SKILL] = None
     with pytest.raises(ValueError, match="Ballistic Skill"):
-        shoot_unit(crewless, spearmen, shooters=1, weapon=REPO.weapons["longbow"])
+        shoot_unit(Contingent(crewless, 1), Contingent(spearmen, 10), REPO.weapons["longbow"])
 
 
 def _killing_blow_double() -> Transform:
