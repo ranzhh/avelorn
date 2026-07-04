@@ -6,7 +6,7 @@ import pytest
 
 from avelorn.core.loading import load_yaml, load_yaml_dir
 from avelorn.tow.combat.charge import stand_and_shoot
-from avelorn.tow.combat.melee import Contingent
+from avelorn.tow.combat.melee import Charge, ChargeArc, Contingent, combat_result, fight
 from avelorn.tow.combat.shooting import shoot_unit
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
@@ -85,6 +85,87 @@ def test_stand_and_shoot_caps_casualties_at_the_charging_unit_size() -> None:
     assert reaction.target_models == 5
     assert len(reaction.casualties) == 6  # 0..5
     assert sum(reaction.casualties) == pytest.approx(1.0)
+
+
+# --- The whole sequence: Stand & Shoot feeding the composed melee ---
+
+
+def test_charge_sequence_matches_mixing_the_survivor_fights_by_hand() -> None:
+    """fight() over the reaction pmf equals summing P(k) x the N-k survivor fight.
+
+    The Archers Stand & Shoot the charging Spearmen; feeding that casualty
+    pmf to fight() as ``a_prior_losses`` must reproduce, exactly, a by-hand
+    mixture over each number ``k`` of Spearmen felled before contact.
+    """
+    archers, spearmen = load_unit("elven-archers"), load_unit("elven-spearmen")
+    spear, hand = load_weapon("thrusting-spear"), load_weapon("hand-weapon")
+    charge = Charge(6, ChargeArc.FRONT)
+    models = 3
+    charger = Contingent(spearmen, models, charge=charge)
+    defender = Contingent(archers, 3)
+    reaction = stand_and_shoot(
+        defender, charger, load_weapon("longbow"), armoury=ARMOURY, rules=RULES
+    )
+
+    composed = fight(
+        charger,
+        defender,
+        a_weapon=spear,
+        b_weapon=hand,
+        a_prior_losses=reaction.casualties,
+        armoury=ARMOURY,
+        rules=RULES,
+    )
+
+    manual = [[0.0] * (defender.models + 1) for _ in range(models + 1)]
+    for felled, p_felled in enumerate(reaction.casualties):
+        survivors = fight(
+            Contingent(spearmen, models - felled, charge=charge),
+            defender,
+            a_weapon=spear,
+            b_weapon=hand,
+            armoury=ARMOURY,
+            rules=RULES,
+        )
+        for a_lost, row in enumerate(survivors.losses):
+            for b_lost, mass in enumerate(row):
+                manual[a_lost][b_lost] += p_felled * mass
+
+    for composed_row, manual_row in zip(composed.losses, manual, strict=True):
+        assert composed_row == pytest.approx(manual_row)
+    assert composed.first_striker is charger  # the charge still strikes first
+
+
+def test_stand_and_shoot_erodes_the_chargers_combat_result() -> None:
+    """Softening the chargers first lowers their combat-result win chance.
+
+    A charge met by Stand & Shoot brings fewer Spearmen to the melee, so
+    they inflict fewer wounds and win the combat less often than an un-shot
+    charge of the same size would.
+    """
+    archers, spearmen = load_unit("elven-archers"), load_unit("elven-spearmen")
+    spear, hand = load_weapon("thrusting-spear"), load_weapon("hand-weapon")
+    charger = Contingent(spearmen, 10, charge=Charge(8, ChargeArc.FRONT))
+    defender = Contingent(archers, 10)
+    reaction = stand_and_shoot(
+        defender, charger, load_weapon("longbow"), armoury=ARMOURY, rules=RULES
+    )
+
+    unshot = combat_result(
+        fight(charger, defender, a_weapon=spear, b_weapon=hand, armoury=ARMOURY, rules=RULES)
+    )
+    shot = combat_result(
+        fight(
+            charger,
+            defender,
+            a_weapon=spear,
+            b_weapon=hand,
+            a_prior_losses=reaction.casualties,
+            armoury=ARMOURY,
+            rules=RULES,
+        )
+    )
+    assert shot.p_a_wins < unshot.p_a_wins
 
 
 def test_force_short_range_honours_long_range_as_a_no_op() -> None:
