@@ -4,14 +4,35 @@ The gameplay-side counterpart of the army-list layer
 (:mod:`avelorn.tow.muster`): a :class:`Contingent` is the body the combat
 resolvers take — a datasheet plus the models actually standing — and
 :class:`Charge` is the charge move it may have made this turn, feeding
-its Combat-phase Initiative bonus.
+its Combat-phase Initiative bonus. Fielding is also where printed
+equipment names stop being strings: :meth:`Contingent.deploy` resolves
+them into a :class:`Loadout`.
 """
 
 from dataclasses import dataclass
 from enum import StrEnum
 
+from avelorn.core.registry import Registry
 from avelorn.tow.muster import Complement
+from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.unit import Unit
+from avelorn.tow.schema.weapon import Weapon
+
+
+@dataclass(frozen=True)
+class Loadout:
+    """A contingent's equipment resolved to entries: weapons and armour worn.
+
+    Built at :meth:`Contingent.deploy` — the muster boundary is where a
+    printed equipment name stops being a string. The armour is what save
+    resolution will read; the weapons are what a per-action choice will
+    pick from. Special rules are not carried here yet: they stay printed
+    strings on the fielded datasheet until rule resolution moves onto
+    this seam, tolerating rules whose entries are not imported yet.
+    """
+
+    weapons: tuple[Weapon, ...]
+    armour: tuple[Armour, ...]
 
 
 class ChargeArc(StrEnum):
@@ -90,27 +111,53 @@ class Contingent:
     unit: Unit
     models: int
     charge: Charge | None = None
+    loadout: Loadout | None = None  # resolved by deploy(); None on direct construction
 
     @classmethod
-    def deploy(cls, complement: Complement, charge: Charge | None = None) -> "Contingent":
-        """Field a :class:`~avelorn.tow.muster.Complement` as a contingent.
+    def deploy(
+        cls,
+        complement: Complement,
+        *,
+        weapons: Registry[Weapon],
+        armoury: Registry[Armour],
+        charge: Charge | None = None,
+    ) -> "Contingent":
+        """Field a :class:`~avelorn.tow.muster.Complement`, resolving its equipment.
 
         The complement's chosen loadout — its equipment and special rules
         after its options' adds and removes — is baked into the datasheet the
         engine reads, so the contingent fights with what was bought, not the
-        printed profile. The chosen ``size`` becomes ``models``.
+        printed profile; the chosen ``size`` becomes ``models``. The
+        equipment names also resolve against the weapon and armour data into
+        a :class:`Loadout`. A name matching neither is an error, not a note:
+        the data covers every unit-referenced item (a test pins it), so at
+        this seam a miss is a typo in the list, and the human building the
+        list is the one to tell.
 
         Args:
             complement: The list entry to field.
+            weapons: Weapon entries, resolving printed equipment names.
+            armoury: Armour entries, resolving printed equipment names.
             charge: The charge this contingent made this turn, if any.
 
         Returns:
-            The fielded contingent.
+            The fielded contingent, loadout resolved.
+
+        Raises:
+            ValueError: a piece of equipment matches no weapon or armour
+                entry.
         """
+        equipment = complement.equipment
+        wielded, rest = weapons.resolve(equipment)
+        worn, unknown = armoury.resolve(rest)
+        if unknown:
+            raise ValueError(
+                f"{complement.unit.name}: equipment matches no weapon or armour: {unknown}"
+            )
         fielded = complement.unit.model_copy(
             update={
-                "equipment": complement.equipment,
+                "equipment": equipment,
                 "special_rules": complement.special_rules,
             }
         )
-        return cls(fielded, complement.size, charge)
+        return cls(fielded, complement.size, charge, Loadout(tuple(wielded), tuple(worn)))
