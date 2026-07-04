@@ -13,9 +13,9 @@ This layer answers such questions *exactly*. It is deliberately split:
   probability mass function to an exact number. A future combat phase, or
   a composed result (casualties feeding a panic test), exposes the same
   type and is queried the same way.
-- :func:`result_distributions` is the only combat-coupled piece: it names
-  the variables a :class:`ShootingResult` carries. When a second producer
-  appears, the generic core lifts to a shared location unchanged.
+- :func:`result_distributions` and :func:`fight_distributions` are the
+  combat-coupled pieces: each names the variables its result — a
+  :class:`ShootingResult`, a :class:`FightResult` — carries.
 
 The intended division of labour: a caller (an agent, the CLI, a future
 MCP tool) translates a natural-language question into a structured

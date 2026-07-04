@@ -150,9 +150,10 @@ def sample(distribution: list[float], rng: random.Random | None = None) -> int:
 
 
 def expected_value(distribution: list[float]) -> float:
-    """Expected outcome of a distribution produced by :func:`binomial_distribution`.
+    """Expected outcome of a distribution over the indices 0..n.
 
     Returns:
-        The mean number of successes.
+        The index-weighted mean (e.g. the mean number of successes or
+        casualties, whichever the distribution counts).
     """
     return sum(k * p for k, p in enumerate(distribution))
