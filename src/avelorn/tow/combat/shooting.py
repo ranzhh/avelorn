@@ -38,7 +38,7 @@ from avelorn.tow.combat.rules import compile_rules
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.unit import Characteristic, Unit
-from avelorn.tow.schema.weapon import Weapon
+from avelorn.tow.schema.weapon import Weapon, WeaponProfile
 
 logger = logging.getLogger(__name__)
 
@@ -195,6 +195,15 @@ def _roll_target(target: int | None) -> RollTarget:
     return RollState.IMPOSSIBLE if target is None else target
 
 
+def _at_long_range(profile: WeaponProfile, context: EngagementContext | None) -> bool | None:
+    # Whether the shot is at long range, "further away than half the
+    # weapon's maximum range". Needs both a known distance and a numeric
+    # weapon range; without them the band is unknown (None).
+    if context is None or context.distance is None or not isinstance(profile.range, int):
+        return None
+    return context.distance > profile.range / 2
+
+
 def shoot_unit(
     attacker: Unit,
     defender: Unit,
@@ -205,6 +214,7 @@ def shoot_unit(
     rules: Mapping[str, Rule] | None = None,
     context: EngagementContext | None = None,
     hit_modifier: int = 0,
+    force_short_range: bool = False,
     defenders: int | None = None,
 ) -> ShootingResult:
     """Resolve ``shooters`` models of ``attacker`` shooting ``weapon`` at ``defender``.
@@ -219,7 +229,10 @@ def shoot_unit(
     ``context`` is the engagement's situation (moved, distance); rules
     conditioned on facts it leaves unknown stay unfactored and noted.
     Rules whose category is the shooting phase chapter apply to every
-    volley, gated by their conditions.
+    volley, gated by their conditions. ``force_short_range`` treats the
+    shot as within half range whatever the distance — a Stand & Shoot
+    reaction, exempt from Firing at Long Range, sets it so that rule is
+    honoured as a no-op rather than left unknown and noted.
 
     ``defenders`` is the number of models actually fielded in the target
     unit — the schema models only the *allowed* size, not what is on the
@@ -273,15 +286,11 @@ def shoot_unit(
         notes.extend(
             f"special rule not factored: {rule} ({unit.name})" for rule in unit.special_rules
         )
-    # The engagement facts, by condition-field name; None = unknown.
-    # Long range is printed as "further away than half the weapon's
-    # maximum range".
-    at_long_range = None
-    if context is not None and context.distance is not None and isinstance(profile.range, int):
-        at_long_range = context.distance > profile.range / 2
+    # The engagement facts, by condition-field name; None = unknown. A shot
+    # forced short (a Stand & Shoot reaction) is never at long range.
     conditions = {
         "moved": context.moved if context is not None else None,
-        "at_long_range": at_long_range,
+        "at_long_range": False if force_short_range else _at_long_range(profile, context),
     }
 
     # Weapon rules with compiled effects join the dice walk; the rest are
