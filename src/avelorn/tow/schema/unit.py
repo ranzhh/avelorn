@@ -1,8 +1,9 @@
 """Unit models for Warhammer: The Old World.
 
-Field aliases mirror the rulebook profile headers (M, WS, BS, ...) so
-hand-authored YAML reads like the printed stat line; Python code uses the
-long names.
+Profile rows are written flat under the rulebook headers (M, WS, BS,
+...) so hand-authored YAML reads like the printed stat line; a
+validator gathers those keys into the row's ``characteristics``
+mapping, and Python code reads them through :class:`Characteristic`.
 """
 
 from enum import StrEnum

@@ -77,7 +77,7 @@ def make_panic_tests(
     """
     size = result.target_models
     if size is None or size == 0:
-        raise ValueError("panic needs the target unit's size (defenders)")
+        raise ValueError("panic needs the target unit's size; resolve with it set on the result")
     battle = battle_strength if battle_strength is not None else size
     if battle < size:
         raise ValueError(f"battle strength ({battle}) cannot be below current size ({size})")

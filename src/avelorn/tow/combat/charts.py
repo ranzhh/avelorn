@@ -3,7 +3,8 @@
 Sources (tow.whfb.app): the-shooting-phase/roll-to-hit-shooting,
 the-shooting-phase/roll-to-wound-shooting, the-shooting-phase/7-to-hit,
 the-shooting-phase/determining-armour-value,
-the-shooting-phase/armour-piercing.
+the-shooting-phase/armour-piercing,
+the-combat-phase/roll-to-hit-combat.
 """
 
 import logging
