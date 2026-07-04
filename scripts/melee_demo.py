@@ -18,7 +18,7 @@ from pathlib import Path
 from avelorn.core.dice import expected_value
 from avelorn.core.loading import load_yaml, load_yaml_dir
 from avelorn.core.logging import configure_logging
-from avelorn.tow.combat.melee import Combatant, combat_result, fight
+from avelorn.tow.combat.melee import Contingent, combat_result, fight
 from avelorn.tow.combat.morale import break_test
 from avelorn.tow.combat.query import Comparator, Predicate, evaluate, fight_distributions
 from avelorn.tow.schema.armour import Armour
@@ -76,9 +76,9 @@ def main() -> None:
     weapon_a = _combat_weapon(unit_a, weapons)
     weapon_b = _combat_weapon(unit_b, weapons)
 
-    a = Combatant(unit_a, args.a_fighters, weapon_a)
-    b = Combatant(unit_b, args.b_fighters, weapon_b)
-    result = fight(a, b, armoury=armoury, rules=rules)
+    a = Contingent(unit_a, args.a_fighters)
+    b = Contingent(unit_b, args.b_fighters)
+    result = fight(a, b, a_weapon=weapon_a, b_weapon=weapon_b, armoury=armoury, rules=rules)
     scored = combat_result(result)
     breaks = break_test(scored, unit_a, unit_b)
 

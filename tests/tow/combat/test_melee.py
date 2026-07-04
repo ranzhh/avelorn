@@ -9,7 +9,7 @@ from avelorn.core.loading import load_yaml, load_yaml_dir
 from avelorn.tow.combat.melee import (
     Charge,
     ChargeArc,
-    Combatant,
+    Contingent,
     combat_result,
     fight,
     strike,
@@ -165,8 +165,8 @@ def test_fight_equal_initiative_is_simultaneous() -> None:
     """
     spearmen = load_unit("high-elf-realms", "elven-spearmen")
     spear = load_weapon("thrusting-spear")
-    side = Combatant(spearmen, 1, spear)
-    result = fight(side, side, armoury=ARMOURY)
+    side = Contingent(spearmen, 1)
+    result = fight(side, side, a_weapon=spear, b_weapon=spear, armoury=ARMOURY)
     assert result.first_striker is None
     assert result.a_casualties[1] == pytest.approx(1 / 6)
     assert result.b_casualties[1] == pytest.approx(1 / 6)
@@ -181,9 +181,9 @@ def test_fight_higher_initiative_strikes_first_and_takes_less() -> None:
     """
     spearmen = load_unit("high-elf-realms", "elven-spearmen")
     spear = load_weapon("thrusting-spear")
-    faster = Combatant(_higher_initiative(spearmen), 1, spear)
-    slower = Combatant(spearmen, 1, spear)
-    result = fight(faster, slower, armoury=ARMOURY)
+    faster = Contingent(_higher_initiative(spearmen), 1)
+    slower = Contingent(spearmen, 1)
+    result = fight(faster, slower, a_weapon=spear, b_weapon=spear, armoury=ARMOURY)
     assert result.first_striker is faster
     assert result.b_casualties[1] == pytest.approx(1 / 6)  # A full-strength
     assert result.a_casualties[1] == pytest.approx(5 / 36)  # B struck back reduced
@@ -193,9 +193,9 @@ def test_fight_orients_the_joint_to_the_arguments() -> None:
     """When the second argument strikes first, losses stay keyed to (a, b)."""
     spearmen = load_unit("high-elf-realms", "elven-spearmen")
     spear = load_weapon("thrusting-spear")
-    slower = Combatant(spearmen, 1, spear)
-    faster = Combatant(_higher_initiative(spearmen), 1, spear)
-    result = fight(slower, faster, armoury=ARMOURY)
+    slower = Contingent(spearmen, 1)
+    faster = Contingent(_higher_initiative(spearmen), 1)
+    result = fight(slower, faster, a_weapon=spear, b_weapon=spear, armoury=ARMOURY)
     assert result.first_striker is faster
     # b (faster) strikes first at full strength -> a falls on 1/6; a's
     # survivors strike back -> b falls on 5/36. Mirror of the test above.
@@ -212,8 +212,10 @@ def test_fight_coupling_reduces_the_return_strike() -> None:
     spearmen = load_unit("high-elf-realms", "elven-spearmen")
     spear = load_weapon("thrusting-spear")
     result = fight(
-        Combatant(_higher_initiative(spearmen), 5, spear),
-        Combatant(spearmen, 5, spear),
+        Contingent(_higher_initiative(spearmen), 5),
+        Contingent(spearmen, 5),
+        a_weapon=spear,
+        b_weapon=spear,
         armoury=ARMOURY,
     )
     full_strength = strike_unit(spearmen, spearmen, 5, spear, armoury=ARMOURY, defenders=5)
@@ -221,12 +223,18 @@ def test_fight_coupling_reduces_the_return_strike() -> None:
     assert any("Fight In Extra Rank" in note for note in result.notes)
 
 
-def test_fight_rejects_negative_fighters() -> None:
-    """A negative fighter count is a programming error, not a silent zero."""
+def test_fight_rejects_negative_models() -> None:
+    """A negative model count is a programming error, not a silent zero."""
     spearmen = load_unit("high-elf-realms", "elven-spearmen")
     spear = load_weapon("thrusting-spear")
-    with pytest.raises(ValueError, match="fighter counts must be >= 0"):
-        fight(Combatant(spearmen, -1, spear), Combatant(spearmen, 5, spear), armoury=ARMOURY)
+    with pytest.raises(ValueError, match="model counts must be >= 0"):
+        fight(
+            Contingent(spearmen, -1),
+            Contingent(spearmen, 5),
+            a_weapon=spear,
+            b_weapon=spear,
+            armoury=ARMOURY,
+        )
 
 
 # --- Charge: the Combat-phase Initiative bonus that decides striking order ---
@@ -256,9 +264,9 @@ def test_fight_charge_makes_the_charger_strike_first() -> None:
     """
     spearmen = load_unit("high-elf-realms", "elven-spearmen")
     spear = load_weapon("thrusting-spear")
-    charger = Combatant(spearmen, 1, spear, charge=Charge(3, ChargeArc.FRONT))
-    defender = Combatant(spearmen, 1, spear)
-    result = fight(charger, defender, armoury=ARMOURY)
+    charger = Contingent(spearmen, 1, charge=Charge(3, ChargeArc.FRONT))
+    defender = Contingent(spearmen, 1)
+    result = fight(charger, defender, a_weapon=spear, b_weapon=spear, armoury=ARMOURY)
     assert result.first_striker is charger
     assert result.b_casualties[1] == pytest.approx(1 / 6)  # charger struck full-strength
     assert result.a_casualties[1] == pytest.approx(5 / 36)  # defender struck back reduced
@@ -272,8 +280,10 @@ def test_fight_charge_capped_below_the_foe_stays_simultaneous() -> None:
     """
     spearmen = load_unit("high-elf-realms", "elven-spearmen")
     spear = load_weapon("thrusting-spear")
-    charger = Combatant(spearmen, 1, spear, charge=Charge(0, ChargeArc.FRONT))
-    result = fight(charger, Combatant(spearmen, 1, spear), armoury=ARMOURY)
+    charger = Contingent(spearmen, 1, charge=Charge(0, ChargeArc.FRONT))
+    result = fight(
+        charger, Contingent(spearmen, 1), a_weapon=spear, b_weapon=spear, armoury=ARMOURY
+    )
     assert result.first_striker is None
 
 
@@ -290,8 +300,10 @@ def test_combat_result_first_strike_advantage() -> None:
     spearmen = load_unit("high-elf-realms", "elven-spearmen")
     spear = load_weapon("thrusting-spear")
     result = fight(
-        Combatant(_higher_initiative(spearmen), 1, spear),
-        Combatant(spearmen, 1, spear),
+        Contingent(_higher_initiative(spearmen), 1),
+        Contingent(spearmen, 1),
+        a_weapon=spear,
+        b_weapon=spear,
         armoury=ARMOURY,
     )
     cr = combat_result(result)
@@ -308,8 +320,8 @@ def test_combat_result_simultaneous_is_symmetric() -> None:
     """Equal Initiative: the win split is symmetric between the two sides."""
     spearmen = load_unit("high-elf-realms", "elven-spearmen")
     spear = load_weapon("thrusting-spear")
-    side = Combatant(spearmen, 1, spear)
-    cr = combat_result(fight(side, side, armoury=ARMOURY))
+    side = Contingent(spearmen, 1)
+    cr = combat_result(fight(side, side, a_weapon=spear, b_weapon=spear, armoury=ARMOURY))
     assert cr.p_a_wins == pytest.approx(cr.p_b_wins)
     assert cr.p_a_wins == pytest.approx(5 / 36)
     assert cr.p_draw == pytest.approx(26 / 36)

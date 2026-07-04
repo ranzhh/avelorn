@@ -406,20 +406,32 @@ class Charge:
 
 
 @dataclass(frozen=True)
-class Combatant:
-    """One side entering a round of close combat.
+class Contingent:
+    """A unit as fielded: its datasheet and the models on the table.
 
-    ``fighters`` models of ``unit`` fight with ``weapon`` (its Combat
-    profile), taking an optional ``hit_modifier`` (printed sign
-    convention: a penalty is negative). ``charge`` is the charge this side
-    made this turn, if any — its Initiative bonus decides who strikes
-    first. Rank-and-file profile only, as with :func:`strike_unit`.
+    The datasheet (:class:`~avelorn.tow.schema.unit.Unit`) is a template —
+    it carries the *allowed* size, not how many models stand on the table —
+    so ``models`` supplies the fielded count. ``charge`` is the charge this
+    contingent made this turn, if any; its Initiative bonus decides who
+    strikes first in :func:`fight`, and a contingent that did not charge
+    (any shooter among them) leaves it None.
+
+    The weapon in use is *not* carried here: it is a per-action choice, so
+    the same contingent shoots with its bow one moment and fights the
+    ensuing melee with a hand weapon the next. Each action takes the chosen
+    weapon (:func:`fight`, :func:`~avelorn.tow.combat.charge.stand_and_shoot`).
+
+    Today a contingent is a single homogeneous body — one profile (the
+    rank-and-file, ``unit.profiles[0]``), as with :func:`strike_unit`. A real
+    contingent can be heterogeneous: rank and file plus a champion, plus an
+    embedded character, each its own profile, Attacks and weapon. That is
+    deliberately not modelled yet (#46); when it is, this grows a notion of
+    *parts* and the single-body fields become the one-part case. Callers read
+    only ``profiles[0]``, so the assumption stays localized to that migration.
     """
 
     unit: Unit
-    fighters: int
-    weapon: Weapon
-    hit_modifier: int = 0
+    models: int
     charge: Charge | None = None
 
 
@@ -433,12 +445,12 @@ class FightResult:
     back with fewer models — so the joint, not the two marginals, is what a
     combat-result margin must be computed from. ``a_casualties`` and
     ``b_casualties`` are its marginals. ``first_striker`` is the
-    :class:`Combatant` that struck first by Initiative, or None when equal
+    :class:`Contingent` that struck first by Initiative, or None when equal
     Initiative made the blows simultaneous.
     """
 
     losses: list[list[float]]  # losses[a_lost][b_lost] = joint probability
-    first_striker: Combatant | None
+    first_striker: Contingent | None
     notes: tuple[str, ...] = ()
 
     @property
@@ -453,23 +465,29 @@ class FightResult:
         return [sum(row[k] for row in self.losses) for k in range(columns)]
 
 
-def _effective_initiative(combatant: Combatant) -> int:
-    # A combatant's Initiative for striking order: its rank-and-file value
+def _effective_initiative(contingent: Contingent) -> int:
+    # A contingent's Initiative for striking order: its rank-and-file value
     # plus any charge bonus, capped at 10 as the-combat-phase/charging-units
     # requires. A profile with no printed Initiative counts as 0.
-    base = combatant.unit.profiles[0][Characteristic.INITIATIVE] or 0
-    bonus = combatant.charge.initiative_bonus() if combatant.charge is not None else 0
+    base = contingent.unit.profiles[0][Characteristic.INITIATIVE] or 0
+    bonus = contingent.charge.initiative_bonus() if contingent.charge is not None else 0
     return min(base + bonus, 10)
 
 
 def fight(
-    a: Combatant,
-    b: Combatant,
+    a: Contingent,
+    b: Contingent,
     *,
+    a_weapon: Weapon,
+    b_weapon: Weapon,
     armoury: Mapping[str, Armour] | None = None,
     rules: Mapping[str, Rule] | None = None,
 ) -> FightResult:
     """Resolve one round of close combat between two single-profile units.
+
+    ``a_weapon`` and ``b_weapon`` are the Combat weapons each side fights
+    with — a per-side choice, since a unit may carry several (a hand weapon
+    and a great weapon) and picks one to swing.
 
     Striking order is by rank-and-file Initiative (highest first): the
     higher-Initiative side strikes at full strength, its casualties are
@@ -494,28 +512,24 @@ def fight(
 
     Returns:
         The joint distribution of casualties for the round, oriented so
-        ``losses[a_lost][b_lost]`` matches the combatants as passed.
+        ``losses[a_lost][b_lost]`` matches the contingents as passed.
 
     Raises:
-        ValueError: either fighter count is negative (plus the matchup
+        ValueError: either model count is negative (plus the matchup
             errors raised by the underlying resolution).
     """
-    if a.fighters < 0 or b.fighters < 0:
-        raise ValueError("fighter counts must be >= 0")
+    if a.models < 0 or b.models < 0:
+        raise ValueError("model counts must be >= 0")
     armoury = armoury or {}
     rules = rules or {}
-    a_strikes = _engage(
-        a.unit, b.unit, a.weapon, armoury=armoury, rules=rules, hit_modifier=a.hit_modifier
-    )
-    b_strikes = _engage(
-        b.unit, a.unit, b.weapon, armoury=armoury, rules=rules, hit_modifier=b.hit_modifier
-    )
+    a_strikes = _engage(a.unit, b.unit, a_weapon, armoury=armoury, rules=rules, hit_modifier=0)
+    b_strikes = _engage(b.unit, a.unit, b_weapon, armoury=armoury, rules=rules, hit_modifier=0)
     initiative_a = _effective_initiative(a)
     initiative_b = _effective_initiative(b)
 
     if initiative_a == initiative_b:
-        losses = _independent(a_strikes, a.fighters, b_strikes, b.fighters)
-        first_striker: Combatant | None = None
+        losses = _independent(a_strikes, a.models, b_strikes, b.models)
+        first_striker: Contingent | None = None
     else:
         # The higher-Initiative side strikes first; resolve in that order,
         # then orient the joint back to the (a, b) axes.
@@ -524,7 +538,7 @@ def fight(
         striker_strikes, target_strikes = (
             (a_strikes, b_strikes) if a_first else (b_strikes, a_strikes)
         )
-        joint = _sequenced(striker_strikes, striker.fighters, target_strikes, target.fighters)
+        joint = _sequenced(striker_strikes, striker.models, target_strikes, target.models)
         losses = joint if a_first else _transpose(joint)
         first_striker = striker
 
