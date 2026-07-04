@@ -203,6 +203,19 @@ def _at_long_range(profile: WeaponProfile, context: EngagementContext | None) ->
     return context.distance > profile.range / 2
 
 
+def _engagement_conditions(
+    profile: WeaponProfile, context: EngagementContext | None, force_short_range: bool
+) -> dict[str, bool | None]:
+    # The engagement facts, by EffectCondition field name; None = unknown.
+    # A shot forced short (a Stand & Shoot reaction) is never at long range.
+    # A drift-guard test asserts the keys cover every EffectCondition field,
+    # so a new condition cannot be compiled against yet silently unanswered.
+    return {
+        "moved": context.moved if context is not None else None,
+        "at_long_range": False if force_short_range else _at_long_range(profile, context),
+    }
+
+
 def shoot_unit(
     attacker: Unit,
     defender: Unit,
@@ -285,12 +298,7 @@ def shoot_unit(
         notes.extend(
             f"special rule not factored: {rule} ({unit.name})" for rule in unit.special_rules
         )
-    # The engagement facts, by condition-field name; None = unknown. A shot
-    # forced short (a Stand & Shoot reaction) is never at long range.
-    conditions = {
-        "moved": context.moved if context is not None else None,
-        "at_long_range": False if force_short_range else _at_long_range(profile, context),
-    }
+    conditions = _engagement_conditions(profile, context, force_short_range)
 
     # Weapon rules with compiled effects join the dice walk; the rest are
     # reported, exactly as before. Shooting-phase chapter rules (Firing
