@@ -79,10 +79,9 @@ def test_strike_unit_spearmen_vs_spearmen() -> None:
     """
     spearmen = REPO.units["elven-spearmen"]
     result = strike_unit(
-        spearmen,
-        spearmen,
-        fighters=5,
-        weapon=REPO.weapons["thrusting-spear"],
+        Contingent(spearmen, 5),
+        Contingent(spearmen, 10),
+        REPO.weapons["thrusting-spear"],
         armoury=REPO.armoury,
     )
     assert result.attacks == 5  # 5 fighters * A1
@@ -101,10 +100,9 @@ def test_strike_unit_attacks_scale_with_the_attacks_characteristic() -> None:
     two_attacks = spearmen.model_copy(deep=True)
     two_attacks.profiles[0].characteristics[Characteristic.ATTACKS] = 2
     result = strike_unit(
-        two_attacks,
-        spearmen,
-        fighters=5,
-        weapon=REPO.weapons["thrusting-spear"],
+        Contingent(two_attacks, 5),
+        Contingent(spearmen, 10),
+        REPO.weapons["thrusting-spear"],
         armoury=REPO.armoury,
     )
     assert result.attacks == 10
@@ -113,7 +111,9 @@ def test_strike_unit_attacks_scale_with_the_attacks_characteristic() -> None:
 def test_strike_unit_without_armoury_degrades_visibly() -> None:
     """No armoury: the defender's armour is unresolved and reported, not guessed."""
     spearmen = REPO.units["elven-spearmen"]
-    result = strike_unit(spearmen, spearmen, fighters=5, weapon=REPO.weapons["thrusting-spear"])
+    result = strike_unit(
+        Contingent(spearmen, 5), Contingent(spearmen, 10), REPO.weapons["thrusting-spear"]
+    )
     assert result.save_target is None
     assert any("Light Armour" in note for note in result.notes)
 
@@ -122,7 +122,7 @@ def test_strike_unit_rejects_a_missile_only_weapon() -> None:
     """A weapon with no Combat profile cannot be used to fight."""
     archers = REPO.units["elven-archers"]
     with pytest.raises(ValueError, match="no Combat profile"):
-        strike_unit(archers, archers, fighters=5, weapon=REPO.weapons["longbow"])
+        strike_unit(Contingent(archers, 5), Contingent(archers, 10), REPO.weapons["longbow"])
 
 
 # --- fight(): one bilateral round with Initiative-ordered coupling ---
@@ -200,7 +200,9 @@ def test_fight_coupling_reduces_the_return_strike() -> None:
         b_weapon=spear,
         armoury=REPO.armoury,
     )
-    full_strength = strike_unit(spearmen, spearmen, 5, spear, armoury=REPO.armoury, defenders=5)
+    full_strength = strike_unit(
+        Contingent(spearmen, 5), Contingent(spearmen, 5), spear, armoury=REPO.armoury
+    )
     assert expected_value(result.a_casualties) < expected_value(full_strength.casualties)
     assert any("Fight In Extra Rank" in note for note in result.notes)
 

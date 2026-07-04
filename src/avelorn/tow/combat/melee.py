@@ -301,27 +301,24 @@ def _engage(
 
 
 def strike_unit(
-    attacker: Unit,
-    defender: Unit,
-    fighters: int,
+    attacker: Contingent,
+    defender: Contingent,
     weapon: Weapon,
     *,
     armoury: Registry[Armour] = _NO_ARMOURY,
     rules: Registry[Rule] = _NO_RULES,
     hit_modifier: int = 0,
-    defenders: int | None = None,
 ) -> StrikeResult:
-    """Resolve ``fighters`` models of ``attacker`` fighting ``weapon`` against ``defender``.
+    """Resolve ``attacker`` striking ``weapon`` blows against ``defender``.
 
-    Each fighter makes its full Attacks with the weapon's Combat profile,
-    using each unit's first (rank-and-file) profile. ``armoury`` maps
-    printed equipment names to armour items; ``rules`` maps printed rule
-    names to rule entries, whose effects compile into the dice walk.
-    Anything either mapping does not resolve — and every unit special
-    rule — is not factored into the math but listed in the result's notes.
-
-    ``defenders`` is the number of models fielded in the target unit; when
-    given, casualties cap at it.
+    Each fielded model (``attacker.models``) makes its full Attacks with
+    the weapon's Combat profile, using each side's first (rank-and-file)
+    profile; casualties cap at the defender's fielded ``models``.
+    ``armoury`` maps printed equipment names to armour items; ``rules``
+    maps printed rule names to rule entries, whose effects compile into
+    the dice walk. Anything either mapping does not resolve — and every
+    unit special rule — is not factored into the math but listed in the
+    result's notes.
 
     Returns:
         The close-combat outcome for this side's blows.
@@ -332,11 +329,12 @@ def strike_unit(
             profile has no Toughness, or the weapon strikes at the
             wielder's Strength and the attacker profile has none.
     """
+    fighters, defenders = attacker.models, defender.models
     if fighters < 0:
         raise ValueError("fighters must be >= 0")
     engagement = _engage(
-        attacker,
-        defender,
+        attacker.unit,
+        defender.unit,
         weapon,
         armoury=armoury,
         rules=rules,
