@@ -149,7 +149,7 @@ def sample(distribution: list[float], rng: random.Random | None = None) -> int:
     return outcome
 
 
-def expected_value(distribution: list[float]) -> float:
+def expected_value(distribution: Sequence[float]) -> float:
     """Expected outcome of a distribution over the indices 0..n.
 
     Returns:
