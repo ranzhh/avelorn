@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from avelorn.core.loading import load_yaml, load_yaml_dir
-from avelorn.tow.combat.attack import AttackProfile, RollState, resolve_attack
+from avelorn.tow.combat.attack import AttackProfile, HitRoll, RollState, resolve_attack
 from avelorn.tow.combat.context import EngagementContext
 from avelorn.tow.combat.rules import _condition_applies, compile_rules, resolve_rule
 from avelorn.tow.combat.shooting import shoot_unit
@@ -54,7 +54,9 @@ def test_compile_armour_bane_from_data_reproduces_the_golden() -> None:
     profile = AttackProfile(
         hit_target=3, wound_target=4, save_target=5, ward_target=RollState.IMPOSSIBLE
     )
-    assert resolve_attack(profile, transforms).p_unsaved == Fraction(13, 54)
+    assert resolve_attack(profile, transforms, hit_roll=HitRoll.SHOOTING).p_unsaved == Fraction(
+        13, 54
+    )
 
 
 def test_compile_effectless_rule_stays_unfactored() -> None:

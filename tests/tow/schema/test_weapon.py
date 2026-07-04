@@ -136,6 +136,27 @@ def test_missile_profile_picks_the_ranged_row() -> None:
     assert melee.missile_profile is None
 
 
+def test_combat_profile_picks_the_close_combat_row() -> None:
+    """A mixed weapon exposes its Combat row; a pure missile weapon exposes none."""
+    brace = Weapon(
+        id="brace-of-pistols",
+        name="Brace of Pistols",
+        profiles=[
+            WeaponProfile.model_validate({"name": "Combat", "R": "Combat", "S": "S"}),
+            WeaponProfile.model_validate({"name": "Ranged", "R": 12, "S": 4, "AP": -1}),
+        ],
+    )
+    assert brace.combat_profile is not None
+    assert brace.combat_profile.range == "Combat"
+
+    longbow = Weapon(
+        id="longbow",
+        name="Longbow",
+        profiles=[WeaponProfile.model_validate({"R": 30, "S": 3})],
+    )
+    assert longbow.combat_profile is None
+
+
 def test_armour_requires_exactly_one_shape() -> None:
     """A suit has a value, an addition has an improvement — never both."""
     Armour(id="light-armour", name="Light Armour", armour_value=6)

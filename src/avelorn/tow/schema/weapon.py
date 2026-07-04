@@ -125,3 +125,12 @@ class Weapon(BaseModel):
             The first non-Combat profile, or None for pure melee weapons.
         """
         return next((p for p in self.profiles if p.is_missile), None)
+
+    @property
+    def combat_profile(self) -> WeaponProfile | None:
+        """The weapon's close-combat profile.
+
+        Returns:
+            The first Combat profile, or None for a pure missile weapon.
+        """
+        return next((p for p in self.profiles if not p.is_missile), None)

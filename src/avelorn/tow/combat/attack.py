@@ -31,6 +31,20 @@ _FACE = Fraction(1, 6)
 _FACES = range(1, 7)
 
 
+class HitRoll(StrEnum):
+    """How a To Hit roll resolves beyond the die's face.
+
+    Shooting confirms a target of 7+ with a second roll ("7 to Hit");
+    close combat has no confirmation step — a natural 6 always hits and a
+    natural 1 always misses, regardless of modifiers
+    (the-combat-phase/roll-to-hit-combat). The two stages share the rest
+    of the walk.
+    """
+
+    SHOOTING = "shooting"
+    MELEE = "melee"
+
+
 class Outcome(StrEnum):
     """What one attack ends as.
 
@@ -136,15 +150,23 @@ class AttackResolution:
 
 
 def resolve_attack(
-    profile: AttackProfile, transforms: Sequence[Transform] = ()
+    profile: AttackProfile,
+    transforms: Sequence[Transform] = (),
+    *,
+    hit_roll: HitRoll,
 ) -> AttackResolution:
     """Resolve one attack by walking its dice exactly.
+
+    ``hit_roll`` selects how the To Hit die resolves (shooting's 7+
+    confirmation versus close combat's natural-6-always-hits); it leaves
+    every other stage unchanged. It is required — the phase is known at
+    the calling helper (``shoot``/``strike``), never assumed here.
 
     Returns:
         The exact per-attack outcome-class probabilities.
     """
     outcomes: dict[Outcome, Fraction] = {}
-    for p_path, outcome in walk(profile, transforms):
+    for p_path, outcome in walk(profile, transforms, hit_roll=hit_roll):
         outcomes[outcome] = outcomes.get(outcome, Fraction(0)) + p_path
     effective = _modify(_by_stage(transforms)[Stage.ROLL_TO_HIT], profile)
     resolution = AttackResolution(outcomes=outcomes, hit_target=effective.hit_target)
@@ -158,7 +180,10 @@ def resolve_attack(
 
 
 def walk(
-    profile: AttackProfile, transforms: Sequence[Transform] = ()
+    profile: AttackProfile,
+    transforms: Sequence[Transform] = (),
+    *,
+    hit_roll: HitRoll,
 ) -> Iterator[tuple[Fraction, Outcome]]:
     """Enumerate every dice path of one attack, applying transforms.
 
@@ -167,8 +192,9 @@ def walk(
         paths sum to exactly 1.
     """
     hooked = _by_stage(transforms)
+    roll_hit = _roll_melee_hit if hit_roll is HitRoll.MELEE else _roll_to_hit
     hit_profile = _modify(hooked[Stage.ROLL_TO_HIT], profile)
-    for p_hit, hit_face, hit in _roll_to_hit(hit_profile.hit_target):
+    for p_hit, hit_face, hit in roll_hit(hit_profile.hit_target):
         if not hit:
             yield p_hit, Outcome.NONE
             continue
@@ -231,6 +257,20 @@ def _roll_to_hit(target: RollTarget) -> Iterator[tuple[Fraction, int, bool]]:
         else:
             for confirm_face in _FACES:
                 yield _FACE * _FACE, face, confirm_face >= confirm
+
+
+def _roll_melee_hit(target: RollTarget) -> Iterator[tuple[Fraction, int, bool]]:
+    # Close combat has no 7+ confirmation: a natural 6 always hits and a
+    # natural 1 always misses, regardless of modifiers
+    # (the-combat-phase/roll-to-hit-combat). This differs from _roll only
+    # at targets of 7+, where a natural 6 still hits rather than failing.
+    # RollStates carry no die, so no natural face fires — deferred to _roll.
+    if isinstance(target, RollState):
+        yield from _roll(target)
+        return
+    threshold = max(target, 2)
+    for face in _FACES:
+        yield _FACE, face, face == 6 or face >= threshold
 
 
 def _roll(target: RollTarget) -> Iterator[tuple[Fraction, int, bool]]:

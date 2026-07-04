@@ -13,24 +13,19 @@ import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
-from avelorn.core.dice import (
-    binomial_distribution,
-    cap_distribution,
-    expected_value,
-    group_distribution,
-    multinomial_outcomes,
-)
+from avelorn.core.dice import expected_value
+from avelorn.tow.combat.armour import defender_armour
 from avelorn.tow.combat.attack import (
     AttackProfile,
+    HitRoll,
     Outcome,
     RollState,
     RollTarget,
     Transform,
     resolve_attack,
 )
+from avelorn.tow.combat.casualties import wound_and_casualties
 from avelorn.tow.combat.charts import (
-    BEST_ARMOUR_VALUE,
-    UNARMOURED,
     armour_save_target,
     hit_probability,
     save_probability,
@@ -151,6 +146,7 @@ def shoot(
             ward_target=_roll_target(ward_target),
         ),
         transforms,
+        hit_roll=HitRoll.SHOOTING,
     )
     p_unsaved = float(resolution.p_unsaved)
     p_kill = float(resolution.p_of(Outcome.INSTANT_KILL))
@@ -169,22 +165,13 @@ def shoot(
         1.0 - save_probability(ward_target),
     )
 
-    if p_kill == 0.0:
-        # Single outcome class: the multinomial degenerates to the binomial,
-        # so keep the established path. Fold unsaved wounds into slain
-        # models by Wounds-per-model, then cap at the unit's size; for
-        # 1-Wound targets the fold is a no-op.
-        distribution = binomial_distribution(shots, p_unsaved)
-        models = group_distribution(distribution, wounds_per_model)
-        casualties = models if targets is None else cap_distribution(models, targets)
-    else:
-        distribution, casualties = _remove_casualties(
-            shots,
-            p_wound_only=p_unsaved - p_kill,
-            p_kill=p_kill,
-            wounds_per_model=wounds_per_model,
-            targets=targets,
-        )
+    distribution, casualties = wound_and_casualties(
+        shots,
+        p_unsaved=p_unsaved,
+        p_kill=p_kill,
+        wounds_per_model=wounds_per_model,
+        targets=targets,
+    )
 
     return ShootingResult(
         shots=shots,
@@ -206,29 +193,6 @@ def _roll_target(target: int | None) -> RollTarget:
     # The charts' printed convention: None means the roll is not taken
     # and cannot succeed ("-" on the wound chart; no save).
     return RollState.IMPOSSIBLE if target is None else target
-
-
-def _remove_casualties(
-    shots: int,
-    *,
-    p_wound_only: float,
-    p_kill: float,
-    wounds_per_model: int,
-    targets: int | None,
-) -> tuple[list[float], list[float]]:
-    # Class-aware aggregation, named after the printed "Remove Casualties"
-    # step: enumerate (wounds, instant kills) counts over the volley by
-    # multinomial. A kill removes a model outright; plain wounds accumulate
-    # by Wounds-per-model. The unsaved-wound distribution counts both
-    # classes (a Killing Blow is still an unsaved wound).
-    distribution = [0.0] * (shots + 1)
-    size = shots if targets is None else targets
-    casualties = [0.0] * (size + 1)
-    for (n_wound, n_kill), mass in multinomial_outcomes(shots, (p_wound_only, p_kill)):
-        distribution[n_wound + n_kill] += mass
-        killed = min(n_kill + n_wound // wounds_per_model, size)
-        casualties[killed] += mass
-    return distribution, casualties
 
 
 def shoot_unit(
@@ -304,7 +268,7 @@ def shoot_unit(
         profile.armour_piercing,
     )
 
-    armour_value, notes = _defender_armour(defender, armoury or {})
+    armour_value, notes = defender_armour(defender, armoury or {})
     for unit in (attacker, defender):
         notes.extend(
             f"special rule not factored: {rule} ({unit.name})" for rule in unit.special_rules
@@ -351,21 +315,3 @@ def shoot_unit(
         transforms=transforms,
         notes=tuple(notes),
     )
-
-
-def _defender_armour(
-    defender: Unit, armoury: Mapping[str, Armour]
-) -> tuple[int | None, list[str]]:
-    suit = UNARMOURED
-    improvement = 0
-    notes: list[str] = []
-    for item in defender.equipment:
-        armour = armoury.get(item)
-        if armour is None:
-            notes.append(f"equipment not factored: {item} ({defender.name})")
-        elif armour.armour_value is not None:
-            suit = min(suit, armour.armour_value)
-        elif armour.armour_value_improvement is not None:
-            improvement += armour.armour_value_improvement
-    value = max(suit - improvement, BEST_ARMOUR_VALUE)
-    return (value if value < UNARMOURED else None), notes

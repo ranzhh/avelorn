@@ -5,11 +5,49 @@ import pytest
 from avelorn.tow.combat.charts import (
     armour_save_target,
     hit_probability,
+    melee_hit_probability,
+    melee_hit_target,
     save_probability,
     shooting_hit_target,
     wound_probability,
     wound_target,
 )
+
+
+@pytest.mark.parametrize(
+    ("weapon_skill", "target_weapon_skill", "expected"),
+    [
+        (4, 4, 4),  # equal WS: 4+
+        (5, 4, 3),  # higher, not double: 3+
+        (7, 3, 2),  # more than double (7 > 6): 2+
+        (6, 3, 3),  # exactly double is not "more than": 3+
+        (3, 7, 5),  # target more than double (7 > 6): 5+
+        (3, 6, 4),  # target exactly double is not "more than": 4+
+        (1, 1, 4),  # chart corner
+        (10, 1, 2),  # far corner
+        (1, 10, 5),  # far corner
+    ],
+)
+def test_melee_hit_target(weapon_skill: int, target_weapon_skill: int, expected: int) -> None:
+    """Spot checks against the verbatim WS-vs-WS close-combat To Hit chart."""
+    assert melee_hit_target(weapon_skill, target_weapon_skill) == expected
+
+
+@pytest.mark.parametrize(
+    ("target", "expected"),
+    [
+        (2, 5 / 6),
+        (3, 4 / 6),
+        (4, 3 / 6),
+        (6, 1 / 6),
+        (7, 1 / 6),  # no confirm: only a natural 6, still 1/6
+        (9, 1 / 6),
+        (1, 5 / 6),  # natural 1 always fails
+    ],
+)
+def test_melee_hit_probability(target: int, expected: float) -> None:
+    """Natural 6 always hits, natural 1 always fails, no 7+ confirmation."""
+    assert melee_hit_probability(target) == pytest.approx(expected)
 
 
 @pytest.mark.parametrize(

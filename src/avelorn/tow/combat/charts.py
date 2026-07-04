@@ -45,6 +45,39 @@ def shooting_hit_target(ballistic_skill: int, modifier: int = 0) -> int:
     return target
 
 
+def melee_hit_target(weapon_skill: int, target_weapon_skill: int) -> int:
+    """Required To Hit roll in close combat, from the WS-vs-WS chart.
+
+    Source: the-combat-phase/roll-to-hit-combat. The printed chart
+    cross-references the attacker's Weapon Skill against the target's;
+    this reproduces every one of its cells (2+ to 5+):
+
+    - attacker's WS more than double the target's: 2+
+    - attacker's WS higher (but not more than double): 3+
+    - target's WS more than double the attacker's: 5+
+    - otherwise (WS within a factor of two, attacker not ahead): 4+
+
+    Returns:
+        The required roll (2..5); a natural 1 always fails and a natural
+        6 always hits (both applied at the roll, not the target).
+    """
+    if weapon_skill > 2 * target_weapon_skill:
+        target = 2
+    elif weapon_skill > target_weapon_skill:
+        target = 3
+    elif target_weapon_skill > 2 * weapon_skill:
+        target = 5
+    else:
+        target = 4
+    logger.debug(
+        "melee to-hit: WS %d vs WS %d -> %s",
+        weapon_skill,
+        target_weapon_skill,
+        _fmt_target(target),
+    )
+    return target
+
+
 def wound_target(strength: int, toughness: int) -> int | None:
     """Required To Wound roll from the Strength vs Toughness chart.
 
@@ -96,6 +129,21 @@ def hit_probability(target: int) -> float:
         confirm = CONFIRM_TARGETS.get(target)
         p = 0.0 if confirm is None else (1 / 6) * p_d6_at_least(confirm)
     logger.debug("hit %s -> p=%.3f", _fmt_target(target), p)
+    return p
+
+
+def melee_hit_probability(target: int) -> float:
+    """Probability that one close-combat attack hits, given its To Hit target.
+
+    A natural 1 always fails and a natural 6 always hits (regardless of
+    modifiers), and there is no 7+ confirmation: a target above 6 still
+    hits one time in six (the-combat-phase/roll-to-hit-combat).
+
+    Returns:
+        The hit probability, in [1/6, 5/6].
+    """
+    p = p_d6_at_least(max(target, 2)) if target <= 6 else 1 / 6
+    logger.debug("melee hit %s -> p=%.3f", _fmt_target(target), p)
     return p
 
 
