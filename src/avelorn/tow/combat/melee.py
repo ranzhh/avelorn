@@ -124,7 +124,7 @@ def strike(
     if wounds_per_model < 1:
         raise ValueError("wounds_per_model must be >= 1")
 
-    hit = melee_hit_target(weapon_skill, target_weapon_skill) - hit_modifier
+    hit = melee_hit_target(weapon_skill, target_weapon_skill, hit_modifier)
     wound = wound_target(strength, toughness)
     save = armour_save_target(armour_value, armour_piercing)
     p_unsaved, p_kill, hit = _per_attack(hit, wound, save, ward_target, transforms)
@@ -263,7 +263,7 @@ def _engage(
     if weapon.notes is not None:
         notes.append(f"weapon notes not factored ({weapon.name}): {weapon.notes}")
 
-    hit = melee_hit_target(weapon_skill, target_weapon_skill) - hit_modifier
+    hit = melee_hit_target(weapon_skill, target_weapon_skill, hit_modifier)
     wound = wound_target(strength, toughness)
     save = armour_save_target(armour_value, profile.armour_piercing)
     p_unsaved, p_kill, hit = _per_attack(hit, wound, save, None, transforms)
