@@ -6,7 +6,15 @@ import pytest
 
 from avelorn.core.dice import binomial_distribution, expected_value
 from avelorn.core.loading import load_yaml, load_yaml_dir
-from avelorn.tow.combat.melee import Combatant, combat_result, fight, strike, strike_unit
+from avelorn.tow.combat.melee import (
+    Charge,
+    ChargeArc,
+    Combatant,
+    combat_result,
+    fight,
+    strike,
+    strike_unit,
+)
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.unit import Characteristic, Unit
 from avelorn.tow.schema.weapon import Weapon
@@ -219,6 +227,54 @@ def test_fight_rejects_negative_fighters() -> None:
     spear = load_weapon("thrusting-spear")
     with pytest.raises(ValueError, match="fighter counts must be >= 0"):
         fight(Combatant(spearmen, -1, spear), Combatant(spearmen, 5, spear), armoury=ARMOURY)
+
+
+# --- Charge: the Combat-phase Initiative bonus that decides striking order ---
+
+
+@pytest.mark.parametrize(
+    ("inches", "arc", "expected"),
+    [
+        (0, ChargeArc.FRONT, 0),
+        (2, ChargeArc.FRONT, 2),  # +1 per full inch
+        (5, ChargeArc.FRONT, 3),  # capped at +3 into the front arc
+        (5, ChargeArc.FLANK, 4),  # +4 into the flank
+        (5, ChargeArc.REAR, 4),  # +4 into the rear
+        (-1, ChargeArc.FRONT, 0),  # never negative
+    ],
+)
+def test_charge_initiative_bonus_caps(inches: int, arc: ChargeArc, expected: int) -> None:
+    """+1 Initiative per full inch, capped by arc (+3 front, +4 flank/rear)."""
+    assert Charge(inches, arc).initiative_bonus() == expected
+
+
+def test_fight_charge_makes_the_charger_strike_first() -> None:
+    """A charge flips an equal-Initiative combat: the charger swings first.
+
+    Both units are I4, so a standing fight is simultaneous; a 3" charge lifts
+    the charger to I7, so it strikes first and its foe swings back reduced.
+    """
+    spearmen = load_unit("high-elf-realms", "elven-spearmen")
+    spear = load_weapon("thrusting-spear")
+    charger = Combatant(spearmen, 1, spear, charge=Charge(3, ChargeArc.FRONT))
+    defender = Combatant(spearmen, 1, spear)
+    result = fight(charger, defender, armoury=ARMOURY)
+    assert result.first_striker is charger
+    assert result.b_casualties[1] == pytest.approx(1 / 6)  # charger struck full-strength
+    assert result.a_casualties[1] == pytest.approx(5 / 36)  # defender struck back reduced
+
+
+def test_fight_charge_capped_below_the_foe_stays_simultaneous() -> None:
+    """A charge whose bonus does not exceed the foe's Initiative changes no order.
+
+    A 0" charge grants +0, so two I4 units still strike simultaneously — the
+    bonus must actually raise Initiative above the foe's to matter.
+    """
+    spearmen = load_unit("high-elf-realms", "elven-spearmen")
+    spear = load_weapon("thrusting-spear")
+    charger = Combatant(spearmen, 1, spear, charge=Charge(0, ChargeArc.FRONT))
+    result = fight(charger, Combatant(spearmen, 1, spear), armoury=ARMOURY)
+    assert result.first_striker is None
 
 
 # --- combat_result(): scoring the round on unsaved wounds inflicted ---

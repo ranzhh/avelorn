@@ -17,6 +17,7 @@ the other strikes back — is composed on top of this, later.
 import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from enum import StrEnum
 
 from avelorn.core.dice import expected_value
 from avelorn.tow.combat.armour import defender_armour
@@ -365,20 +366,61 @@ def strike_unit(
     )
 
 
+class ChargeArc(StrEnum):
+    """Which arc a charge struck.
+
+    The rulebook caps the charge Initiative bonus per arc (front vs flank
+    or rear), but flank and rear diverge elsewhere — the combat-result
+    bonuses each grants differ (#28) — so all three are distinguished here.
+    """
+
+    FRONT = "front"
+    FLANK = "flank"
+    REAR = "rear"
+
+
+@dataclass(frozen=True)
+class Charge:
+    """A charge move, feeding the charger's Combat-phase Initiative bonus.
+
+    A model that charged gains +1 Initiative per full inch it moved before
+    contact — capped at +3 into the enemy's front arc, +4 into its flank or
+    rear (the-combat-phase/charging-units). :func:`fight` caps the resulting
+    Initiative at 10, as the rule requires. The flank/rear *combat-result*
+    bonuses that same arc would grant are a separate, still-deferred
+    concern (#28); only the Initiative modifier is read here.
+    """
+
+    full_inches: int
+    arc: ChargeArc = ChargeArc.FRONT
+
+    def initiative_bonus(self) -> int:
+        """The Initiative modifier this charge grants its models.
+
+        Returns:
+            +1 per full inch moved, clamped to the arc's cap (+3 into the
+            front, +4 into the flank or rear) and never below zero.
+        """
+        cap = 3 if self.arc is ChargeArc.FRONT else 4
+        return min(max(self.full_inches, 0), cap)
+
+
 @dataclass(frozen=True)
 class Combatant:
     """One side entering a round of close combat.
 
     ``fighters`` models of ``unit`` fight with ``weapon`` (its Combat
     profile), taking an optional ``hit_modifier`` (printed sign
-    convention: a penalty is negative). Rank-and-file profile only, as
-    with :func:`strike_unit`.
+    convention: a penalty is negative). ``charge`` is the charge this side
+    made this turn, if any — its Initiative bonus decides who strikes
+    first. Rank-and-file profile only, as with :func:`strike_unit`.
     """
 
     unit: Unit
     fighters: int
     weapon: Weapon
     hit_modifier: int = 0
+    charge: Charge | None = None
 
 
 @dataclass(frozen=True)
@@ -411,6 +453,15 @@ class FightResult:
         return [sum(row[k] for row in self.losses) for k in range(columns)]
 
 
+def _effective_initiative(combatant: Combatant) -> int:
+    # A combatant's Initiative for striking order: its rank-and-file value
+    # plus any charge bonus, capped at 10 as the-combat-phase/charging-units
+    # requires. A profile with no printed Initiative counts as 0.
+    base = combatant.unit.profiles[0][Characteristic.INITIATIVE] or 0
+    bonus = combatant.charge.initiative_bonus() if combatant.charge is not None else 0
+    return min(base + bonus, 10)
+
+
 def fight(
     a: Combatant,
     b: Combatant,
@@ -427,16 +478,19 @@ def fight(
     (the-combat-phase: who-strikes-first, fight-on). Equal Initiative
     strikes simultaneously, with no such reduction (simultaneous-combat).
 
-    The two sides are symmetric; only Initiative orders them. Resolution
-    happens in strike order and the joint is oriented back to the ``(a, b)``
-    axes the caller passed.
+    A charging side's ``charge`` adds its Initiative bonus before the
+    comparison (the-combat-phase/charging-units); the modified Initiative
+    is capped at 10. The two sides are otherwise symmetric; only Initiative
+    orders them. Resolution happens in strike order and the joint is
+    oriented back to the ``(a, b)`` axes the caller passed.
 
-    Deferred and noted, not modelled here: charge/flank Initiative
-    modifiers and Always Strikes First/Last (order modifiers), the break
-    test, ranks and supporting attacks (#28), split-profile champions
-    (#46), and multi-unit combats. Every fighter is treated as in base
-    contact making its full Attacks. Score the round with
-    :func:`combat_result`.
+    Deferred and noted, not modelled here: Always Strikes First/Last and
+    the Initiative modifiers granted by special rules (Elven Reflexes) or
+    weapons (a Thrusting Spear's bonus when charged) — surfaced in the
+    result's notes; the break test, ranks and supporting attacks (#28),
+    split-profile champions (#46), and multi-unit combats. Every fighter is
+    treated as in base contact making its full Attacks. Score the round
+    with :func:`combat_result`.
 
     Returns:
         The joint distribution of casualties for the round, oriented so
@@ -456,8 +510,8 @@ def fight(
     b_strikes = _engage(
         b.unit, a.unit, b.weapon, armoury=armoury, rules=rules, hit_modifier=b.hit_modifier
     )
-    initiative_a = a.unit.profiles[0][Characteristic.INITIATIVE] or 0
-    initiative_b = b.unit.profiles[0][Characteristic.INITIATIVE] or 0
+    initiative_a = _effective_initiative(a)
+    initiative_b = _effective_initiative(b)
 
     if initiative_a == initiative_b:
         losses = _independent(a_strikes, a.fighters, b_strikes, b.fighters)
