@@ -6,11 +6,11 @@ import pytest
 from pydantic import TypeAdapter, ValidationError
 
 from avelorn.core.loading import load_yaml
+from avelorn.tow.data import DATA_DIR
 from avelorn.tow.schema.rule import Rule, RuleEffect
 
 _EFFECT = TypeAdapter(RuleEffect)
 
-DATA_DIR = Path(__file__).parents[3] / "data"
 RULE_FILES = sorted(DATA_DIR.glob("tow/rules/*.yaml"))
 
 

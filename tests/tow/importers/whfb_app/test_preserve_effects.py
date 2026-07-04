@@ -6,13 +6,12 @@ import pytest
 import yaml
 
 from avelorn.core.loading import load_yaml
-from avelorn.tow.data import TOWRepository
+from avelorn.tow.data import DATA_DIR, TOWRepository
 from avelorn.tow.importers.whfb_app.parse import WhfbParseError
 from avelorn.tow.importers.whfb_app.rules import with_existing_effects
 from avelorn.tow.importers.whfb_app.yamlout import rule_to_yaml
 from avelorn.tow.schema.rule import Rule
 
-DATA_DIR = Path(__file__).parents[4] / "data"
 RULE_FILES = sorted(DATA_DIR.glob("tow/rules/*.yaml"))
 REPO = TOWRepository()
 
