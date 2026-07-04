@@ -95,3 +95,22 @@ class Registry[T: Keyed](Mapping[str, T]):
             return self._by_name[name]
         except KeyError:
             raise UnknownNameError(self._kind, name) from None
+
+    def resolve(self, names: Iterable[str]) -> tuple[list[T], list[str]]:
+        """Resolve printed display names in bulk, tolerating misses.
+
+        The counterpart of :meth:`by_name` for callers to whom an unknown
+        name is data rather than an error: nothing raises, and the misses
+        come back for the caller to report.
+
+        Returns:
+            The resolved entries and the unknown names, each in input order.
+        """
+        found: list[T] = []
+        missing: list[str] = []
+        for name in names:
+            if (item := self._by_name.get(name)) is not None:
+                found.append(item)
+            else:
+                missing.append(name)
+        return found, missing

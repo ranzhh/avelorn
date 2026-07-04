@@ -9,7 +9,7 @@ save roll after the weapon's Armour Piercing. Phase-neutral: both
 shooting and close combat resolve the defender's save this way.
 """
 
-from avelorn.core.registry import Registry, UnknownNameError
+from avelorn.core.registry import Registry
 from avelorn.tow.combat.charts import BEST_ARMOUR_VALUE, UNARMOURED
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.unit import Unit
@@ -35,13 +35,9 @@ def defender_armour(defender: Unit, armoury: Registry[Armour]) -> tuple[int | No
     """
     suit = UNARMOURED
     improvement = 0
-    notes: list[str] = []
-    for item in defender.equipment:
-        try:
-            armour = armoury.by_name(item)
-        except UnknownNameError:
-            notes.append(f"equipment not factored: {item} ({defender.name})")
-            continue
+    worn, unknown = armoury.resolve(defender.equipment)
+    notes = [f"equipment not factored: {item} ({defender.name})" for item in unknown]
+    for armour in worn:
         if armour.armour_value is not None:
             suit = min(suit, armour.armour_value)
         elif armour.armour_value_improvement is not None:

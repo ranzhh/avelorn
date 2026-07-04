@@ -68,3 +68,11 @@ def test_empty_registry() -> None:
     assert len(registry) == 0
     with pytest.raises(UnknownNameError, match="no entry named"):
         registry.by_name("Shield")
+
+
+def test_resolve_partitions_found_and_missing_in_order() -> None:
+    """Bulk resolution tolerates misses: entries and unknowns, input order."""
+    registry = Registry([SHIELD, LIGHT], kind="armour")
+    found, missing = registry.resolve(["Light Armour", "Helmet", "Shield", "Barding"])
+    assert found == [LIGHT, SHIELD]
+    assert missing == ["Helmet", "Barding"]
