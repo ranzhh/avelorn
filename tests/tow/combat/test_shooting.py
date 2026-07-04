@@ -1,39 +1,16 @@
 """Shooting chain tests, golden values hand-computed from the rulebook charts."""
 
 from dataclasses import replace
-from pathlib import Path
 
 import pytest
 
-from avelorn.core.loading import load_yaml, load_yaml_dir
 from avelorn.tow.combat.attack import AttackProfile, Outcome, RollState, Transform
 from avelorn.tow.combat.shooting import shoot, shoot_unit
-from avelorn.tow.schema.armour import Armour
+from avelorn.tow.data import TOWRepository
 from avelorn.tow.schema.stage import Stage
-from avelorn.tow.schema.unit import Characteristic, Unit
-from avelorn.tow.schema.weapon import Weapon
+from avelorn.tow.schema.unit import Characteristic
 
-DATA_DIR = Path(__file__).parents[3] / "data"
-
-ARMOURY = {a.name: a for a in load_yaml_dir(DATA_DIR / "tow/armour", Armour)}
-
-
-def load_unit(army: str, slug: str) -> Unit:
-    """Load and validate a unit from the data/ tree.
-
-    Returns:
-        The parsed unit model.
-    """
-    return load_yaml(DATA_DIR / f"tow/armies/{army}/units/{slug}.yaml", Unit)
-
-
-def load_weapon(slug: str) -> Weapon:
-    """Load and validate a weapon from the data/ tree.
-
-    Returns:
-        The parsed weapon model.
-    """
-    return load_yaml(DATA_DIR / f"tow/weapons/{slug}.yaml", Weapon)
+REPO = TOWRepository()
 
 
 def test_shoot_golden_chain() -> None:
@@ -68,10 +45,10 @@ def test_shoot_unit_archers_vs_spearmen() -> None:
     Spearmen carry light armour (6+) and a shield (+1), so they save on
     5+; the longbow has no AP. Expected kills = 3 * 2/9.
     """
-    archers = load_unit("high-elf-realms", "elven-archers")
-    spearmen = load_unit("high-elf-realms", "elven-spearmen")
+    archers = REPO.units["elven-archers"]
+    spearmen = REPO.units["elven-spearmen"]
     result = shoot_unit(
-        archers, spearmen, shooters=3, weapon=load_weapon("longbow"), armoury=ARMOURY
+        archers, spearmen, shooters=3, weapon=REPO.weapons["longbow"], armoury=REPO.armoury
     )
     assert result.hit_target == 3  # BS 4
     assert result.save_target == 5  # 7 - light armour - shield
@@ -83,9 +60,9 @@ def test_shoot_unit_archers_vs_spearmen() -> None:
 
 def test_shoot_unit_without_armoury_degrades_visibly() -> None:
     """No armoury means no save — but every ignored item is reported."""
-    archers = load_unit("high-elf-realms", "elven-archers")
-    spearmen = load_unit("high-elf-realms", "elven-spearmen")
-    result = shoot_unit(archers, spearmen, shooters=3, weapon=load_weapon("longbow"))
+    archers = REPO.units["elven-archers"]
+    spearmen = REPO.units["elven-spearmen"]
+    result = shoot_unit(archers, spearmen, shooters=3, weapon=REPO.weapons["longbow"])
     assert result.save_target is None
     assert any("Light Armour" in note for note in result.notes)
     assert any("Shield" in note for note in result.notes)
@@ -97,14 +74,14 @@ def test_defender_size_does_not_affect_wounds() -> None:
     Regression guard: 3 archers shooting 20 spearmen and 3 archers
     shooting 30 spearmen must produce the identical wound distribution.
     """
-    archers = load_unit("high-elf-realms", "elven-archers")
-    spearmen = load_unit("high-elf-realms", "elven-spearmen")
-    longbow = load_weapon("longbow")
+    archers = REPO.units["elven-archers"]
+    spearmen = REPO.units["elven-spearmen"]
+    longbow = REPO.weapons["longbow"]
     twenty = spearmen.model_copy(update={"unit_size": {"min": 20, "max": 20}}, deep=True)
     thirty = spearmen.model_copy(update={"unit_size": {"min": 30, "max": 30}}, deep=True)
 
-    vs_twenty = shoot_unit(archers, twenty, shooters=3, weapon=longbow, armoury=ARMOURY)
-    vs_thirty = shoot_unit(archers, thirty, shooters=3, weapon=longbow, armoury=ARMOURY)
+    vs_twenty = shoot_unit(archers, twenty, shooters=3, weapon=longbow, armoury=REPO.armoury)
+    vs_thirty = shoot_unit(archers, thirty, shooters=3, weapon=longbow, armoury=REPO.armoury)
 
     assert vs_twenty.p_unsaved == vs_thirty.p_unsaved
     assert vs_twenty.distribution == vs_thirty.distribution
@@ -146,10 +123,15 @@ def test_shoot_unit_caps_casualties_but_not_wounds() -> None:
     30 archers into 5 spearmen: the wound distribution is unbounded over
     30 shots, but the spearmen unit can lose at most 5 models.
     """
-    archers = load_unit("high-elf-realms", "elven-archers")
-    spearmen = load_unit("high-elf-realms", "elven-spearmen")
+    archers = REPO.units["elven-archers"]
+    spearmen = REPO.units["elven-spearmen"]
     result = shoot_unit(
-        archers, spearmen, shooters=30, weapon=load_weapon("longbow"), armoury=ARMOURY, defenders=5
+        archers,
+        spearmen,
+        shooters=30,
+        weapon=REPO.weapons["longbow"],
+        armoury=REPO.armoury,
+        defenders=5,
     )
     assert result.target_models == 5
     assert len(result.distribution) == 31
@@ -187,16 +169,16 @@ def test_shoot_unit_folds_multi_wound_casualties_and_caps() -> None:
     wounds each), capped at 5, and fewer than the wounds inflicted. The
     old "carry-over not modelled" disclaimer is gone.
     """
-    archers = load_unit("high-elf-realms", "elven-archers")
-    spearmen = load_unit("high-elf-realms", "elven-spearmen")
+    archers = REPO.units["elven-archers"]
+    spearmen = REPO.units["elven-spearmen"]
     multi_wound = spearmen.model_copy(deep=True)
     multi_wound.profiles[0].characteristics[Characteristic.WOUNDS] = 3
     result = shoot_unit(
         archers,
         multi_wound,
         shooters=30,
-        weapon=load_weapon("longbow"),
-        armoury=ARMOURY,
+        weapon=REPO.weapons["longbow"],
+        armoury=REPO.armoury,
         defenders=5,
     )
     assert result.target_models == 5  # cap now applied
@@ -213,10 +195,10 @@ def test_shoot_unit_warbow_uses_wielders_strength() -> None:
     Guard's S3 vs T3: wound on 4+, same 2/9 per-shot chain as the longbow
     golden test (spearmen save on 5+, no AP).
     """
-    sea_guard = load_unit("high-elf-realms", "lothern-sea-guard")
-    spearmen = load_unit("high-elf-realms", "elven-spearmen")
+    sea_guard = REPO.units["lothern-sea-guard"]
+    spearmen = REPO.units["elven-spearmen"]
     result = shoot_unit(
-        sea_guard, spearmen, shooters=3, weapon=load_weapon("warbow"), armoury=ARMOURY
+        sea_guard, spearmen, shooters=3, weapon=REPO.weapons["warbow"], armoury=REPO.armoury
     )
     assert result.hit_target == 3  # BS 4
     assert result.wound_target == 4  # wielder's S3 vs T3
@@ -225,27 +207,27 @@ def test_shoot_unit_warbow_uses_wielders_strength() -> None:
 
 def test_shoot_unit_rejects_wielder_strength_weapon_without_strength() -> None:
     """A "Strength: S" weapon cannot resolve if the wielder has no S."""
-    spearmen = load_unit("high-elf-realms", "elven-spearmen")
+    spearmen = REPO.units["elven-spearmen"]
     strengthless = spearmen.model_copy(deep=True)
     strengthless.profiles[0].characteristics[Characteristic.STRENGTH] = None
     with pytest.raises(ValueError, match="wielder's Strength"):
-        shoot_unit(strengthless, spearmen, shooters=1, weapon=load_weapon("warbow"))
+        shoot_unit(strengthless, spearmen, shooters=1, weapon=REPO.weapons["warbow"])
 
 
 def test_shoot_unit_rejects_pure_melee_weapon() -> None:
     """A weapon with no missile profile cannot shoot."""
-    spearmen = load_unit("high-elf-realms", "elven-spearmen")
+    spearmen = REPO.units["elven-spearmen"]
     with pytest.raises(ValueError, match="missile profile"):
-        shoot_unit(spearmen, spearmen, shooters=1, weapon=load_weapon("hand-weapon"))
+        shoot_unit(spearmen, spearmen, shooters=1, weapon=REPO.weapons["hand-weapon"])
 
 
 def test_shoot_unit_rejects_missing_ballistic_skill() -> None:
     """A unit whose profile has BS "-" cannot shoot."""
-    spearmen = load_unit("high-elf-realms", "elven-spearmen")
+    spearmen = REPO.units["elven-spearmen"]
     crewless = spearmen.model_copy(deep=True)
     crewless.profiles[0].characteristics[Characteristic.BALLISTIC_SKILL] = None
     with pytest.raises(ValueError, match="Ballistic Skill"):
-        shoot_unit(crewless, spearmen, shooters=1, weapon=load_weapon("longbow"))
+        shoot_unit(crewless, spearmen, shooters=1, weapon=REPO.weapons["longbow"])
 
 
 def _killing_blow_double() -> Transform:
