@@ -43,7 +43,7 @@ from avelorn.tow.combat.charts import (
 from avelorn.tow.combat.rules import compile_rules
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
-from avelorn.tow.schema.unit import Characteristic, Unit
+from avelorn.tow.schema.unit import Characteristic, Complement, Unit
 from avelorn.tow.schema.weapon import Weapon
 
 logger = logging.getLogger(__name__)
@@ -434,6 +434,30 @@ class Contingent:
     unit: Unit
     models: int
     charge: Charge | None = None
+
+    @classmethod
+    def deploy(cls, complement: Complement, charge: Charge | None = None) -> "Contingent":
+        """Field a :class:`~avelorn.tow.schema.unit.Complement` as a contingent.
+
+        The complement's chosen loadout — its equipment and special rules
+        after its options' adds and removes — is baked into the datasheet the
+        engine reads, so the contingent fights with what was bought, not the
+        printed profile. The chosen ``size`` becomes ``models``.
+
+        Args:
+            complement: The list entry to field.
+            charge: The charge this contingent made this turn, if any.
+
+        Returns:
+            The fielded contingent.
+        """
+        fielded = complement.unit.model_copy(
+            update={
+                "equipment": complement.equipment,
+                "special_rules": complement.special_rules,
+            }
+        )
+        return cls(fielded, complement.size, charge)
 
 
 @dataclass(frozen=True)

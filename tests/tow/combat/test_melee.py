@@ -16,7 +16,7 @@ from avelorn.tow.combat.melee import (
     strike_unit,
 )
 from avelorn.tow.schema.armour import Armour
-from avelorn.tow.schema.unit import Characteristic, Unit
+from avelorn.tow.schema.unit import Characteristic, Complement, Unit
 from avelorn.tow.schema.weapon import Weapon
 
 DATA_DIR = Path(__file__).parents[3] / "data"
@@ -40,6 +40,31 @@ def load_weapon(slug: str) -> Weapon:
         The parsed weapon model.
     """
     return load_yaml(DATA_DIR / f"tow/weapons/{slug}.yaml", Weapon)
+
+
+def test_deploy_fields_complement_size_and_loadout() -> None:
+    """Contingent.deploy carries the complement's size and chosen loadout."""
+    unit = load_unit("high-elf-realms", "elven-spearmen")
+    mustered = Complement(unit=unit, size=18, options=["Shieldwall"])
+    charge = Charge(6, ChargeArc.FRONT)
+
+    contingent = Contingent.deploy(mustered, charge)
+
+    assert contingent.models == 18
+    assert contingent.charge is charge
+    # The chosen option's rule is what the engine reads, not the printed profile.
+    assert "Shieldwall" in contingent.unit.special_rules
+    assert "Shieldwall" not in unit.special_rules
+
+
+def test_deploy_without_options_matches_the_datasheet() -> None:
+    """With no options, the fielded loadout equals the printed datasheet."""
+    unit = load_unit("high-elf-realms", "elven-spearmen")
+
+    contingent = Contingent.deploy(Complement(unit=unit, size=10))
+
+    assert contingent.unit.equipment == unit.equipment
+    assert contingent.unit.special_rules == unit.special_rules
 
 
 def test_strike_golden_no_save() -> None:
