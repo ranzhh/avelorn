@@ -6,6 +6,7 @@ from avelorn.core.dice import binomial_distribution, expected_value
 from avelorn.tow.combat.contingent import Charge, ChargeArc, Contingent
 from avelorn.tow.combat.melee import (
     combat_result,
+    effective_initiative,
     fight,
     strike,
     strike_unit,
@@ -274,6 +275,32 @@ def test_fight_prior_losses_reject_a_non_distribution() -> None:
 
 
 # --- Charge: fed into fight() as the striking-order bonus ---
+
+
+@pytest.mark.parametrize(
+    ("inches", "arc", "expected"),
+    [
+        (0, ChargeArc.FRONT, 4),  # +0: no full inch moved
+        (2, ChargeArc.FRONT, 6),  # +1 per full inch
+        (5, ChargeArc.FRONT, 7),  # capped at +3 into the front arc
+        (5, ChargeArc.FLANK, 8),  # +4 into the flank
+        (5, ChargeArc.REAR, 8),  # +4 into the rear
+    ],
+)
+def test_effective_initiative_applies_the_charge_bonus(
+    inches: int, arc: ChargeArc, expected: int
+) -> None:
+    """+1 Initiative per full inch charged, capped by arc, on the I4 base."""
+    spearmen = REPO.units["elven-spearmen"]  # I4
+    charger = Contingent(spearmen, 5, charge=Charge(inches, arc))
+    assert effective_initiative(charger) == expected
+
+
+def test_effective_initiative_caps_at_ten() -> None:
+    """The charge bonus cannot lift Initiative past the printed cap of 10."""
+    fast = _higher_initiative(REPO.units["elven-spearmen"], 9)
+    charger = Contingent(fast, 5, charge=Charge(5, ChargeArc.FLANK))  # 9 + 4 -> 10
+    assert effective_initiative(charger) == 10
 
 
 def test_fight_charge_makes_the_charger_strike_first() -> None:

@@ -40,39 +40,49 @@ class ChargeArc(StrEnum):
 
     The rulebook caps the charge Initiative bonus per arc (front vs flank
     or rear), but flank and rear diverge elsewhere — the combat-result
-    bonuses each grants differ (#28) — so all three are distinguished here.
+    bonuses each grants differ (#28) — so all three are distinguished
+    here, and each arc carries its own printed numbers.
     """
 
     FRONT = "front"
     FLANK = "flank"
     REAR = "rear"
 
+    @property
+    def initiative_cap(self) -> int:
+        """The arc's cap on the charge Initiative bonus.
+
+        Returns:
+            +3 into the front arc, +4 into the flank or rear
+            (the-combat-phase/charging-units).
+        """
+        return 3 if self is ChargeArc.FRONT else 4
+
 
 @dataclass(frozen=True)
 class Charge:
-    """A charge move, feeding the charger's Combat-phase Initiative bonus.
+    """A charge move: how far it carried, into which arc. A pure record.
 
-    A model that charged gains +1 Initiative per full inch it moved before
-    contact — capped at +3 into the enemy's front arc, +4 into its flank or
-    rear (the-combat-phase/charging-units).
-    :func:`~avelorn.tow.combat.melee.fight` caps the resulting Initiative
-    at 10, as the rule requires. The flank/rear *combat-result* bonuses
-    that same arc would grant are a separate, still-deferred concern
-    (#28); only the Initiative modifier is read here.
+    Both facts are read by the rules the charge feeds — the Combat-phase
+    Initiative bonus computes in
+    :func:`~avelorn.tow.combat.melee.effective_initiative`, and the
+    flank/rear combat-result bonuses are a still-deferred concern (#28).
+    The arc has no default: which arc a charge struck is a fact of the
+    move, not a parameter to assume.
     """
 
     full_inches: int
-    arc: ChargeArc = ChargeArc.FRONT
+    arc: ChargeArc
 
-    def initiative_bonus(self) -> int:
-        """The Initiative modifier this charge grants its models.
+    def __post_init__(self) -> None:
+        """Reject a nonsensical move.
 
-        Returns:
-            +1 per full inch moved, clamped to the arc's cap (+3 into the
-            front, +4 into the flank or rear) and never below zero.
+        Raises:
+            ValueError: the charge distance is negative — a programming
+                error, not a zero bonus.
         """
-        cap = 3 if self.arc is ChargeArc.FRONT else 4
-        return min(max(self.full_inches, 0), cap)
+        if self.full_inches < 0:
+            raise ValueError(f"a charge cannot move a negative distance ({self.full_inches})")
 
 
 @dataclass(frozen=True)
