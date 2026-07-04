@@ -17,6 +17,8 @@ the other strikes back — is composed on top of this, later.
 import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from enum import StrEnum
+from math import isclose
 
 from avelorn.core.dice import expected_value
 from avelorn.tow.combat.armour import defender_armour
@@ -365,20 +367,73 @@ def strike_unit(
     )
 
 
-@dataclass(frozen=True)
-class Combatant:
-    """One side entering a round of close combat.
+class ChargeArc(StrEnum):
+    """Which arc a charge struck.
 
-    ``fighters`` models of ``unit`` fight with ``weapon`` (its Combat
-    profile), taking an optional ``hit_modifier`` (printed sign
-    convention: a penalty is negative). Rank-and-file profile only, as
-    with :func:`strike_unit`.
+    The rulebook caps the charge Initiative bonus per arc (front vs flank
+    or rear), but flank and rear diverge elsewhere — the combat-result
+    bonuses each grants differ (#28) — so all three are distinguished here.
+    """
+
+    FRONT = "front"
+    FLANK = "flank"
+    REAR = "rear"
+
+
+@dataclass(frozen=True)
+class Charge:
+    """A charge move, feeding the charger's Combat-phase Initiative bonus.
+
+    A model that charged gains +1 Initiative per full inch it moved before
+    contact — capped at +3 into the enemy's front arc, +4 into its flank or
+    rear (the-combat-phase/charging-units). :func:`fight` caps the resulting
+    Initiative at 10, as the rule requires. The flank/rear *combat-result*
+    bonuses that same arc would grant are a separate, still-deferred
+    concern (#28); only the Initiative modifier is read here.
+    """
+
+    full_inches: int
+    arc: ChargeArc = ChargeArc.FRONT
+
+    def initiative_bonus(self) -> int:
+        """The Initiative modifier this charge grants its models.
+
+        Returns:
+            +1 per full inch moved, clamped to the arc's cap (+3 into the
+            front, +4 into the flank or rear) and never below zero.
+        """
+        cap = 3 if self.arc is ChargeArc.FRONT else 4
+        return min(max(self.full_inches, 0), cap)
+
+
+@dataclass(frozen=True)
+class Contingent:
+    """A unit as fielded: its datasheet and the models on the table.
+
+    The datasheet (:class:`~avelorn.tow.schema.unit.Unit`) is a template —
+    it carries the *allowed* size, not how many models stand on the table —
+    so ``models`` supplies the fielded count. ``charge`` is the charge this
+    contingent made this turn, if any; its Initiative bonus decides who
+    strikes first in :func:`fight`, and a contingent that did not charge
+    (any shooter among them) leaves it None.
+
+    The weapon in use is *not* carried here: it is a per-action choice, so
+    the same contingent shoots with its bow one moment and fights the
+    ensuing melee with a hand weapon the next. Each action takes the chosen
+    weapon (:func:`fight`, :func:`~avelorn.tow.combat.charge.stand_and_shoot`).
+
+    Today a contingent is a single homogeneous body — one profile (the
+    rank-and-file, ``unit.profiles[0]``), as with :func:`strike_unit`. A real
+    contingent can be heterogeneous: rank and file plus a champion, plus an
+    embedded character, each its own profile, Attacks and weapon. That is
+    deliberately not modelled yet (#46); when it is, this grows a notion of
+    *parts* and the single-body fields become the one-part case. Callers read
+    only ``profiles[0]``, so the assumption stays localized to that migration.
     """
 
     unit: Unit
-    fighters: int
-    weapon: Weapon
-    hit_modifier: int = 0
+    models: int
+    charge: Charge | None = None
 
 
 @dataclass(frozen=True)
@@ -391,12 +446,12 @@ class FightResult:
     back with fewer models — so the joint, not the two marginals, is what a
     combat-result margin must be computed from. ``a_casualties`` and
     ``b_casualties`` are its marginals. ``first_striker`` is the
-    :class:`Combatant` that struck first by Initiative, or None when equal
+    :class:`Contingent` that struck first by Initiative, or None when equal
     Initiative made the blows simultaneous.
     """
 
     losses: list[list[float]]  # losses[a_lost][b_lost] = joint probability
-    first_striker: Combatant | None
+    first_striker: Contingent | None
     notes: tuple[str, ...] = ()
 
     @property
@@ -411,14 +466,47 @@ class FightResult:
         return [sum(row[k] for row in self.losses) for k in range(columns)]
 
 
+def _effective_initiative(contingent: Contingent) -> int:
+    # A contingent's Initiative for striking order: its rank-and-file value
+    # plus any charge bonus, capped at 10 as the-combat-phase/charging-units
+    # requires. A profile with no printed Initiative counts as 0.
+    base = contingent.unit.profiles[0][Characteristic.INITIATIVE] or 0
+    bonus = contingent.charge.initiative_bonus() if contingent.charge is not None else 0
+    return min(base + bonus, 10)
+
+
+def _prior_loss_pmf(pmf: Sequence[float] | None, models: int, name: str) -> Sequence[float]:
+    # A side's pre-combat loss distribution: pmf[k] = P(k models lost before
+    # any blows are struck. None means none were lost — certainty at zero. A
+    # side cannot lose more models than it fields, and the mass must be a
+    # distribution.
+    if pmf is None:
+        return (1.0,)
+    if len(pmf) > models + 1:
+        raise ValueError(f"{name} covers more losses ({len(pmf) - 1}) than models ({models})")
+    if any(p < 0 for p in pmf):
+        raise ValueError(f"{name} has a negative probability")
+    if not isclose(sum(pmf), 1.0):
+        raise ValueError(f"{name} must sum to 1, got {sum(pmf)}")
+    return pmf
+
+
 def fight(
-    a: Combatant,
-    b: Combatant,
+    a: Contingent,
+    b: Contingent,
     *,
+    a_weapon: Weapon,
+    b_weapon: Weapon,
+    a_prior_losses: Sequence[float] | None = None,
+    b_prior_losses: Sequence[float] | None = None,
     armoury: Mapping[str, Armour] | None = None,
     rules: Mapping[str, Rule] | None = None,
 ) -> FightResult:
     """Resolve one round of close combat between two single-profile units.
+
+    ``a_weapon`` and ``b_weapon`` are the Combat weapons each side fights
+    with — a per-side choice, since a unit may carry several (a hand weapon
+    and a great weapon) and picks one to swing.
 
     Striking order is by rank-and-file Initiative (highest first): the
     higher-Initiative side strikes at full strength, its casualties are
@@ -427,53 +515,63 @@ def fight(
     (the-combat-phase: who-strikes-first, fight-on). Equal Initiative
     strikes simultaneously, with no such reduction (simultaneous-combat).
 
-    The two sides are symmetric; only Initiative orders them. Resolution
-    happens in strike order and the joint is oriented back to the ``(a, b)``
-    axes the caller passed.
+    A charging side's ``charge`` adds its Initiative bonus before the
+    comparison (the-combat-phase/charging-units); the modified Initiative
+    is capped at 10. The two sides are otherwise symmetric; only Initiative
+    orders them. Resolution happens in strike order and the joint is
+    oriented back to the ``(a, b)`` axes the caller passed.
 
-    Deferred and noted, not modelled here: charge/flank Initiative
-    modifiers and Always Strikes First/Last (order modifiers), the break
-    test, ranks and supporting attacks (#28), split-profile champions
-    (#46), and multi-unit combats. Every fighter is treated as in base
-    contact making its full Attacks. Score the round with
-    :func:`combat_result`.
+    ``a_prior_losses`` / ``b_prior_losses`` let a side enter already thinned:
+    a pmf whose index ``k`` is P(that side lost ``k`` models *before* any
+    blows — a Stand & Shoot volley on the chargers, say). The round is
+    resolved at each surviving strength and mixed over these two
+    (independent) distributions, exactly; omitted, a side enters at full
+    ``models``. The returned ``losses`` count only this round's melee
+    casualties, so pre-combat losses never inflate the combat result.
+
+    Deferred and noted, not modelled here: Always Strikes First/Last and
+    the Initiative modifiers granted by special rules (Elven Reflexes) or
+    weapons (a Thrusting Spear's bonus when charged) — surfaced in the
+    result's notes; the break test, ranks and supporting attacks (#28),
+    split-profile champions (#46), and multi-unit combats. Every fighter is
+    treated as in base contact making its full Attacks. Score the round
+    with :func:`combat_result`.
 
     Returns:
         The joint distribution of casualties for the round, oriented so
-        ``losses[a_lost][b_lost]`` matches the combatants as passed.
+        ``losses[a_lost][b_lost]`` matches the contingents as passed.
 
     Raises:
-        ValueError: either fighter count is negative (plus the matchup
-            errors raised by the underlying resolution).
+        ValueError: either model count is negative, or a prior-loss pmf
+            covers more losses than the side has models, carries a negative
+            probability, or does not sum to 1 (plus the matchup errors
+            raised by the underlying resolution).
     """
-    if a.fighters < 0 or b.fighters < 0:
-        raise ValueError("fighter counts must be >= 0")
+    if a.models < 0 or b.models < 0:
+        raise ValueError("model counts must be >= 0")
+    a_lost_before = _prior_loss_pmf(a_prior_losses, a.models, "a_prior_losses")
+    b_lost_before = _prior_loss_pmf(b_prior_losses, b.models, "b_prior_losses")
     armoury = armoury or {}
     rules = rules or {}
-    a_strikes = _engage(
-        a.unit, b.unit, a.weapon, armoury=armoury, rules=rules, hit_modifier=a.hit_modifier
-    )
-    b_strikes = _engage(
-        b.unit, a.unit, b.weapon, armoury=armoury, rules=rules, hit_modifier=b.hit_modifier
-    )
-    initiative_a = a.unit.profiles[0][Characteristic.INITIATIVE] or 0
-    initiative_b = b.unit.profiles[0][Characteristic.INITIATIVE] or 0
+    a_strikes = _engage(a.unit, b.unit, a_weapon, armoury=armoury, rules=rules, hit_modifier=0)
+    b_strikes = _engage(b.unit, a.unit, b_weapon, armoury=armoury, rules=rules, hit_modifier=0)
+    a_first = _strikes_first(_effective_initiative(a), _effective_initiative(b))
 
-    if initiative_a == initiative_b:
-        losses = _independent(a_strikes, a.fighters, b_strikes, b.fighters)
-        first_striker: Combatant | None = None
-    else:
-        # The higher-Initiative side strikes first; resolve in that order,
-        # then orient the joint back to the (a, b) axes.
-        a_first = initiative_a > initiative_b
-        striker, target = (a, b) if a_first else (b, a)
-        striker_strikes, target_strikes = (
-            (a_strikes, b_strikes) if a_first else (b_strikes, a_strikes)
-        )
-        joint = _sequenced(striker_strikes, striker.fighters, target_strikes, target.fighters)
-        losses = joint if a_first else _transpose(joint)
-        first_striker = striker
+    # Each side may enter already thinned by pre-combat casualties (a Stand &
+    # Shoot volley, say); the two are independent, so the round is the
+    # fixed-count joint mixed over the product of the loss distributions.
+    losses = [[0.0] * (b.models + 1) for _ in range(a.models + 1)]
+    for pre_a, p_a in enumerate(a_lost_before):
+        for pre_b, p_b in enumerate(b_lost_before):
+            weight = p_a * p_b
+            if weight == 0.0:
+                continue
+            joint = _round_joint(a_strikes, a.models - pre_a, b_strikes, b.models - pre_b, a_first)
+            for a_lost, row in enumerate(joint):
+                for b_lost, mass in enumerate(row):
+                    losses[a_lost][b_lost] += weight * mass
 
+    first_striker = None if a_first is None else (a if a_first else b)
     notes = tuple(dict.fromkeys([*a_strikes.notes, *b_strikes.notes]))
     logger.debug(
         "fight: %s vs %s, first=%s",
@@ -533,6 +631,32 @@ def _sequenced(
 def _transpose(joint: list[list[float]]) -> list[list[float]]:
     # Swap axes: [second_lost][first_lost] -> [first_lost][second_lost].
     return [list(row) for row in zip(*joint, strict=True)]
+
+
+def _strikes_first(initiative_a: int, initiative_b: int) -> bool | None:
+    # Who strikes first by Initiative: True if A does, False if B, None when
+    # equal Initiative makes the blows simultaneous.
+    if initiative_a == initiative_b:
+        return None
+    return initiative_a > initiative_b
+
+
+def _round_joint(
+    a_strikes: _Engagement,
+    a_models: int,
+    b_strikes: _Engagement,
+    b_models: int,
+    a_first: bool | None,
+) -> list[list[float]]:
+    # One round's joint casualty distribution at fixed model counts, oriented
+    # to (a, b). Equal Initiative (a_first is None) strikes simultaneously —
+    # independent losses; otherwise the first striker thins the other before
+    # it swings back, and the sequenced joint is oriented back to (a, b).
+    if a_first is None:
+        return _independent(a_strikes, a_models, b_strikes, b_models)
+    if a_first:
+        return _sequenced(a_strikes, a_models, b_strikes, b_models)
+    return _transpose(_sequenced(b_strikes, b_models, a_strikes, a_models))
 
 
 _UNMODELLED_COMBAT_RESULT: tuple[str, ...] = (

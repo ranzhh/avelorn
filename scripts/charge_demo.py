@@ -1,0 +1,168 @@
+"""End-to-end charge demo: Elven Spearmen charge Elven Archers.
+
+The full sequence, resolved exactly (no dice rolled):
+
+1. The Spearmen declare a charge over ``charge_inches``.
+2. The Archers react with Stand & Shoot, loosing their bows at the chargers
+   as they close (-1 To Hit, no long-range penalty).
+3. The survivors fight the combat round — the Spearmen striking first for
+   their charge Initiative bonus, then the Archers striking back with a hand
+   weapon. The melee is resolved over the whole Stand & Shoot casualty
+   distribution, so fewer surviving chargers means fewer attacks.
+
+Prints the Stand & Shoot toll, the striking order, each side's melee
+casualty distribution, the combat result, both Break tests, exact
+distributional queries, and everything the math does not yet factor.
+
+Usage: uv run python scripts/charge_demo.py [spearmen] [archers] [charge_inches]
+
+Pass -v/--verbose to also emit the DEBUG math trace to stderr.
+"""
+
+import argparse
+import logging
+from pathlib import Path
+
+from avelorn.core.dice import expected_value
+from avelorn.core.loading import load_yaml, load_yaml_dir
+from avelorn.core.logging import configure_logging
+from avelorn.tow.combat.charge import stand_and_shoot
+from avelorn.tow.combat.melee import Charge, ChargeArc, Contingent, combat_result, fight
+from avelorn.tow.combat.morale import break_test
+from avelorn.tow.combat.query import Comparator, Predicate, evaluate, fight_distributions
+from avelorn.tow.schema.armour import Armour
+from avelorn.tow.schema.rule import Rule
+from avelorn.tow.schema.unit import Characteristic, Unit
+from avelorn.tow.schema.weapon import Weapon
+
+_DATA_DIR = Path(__file__).parents[1] / "data"
+
+
+def _load_unit(slug: str) -> Unit:
+    return load_yaml(_DATA_DIR / f"tow/armies/high-elf-realms/units/{slug}.yaml", Unit)
+
+
+def _print_casualties(label: str, casualties: list[float], models: int) -> None:
+    print(f"  {label} casualties:")
+    print(f"    expected: {expected_value(casualties):.2f} of {models}")
+    print("    killed  probability")
+    for killed, p in enumerate(casualties):
+        bar = "#" * round(p * 40)
+        print(f"    {killed:>6}  {p:>10.3f}  {bar}")
+
+
+def main() -> None:
+    """Parse argv, resolve the charge sequence, and print the outcome."""
+    parser = argparse.ArgumentParser(description="Charge demo: Spearmen charge Archers.")
+    parser.add_argument("spearmen", nargs="?", type=int, default=10, help="charging Spearmen")
+    parser.add_argument("archers", nargs="?", type=int, default=10, help="defending Archers")
+    parser.add_argument(
+        "charge_inches", nargs="?", type=int, default=8, help="inches the Spearmen charged"
+    )
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="emit the DEBUG math trace to stderr"
+    )
+    args = parser.parse_args()
+    if args.verbose:
+        configure_logging(logging.DEBUG)
+
+    weapons = {w.name: w for w in load_yaml_dir(_DATA_DIR / "tow/weapons", Weapon)}
+    armoury = {a.name: a for a in load_yaml_dir(_DATA_DIR / "tow/armour", Armour)}
+    rules = {r.name: r for r in load_yaml_dir(_DATA_DIR / "tow/rules", Rule)}
+    spearmen_unit = _load_unit("elven-spearmen")
+    archers_unit = _load_unit("elven-archers")
+    # The scene fixes each unit's weapon for the phase it acts in: the
+    # Archers shoot the Longbow, then defend with a Hand Weapon; the Spearmen
+    # charge home with the Thrusting Spear.
+    spear = weapons["Thrusting Spear"]
+    hand_weapon = weapons["Hand Weapon"]
+    longbow = weapons["Longbow"]
+
+    spearmen = Contingent(spearmen_unit, args.spearmen, charge=Charge(args.charge_inches))
+    archers = Contingent(archers_unit, args.archers)
+
+    reaction = stand_and_shoot(archers, spearmen, longbow, armoury=armoury, rules=rules)
+    melee = fight(
+        spearmen,
+        archers,
+        a_weapon=spear,
+        b_weapon=hand_weapon,
+        a_prior_losses=reaction.casualties,
+        armoury=armoury,
+        rules=rules,
+    )
+    scored = combat_result(melee)
+    breaks = break_test(scored, spearmen_unit, archers_unit)
+
+    move = spearmen_unit.profiles[0][Characteristic.MOVEMENT]
+    init = spearmen_unit.profiles[0][Characteristic.INITIATIVE] or 0
+    bonus = Charge(args.charge_inches, ChargeArc.FRONT).initiative_bonus()
+    inches = args.charge_inches
+    print(f'{args.spearmen} Elven Spearmen charge {args.archers} Elven Archers ({inches}")')
+    if move is None or inches >= move:
+        print("  charge reaction: the Archers Stand & Shoot (bow), then Hold")
+    else:
+        print(
+            f"  charge reaction: gap < Movement {move}, no Stand & Shoot possible; assumed anyway"
+        )
+    print()
+
+    print("  Stand & Shoot (Archers -> charging Spearmen, -1 To Hit, no long range):")
+    _print_casualties("Spearmen", reaction.casualties, args.spearmen)
+    print()
+
+    charged_init = min(init + bonus, 10)
+    if melee.first_striker is spearmen:
+        order = f"Spearmen first (I{init} +{bonus} charge = I{charged_init} vs Archers I{init})"
+    else:
+        order = f'simultaneous (both I{init}; the {inches}" charge adds +{bonus})'
+    print(f"  striking order: {order}")
+    print("  (assumes every fighter is in base contact at full Attacks;")
+    print("   fighting ranks & supporting attacks not yet modelled — #28)")
+    print()
+
+    _print_casualties("Spearmen (A, melee)", melee.a_casualties, args.spearmen)
+    print()
+    _print_casualties("Archers (B, melee)", melee.b_casualties, args.archers)
+    print()
+
+    # Expectations add whatever the correlation, so the total the chargers
+    # lose across the sequence is the Stand & Shoot mean plus the melee mean.
+    shot = expected_value(reaction.casualties)
+    slain = expected_value(melee.a_casualties)
+    print(f"  expected Spearmen lost over the whole charge: {shot + slain:.2f} of {args.spearmen}")
+    print(f"  (Stand & Shoot {shot:.2f} + melee {slain:.2f})")
+    print()
+
+    print("  combat result (melee only):")
+    print(f"  - P(Spearmen win): {scored.p_a_wins:.3f}")
+    print(f"  - P(draw):         {scored.p_draw:.3f}")
+    print(f"  - P(Archers win):  {scored.p_b_wins:.3f}")
+    print()
+
+    print("  break test (only the loser tests):")
+    for label, side in (("Spearmen", breaks.a), ("Archers", breaks.b)):
+        lost = side.p_gives_ground + side.p_falls_back + side.p_breaks
+        print(
+            f"  - {label} (loses {lost:.3f}): gives ground {side.p_gives_ground:.3f}, "
+            f"falls back {side.p_falls_back:.3f}, breaks {side.p_breaks:.3f}"
+        )
+    print(f"  - draw, neither tests: {breaks.p_draw:.3f}")
+    print()
+
+    dists = fight_distributions(melee)
+    print("  exact queries:")
+    archers_bloodied = evaluate(dists["b_casualties"], Predicate(Comparator.AT_LEAST, 1))
+    spearmen_clean = evaluate(dists["a_survivors"], Predicate(Comparator.EXACTLY, args.spearmen))
+    print(f"  - P(Archers lose at least one in the melee): {archers_bloodied:.3f}")
+    print(f"  - P(no Spearman falls in the melee):         {spearmen_clean:.3f}")
+
+    if melee.notes:
+        print()
+        print("  not factored into the math:")
+        for note in melee.notes:
+            print(f"  - {note}")
+
+
+if __name__ == "__main__":
+    main()
