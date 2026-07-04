@@ -7,7 +7,7 @@ import pytest
 from avelorn.tow.combat.attack import AttackProfile, Outcome, RollState, Transform
 from avelorn.tow.combat.shooting import _engagement_conditions, shoot, shoot_unit
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.schema.rule import EffectCondition
+from avelorn.tow.schema.rule import Condition
 from avelorn.tow.schema.stage import Stage
 from avelorn.tow.schema.unit import Characteristic
 
@@ -288,15 +288,14 @@ def test_shoot_instant_kills_match_the_spike_distribution() -> None:
     assert sum(result.distribution) == pytest.approx(1.0)
 
 
-def test_engagement_conditions_cover_every_effect_condition_field() -> None:
-    """The shooting producer answers every EffectCondition field.
+def test_engagement_conditions_cover_every_condition() -> None:
+    """The shooting producer answers every Condition member.
 
-    Drift guard: the schema validator and the rules compiler introspect
-    EffectCondition's fields, so a field added there must be supplied
-    here too (if only as unknown) — never silently absent from
-    compilation.
+    Drift guard behind the producer's exhaustive match: a member added
+    to the vocabulary must be supplied here (if only as unknown) —
+    never silently absent from compilation.
     """
     profile = REPO.weapons["longbow"].missile_profile
     assert profile is not None
     conditions = _engagement_conditions(profile, None, False)
-    assert set(conditions) == set(EffectCondition.model_fields)
+    assert set(conditions) == set(Condition)

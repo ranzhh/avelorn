@@ -19,35 +19,29 @@ stays unmodelled (and is reported by the engine) rather than
 approximated.
 """
 
-from typing import Annotated, Literal, Self
+from enum import StrEnum
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 from avelorn.tow.schema.psychology import PanicCause
 from avelorn.tow.schema.stage import Stage
 
 
-class EffectCondition(BaseModel):
-    """The situation an effect requires — the "when" over the engagement.
+class Condition(StrEnum):
+    """The engagement facts an effect can be gated on — the "when" vocabulary.
 
-    Set fields are conjunctive: every one must match the engagement
-    context for the effect to apply. A context that cannot answer a set
-    field (unknown) leaves the whole rule unfactored and reported; a
-    context that answers it False simply means the rule does not apply
-    (no note — a unit that did not move is correctly unpenalised).
+    The single declaration, like :class:`~avelorn.tow.schema.stage.Stage`
+    for game moments: an effect's ``when`` maps members to the value it
+    requires, and the engine supplies a fact per member — both checked
+    against this enum, so a name outside it fails at data load and a
+    member the engine forgets to answer fails its drift guard. It is
+    append-only: a member joins when an imported rule's condition needs
+    it and the engagement context can carry the fact.
     """
 
-    model_config = ConfigDict(extra="forbid")
-
-    moved: bool | None = None  # "moved for any reason during this turn"
-    at_long_range: bool | None = None  # "further away than half the weapon's maximum range"
-
-    @model_validator(mode="after")
-    def _asks_something(self) -> Self:
-        # Field-agnostic: new condition fields participate automatically.
-        if all(getattr(self, name) is None for name in type(self).model_fields):
-            raise ValueError("a condition must set at least one field")
-        return self
+    MOVED = "moved"  # "moved for any reason during this turn"
+    AT_LONG_RANGE = "at_long_range"  # "further away than half the weapon's maximum range"
 
 
 class ArmourPiercingEffect(BaseModel):
@@ -76,8 +70,13 @@ class ToHitEffect(BaseModel):
 
     ``amount`` follows the printed sign convention: penalties are
     negative ("-1 To Hit modifier" is ``amount: -1``). ``when`` gates
-    the effect on the engagement (long range, having moved); without it
-    the modifier applies to every attack.
+    the effect on the engagement: required facts by
+    :class:`Condition`, conjunctive — every one must match for the
+    effect to apply. A fact the context cannot answer (unknown) leaves
+    the whole rule unfactored and reported; one answered False simply
+    means the rule does not apply (no note — a unit that did not move
+    is correctly unpenalised). Without ``when`` the modifier applies to
+    every attack.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -85,7 +84,7 @@ class ToHitEffect(BaseModel):
     kind: Literal["to-hit"]
     stage: Stage
     amount: int
-    when: EffectCondition | None = None
+    when: Annotated[dict[Condition, bool], Field(min_length=1)] | None = None
 
 
 class RerollEffect(BaseModel):

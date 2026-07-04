@@ -200,21 +200,20 @@ def test_move_in_or_stay_out_is_a_wash() -> None:
     assert stay.casualties == pytest.approx(move_in.casualties)
 
 
-def test_every_condition_field_is_consulted() -> None:
-    """Each EffectCondition field, when set, must gate on the context.
+def test_every_condition_is_consulted() -> None:
+    """Each Condition, when asked, must gate on the engagement facts.
 
-    Drift guard: a condition field added to the schema but absent from
-    the engagement facts must make the rule unevaluatable (None), never
-    be silently ignored. Iterates the model's fields so new ones are
-    covered automatically.
+    Drift guard: a condition asked for but absent from the facts must
+    make the rule unevaluatable (None), never be silently ignored.
+    Iterates the vocabulary so new members are covered automatically.
     """
-    from avelorn.tow.schema.rule import EffectCondition
+    from avelorn.tow.schema.rule import Condition
 
-    for name in EffectCondition.model_fields:
-        when = EffectCondition.model_validate({name: True})
-        assert _condition_applies(when, {}) is None, name
-        assert _condition_applies(when, {name: True}) is True, name
-        assert _condition_applies(when, {name: False}) is False, name
+    for condition in Condition:
+        when = {condition: True}
+        assert _condition_applies(when, {}) is None, condition
+        assert _condition_applies(when, {condition: True}) is True, condition
+        assert _condition_applies(when, {condition: False}) is False, condition
 
 
 def test_conjunctive_condition_with_known_false_member_does_not_apply() -> None:
@@ -224,9 +223,10 @@ def test_conjunctive_condition_with_known_false_member_does_not_apply() -> None:
     unknown distance definitely does not apply — silent no-op, not
     "cannot be evaluated".
     """
-    from avelorn.tow.schema.rule import EffectCondition
+    from avelorn.tow.schema.rule import Condition
 
-    both = EffectCondition(moved=True, at_long_range=True)
-    assert _condition_applies(both, {"moved": False, "at_long_range": None}) is False
-    assert _condition_applies(both, {"moved": True, "at_long_range": None}) is None
-    assert _condition_applies(both, {"moved": True, "at_long_range": True}) is True
+    moved, ranged = Condition.MOVED, Condition.AT_LONG_RANGE
+    both = {moved: True, ranged: True}
+    assert _condition_applies(both, {moved: False, ranged: None}) is False
+    assert _condition_applies(both, {moved: True, ranged: None}) is None
+    assert _condition_applies(both, {moved: True, ranged: True}) is True

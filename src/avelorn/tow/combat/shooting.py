@@ -12,6 +12,7 @@ rather than silently ignored.
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import assert_never
 
 from avelorn.core.dice import expected_value
 from avelorn.core.registry import Registry
@@ -36,7 +37,7 @@ from avelorn.tow.combat.charts import (
 from avelorn.tow.combat.context import EngagementContext
 from avelorn.tow.combat.rules import compile_rules
 from avelorn.tow.schema.armour import Armour
-from avelorn.tow.schema.rule import Rule
+from avelorn.tow.schema.rule import Condition, Rule
 from avelorn.tow.schema.unit import Characteristic, Unit
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile
 
@@ -205,15 +206,21 @@ def _at_long_range(profile: WeaponProfile, context: EngagementContext | None) ->
 
 def _engagement_conditions(
     profile: WeaponProfile, context: EngagementContext | None, force_short_range: bool
-) -> dict[str, bool | None]:
-    # The engagement facts, by EffectCondition field name; None = unknown.
-    # A shot forced short (a Stand & Shoot reaction) is never at long range.
-    # A drift-guard test asserts the keys cover every EffectCondition field,
-    # so a new condition cannot be compiled against yet silently unanswered.
-    return {
-        "moved": context.moved if context is not None else None,
-        "at_long_range": False if force_short_range else _at_long_range(profile, context),
-    }
+) -> dict[Condition, bool | None]:
+    # One fact per Condition member; None = unknown. The match is
+    # exhaustive (assert_never), so a new member fails the type check —
+    # and a drift-guard test — until it is answered here. A shot forced
+    # short (a Stand & Shoot reaction) is never at long range.
+    def fact(condition: Condition) -> bool | None:
+        match condition:
+            case Condition.MOVED:
+                return context.moved if context is not None else None
+            case Condition.AT_LONG_RANGE:
+                return False if force_short_range else _at_long_range(profile, context)
+            case unanswered:
+                assert_never(unanswered)
+
+    return {condition: fact(condition) for condition in Condition}
 
 
 def shoot_unit(
