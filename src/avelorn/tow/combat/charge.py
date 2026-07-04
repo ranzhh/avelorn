@@ -8,8 +8,8 @@ Combat-phase Initiative bonus lives on :class:`~avelorn.tow.combat.melee.Charge`
 """
 
 import logging
-from collections.abc import Mapping
 
+from avelorn.core.registry import Registry
 from avelorn.tow.combat.context import EngagementContext
 from avelorn.tow.combat.melee import Contingent
 from avelorn.tow.combat.shooting import ShootingResult, shoot_unit
@@ -18,6 +18,11 @@ from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.weapon import Weapon
 
 logger = logging.getLogger(__name__)
+
+# Empty registries as defaults: resolution against them misses everything,
+# so an omitted registry degrades to notes exactly like unknown entries do.
+_NO_ARMOURY: Registry[Armour] = Registry(kind="armour")
+_NO_RULES: Registry[Rule] = Registry(kind="rule")
 
 # Models making a Stand & Shoot reaction suffer -1 To Hit and no Firing at
 # Long Range modifier (the-shooting-phase/standing-and-shooting).
@@ -29,8 +34,8 @@ def stand_and_shoot(
     target: Contingent,
     weapon: Weapon,
     *,
-    armoury: Mapping[str, Armour] | None = None,
-    rules: Mapping[str, Rule] | None = None,
+    armoury: Registry[Armour] = _NO_ARMOURY,
+    rules: Registry[Rule] = _NO_RULES,
 ) -> ShootingResult:
     """Resolve a Stand & Shoot charge reaction: ``shooter`` shoots the ``target``.
 

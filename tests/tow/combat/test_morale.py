@@ -4,6 +4,7 @@ from fractions import Fraction
 
 import pytest
 
+from avelorn.core.registry import Registry
 from avelorn.tow.combat.melee import CombatResult
 from avelorn.tow.combat.morale import SideBreak, break_test, make_panic_tests
 from avelorn.tow.combat.shooting import ShootingResult
@@ -111,15 +112,14 @@ def test_battle_strength_below_current_size_rejected() -> None:
         )
 
 
-def _valour(causes: list[PanicCause]) -> dict[str, Rule]:
-    return {
-        "Valour of Ages": Rule(
-            id="valour-of-ages",
-            name="Valour of Ages",
-            paragraphs=["Re-roll text."],
-            effects=[RerollEffect(kind="re-roll", stage=Stage.MAKE_PANIC_TESTS, causes=causes)],
-        )
-    }
+def _valour(causes: list[PanicCause]) -> Registry[Rule]:
+    rule = Rule(
+        id="valour-of-ages",
+        name="Valour of Ages",
+        paragraphs=["Re-roll text."],
+        effects=[RerollEffect(kind="re-roll", stage=Stage.MAKE_PANIC_TESTS, causes=causes)],
+    )
+    return Registry([rule], kind="rule")
 
 
 def test_reroll_effect_lifts_the_pass_probability() -> None:
