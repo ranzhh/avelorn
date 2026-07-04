@@ -6,7 +6,7 @@ import pytest
 
 from avelorn.core.dice import binomial_distribution, expected_value
 from avelorn.core.loading import load_yaml, load_yaml_dir
-from avelorn.tow.combat.melee import fight, strike, strike_unit
+from avelorn.tow.combat.melee import Combatant, fight, strike, strike_unit
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.unit import Characteristic, Unit
 from avelorn.tow.schema.weapon import Weapon
@@ -157,7 +157,8 @@ def test_fight_equal_initiative_is_simultaneous() -> None:
     """
     spearmen = load_unit("high-elf-realms", "elven-spearmen")
     spear = load_weapon("thrusting-spear")
-    result = fight(spearmen, 1, spear, spearmen, 1, spear, armoury=ARMOURY)
+    side = Combatant(spearmen, 1, spear)
+    result = fight(side, side, armoury=ARMOURY)
     assert result.first_striker is None
     assert result.a_casualties[1] == pytest.approx(1 / 6)
     assert result.b_casualties[1] == pytest.approx(1 / 6)
@@ -172,10 +173,26 @@ def test_fight_higher_initiative_strikes_first_and_takes_less() -> None:
     """
     spearmen = load_unit("high-elf-realms", "elven-spearmen")
     spear = load_weapon("thrusting-spear")
-    result = fight(_higher_initiative(spearmen), 1, spear, spearmen, 1, spear, armoury=ARMOURY)
-    assert result.first_striker == "a"
+    faster = Combatant(_higher_initiative(spearmen), 1, spear)
+    slower = Combatant(spearmen, 1, spear)
+    result = fight(faster, slower, armoury=ARMOURY)
+    assert result.first_striker is faster
     assert result.b_casualties[1] == pytest.approx(1 / 6)  # A full-strength
     assert result.a_casualties[1] == pytest.approx(5 / 36)  # B struck back reduced
+
+
+def test_fight_orients_the_joint_to_the_arguments() -> None:
+    """When the second argument strikes first, losses stay keyed to (a, b)."""
+    spearmen = load_unit("high-elf-realms", "elven-spearmen")
+    spear = load_weapon("thrusting-spear")
+    slower = Combatant(spearmen, 1, spear)
+    faster = Combatant(_higher_initiative(spearmen), 1, spear)
+    result = fight(slower, faster, armoury=ARMOURY)
+    assert result.first_striker is faster
+    # b (faster) strikes first at full strength -> a falls on 1/6; a's
+    # survivors strike back -> b falls on 5/36. Mirror of the test above.
+    assert result.a_casualties[1] == pytest.approx(1 / 6)
+    assert result.b_casualties[1] == pytest.approx(5 / 36)
 
 
 def test_fight_coupling_reduces_the_return_strike() -> None:
@@ -186,7 +203,11 @@ def test_fight_coupling_reduces_the_return_strike() -> None:
     """
     spearmen = load_unit("high-elf-realms", "elven-spearmen")
     spear = load_weapon("thrusting-spear")
-    result = fight(_higher_initiative(spearmen), 5, spear, spearmen, 5, spear, armoury=ARMOURY)
+    result = fight(
+        Combatant(_higher_initiative(spearmen), 5, spear),
+        Combatant(spearmen, 5, spear),
+        armoury=ARMOURY,
+    )
     full_strength = strike_unit(spearmen, spearmen, 5, spear, armoury=ARMOURY, defenders=5)
     assert expected_value(result.a_casualties) < expected_value(full_strength.casualties)
     assert any("Fight In Extra Rank" in note for note in result.notes)
@@ -197,4 +218,4 @@ def test_fight_rejects_negative_fighters() -> None:
     spearmen = load_unit("high-elf-realms", "elven-spearmen")
     spear = load_weapon("thrusting-spear")
     with pytest.raises(ValueError, match="fighter counts must be >= 0"):
-        fight(spearmen, -1, spear, spearmen, 5, spear, armoury=ARMOURY)
+        fight(Combatant(spearmen, -1, spear), Combatant(spearmen, 5, spear), armoury=ARMOURY)

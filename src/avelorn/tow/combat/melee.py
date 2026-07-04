@@ -17,7 +17,6 @@ the other strikes back — is composed on top of this, later.
 import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Literal
 
 from avelorn.core.dice import expected_value
 from avelorn.tow.combat.armour import defender_armour
@@ -367,33 +366,57 @@ def strike_unit(
 
 
 @dataclass(frozen=True)
+class Combatant:
+    """One side entering a round of close combat.
+
+    ``fighters`` models of ``unit`` fight with ``weapon`` (its Combat
+    profile), taking an optional ``hit_modifier`` (printed sign
+    convention: a penalty is negative). Rank-and-file profile only, as
+    with :func:`strike_unit`.
+    """
+
+    unit: Unit
+    fighters: int
+    weapon: Weapon
+    hit_modifier: int = 0
+
+
+@dataclass(frozen=True)
 class FightResult:
     """Outcome of one round of close combat between two units.
 
-    ``a_casualties`` and ``b_casualties`` are each side's models-removed
-    distribution for the round (index k = P(k models removed)).
-    ``first_striker`` is the side that struck first by Initiative, or None
-    when equal Initiative made the blows simultaneous.
+    ``losses`` is the *joint* distribution of models removed:
+    ``losses[j][k]`` = P(A lost j models and B lost k). The two sides are
+    correlated whenever one strikes first — a side that lost heavily strikes
+    back with fewer models — so the joint, not the two marginals, is what a
+    combat-result margin must be computed from. ``a_casualties`` and
+    ``b_casualties`` are its marginals. ``first_striker`` is the
+    :class:`Combatant` that struck first by Initiative, or None when equal
+    Initiative made the blows simultaneous.
     """
 
-    a_casualties: list[float]
-    b_casualties: list[float]
-    first_striker: Literal["a", "b"] | None
+    losses: list[list[float]]  # losses[a_lost][b_lost] = joint probability
+    first_striker: Combatant | None
     notes: tuple[str, ...] = ()
+
+    @property
+    def a_casualties(self) -> list[float]:
+        """Marginal distribution of models A lost (index k = P(k removed))."""
+        return [sum(row) for row in self.losses]
+
+    @property
+    def b_casualties(self) -> list[float]:
+        """Marginal distribution of models B lost (index k = P(k removed))."""
+        columns = len(self.losses[0]) if self.losses else 0
+        return [sum(row[k] for row in self.losses) for k in range(columns)]
 
 
 def fight(
-    unit_a: Unit,
-    a_fighters: int,
-    weapon_a: Weapon,
-    unit_b: Unit,
-    b_fighters: int,
-    weapon_b: Weapon,
+    a: Combatant,
+    b: Combatant,
     *,
     armoury: Mapping[str, Armour] | None = None,
     rules: Mapping[str, Rule] | None = None,
-    a_hit_modifier: int = 0,
-    b_hit_modifier: int = 0,
 ) -> FightResult:
     """Resolve one round of close combat between two single-profile units.
 
@@ -404,52 +427,61 @@ def fight(
     (the-combat-phase: who-strikes-first, fight-on). Equal Initiative
     strikes simultaneously, with no such reduction (simultaneous-combat).
 
+    The two sides are symmetric; only Initiative orders them. Resolution
+    happens in strike order and the joint is oriented back to the ``(a, b)``
+    axes the caller passed.
+
     Deferred and noted, not modelled here: charge/flank Initiative
-    modifiers and Always Strikes First/Last (order modifiers), the
-    combat-result margin and break test, ranks and supporting attacks
-    (#28), split-profile champions (#46), and multi-unit combats. Every
-    fighter is treated as in base contact making its full Attacks.
+    modifiers and Always Strikes First/Last (order modifiers), the break
+    test, ranks and supporting attacks (#28), split-profile champions
+    (#46), and multi-unit combats. Every fighter is treated as in base
+    contact making its full Attacks. Score the round with
+    :func:`combat_result`.
 
     Returns:
-        Each side's casualty distribution for the round.
+        The joint distribution of casualties for the round, oriented so
+        ``losses[a_lost][b_lost]`` matches the combatants as passed.
 
     Raises:
         ValueError: either fighter count is negative (plus the matchup
             errors raised by the underlying resolution).
     """
-    if a_fighters < 0 or b_fighters < 0:
+    if a.fighters < 0 or b.fighters < 0:
         raise ValueError("fighter counts must be >= 0")
     armoury = armoury or {}
     rules = rules or {}
     a_strikes = _engage(
-        unit_a, unit_b, weapon_a, armoury=armoury, rules=rules, hit_modifier=a_hit_modifier
+        a.unit, b.unit, a.weapon, armoury=armoury, rules=rules, hit_modifier=a.hit_modifier
     )
     b_strikes = _engage(
-        unit_b, unit_a, weapon_b, armoury=armoury, rules=rules, hit_modifier=b_hit_modifier
+        b.unit, a.unit, b.weapon, armoury=armoury, rules=rules, hit_modifier=b.hit_modifier
     )
-    initiative_a = unit_a.profiles[0][Characteristic.INITIATIVE] or 0
-    initiative_b = unit_b.profiles[0][Characteristic.INITIATIVE] or 0
+    initiative_a = a.unit.profiles[0][Characteristic.INITIATIVE] or 0
+    initiative_b = b.unit.profiles[0][Characteristic.INITIATIVE] or 0
 
-    first: Literal["a", "b"] | None
     if initiative_a == initiative_b:
-        # Simultaneous: neither side's casualties reduce the other's blows.
-        a_casualties = _fell(b_strikes, b_fighters, targets=a_fighters)
-        b_casualties = _fell(a_strikes, a_fighters, targets=b_fighters)
-        first = None
-    elif initiative_a > initiative_b:
-        b_casualties = _fell(a_strikes, a_fighters, targets=b_fighters)
-        a_casualties = _fell_after_losses(b_strikes, b_fighters, b_casualties, targets=a_fighters)
-        first = "a"
+        losses = _independent(a_strikes, a.fighters, b_strikes, b.fighters)
+        first_striker: Combatant | None = None
     else:
-        a_casualties = _fell(b_strikes, b_fighters, targets=a_fighters)
-        b_casualties = _fell_after_losses(a_strikes, a_fighters, a_casualties, targets=b_fighters)
-        first = "b"
+        # The higher-Initiative side strikes first; resolve in that order,
+        # then orient the joint back to the (a, b) axes.
+        a_first = initiative_a > initiative_b
+        striker, target = (a, b) if a_first else (b, a)
+        striker_strikes, target_strikes = (
+            (a_strikes, b_strikes) if a_first else (b_strikes, a_strikes)
+        )
+        joint = _sequenced(striker_strikes, striker.fighters, target_strikes, target.fighters)
+        losses = joint if a_first else _transpose(joint)
+        first_striker = striker
 
     notes = tuple(dict.fromkeys([*a_strikes.notes, *b_strikes.notes]))
-    logger.debug("fight: %s vs %s, first=%s", unit_a.name, unit_b.name, first or "simultaneous")
-    return FightResult(
-        a_casualties=a_casualties, b_casualties=b_casualties, first_striker=first, notes=notes
+    logger.debug(
+        "fight: %s vs %s, first=%s",
+        a.unit.name,
+        b.unit.name,
+        "simultaneous" if first_striker is None else first_striker.unit.name,
     )
+    return FightResult(losses=losses, first_striker=first_striker, notes=notes)
 
 
 def _fell(engagement: _Engagement, fighters: int, *, targets: int) -> list[float]:
@@ -464,18 +496,40 @@ def _fell(engagement: _Engagement, fighters: int, *, targets: int) -> list[float
     return casualties
 
 
-def _fell_after_losses(
-    engagement: _Engagement, fighters: int, losses: list[float], *, targets: int
-) -> list[float]:
-    # The striker has already taken casualties this round (``losses`` = the
-    # distribution of models it lost to the first blow); its survivors
-    # strike back. Mix the resulting casualty distributions over how many
-    # survivors remain — the exact composition of the two dependent steps.
-    combined = [0.0] * (targets + 1)
-    for lost, p_lost in enumerate(losses):
-        if p_lost == 0.0:
+def _independent(
+    row_strikes: _Engagement, row_fighters: int, col_strikes: _Engagement, col_fighters: int
+) -> list[list[float]]:
+    # Simultaneous combat: neither side's casualties reduce the other's
+    # blows, so the two loss distributions are independent — the joint is
+    # their outer product. Each side's losses come from the other's strike.
+    row_losses = _fell(col_strikes, col_fighters, targets=row_fighters)
+    col_losses = _fell(row_strikes, row_fighters, targets=col_fighters)
+    return [[p_row * p_col for p_col in col_losses] for p_row in row_losses]
+
+
+def _sequenced(
+    first_strikes: _Engagement,
+    first_fighters: int,
+    second_strikes: _Engagement,
+    second_fighters: int,
+) -> list[list[float]]:
+    # The first side strikes at full strength; its casualties thin the second
+    # before the survivors strike back, so the second's blows are conditioned
+    # on how many of it remain. Returns joint[first_lost][second_lost].
+    joint = [[0.0] * (second_fighters + 1) for _ in range(first_fighters + 1)]
+    for second_lost, p_second in enumerate(
+        _fell(first_strikes, first_fighters, targets=second_fighters)
+    ):
+        if p_second == 0.0:
             continue
-        survivors = fighters - lost
-        for removed, p_removed in enumerate(_fell(engagement, survivors, targets=targets)):
-            combined[removed] += p_lost * p_removed
-    return combined
+        survivors = second_fighters - second_lost
+        for first_lost, p_first in enumerate(
+            _fell(second_strikes, survivors, targets=first_fighters)
+        ):
+            joint[first_lost][second_lost] += p_second * p_first
+    return joint
+
+
+def _transpose(joint: list[list[float]]) -> list[list[float]]:
+    # Swap axes: [second_lost][first_lost] -> [first_lost][second_lost].
+    return [list(row) for row in zip(*joint, strict=True)]
