@@ -44,6 +44,9 @@ def test_unit_equipment_resolves(path: Path) -> None:
     Covers base equipment and option-granted equipment; resolution is by
     exact printed name.
     """
+    # The registries key by role (see TOWRepository): armoury by display
+    # name — already the form equipment strings take — but weapons by slug,
+    # so their display names come off the values.
     known = {weapon.name for weapon in REPO.weapons.values()} | set(REPO.armoury)
     unit = load_yaml(path, Unit)
     carried = set(unit.equipment)
