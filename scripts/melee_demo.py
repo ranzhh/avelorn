@@ -17,7 +17,8 @@ import logging
 
 from avelorn.core.dice import expected_value
 from avelorn.core.logging import configure_logging
-from avelorn.tow.combat.melee import Contingent, combat_result, fight
+from avelorn.tow.combat.contingent import Contingent
+from avelorn.tow.combat.melee import combat_result, fight
 from avelorn.tow.combat.morale import break_test
 from avelorn.tow.combat.query import Comparator, Predicate, evaluate, fight_distributions
 from avelorn.tow.data import TOWRepository

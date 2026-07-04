@@ -35,10 +35,11 @@ from avelorn.tow.combat.charts import (
     wound_target,
 )
 from avelorn.tow.combat.context import EngagementContext
+from avelorn.tow.combat.contingent import Contingent
 from avelorn.tow.combat.rules import compile_rules
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Condition, Rule
-from avelorn.tow.schema.unit import Characteristic, Unit
+from avelorn.tow.schema.unit import Characteristic
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile
 
 logger = logging.getLogger(__name__)
@@ -224,9 +225,8 @@ def _engagement_conditions(
 
 
 def shoot_unit(
-    attacker: Unit,
-    defender: Unit,
-    shooters: int,
+    attacker: Contingent,
+    defender: Contingent,
     weapon: Weapon,
     *,
     armoury: Registry[Armour] = _NO_ARMOURY,
@@ -234,16 +234,18 @@ def shoot_unit(
     context: EngagementContext | None = None,
     hit_modifier: int = 0,
     force_short_range: bool = False,
-    defenders: int | None = None,
 ) -> ShootingResult:
-    """Resolve ``shooters`` models of ``attacker`` shooting ``weapon`` at ``defender``.
+    """Resolve ``attacker`` shooting a volley of ``weapon`` at ``defender``.
 
-    One shot per model, using each unit's first (rank-and-file) profile
-    and the weapon's missile profile. ``armoury`` maps printed equipment
-    names to armour items; ``rules`` maps printed rule names to rule
-    entries, whose effects compile into the dice walk. Anything either
-    mapping does not resolve — and every unit special rule — is not
-    factored into the math but listed in the result's notes.
+    One shot per fielded model (``attacker.models``), using each side's
+    first (rank-and-file) profile and the weapon's missile profile;
+    casualties cap at the defender's fielded ``models``. To resolve a
+    partial volley (only some models in range or sight), field the
+    shooting subset as its own contingent. ``armoury`` maps printed
+    equipment names to armour items; ``rules`` maps printed rule names to
+    rule entries, whose effects compile into the dice walk. Anything
+    either mapping does not resolve — and every unit special rule — is
+    not factored into the math but listed in the result's notes.
 
     ``context`` is the engagement's situation (moved, distance); rules
     conditioned on facts it leaves unknown stay unfactored and noted.
@@ -252,10 +254,6 @@ def shoot_unit(
     shot as within half range whatever the distance — a Stand & Shoot
     reaction, exempt from Firing at Long Range, sets it so that rule is
     honoured as a no-op rather than left unknown and noted.
-
-    ``defenders`` is the number of models actually fielded in the target
-    unit — the schema models only the *allowed* size, not what is on the
-    table, so the count is supplied here. When given, casualties cap at it.
 
     Returns:
         The shooting outcome.
@@ -266,6 +264,8 @@ def shoot_unit(
             Toughness, or the weapon shoots at the wielder's Strength and
             the attacker profile has none.
     """
+    shooters, defenders = attacker.models, defender.models
+    shooter, target = attacker.unit, defender.unit
     # TODO: profile selection is naive. A unit that bought a champion
     # shoots with the champion too (possibly at higher BS, e.g. an
     # archers' Sentinel at BS 5), and units with split profiles need
@@ -275,33 +275,33 @@ def shoot_unit(
     profile = weapon.missile_profile
     if profile is None:
         raise ValueError(f"{weapon.name} has no missile profile; it cannot shoot")
-    ballistic_skill = attacker.profiles[0][Characteristic.BALLISTIC_SKILL]
-    toughness = defender.profiles[0][Characteristic.TOUGHNESS]
+    ballistic_skill = shooter.profiles[0][Characteristic.BALLISTIC_SKILL]
+    toughness = target.profiles[0][Characteristic.TOUGHNESS]
     if ballistic_skill is None:
-        raise ValueError(f"{attacker.name} has no Ballistic Skill; it cannot shoot")
+        raise ValueError(f"{shooter.name} has no Ballistic Skill; it cannot shoot")
     if toughness is None:
-        raise ValueError(f"{defender.name} has no Toughness; it cannot be wounded")
+        raise ValueError(f"{target.name} has no Toughness; it cannot be wounded")
 
-    wielder_strength = attacker.profiles[0][Characteristic.STRENGTH]
+    wielder_strength = shooter.profiles[0][Characteristic.STRENGTH]
     if profile.strength.is_relative and wielder_strength is None:
         raise ValueError(
-            f"{weapon.name} shoots at the wielder's Strength, but {attacker.name} has none"
+            f"{weapon.name} shoots at the wielder's Strength, but {shooter.name} has none"
         )
     strength = profile.strength.resolve(wielder_strength or 0)
     logger.debug(
         "resolving %d %s (BS %d) shooting %s at %s (T %d), S %d AP %d",
         shooters,
-        attacker.name,
+        shooter.name,
         ballistic_skill,
         weapon.name,
-        defender.name,
+        target.name,
         toughness,
         strength,
         profile.armour_piercing,
     )
 
-    armour_value, notes = defender_armour(defender, armoury)
-    for unit in (attacker, defender):
+    armour_value, notes = defender_armour(target, armoury)
+    for unit in (shooter, target):
         notes.extend(
             f"special rule not factored: {rule} ({unit.name})" for rule in unit.special_rules
         )
@@ -323,7 +323,7 @@ def shoot_unit(
 
     # Wounds accumulate into whole slain models; a profile with no printed
     # Wounds ("-") is treated as a single-Wound model.
-    defender_wounds = defender.profiles[0][Characteristic.WOUNDS] or 1
+    defender_wounds = target.profiles[0][Characteristic.WOUNDS] or 1
 
     return shoot(
         shots=shooters,

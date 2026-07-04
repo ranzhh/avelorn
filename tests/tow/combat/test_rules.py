@@ -6,6 +6,7 @@ import pytest
 
 from avelorn.tow.combat.attack import AttackProfile, HitRoll, RollState, resolve_attack
 from avelorn.tow.combat.context import EngagementContext
+from avelorn.tow.combat.contingent import Contingent
 from avelorn.tow.combat.rules import _condition_applies, compile_rules, resolve_rule
 from avelorn.tow.combat.shooting import shoot_unit
 from avelorn.tow.data import TOWRepository
@@ -73,9 +74,8 @@ def test_shoot_unit_factors_armour_bane_from_data() -> None:
     13/54, the Armour Bane note disappears, and Volley Fire stays noted.
     """
     result = shoot_unit(
-        REPO.units["elven-archers"],
-        REPO.units["elven-spearmen"],
-        shooters=3,
+        Contingent(REPO.units["elven-archers"], 3),
+        Contingent(REPO.units["elven-spearmen"], 10),
         weapon=REPO.weapons["longbow"],
         armoury=REPO.armoury,
         rules=REPO.rules,
@@ -88,9 +88,8 @@ def test_shoot_unit_factors_armour_bane_from_data() -> None:
 def test_shoot_unit_without_rules_is_unchanged() -> None:
     """No rules registry: every weapon rule stays noted, math unchanged."""
     result = shoot_unit(
-        REPO.units["elven-archers"],
-        REPO.units["elven-spearmen"],
-        shooters=3,
+        Contingent(REPO.units["elven-archers"], 3),
+        Contingent(REPO.units["elven-spearmen"], 10),
         weapon=REPO.weapons["longbow"],
         armoury=REPO.armoury,
     )
@@ -105,9 +104,8 @@ def test_long_range_penalty_applies_from_data() -> None:
     with Armour Bane live, p = 1/2 * (2/6 * 2/3 + 1/6 * 5/6) = 13/72.
     """
     result = shoot_unit(
-        REPO.units["elven-archers"],
-        REPO.units["elven-spearmen"],
-        shooters=3,
+        Contingent(REPO.units["elven-archers"], 3),
+        Contingent(REPO.units["elven-spearmen"], 10),
         weapon=REPO.weapons["longbow"],
         armoury=REPO.armoury,
         rules=REPO.rules,
@@ -123,9 +121,8 @@ def test_condition_false_applies_no_penalty_and_no_note() -> None:
     A rule whose condition evaluates False is honoured by not applying.
     """
     result = shoot_unit(
-        REPO.units["elven-archers"],
-        REPO.units["elven-spearmen"],
-        shooters=3,
+        Contingent(REPO.units["elven-archers"], 3),
+        Contingent(REPO.units["elven-spearmen"], 10),
         weapon=REPO.weapons["longbow"],
         armoury=REPO.armoury,
         rules=REPO.rules,
@@ -138,9 +135,8 @@ def test_condition_false_applies_no_penalty_and_no_note() -> None:
 def test_unknown_context_leaves_core_rules_unfactored() -> None:
     """Without an engagement context the phase rules cannot be evaluated."""
     result = shoot_unit(
-        REPO.units["elven-archers"],
-        REPO.units["elven-spearmen"],
-        shooters=3,
+        Contingent(REPO.units["elven-archers"], 3),
+        Contingent(REPO.units["elven-spearmen"], 10),
         weapon=REPO.weapons["longbow"],
         armoury=REPO.armoury,
         rules=REPO.rules,
@@ -153,9 +149,8 @@ def test_unknown_context_leaves_core_rules_unfactored() -> None:
 def test_both_penalties_stack() -> None:
     """Moved and at long range: -1 and -1, hit 5+."""
     result = shoot_unit(
-        REPO.units["elven-archers"],
-        REPO.units["elven-spearmen"],
-        shooters=3,
+        Contingent(REPO.units["elven-archers"], 3),
+        Contingent(REPO.units["elven-spearmen"], 10),
         weapon=REPO.weapons["longbow"],
         armoury=REPO.armoury,
         rules=REPO.rules,
@@ -176,24 +171,20 @@ def test_move_in_or_stay_out_is_a_wash() -> None:
     spearmen = REPO.units["elven-spearmen"]
     warbow = REPO.weapons["warbow"]
     stay = shoot_unit(
-        sea_guard,
-        spearmen,
-        shooters=10,
-        weapon=warbow,
+        Contingent(sea_guard, 10),
+        Contingent(spearmen, 10),
+        warbow,
         armoury=REPO.armoury,
         rules=REPO.rules,
         context=EngagementContext(moved=False, distance=15),
-        defenders=10,
     )
     move_in = shoot_unit(
-        sea_guard,
-        spearmen,
-        shooters=10,
-        weapon=warbow,
+        Contingent(sea_guard, 10),
+        Contingent(spearmen, 10),
+        warbow,
         armoury=REPO.armoury,
         rules=REPO.rules,
         context=EngagementContext(moved=True, distance=12),
-        defenders=10,
     )
     assert stay.hit_target == move_in.hit_target == 4
     assert stay.p_unsaved == pytest.approx(move_in.p_unsaved)

@@ -4,14 +4,14 @@ A declared charge is answered by a charge reaction before contact
 (the-movement-phase/charge-reactions). This module models Stand & Shoot —
 the charged unit shooting the chargers as they close — and, later, composes
 the survivors into the combat round the charge sets up. The charge's own
-Combat-phase Initiative bonus lives on :class:`~avelorn.tow.combat.melee.Charge`.
+Combat-phase Initiative bonus lives on :class:`~avelorn.tow.muster.Charge`.
 """
 
 import logging
 
 from avelorn.core.registry import Registry
 from avelorn.tow.combat.context import EngagementContext
-from avelorn.tow.combat.melee import Contingent
+from avelorn.tow.combat.contingent import Contingent
 from avelorn.tow.combat.shooting import ShootingResult, shoot_unit
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
@@ -62,14 +62,12 @@ def stand_and_shoot(
     """
     logger.debug("stand & shoot: %s fires on charging %s", shooter.unit.name, target.unit.name)
     return shoot_unit(
-        shooter.unit,
-        target.unit,
-        shooter.models,
+        shooter,
+        target,
         weapon,
         armoury=armoury,
         rules=rules,
         context=EngagementContext(moved=False),
         hit_modifier=_STAND_AND_SHOOT_TO_HIT,
         force_short_range=True,
-        defenders=target.models,
     )
