@@ -1,9 +1,37 @@
 """Close-combat strike tests, golden values hand-computed from the charts."""
 
+from pathlib import Path
+
 import pytest
 
 from avelorn.core.dice import binomial_distribution
-from avelorn.tow.combat.melee import strike
+from avelorn.core.loading import load_yaml, load_yaml_dir
+from avelorn.tow.combat.melee import strike, strike_unit
+from avelorn.tow.schema.armour import Armour
+from avelorn.tow.schema.unit import Characteristic, Unit
+from avelorn.tow.schema.weapon import Weapon
+
+DATA_DIR = Path(__file__).parents[3] / "data"
+
+ARMOURY = {a.name: a for a in load_yaml_dir(DATA_DIR / "tow/armour", Armour)}
+
+
+def load_unit(army: str, slug: str) -> Unit:
+    """Load and validate a unit from the data/ tree.
+
+    Returns:
+        The parsed unit model.
+    """
+    return load_yaml(DATA_DIR / f"tow/armies/{army}/units/{slug}.yaml", Unit)
+
+
+def load_weapon(slug: str) -> Weapon:
+    """Load and validate a weapon from the data/ tree.
+
+    Returns:
+        The parsed weapon model.
+    """
+    return load_yaml(DATA_DIR / f"tow/weapons/{slug}.yaml", Weapon)
 
 
 def test_strike_golden_no_save() -> None:
@@ -55,3 +83,53 @@ def test_strike_rejects_negative_attacks() -> None:
     """A negative attack count is a programming error, not a silent zero."""
     with pytest.raises(ValueError, match="attacks must be >= 0"):
         strike(-1, weapon_skill=4, target_weapon_skill=4, strength=4, toughness=4)
+
+
+# --- strike_unit: end-to-end from the data/ tree ---
+
+
+def test_strike_unit_spearmen_vs_spearmen() -> None:
+    """5 Elven Spearmen fight Elven Spearmen with thrusting spears.
+
+    WS4 vs WS4 (4+), thrusting spear at S (S3) vs T3 (4+), and the target's
+    light armour (6+) + shield (+1) give a 5+ save; A1 each -> 5 attacks.
+    p_unsaved = 1/2 * 1/2 * 4/6 = 1/6.
+    """
+    spearmen = load_unit("high-elf-realms", "elven-spearmen")
+    result = strike_unit(
+        spearmen, spearmen, fighters=5, weapon=load_weapon("thrusting-spear"), armoury=ARMOURY
+    )
+    assert result.attacks == 5  # 5 fighters * A1
+    assert result.hit_target == 4
+    assert result.wound_target == 4
+    assert result.save_target == 5
+    assert result.p_unsaved == pytest.approx(1 / 6)
+    assert any("Fight In Extra Rank" in note for note in result.notes)  # weapon rule unfactored
+    assert any("Valour of Ages" in note for note in result.notes)  # unit special rule
+    assert any("thrusting spear" in note.lower() for note in result.notes)  # weapon notes
+
+
+def test_strike_unit_attacks_scale_with_the_attacks_characteristic() -> None:
+    """Each fighter makes its full Attacks: A2 over 5 fighters is 10 attacks."""
+    spearmen = load_unit("high-elf-realms", "elven-spearmen")
+    two_attacks = spearmen.model_copy(deep=True)
+    two_attacks.profiles[0].characteristics[Characteristic.ATTACKS] = 2
+    result = strike_unit(
+        two_attacks, spearmen, fighters=5, weapon=load_weapon("thrusting-spear"), armoury=ARMOURY
+    )
+    assert result.attacks == 10
+
+
+def test_strike_unit_without_armoury_degrades_visibly() -> None:
+    """No armoury: the defender's armour is unresolved and reported, not guessed."""
+    spearmen = load_unit("high-elf-realms", "elven-spearmen")
+    result = strike_unit(spearmen, spearmen, fighters=5, weapon=load_weapon("thrusting-spear"))
+    assert result.save_target is None
+    assert any("Light Armour" in note for note in result.notes)
+
+
+def test_strike_unit_rejects_a_missile_only_weapon() -> None:
+    """A weapon with no Combat profile cannot be used to fight."""
+    archers = load_unit("high-elf-realms", "elven-archers")
+    with pytest.raises(ValueError, match="no Combat profile"):
+        strike_unit(archers, archers, fighters=5, weapon=load_weapon("longbow"))
