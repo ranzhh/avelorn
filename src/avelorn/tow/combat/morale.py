@@ -23,10 +23,12 @@ casualty outcome branches through the trigger and the test, exactly.
 """
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from itertools import product
 
 from avelorn.tow.combat.characteristic_tests import unit_pass_probability
+from avelorn.tow.combat.melee import CombatResult
 from avelorn.tow.combat.rules import resolve_rule
 from avelorn.tow.combat.shooting import ShootingResult
 from avelorn.tow.schema.psychology import PanicCause
@@ -135,3 +137,105 @@ def _reroll_grant(defender: Unit, rules: Mapping[str, Rule], cause: PanicCause) 
                 logger.debug("panic re-roll granted by %s", printed)
                 return printed
     return None
+
+
+@dataclass(frozen=True)
+class SideBreak:
+    """A side's Break-test outcomes for the rounds it loses.
+
+    Only the losing side takes a Break test, so these are the printed
+    outcomes for this side *conditioned on it being the loser*: the three
+    sum to the probability this side lost the round. The winner takes no
+    Break test — its follow-up / pursuit / reform choices are not modelled
+    here.
+    """
+
+    p_gives_ground: float
+    p_falls_back: float
+    p_breaks: float
+
+
+@dataclass(frozen=True)
+class BreakResult:
+    """Both sides' Break-test outcomes for one round of close combat.
+
+    A round has at most one loser, so ``a`` and ``b`` are mutually
+    exclusive — each is non-zero only across the outcomes where that side
+    lost. ``p_draw`` is the chance of a drawn combat, in which neither side
+    tests. The two sides' six outcome probabilities and ``p_draw`` sum to 1.
+    """
+
+    a: SideBreak
+    b: SideBreak
+    p_draw: float
+
+
+def break_test(result: CombatResult, unit_a: Unit, unit_b: Unit) -> BreakResult:
+    """Resolve the Break test for a scored combat round, for each side.
+
+    Only the losing side rolls: 2D6, add the winner's margin, compare to
+    its Leadership (highest value in the unit). A natural roll above
+    Leadership Breaks and flees; a natural roll within it but a modified
+    roll above Falls Back in Good Order; a modified roll within it — or a
+    natural double 1 — Gives Ground (the-combat-phase/break-test). The
+    winner takes no Break test (its follow-up and pursuit choices are not
+    modelled here), and a drawn combat tests neither side.
+
+    Composes on the signed margin distribution: ``unit_a`` is the
+    positive-margin side, matching :func:`~avelorn.tow.combat.melee.fight`'s
+    ``a``.
+
+    Returns:
+        Each side's Break-test outcomes for the rounds it loses, plus the
+        drawn-combat probability.
+    """
+    a_leadership = unit_a.highest(Characteristic.LEADERSHIP) or 0
+    b_leadership = unit_b.highest(Characteristic.LEADERSHIP) or 0
+    logger.debug("break test: Ld %d (a) vs Ld %d (b)", a_leadership, b_leadership)
+    return BreakResult(
+        a=_side_break(
+            result.margin, a_leadership, deficit=lambda lead: -lead if lead < 0 else None
+        ),
+        b=_side_break(
+            result.margin, b_leadership, deficit=lambda lead: lead if lead > 0 else None
+        ),
+        p_draw=sum(mass for lead, mass in result.margin.items() if lead == 0),
+    )
+
+
+def _side_break(
+    margin: Mapping[int, float], leadership: int, *, deficit: Callable[[int], int | None]
+) -> SideBreak:
+    # Aggregate one side's Break-test outcomes over the rounds it loses.
+    # ``deficit(lead)`` is this side's losing margin at signed lead ``lead``,
+    # or None when it did not lose (it won, or the combat was drawn) and so
+    # takes no test.
+    breaks = falls_back = gives_ground = 0.0
+    for lead, mass in margin.items():
+        loss = deficit(lead)
+        if loss is None:
+            continue
+        p_break, p_fall, p_give = _break_outcomes(leadership, loss)
+        breaks += mass * p_break
+        falls_back += mass * p_fall
+        gives_ground += mass * p_give
+    return SideBreak(p_gives_ground=gives_ground, p_falls_back=falls_back, p_breaks=breaks)
+
+
+def _break_outcomes(leadership: int, margin: int) -> tuple[float, float, float]:
+    # The three Break-test outcome probabilities for a loser of ``leadership``
+    # facing a winner's ``margin`` (>= 1), over an exact 2D6. A natural
+    # double 1 always Gives Ground; otherwise a natural roll over Leadership
+    # Breaks, a modified roll over it Falls Back, and the rest Gives Ground.
+    breaks = falls_back = gives_ground = 0
+    for first, second in product(range(1, 7), repeat=2):
+        natural = first + second
+        if natural == 2:  # natural double 1
+            gives_ground += 1
+        elif natural > leadership:
+            breaks += 1
+        elif natural + margin > leadership:
+            falls_back += 1
+        else:
+            gives_ground += 1
+    return breaks / 36, falls_back / 36, gives_ground / 36

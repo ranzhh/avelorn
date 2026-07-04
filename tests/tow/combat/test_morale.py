@@ -6,7 +6,8 @@ from pathlib import Path
 import pytest
 
 from avelorn.core.loading import load_yaml, load_yaml_dir
-from avelorn.tow.combat.morale import make_panic_tests
+from avelorn.tow.combat.melee import CombatResult
+from avelorn.tow.combat.morale import SideBreak, break_test, make_panic_tests
 from avelorn.tow.combat.shooting import ShootingResult
 from avelorn.tow.schema.psychology import PanicCause
 from avelorn.tow.schema.rule import RerollEffect, Rule
@@ -160,3 +161,63 @@ def test_valour_of_ages_applies_from_the_data_file() -> None:
     panic = make_panic_tests(result, _spearmen(), rules=registry)
     assert panic.reroll_from == "Valour of Ages"
     assert panic.p_holds == pytest.approx(P_PASS + (1 - P_PASS) * P_PASS)
+
+
+# --- Break test: 2D6 + margin vs Leadership, three outcomes ---
+
+
+def _combat(margin: dict[int, float]) -> CombatResult:
+    # Only the signed margin distribution matters to the break test; the
+    # win/draw/loss summaries are inert scaffolding here.
+    return CombatResult(p_a_wins=0.0, p_draw=0.0, p_b_wins=0.0, margin=margin)
+
+
+def test_break_test_three_outcomes_at_a_fixed_margin() -> None:
+    """B loses by 3 against Ld 8: 2D6 splits Break / Fall Back / Give Ground.
+
+    Break (natural > 8): 9,10,11,12 = 10/36. Fall Back (natural <= 8,
+    natural+3 > 8, i.e. 6,7,8) = 16/36. Give Ground (the rest, incl. the
+    double 1) = 10/36. A is the winner, so it takes no test at all.
+    """
+    result = break_test(_combat({3: 1.0}), _spearmen(), _spearmen())
+    assert result.b.p_breaks == pytest.approx(10 / 36)
+    assert result.b.p_falls_back == pytest.approx(16 / 36)
+    assert result.b.p_gives_ground == pytest.approx(10 / 36)
+    assert result.a == SideBreak(0.0, 0.0, 0.0)  # winner never tests
+    assert result.p_draw == pytest.approx(0.0)
+
+
+def test_break_test_double_one_always_gives_ground() -> None:
+    """Even under a crushing margin, a natural double 1 Gives Ground.
+
+    Margin 100 vs Ld 8: every non-double-1 roll within Leadership would Fall
+    Back, so Give Ground is exactly the 1/36 double 1 — proof the override
+    fires.
+    """
+    result = break_test(_combat({100: 1.0}), _spearmen(), _spearmen())
+    assert result.b.p_gives_ground == pytest.approx(1 / 36)
+    assert result.b.p_breaks == pytest.approx(10 / 36)
+    assert result.b.p_falls_back == pytest.approx(25 / 36)
+
+
+def test_break_test_draw_takes_no_test() -> None:
+    """A drawn combat: neither side tests."""
+    result = break_test(_combat({0: 1.0}), _spearmen(), _spearmen())
+    assert result.p_draw == pytest.approx(1.0)
+    assert result.a == SideBreak(0.0, 0.0, 0.0)
+    assert result.b == SideBreak(0.0, 0.0, 0.0)
+
+
+def test_break_test_scores_whichever_side_lost() -> None:
+    """Either side can be the loser; the split is symmetric here.
+
+    A wins by 2 half the time, B wins by 2 the other half (Ld 8 both), so
+    each side's loser-outcomes are identical and each side loses half the
+    time. The six outcome masses and the (zero) draw sum to 1.
+    """
+    result = break_test(_combat({2: 0.5, -2: 0.5}), _spearmen(), _spearmen())
+    assert result.a == result.b
+    a_lost = result.a.p_gives_ground + result.a.p_falls_back + result.a.p_breaks
+    b_lost = result.b.p_gives_ground + result.b.p_falls_back + result.b.p_breaks
+    assert a_lost == pytest.approx(0.5)  # A is the loser half the time
+    assert a_lost + b_lost + result.p_draw == pytest.approx(1.0)
