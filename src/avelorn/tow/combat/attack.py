@@ -76,6 +76,18 @@ class RollState(StrEnum):
 type RollTarget = int | RollState
 
 
+def roll_target(target: int | None) -> RollTarget:
+    """Lift a chart target into a roll target.
+
+    The charts speak the printed convention: None means the roll is not
+    taken and cannot succeed ("-" on the wound chart; no save).
+
+    Returns:
+        The numeric target unchanged, or ``RollState.IMPOSSIBLE`` for None.
+    """
+    return RollState.IMPOSSIBLE if target is None else target
+
+
 @dataclass(frozen=True)
 class AttackProfile:
     """Roll targets and outcome semantics for one attack.

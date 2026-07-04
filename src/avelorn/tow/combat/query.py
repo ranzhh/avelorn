@@ -27,6 +27,7 @@ import logging
 from dataclasses import dataclass
 from enum import StrEnum
 
+from avelorn.core.dice import expected_value
 from avelorn.tow.combat.melee import FightResult
 from avelorn.tow.combat.shooting import ShootingResult
 
@@ -130,7 +131,7 @@ class Distribution:
         Returns:
             Sum of ``k * P(value == k)``.
         """
-        return sum(k * p for k, p in enumerate(self.pmf))
+        return expected_value(self.pmf)
 
     def mode(self) -> int:
         """The single most likely outcome.

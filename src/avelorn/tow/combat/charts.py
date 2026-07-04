@@ -46,7 +46,7 @@ def shooting_hit_target(ballistic_skill: int, modifier: int = 0) -> int:
     return target
 
 
-def melee_hit_target(weapon_skill: int, target_weapon_skill: int) -> int:
+def melee_hit_target(weapon_skill: int, target_weapon_skill: int, modifier: int = 0) -> int:
     """Required To Hit roll in close combat, from the WS-vs-WS chart.
 
     Source: the-combat-phase/roll-to-hit-combat. The printed chart
@@ -58,22 +58,29 @@ def melee_hit_target(weapon_skill: int, target_weapon_skill: int) -> int:
     - target's WS more than double the attacker's: 5+
     - otherwise (WS within a factor of two, attacker not ahead): 4+
 
+    ``modifier`` follows the rulebook's sign convention: penalties are
+    negative, so they raise the target — the same shape as
+    :func:`shooting_hit_target`.
+
     Returns:
-        The required roll (2..5); a natural 1 always fails and a natural
-        6 always hits (both applied at the roll, not the target).
+        The chart cell (2..5) shifted by modifiers; a natural 1 always
+        fails and a natural 6 always hits (both applied at the roll, not
+        the target).
     """
     if weapon_skill > 2 * target_weapon_skill:
-        target = 2
+        chart = 2
     elif weapon_skill > target_weapon_skill:
-        target = 3
+        chart = 3
     elif target_weapon_skill > 2 * weapon_skill:
-        target = 5
+        chart = 5
     else:
-        target = 4
+        chart = 4
+    target = chart - modifier
     logger.debug(
-        "melee to-hit: WS %d vs WS %d -> %s",
+        "melee to-hit: WS %d vs WS %d, modifier %d -> %s",
         weapon_skill,
         target_weapon_skill,
+        modifier,
         _fmt_target(target),
     )
     return target
