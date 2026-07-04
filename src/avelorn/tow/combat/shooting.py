@@ -46,6 +46,11 @@ logger = logging.getLogger(__name__)
 # Rules filed under the shooting phase chapter apply to every volley.
 _SHOOTING_PHASE = "The Shooting Phase"
 
+# Empty registries as defaults: resolution against them misses everything,
+# so an omitted registry degrades to notes exactly like unknown entries do.
+_NO_ARMOURY: Registry[Armour] = Registry(kind="armour")
+_NO_RULES: Registry[Rule] = Registry(kind="rule")
+
 
 @dataclass(frozen=True)
 class ShootingResult:
@@ -211,8 +216,8 @@ def shoot_unit(
     shooters: int,
     weapon: Weapon,
     *,
-    armoury: Registry[Armour] | None = None,
-    rules: Registry[Rule] | None = None,
+    armoury: Registry[Armour] = _NO_ARMOURY,
+    rules: Registry[Rule] = _NO_RULES,
     context: EngagementContext | None = None,
     hit_modifier: int = 0,
     force_short_range: bool = False,
@@ -282,8 +287,6 @@ def shoot_unit(
         profile.armour_piercing,
     )
 
-    armoury = armoury or Registry[Armour]()
-    rules = rules or Registry[Rule]()
     armour_value, notes = defender_armour(defender, armoury)
     for unit in (attacker, defender):
         notes.extend(

@@ -39,6 +39,9 @@ from avelorn.tow.schema.unit import Characteristic, Unit
 
 logger = logging.getLogger(__name__)
 
+# An empty registry as the default: every rule stays inert, visibly.
+_NO_RULES: Registry[Rule] = Registry(kind="rule")
+
 
 @dataclass(frozen=True)
 class PanicResult:
@@ -56,7 +59,7 @@ def make_panic_tests(
     result: ShootingResult,
     defender: Unit,
     *,
-    rules: Registry[Rule] | None = None,
+    rules: Registry[Rule] = _NO_RULES,
     battle_strength: int | None = None,
 ) -> PanicResult:
     """Resolve the panic step for one volley's casualty distribution.
@@ -84,7 +87,7 @@ def make_panic_tests(
         raise ValueError(f"battle strength ({battle}) cannot be below current size ({size})")
 
     p_pass = float(unit_pass_probability(defender, Characteristic.LEADERSHIP))
-    reroll_from = _reroll_grant(defender, rules or Registry[Rule](), PanicCause.HEAVY_CASUALTIES)
+    reroll_from = _reroll_grant(defender, rules, PanicCause.HEAVY_CASUALTIES)
     if reroll_from is not None:
         # A failed test is taken again: both dice, same natural bounds,
         # never more than once whatever the source.

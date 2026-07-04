@@ -49,6 +49,11 @@ from avelorn.tow.schema.weapon import Weapon
 
 logger = logging.getLogger(__name__)
 
+# Empty registries as defaults: resolution against them misses everything,
+# so an omitted registry degrades to notes exactly like unknown entries do.
+_NO_ARMOURY: Registry[Armour] = Registry(kind="armour")
+_NO_RULES: Registry[Rule] = Registry(kind="rule")
+
 
 @dataclass(frozen=True)
 class StrikeResult:
@@ -308,8 +313,8 @@ def strike_unit(
     fighters: int,
     weapon: Weapon,
     *,
-    armoury: Registry[Armour] | None = None,
-    rules: Registry[Rule] | None = None,
+    armoury: Registry[Armour] = _NO_ARMOURY,
+    rules: Registry[Rule] = _NO_RULES,
     hit_modifier: int = 0,
     defenders: int | None = None,
 ) -> StrikeResult:
@@ -340,8 +345,8 @@ def strike_unit(
         attacker,
         defender,
         weapon,
-        armoury=armoury or Registry[Armour](),
-        rules=rules or Registry[Rule](),
+        armoury=armoury,
+        rules=rules,
         hit_modifier=hit_modifier,
     )
     attacks = fighters * engagement.attacks_per_model
@@ -531,8 +536,8 @@ def fight(
     b_weapon: Weapon,
     a_prior_losses: Sequence[float] | None = None,
     b_prior_losses: Sequence[float] | None = None,
-    armoury: Registry[Armour] | None = None,
-    rules: Registry[Rule] | None = None,
+    armoury: Registry[Armour] = _NO_ARMOURY,
+    rules: Registry[Rule] = _NO_RULES,
 ) -> FightResult:
     """Resolve one round of close combat between two single-profile units.
 
@@ -583,8 +588,6 @@ def fight(
         raise ValueError("model counts must be >= 0")
     a_lost_before = _prior_loss_pmf(a_prior_losses, a.models, "a_prior_losses")
     b_lost_before = _prior_loss_pmf(b_prior_losses, b.models, "b_prior_losses")
-    armoury = armoury or Registry[Armour]()
-    rules = rules or Registry[Rule]()
     a_strikes = _engage(a.unit, b.unit, a_weapon, armoury=armoury, rules=rules, hit_modifier=0)
     b_strikes = _engage(b.unit, a.unit, b_weapon, armoury=armoury, rules=rules, hit_modifier=0)
     a_first = _strikes_first(_effective_initiative(a), _effective_initiative(b))
