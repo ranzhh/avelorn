@@ -4,43 +4,16 @@ import pytest
 
 from avelorn.core.dice import binomial_distribution, expected_value
 from avelorn.tow.combat.melee import (
-    Charge,
-    ChargeArc,
-    Contingent,
     combat_result,
     fight,
     strike,
     strike_unit,
 )
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.schema.unit import Characteristic, Complement, Unit
+from avelorn.tow.muster import Charge, ChargeArc, Contingent
+from avelorn.tow.schema.unit import Characteristic, Unit
 
 REPO = TOWRepository()
-
-
-def test_deploy_fields_complement_size_and_loadout() -> None:
-    """Contingent.deploy carries the complement's size and chosen loadout."""
-    unit = REPO.units["elven-spearmen"]
-    mustered = Complement(unit=unit, size=18, options=["Shieldwall"])
-    charge = Charge(6, ChargeArc.FRONT)
-
-    contingent = Contingent.deploy(mustered, charge)
-
-    assert contingent.models == 18
-    assert contingent.charge is charge
-    # The chosen option's rule is what the engine reads, not the printed profile.
-    assert "Shieldwall" in contingent.unit.special_rules
-    assert "Shieldwall" not in unit.special_rules
-
-
-def test_deploy_without_options_matches_the_datasheet() -> None:
-    """With no options, the fielded loadout equals the printed datasheet."""
-    unit = REPO.units["elven-spearmen"]
-
-    contingent = Contingent.deploy(Complement(unit=unit, size=10))
-
-    assert contingent.unit.equipment == unit.equipment
-    assert contingent.unit.special_rules == unit.special_rules
 
 
 def test_strike_golden_no_save() -> None:
@@ -298,23 +271,7 @@ def test_fight_prior_losses_reject_a_non_distribution() -> None:
         fight(a, b, a_weapon=spear, b_weapon=spear, b_prior_losses=[0.5, 0.2])
 
 
-# --- Charge: the Combat-phase Initiative bonus that decides striking order ---
-
-
-@pytest.mark.parametrize(
-    ("inches", "arc", "expected"),
-    [
-        (0, ChargeArc.FRONT, 0),
-        (2, ChargeArc.FRONT, 2),  # +1 per full inch
-        (5, ChargeArc.FRONT, 3),  # capped at +3 into the front arc
-        (5, ChargeArc.FLANK, 4),  # +4 into the flank
-        (5, ChargeArc.REAR, 4),  # +4 into the rear
-        (-1, ChargeArc.FRONT, 0),  # never negative
-    ],
-)
-def test_charge_initiative_bonus_caps(inches: int, arc: ChargeArc, expected: int) -> None:
-    """+1 Initiative per full inch, capped by arc (+3 front, +4 flank/rear)."""
-    assert Charge(inches, arc).initiative_bonus() == expected
+# --- Charge: fed into fight() as the striking-order bonus ---
 
 
 def test_fight_charge_makes_the_charger_strike_first() -> None:

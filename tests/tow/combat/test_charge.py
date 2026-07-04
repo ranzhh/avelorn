@@ -3,9 +3,10 @@
 import pytest
 
 from avelorn.tow.combat.charge import stand_and_shoot
-from avelorn.tow.combat.melee import Charge, ChargeArc, Contingent, combat_result, fight
+from avelorn.tow.combat.melee import combat_result, fight
 from avelorn.tow.combat.shooting import shoot_unit
 from avelorn.tow.data import TOWRepository
+from avelorn.tow.muster import Charge, ChargeArc, Contingent
 
 REPO = TOWRepository()
 
