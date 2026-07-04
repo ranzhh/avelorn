@@ -25,7 +25,7 @@ from avelorn.core.registry import Registry, UnknownNameError
 from avelorn.tow.combat.attack import AttackProfile, RollState, Transform
 from avelorn.tow.schema.rule import (
     ArmourPiercingEffect,
-    EffectCondition,
+    Condition,
     Rule,
     RuleEffect,
     ToHitEffect,
@@ -72,15 +72,14 @@ def resolve_rule(printed: str, rules: Registry[Rule]) -> ResolvedRule | None:
 def compile_rules(
     printed_rules: Sequence[str],
     rules: Registry[Rule],
-    conditions: Mapping[str, bool | None] | None = None,
+    conditions: Mapping[Condition, bool | None] | None = None,
 ) -> tuple[list[Transform], list[str]]:
     """Compile printed rule names into transforms.
 
-    ``conditions`` are the evaluated engagement facts by condition-field
-    name (``moved``, ``at_long_range``); None means unknown. A rule
-    whose condition needs an unknown fact is unfactored and reported; a
-    rule whose condition evaluates False is honoured by not applying —
-    no transform, no note.
+    ``conditions`` are the evaluated engagement facts by
+    :class:`Condition`; None means unknown. A rule whose condition needs
+    an unknown fact is unfactored and reported; a rule whose condition
+    evaluates False is honoured by not applying — no transform, no note.
 
     Returns:
         The compiled transforms, and the printed names that could not be
@@ -103,7 +102,7 @@ def compile_rules(
 
 
 def _compile(
-    resolved: ResolvedRule, conditions: Mapping[str, bool | None]
+    resolved: ResolvedRule, conditions: Mapping[Condition, bool | None]
 ) -> list[Transform] | None:
     # All-or-nothing: every effect must compile, or the rule is
     # unfactored. An effect whose condition evaluates False compiles to
@@ -120,7 +119,7 @@ def _compile(
 
 
 def _compile_effect(
-    effect: RuleEffect, parameter: int | None, conditions: Mapping[str, bool | None]
+    effect: RuleEffect, parameter: int | None, conditions: Mapping[Condition, bool | None]
 ) -> list[Transform] | None:
     # Dispatches on the effect kind; grows as kinds join. Every registry
     # stage is hookable today; when the registry outgrows the walk (a
@@ -155,18 +154,16 @@ def _compile_effect(
 
 
 def _condition_applies(
-    when: EffectCondition | None, conditions: Mapping[str, bool | None]
+    when: Mapping[Condition, bool] | None, conditions: Mapping[Condition, bool | None]
 ) -> bool | None:
-    # Iterates the condition's set fields by introspection: a field added
-    # to EffectCondition is automatically required here — never silently
-    # ignored because a hand-kept name list went stale. Conjunction: one
-    # known-False member settles "does not apply" even if others are
-    # unknown; unknown decides only when nothing is known-False.
+    # Conjunction over the asked facts: one known-False member settles
+    # "does not apply" even if others are unknown; unknown decides only
+    # when nothing is known-False.
     if when is None:
         return True
     unknown = False
-    for name, required in when.model_dump(exclude_none=True).items():
-        actual = conditions.get(name)
+    for condition, required in when.items():
+        actual = conditions.get(condition)
         if actual is None:
             unknown = True
         elif actual != required:

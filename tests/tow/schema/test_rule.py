@@ -7,7 +7,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from avelorn.core.loading import load_yaml
 from avelorn.tow.data import DATA_DIR
-from avelorn.tow.schema.rule import Rule, RuleEffect
+from avelorn.tow.schema.rule import Condition, Rule, RuleEffect
 
 _EFFECT = TypeAdapter(RuleEffect)
 
@@ -55,12 +55,20 @@ def test_to_hit_effect_parses_with_condition() -> None:
         {"kind": "to-hit", "stage": "roll-to-hit", "amount": -1, "when": {"at_long_range": True}}
     )
     assert effect.amount == -1
-    assert effect.when is not None and effect.when.at_long_range is True
+    assert effect.when is not None and effect.when[Condition.AT_LONG_RANGE] is True
+
+
+def test_condition_outside_the_vocabulary_rejected() -> None:
+    """A condition name outside the closed enum is a data error."""
+    with pytest.raises(ValidationError, match="when"):
+        _EFFECT.validate_python(
+            {"kind": "to-hit", "stage": "roll-to-hit", "amount": -1, "when": {"charging": True}}
+        )
 
 
 def test_condition_must_ask_something() -> None:
     """An empty condition is meaningless."""
-    with pytest.raises(ValidationError, match="at least one"):
+    with pytest.raises(ValidationError, match="at least 1"):
         _EFFECT.validate_python(
             {"kind": "to-hit", "stage": "roll-to-hit", "amount": -1, "when": {}}
         )
