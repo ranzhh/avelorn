@@ -5,12 +5,13 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from avelorn.core.loading import load_yaml, load_yaml_dir
+from avelorn.core.loading import load_yaml
+from avelorn.tow.data import DATA_DIR, TOWRepository
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.unit import Unit
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile, WeaponStrength
 
-DATA_DIR = Path(__file__).parents[3] / "data"
+REPO = TOWRepository()
 WEAPON_FILES = sorted(DATA_DIR.glob("tow/weapons/*.yaml"))
 ARMOUR_FILES = sorted(DATA_DIR.glob("tow/armour/*.yaml"))
 UNIT_FILES = sorted(DATA_DIR.glob("tow/armies/*/units/*.yaml"))
@@ -43,8 +44,7 @@ def test_unit_equipment_resolves(path: Path) -> None:
     Covers base equipment and option-granted equipment; resolution is by
     exact printed name.
     """
-    known = {item.name for item in load_yaml_dir(DATA_DIR / "tow/weapons", Weapon)}
-    known |= {item.name for item in load_yaml_dir(DATA_DIR / "tow/armour", Armour)}
+    known = {item.name for item in (*REPO.weapons.values(), *REPO.armoury.values())}
     unit = load_yaml(path, Unit)
     carried = set(unit.equipment)
     for option in unit.options:

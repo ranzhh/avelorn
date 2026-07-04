@@ -6,13 +6,12 @@ import pytest
 import yaml
 
 from avelorn.core.loading import load_yaml
-from avelorn.tow.data import TOWRepository
+from avelorn.tow.data import DATA_DIR, TOWRepository
 from avelorn.tow.importers.whfb_app.parse import WhfbParseError
 from avelorn.tow.importers.whfb_app.rules import with_existing_effects
 from avelorn.tow.importers.whfb_app.yamlout import rule_to_yaml
 from avelorn.tow.schema.rule import Rule
 
-DATA_DIR = Path(__file__).parents[4] / "data"
 RULE_FILES = sorted(DATA_DIR.glob("tow/rules/*.yaml"))
 REPO = TOWRepository()
 
@@ -31,7 +30,7 @@ def test_effects_survive_a_reimport(tmp_path: Path) -> None:
     The fresh text differs from the file's, so the merge also warns that
     the preserved effects need re-verifying — the FAQ/errata reread case.
     """
-    existing = REPO.rules["Armour Bane (X)"]
+    existing = REPO.rules["armour-bane"]
     assert existing.effects  # the premise: the real file has them
     path = _existing(tmp_path, rule_to_yaml(existing))
     merged, warnings = with_existing_effects(_REIMPORTED, path)
@@ -42,7 +41,7 @@ def test_effects_survive_a_reimport(tmp_path: Path) -> None:
 
 def test_unchanged_text_preserves_without_warning(tmp_path: Path) -> None:
     """Same printed text: effects carry over silently."""
-    existing = REPO.rules["Armour Bane (X)"]
+    existing = REPO.rules["armour-bane"]
     path = _existing(tmp_path, rule_to_yaml(existing))
     fresh = existing.model_copy(update={"effects": []})
     merged, warnings = with_existing_effects(fresh, path)

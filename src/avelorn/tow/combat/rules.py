@@ -18,8 +18,10 @@ recognised text the engine cannot yet honour.
 import logging
 import re
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import suppress
 from dataclasses import dataclass, replace
 
+from avelorn.core.registry import Registry, UnknownNameError
 from avelorn.tow.combat.attack import AttackProfile, RollState, Transform
 from avelorn.tow.schema.rule import (
     ArmourPiercingEffect,
@@ -43,28 +45,33 @@ class ResolvedRule:
     parameter: int | None  # the bracketed number, e.g. 1 for "Armour Bane (1)"
 
 
-def resolve_rule(printed: str, rules: Mapping[str, Rule]) -> ResolvedRule | None:
-    """Match a printed rule name against a registry keyed by rule name.
+def resolve_rule(printed: str, rules: Registry[Rule]) -> ResolvedRule | None:
+    """Match a printed rule name against the rule registry.
 
     An exact name match wins; otherwise a bracketed numeric parameter
-    matches the rule named with the "(X)" placeholder.
+    matches the rule named with the "(X)" placeholder. A name the
+    registry does not know is not an error here but the answer — the
+    rule is not modelled yet — so this is the seam where the registry's
+    loud :class:`UnknownNameError` becomes the domain's quiet None, and
+    unfactored reporting takes over.
 
     Returns:
         The resolved rule and its parameter, or None if nothing matches.
     """
-    rule = rules.get(printed)
-    if rule is not None:
-        return ResolvedRule(rule=rule, parameter=None)
+    with suppress(UnknownNameError):
+        return ResolvedRule(rule=rules.by_name(printed), parameter=None)
     if match := _PARAMETERISED.match(printed):
-        rule = rules.get(match.group("base") + _PARAMETER_PLACEHOLDER)
-        if rule is not None:
-            return ResolvedRule(rule=rule, parameter=int(match.group("value")))
+        with suppress(UnknownNameError):
+            return ResolvedRule(
+                rule=rules.by_name(match.group("base") + _PARAMETER_PLACEHOLDER),
+                parameter=int(match.group("value")),
+            )
     return None
 
 
 def compile_rules(
     printed_rules: Sequence[str],
-    rules: Mapping[str, Rule],
+    rules: Registry[Rule],
     conditions: Mapping[str, bool | None] | None = None,
 ) -> tuple[list[Transform], list[str]]:
     """Compile printed rule names into transforms.

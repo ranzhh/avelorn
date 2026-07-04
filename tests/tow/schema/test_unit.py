@@ -6,6 +6,7 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
+from avelorn.tow.data import DATA_DIR
 from avelorn.tow.schema.unit import (
     Characteristic,
     Complement,
@@ -15,7 +16,6 @@ from avelorn.tow.schema.unit import (
     UnitSize,
 )
 
-DATA_DIR = Path(__file__).parents[3] / "data"
 UNIT_FILES = sorted(DATA_DIR.glob("tow/armies/*/units/*.yaml"))
 
 

@@ -10,10 +10,11 @@ rather than silently ignored.
 """
 
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from avelorn.core.dice import expected_value
+from avelorn.core.registry import Registry
 from avelorn.tow.combat.armour import defender_armour
 from avelorn.tow.combat.attack import (
     AttackProfile,
@@ -44,6 +45,11 @@ logger = logging.getLogger(__name__)
 
 # Rules filed under the shooting phase chapter apply to every volley.
 _SHOOTING_PHASE = "The Shooting Phase"
+
+# Empty registries as defaults: resolution against them misses everything,
+# so an omitted registry degrades to notes exactly like unknown entries do.
+_NO_ARMOURY: Registry[Armour] = Registry(kind="armour")
+_NO_RULES: Registry[Rule] = Registry(kind="rule")
 
 
 @dataclass(frozen=True)
@@ -210,8 +216,8 @@ def shoot_unit(
     shooters: int,
     weapon: Weapon,
     *,
-    armoury: Mapping[str, Armour] | None = None,
-    rules: Mapping[str, Rule] | None = None,
+    armoury: Registry[Armour] = _NO_ARMOURY,
+    rules: Registry[Rule] = _NO_RULES,
     context: EngagementContext | None = None,
     hit_modifier: int = 0,
     force_short_range: bool = False,
@@ -281,7 +287,7 @@ def shoot_unit(
         profile.armour_piercing,
     )
 
-    armour_value, notes = defender_armour(defender, armoury or {})
+    armour_value, notes = defender_armour(defender, armoury)
     for unit in (attacker, defender):
         notes.extend(
             f"special rule not factored: {rule} ({unit.name})" for rule in unit.special_rules
@@ -296,12 +302,12 @@ def shoot_unit(
     # Weapon rules with compiled effects join the dice walk; the rest are
     # reported, exactly as before. Shooting-phase chapter rules (Firing
     # at Long Range, Moving and Shooting) apply to every volley.
-    transforms, unfactored = compile_rules(profile.special_rules, rules or {}, conditions)
+    transforms, unfactored = compile_rules(profile.special_rules, rules, conditions)
     notes.extend(f"weapon rule not factored: {rule} ({weapon.name})" for rule in unfactored)
     phase_rules = sorted(
-        r.name for r in (rules or {}).values() if r.category == _SHOOTING_PHASE and r.effects
+        r.name for r in rules.values() if r.category == _SHOOTING_PHASE and r.effects
     )
-    phase_transforms, phase_unfactored = compile_rules(phase_rules, rules or {}, conditions)
+    phase_transforms, phase_unfactored = compile_rules(phase_rules, rules, conditions)
     transforms.extend(phase_transforms)
     notes.extend(f"core rule not factored: {name}" for name in phase_unfactored)
     if weapon.notes is not None:
