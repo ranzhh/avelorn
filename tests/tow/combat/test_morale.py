@@ -1,4 +1,4 @@
-"""Make Panic Tests: hand-computed goldens over synthetic casualty masses."""
+"""Morale tests: hand-computed goldens over synthetic distributions."""
 
 from fractions import Fraction
 from pathlib import Path
@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from avelorn.core.loading import load_yaml, load_yaml_dir
-from avelorn.tow.combat.panic import make_panic_tests
+from avelorn.tow.combat.morale import make_panic_tests
 from avelorn.tow.combat.shooting import ShootingResult
 from avelorn.tow.schema.psychology import PanicCause
 from avelorn.tow.schema.rule import RerollEffect, Rule

@@ -1,6 +1,11 @@
-"""Make Panic Tests: the shooting sequence's final step, composed on casualties.
+"""Morale tests: Leadership tests forced by the tide of battle.
 
-Sources (tow.whfb.app): the-shooting-phase/make-panic-tests,
+Each is composed on another result's distribution — casualties, a combat
+result — so a caller gets the outcome probabilities directly rather than
+multiplying them by hand. The first is Make Panic Tests.
+
+Make Panic Tests: the shooting sequence's final step, composed on
+casualties. Sources (tow.whfb.app): the-shooting-phase/make-panic-tests,
 the-shooting-phase/fall-back-or-flee,
 the-shooting-phase/no-need-for-hysterics-shooting,
 the-psychology-of-war/panic-tests. The printed model:

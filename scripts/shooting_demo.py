@@ -18,7 +18,7 @@ from pathlib import Path
 from avelorn.core.loading import load_yaml, load_yaml_dir
 from avelorn.core.logging import configure_logging
 from avelorn.tow.combat.context import EngagementContext
-from avelorn.tow.combat.panic import make_panic_tests
+from avelorn.tow.combat.morale import make_panic_tests
 from avelorn.tow.combat.query import Comparator, Predicate, query_result
 from avelorn.tow.combat.shooting import shoot_unit
 from avelorn.tow.schema.armour import Armour
