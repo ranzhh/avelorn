@@ -6,7 +6,7 @@ import pytest
 
 from avelorn.core.dice import binomial_distribution, expected_value
 from avelorn.core.loading import load_yaml, load_yaml_dir
-from avelorn.tow.combat.melee import Combatant, fight, strike, strike_unit
+from avelorn.tow.combat.melee import Combatant, combat_result, fight, strike, strike_unit
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.unit import Characteristic, Unit
 from avelorn.tow.schema.weapon import Weapon
@@ -219,3 +219,41 @@ def test_fight_rejects_negative_fighters() -> None:
     spear = load_weapon("thrusting-spear")
     with pytest.raises(ValueError, match="fighter counts must be >= 0"):
         fight(Combatant(spearmen, -1, spear), Combatant(spearmen, 5, spear), armoury=ARMOURY)
+
+
+# --- combat_result(): scoring the round on unsaved wounds inflicted ---
+
+
+def test_combat_result_first_strike_advantage() -> None:
+    """Striking first tilts the win split (1v1, A at I10).
+
+    A always swings full; B swings back only if it lived (5/6). Joint:
+    P(A wins) = P(B falls, A lives) = 1/6; P(B wins) = P(A falls) =
+    5/6 * 1/6 = 5/36; the rest (25/36) is a draw.
+    """
+    spearmen = load_unit("high-elf-realms", "elven-spearmen")
+    spear = load_weapon("thrusting-spear")
+    result = fight(
+        Combatant(_higher_initiative(spearmen), 1, spear),
+        Combatant(spearmen, 1, spear),
+        armoury=ARMOURY,
+    )
+    cr = combat_result(result)
+    assert cr.p_a_wins == pytest.approx(1 / 6)
+    assert cr.p_b_wins == pytest.approx(5 / 36)
+    assert cr.p_draw == pytest.approx(25 / 36)
+    assert cr.margin[1] == pytest.approx(6 / 36)  # A ahead by one wound
+    assert cr.margin[-1] == pytest.approx(5 / 36)  # B ahead by one wound
+    assert sum(cr.margin.values()) == pytest.approx(1.0)
+    assert any("rank bonus" in note for note in cr.notes)
+
+
+def test_combat_result_simultaneous_is_symmetric() -> None:
+    """Equal Initiative: the win split is symmetric between the two sides."""
+    spearmen = load_unit("high-elf-realms", "elven-spearmen")
+    spear = load_weapon("thrusting-spear")
+    side = Combatant(spearmen, 1, spear)
+    cr = combat_result(fight(side, side, armoury=ARMOURY))
+    assert cr.p_a_wins == pytest.approx(cr.p_b_wins)
+    assert cr.p_a_wins == pytest.approx(5 / 36)
+    assert cr.p_draw == pytest.approx(26 / 36)
