@@ -3,6 +3,7 @@
 import pytest
 
 from avelorn.core.dice import binomial_distribution, expected_value
+from avelorn.tow.combat.contingent import Charge, ChargeArc, Contingent
 from avelorn.tow.combat.melee import (
     combat_result,
     fight,
@@ -10,7 +11,6 @@ from avelorn.tow.combat.melee import (
     strike_unit,
 )
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.muster import Charge, ChargeArc, Contingent
 from avelorn.tow.schema.unit import Characteristic, Unit
 
 REPO = TOWRepository()

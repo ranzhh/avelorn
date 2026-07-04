@@ -6,10 +6,10 @@ import pytest
 
 from avelorn.tow.combat.attack import AttackProfile, HitRoll, RollState, resolve_attack
 from avelorn.tow.combat.context import EngagementContext
+from avelorn.tow.combat.contingent import Contingent
 from avelorn.tow.combat.rules import _condition_applies, compile_rules, resolve_rule
 from avelorn.tow.combat.shooting import shoot_unit
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.muster import Contingent
 
 REPO = TOWRepository()
 

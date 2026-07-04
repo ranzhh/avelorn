@@ -11,8 +11,8 @@ import logging
 
 from avelorn.core.registry import Registry
 from avelorn.tow.combat.context import EngagementContext
+from avelorn.tow.combat.contingent import Contingent
 from avelorn.tow.combat.shooting import ShootingResult, shoot_unit
-from avelorn.tow.muster import Contingent
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.weapon import Weapon

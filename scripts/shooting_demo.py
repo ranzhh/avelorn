@@ -15,11 +15,11 @@ import logging
 
 from avelorn.core.logging import configure_logging
 from avelorn.tow.combat.context import EngagementContext
+from avelorn.tow.combat.contingent import Contingent
 from avelorn.tow.combat.morale import make_panic_tests
 from avelorn.tow.combat.query import Comparator, Predicate, query_result
 from avelorn.tow.combat.shooting import shoot_unit
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.muster import Contingent
 
 
 def main() -> None:
