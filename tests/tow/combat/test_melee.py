@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from avelorn.core.dice import binomial_distribution
+from avelorn.core.dice import binomial_distribution, expected_value
 from avelorn.core.loading import load_yaml, load_yaml_dir
-from avelorn.tow.combat.melee import strike, strike_unit
+from avelorn.tow.combat.melee import fight, strike, strike_unit
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.unit import Characteristic, Unit
 from avelorn.tow.schema.weapon import Weapon
@@ -133,3 +133,68 @@ def test_strike_unit_rejects_a_missile_only_weapon() -> None:
     archers = load_unit("high-elf-realms", "elven-archers")
     with pytest.raises(ValueError, match="no Combat profile"):
         strike_unit(archers, archers, fighters=5, weapon=load_weapon("longbow"))
+
+
+# --- fight(): one bilateral round with Initiative-ordered coupling ---
+
+
+def _higher_initiative(unit: Unit, value: int = 10) -> Unit:
+    """A copy of ``unit`` with its rank-and-file Initiative raised.
+
+    Returns:
+        The modified unit (so it strikes before an unmodified copy).
+    """
+    faster = unit.model_copy(deep=True)
+    faster.profiles[0].characteristics[Characteristic.INITIATIVE] = value
+    return faster
+
+
+def test_fight_equal_initiative_is_simultaneous() -> None:
+    """Same Initiative: both strike at full strength, no reduction.
+
+    Spearman vs spearman (both I4), 1 fighter each: each takes the same
+    single-attack casualty distribution, p_unsaved = 1/6.
+    """
+    spearmen = load_unit("high-elf-realms", "elven-spearmen")
+    spear = load_weapon("thrusting-spear")
+    result = fight(spearmen, 1, spear, spearmen, 1, spear, armoury=ARMOURY)
+    assert result.first_striker is None
+    assert result.a_casualties[1] == pytest.approx(1 / 6)
+    assert result.b_casualties[1] == pytest.approx(1 / 6)
+
+
+def test_fight_higher_initiative_strikes_first_and_takes_less() -> None:
+    """A strikes first (I10 vs I4); B's survivors strike back with fewer models.
+
+    1 vs 1: A's blow removes B on 1/6, so B swings back only when it
+    survived (5/6) and then removes A on 1/6 -> A falls on 5/36. B, hit at
+    full strength, falls on 1/6.
+    """
+    spearmen = load_unit("high-elf-realms", "elven-spearmen")
+    spear = load_weapon("thrusting-spear")
+    result = fight(_higher_initiative(spearmen), 1, spear, spearmen, 1, spear, armoury=ARMOURY)
+    assert result.first_striker == "a"
+    assert result.b_casualties[1] == pytest.approx(1 / 6)  # A full-strength
+    assert result.a_casualties[1] == pytest.approx(5 / 36)  # B struck back reduced
+
+
+def test_fight_coupling_reduces_the_return_strike() -> None:
+    """Striking first strictly lowers the expected return damage taken.
+
+    A (I10) vs B (I4), 5 each: some B models die before swinging, so the
+    casualties A suffers are fewer than a full-strength B strike would deal.
+    """
+    spearmen = load_unit("high-elf-realms", "elven-spearmen")
+    spear = load_weapon("thrusting-spear")
+    result = fight(_higher_initiative(spearmen), 5, spear, spearmen, 5, spear, armoury=ARMOURY)
+    full_strength = strike_unit(spearmen, spearmen, 5, spear, armoury=ARMOURY, defenders=5)
+    assert expected_value(result.a_casualties) < expected_value(full_strength.casualties)
+    assert any("Fight In Extra Rank" in note for note in result.notes)
+
+
+def test_fight_rejects_negative_fighters() -> None:
+    """A negative fighter count is a programming error, not a silent zero."""
+    spearmen = load_unit("high-elf-realms", "elven-spearmen")
+    spear = load_weapon("thrusting-spear")
+    with pytest.raises(ValueError, match="fighter counts must be >= 0"):
+        fight(spearmen, -1, spear, spearmen, 5, spear, armoury=ARMOURY)
