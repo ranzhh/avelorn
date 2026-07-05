@@ -30,7 +30,7 @@ from itertools import product
 from avelorn.core.registry import Registry
 from avelorn.tow.combat.characteristic_tests import unit_pass_probability
 from avelorn.tow.combat.melee import CombatResult
-from avelorn.tow.combat.rules import resolve_rule
+from avelorn.tow.combat.rules import printed_rule
 from avelorn.tow.combat.shooting import ShootingResult
 from avelorn.tow.schema.psychology import PanicCause
 from avelorn.tow.schema.rule import RerollEffect, Rule
@@ -129,10 +129,10 @@ def _reroll_grant(defender: Unit, rules: Registry[Rule], cause: PanicCause) -> s
     # The first of the defender's rules granting a re-roll on this seam
     # for this cause; one grant is all a test can ever use.
     for printed in defender.special_rules:
-        resolved = resolve_rule(printed, rules)
-        if resolved is None:
+        rule = printed_rule(printed, rules)
+        if rule is None:
             continue
-        for effect in resolved.rule.effects:
+        for effect in rule.effects:
             if (
                 isinstance(effect, RerollEffect)
                 and effect.stage is Stage.MAKE_PANIC_TESTS

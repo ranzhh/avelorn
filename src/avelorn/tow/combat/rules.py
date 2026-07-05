@@ -19,7 +19,7 @@ import logging
 import re
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
-from dataclasses import dataclass, replace
+from dataclasses import replace
 
 from avelorn.core.registry import Registry, UnknownNameError
 from avelorn.tow.combat.attack import AttackProfile, RollState, Transform
@@ -37,36 +37,42 @@ _PARAMETERISED = re.compile(r"^(?P<base>.+) \((?P<value>\d+)\)$")
 _PARAMETER_PLACEHOLDER = " (X)"
 
 
-@dataclass(frozen=True)
-class ResolvedRule:
-    """A printed rule name matched to its rule entry."""
+def printed_rule(printed: str, rules: Registry[Rule]) -> Rule | None:
+    """Resolve a printed rule name to the rule exactly as printed.
 
-    rule: Rule
-    parameter: int | None  # the bracketed number, e.g. 1 for "Armour Bane (1)"
-
-
-def resolve_rule(printed: str, rules: Registry[Rule]) -> ResolvedRule | None:
-    """Match a printed rule name against the rule registry.
-
-    An exact name match wins; otherwise a bracketed numeric parameter
-    matches the rule named with the "(X)" placeholder. A name the
-    registry does not know is not an error here but the answer — the
-    rule is not modelled yet — so this is the seam where the registry's
-    loud :class:`UnknownNameError` becomes the domain's quiet None, and
-    unfactored reporting takes over.
+    An exact name match returns the entry itself. Otherwise a bracketed
+    numeric parameter matches the rule filed under the "(X)" placeholder
+    and returns a copy carrying the printed name, the parameter
+    substituted into its effects ("the amount shown in brackets after
+    the name of this special rule") — the rule as this unit prints it,
+    not as it is filed. A name the registry does not know is not an
+    error here but the answer — the rule is not modelled yet — so this
+    is the seam where the registry's loud :class:`UnknownNameError`
+    becomes the domain's quiet None, and unfactored reporting takes
+    over.
 
     Returns:
-        The resolved rule and its parameter, or None if nothing matches.
+        The rule as printed, or None if nothing matches.
     """
     with suppress(UnknownNameError):
-        return ResolvedRule(rule=rules.by_name(printed), parameter=None)
+        return rules.by_name(printed)
     if match := _PARAMETERISED.match(printed):
         with suppress(UnknownNameError):
-            return ResolvedRule(
-                rule=rules.by_name(match.group("base") + _PARAMETER_PLACEHOLDER),
-                parameter=int(match.group("value")),
-            )
+            entry = rules.by_name(match.group("base") + _PARAMETER_PLACEHOLDER)
+            parameter = int(match.group("value"))
+            effects = [_with_parameter(effect, parameter) for effect in entry.effects]
+            return entry.model_copy(update={"name": printed, "effects": effects})
     return None
+
+
+def _with_parameter(effect: RuleEffect, parameter: int) -> RuleEffect:
+    # Substitute the printed parameter into every "X" placeholder the
+    # effect carries. Introspects the effect's fields, so a new
+    # X-bearing kind participates automatically.
+    placeholders = {
+        name: parameter for name in type(effect).model_fields if getattr(effect, name) == "X"
+    }
+    return effect.model_copy(update=placeholders) if placeholders else effect
 
 
 def compile_rules(
@@ -90,8 +96,8 @@ def compile_rules(
     transforms: list[Transform] = []
     unfactored: list[str] = []
     for printed in printed_rules:
-        resolved = resolve_rule(printed, rules)
-        compiled = _compile(resolved, conditions) if resolved is not None else None
+        rule = printed_rule(printed, rules)
+        compiled = _compile(rule, conditions) if rule is not None else None
         if compiled is None:
             unfactored.append(printed)
         else:
@@ -101,17 +107,15 @@ def compile_rules(
     return transforms, unfactored
 
 
-def _compile(
-    resolved: ResolvedRule, conditions: Mapping[Condition, bool | None]
-) -> list[Transform] | None:
+def _compile(rule: Rule, conditions: Mapping[Condition, bool | None]) -> list[Transform] | None:
     # All-or-nothing: every effect must compile, or the rule is
     # unfactored. An effect whose condition evaluates False compiles to
     # no transforms — honoured, not unfactored.
-    if not resolved.rule.effects:
+    if not rule.effects:
         return None
     transforms: list[Transform] = []
-    for effect in resolved.rule.effects:
-        compiled = _compile_effect(effect, resolved.parameter, conditions)
+    for effect in rule.effects:
+        compiled = _compile_effect(effect, conditions)
         if compiled is None:
             return None
         transforms.extend(compiled)
@@ -119,7 +123,7 @@ def _compile(
 
 
 def _compile_effect(
-    effect: RuleEffect, parameter: int | None, conditions: Mapping[Condition, bool | None]
+    effect: RuleEffect, conditions: Mapping[Condition, bool | None]
 ) -> list[Transform] | None:
     # Dispatches on the effect kind; grows as kinds join. Every registry
     # stage is hookable today; when the registry outgrows the walk (a
@@ -127,16 +131,15 @@ def _compile_effect(
     # check returns None here — not modelled, not an error.
     match effect:
         case ArmourPiercingEffect():
-            amount = parameter if effect.amount == "X" else effect.amount
-            if amount is None or effect.on_natural is None:
-                # "X" without a printed parameter, or an unconditional AP
-                # change (which belongs on the chart-side AP, not a walk
-                # transform).
+            if effect.amount == "X" or effect.on_natural is None:
+                # An unsubstituted "X" (the printed name carried no
+                # parameter), or an unconditional AP change (which belongs
+                # on the chart-side AP, not a walk transform).
                 return None
             return [
                 Transform(
                     stage=effect.stage,
-                    on_success=_worsen_save_on_natural(effect.on_natural, amount),
+                    on_success=_worsen_save_on_natural(effect.on_natural, effect.amount),
                 )
             ]
         case ToHitEffect():

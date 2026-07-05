@@ -6,8 +6,8 @@ resolvers take — a datasheet plus the models actually standing.
 :class:`Charge` records a charge move — event data, carried by the
 action that resolves it (:func:`~avelorn.tow.combat.charge.charge`, via
 the :class:`~avelorn.tow.combat.context.CombatContext`), never by the
-unit. Fielding is also where printed equipment names stop being
-strings: :meth:`Contingent.deploy` resolves them into a
+unit. Fielding is also where printed names stop being strings:
+:meth:`Contingent.deploy` resolves equipment and special rules into a
 :class:`Loadout`.
 """
 
@@ -15,26 +15,38 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from avelorn.core.registry import Registry
+from avelorn.tow.combat.rules import printed_rule
 from avelorn.tow.muster import Complement
 from avelorn.tow.schema.armour import Armour
+from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.unit import Unit
 from avelorn.tow.schema.weapon import Weapon
 
 
 @dataclass(frozen=True)
 class Loadout:
-    """A contingent's equipment resolved to entries: weapons and armour worn.
+    """A contingent's gear and rules resolved to entries, at fielding time.
 
     Built at :meth:`Contingent.deploy` — the muster boundary is where a
-    printed equipment name stops being a string. The armour is what save
-    resolution will read; the weapons are what a per-action choice will
-    pick from. Special rules are not carried here yet: they stay printed
-    strings on the fielded datasheet until rule resolution moves onto
-    this seam, tolerating rules whose entries are not imported yet.
+    printed name stops being a string. The armour is what save resolution
+    will read; the weapons are what a per-action choice will pick from;
+    ``rules`` are the unit's special rules that resolve against the rule
+    data — each the rule exactly as printed, parameters substituted, by
+    the engine's one resolution convention
+    (:func:`~avelorn.tow.combat.rules.printed_rule`).
+
+    The two halves miss differently, by design. Equipment coverage is
+    complete, so an unresolvable equipment name fails the deploy. Rule
+    entries exist only for what the engine can honour, so a rule without
+    one is the norm — those names ride along printed, in
+    :attr:`unresolved_rules`, and keep feeding the "not factored" notes
+    rather than silently vanishing.
     """
 
     weapons: tuple[Weapon, ...]
     armour: tuple[Armour, ...]
+    rules: tuple[Rule, ...]
+    unresolved_rules: tuple[str, ...]
 
 
 class ChargeArc(StrEnum):
@@ -130,23 +142,26 @@ class Contingent:
         *,
         weapons: Registry[Weapon],
         armoury: Registry[Armour],
+        rules: Registry[Rule],
     ) -> "Contingent":
         """Field a :class:`~avelorn.tow.muster.Complement`, resolving its equipment.
 
         The complement's chosen loadout — its equipment and special rules
         after its options' adds and removes — is baked into the datasheet the
         engine reads, so the contingent fights with what was bought, not the
-        printed profile; the chosen ``size`` becomes ``models``. The
-        equipment names also resolve against the weapon and armour data into
-        a :class:`Loadout`. A name matching neither is an error, not a note:
-        the data covers every unit-referenced item (a test pins it), so at
-        this seam a miss is a typo in the list, and the human building the
-        list is the one to tell.
+        printed profile; the chosen ``size`` becomes ``models``. The printed
+        names also resolve into a :class:`Loadout`, each kind on its own
+        terms: an equipment name matching no weapon or armour entry is an
+        error — coverage is complete (a test pins it), so a miss here is a
+        typo in the list, and the human building the list is the one to
+        tell — while a special rule without an entry is expected (entries
+        exist only for what the engine can honour) and rides along printed.
 
         Args:
             complement: The list entry to field.
             weapons: Weapon entries, resolving printed equipment names.
             armoury: Armour entries, resolving printed equipment names.
+            rules: Rule entries, resolving printed special-rule names.
 
         Returns:
             The fielded contingent, loadout resolved.
@@ -162,10 +177,20 @@ class Contingent:
             raise ValueError(
                 f"{complement.unit.name}: equipment matches no weapon or armour: {unknown}"
             )
+        special_rules = complement.special_rules
+        resolved: list[Rule] = []
+        unresolved: list[str] = []
+        for printed in special_rules:
+            entry = printed_rule(printed, rules)
+            if entry is None:
+                unresolved.append(printed)
+            else:
+                resolved.append(entry)
         fielded = complement.unit.model_copy(
             update={
                 "equipment": equipment,
-                "special_rules": complement.special_rules,
+                "special_rules": special_rules,
             }
         )
-        return cls(fielded, complement.size, Loadout(tuple(wielded), tuple(worn)))
+        loadout = Loadout(tuple(wielded), tuple(worn), tuple(resolved), tuple(unresolved))
+        return cls(fielded, complement.size, loadout)

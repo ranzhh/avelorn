@@ -7,32 +7,41 @@ import pytest
 from avelorn.tow.combat.attack import AttackProfile, HitRoll, RollState, resolve_attack
 from avelorn.tow.combat.context import EngagementContext
 from avelorn.tow.combat.contingent import Contingent
-from avelorn.tow.combat.rules import _condition_applies, compile_rules, resolve_rule
+from avelorn.tow.combat.rules import _condition_applies, compile_rules, printed_rule
 from avelorn.tow.combat.shooting import shoot_unit
 from avelorn.tow.data import TOWRepository
+from avelorn.tow.schema.rule import ArmourPiercingEffect
 
 REPO = TOWRepository()
 
 
-def test_resolve_exact_name() -> None:
-    """A printed name matching a rule name resolves without a parameter."""
-    resolved = resolve_rule("Killing Blow", REPO.rules)
-    assert resolved is not None
-    assert resolved.rule.id == "killing-blow"
-    assert resolved.parameter is None
+def test_printed_rule_exact_name_is_the_entry_itself() -> None:
+    """A printed name matching an entry name returns that entry, unchanged."""
+    assert printed_rule("Killing Blow", REPO.rules) is REPO.rules["killing-blow"]
 
 
-def test_resolve_parameterised_name() -> None:
-    """A bracketed number matches the rule filed under the (X) placeholder."""
-    resolved = resolve_rule("Armour Bane (1)", REPO.rules)
-    assert resolved is not None
-    assert resolved.rule.id == "armour-bane"
-    assert resolved.parameter == 1
+def test_printed_rule_substitutes_the_parameter() -> None:
+    """A bracketed number matches the (X) entry, returned as printed.
+
+    The copy carries the printed name and the parameter substituted into
+    its effects — the rule as the unit prints it, not as it is filed.
+    """
+    rule = printed_rule("Armour Bane (1)", REPO.rules)
+    assert rule is not None
+    assert rule.id == "armour-bane"
+    assert rule.name == "Armour Bane (1)"
+    effect = rule.effects[0]
+    assert isinstance(effect, ArmourPiercingEffect)
+    assert effect.amount == 1
+    # The filed entry is untouched: the placeholder still reads "X".
+    filed = REPO.rules["armour-bane"].effects[0]
+    assert isinstance(filed, ArmourPiercingEffect)
+    assert filed.amount == "X"
 
 
-def test_resolve_unknown_name() -> None:
+def test_printed_rule_unknown_name() -> None:
     """A name matching nothing resolves to None."""
-    assert resolve_rule("Volley Fire", REPO.rules) is None
+    assert printed_rule("Volley Fire", REPO.rules) is None
 
 
 def test_compile_armour_bane_from_data_reproduces_the_golden() -> None:
