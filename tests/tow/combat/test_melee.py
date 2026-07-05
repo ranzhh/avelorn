@@ -3,9 +3,11 @@
 import pytest
 
 from avelorn.core.dice import binomial_distribution, expected_value
+from avelorn.tow.combat.context import CombatContext
 from avelorn.tow.combat.contingent import Charge, ChargeArc, Contingent
 from avelorn.tow.combat.melee import (
     combat_result,
+    effective_initiative,
     fight,
     strike,
     strike_unit,
@@ -276,6 +278,32 @@ def test_fight_prior_losses_reject_a_non_distribution() -> None:
 # --- Charge: fed into fight() as the striking-order bonus ---
 
 
+@pytest.mark.parametrize(
+    ("inches", "arc", "expected"),
+    [
+        (0, ChargeArc.FRONT, 4),  # +0: no full inch moved
+        (2, ChargeArc.FRONT, 6),  # +1 per full inch
+        (5, ChargeArc.FRONT, 7),  # capped at +3 into the front arc
+        (5, ChargeArc.FLANK, 8),  # +4 into the flank
+        (5, ChargeArc.REAR, 8),  # +4 into the rear
+    ],
+)
+def test_effective_initiative_applies_the_charge_bonus(
+    inches: int, arc: ChargeArc, expected: int
+) -> None:
+    """+1 Initiative per full inch charged, capped by arc, on the I4 base."""
+    spearmen = REPO.units["elven-spearmen"]  # I4
+    charger = Contingent(spearmen, 5)
+    assert effective_initiative(charger, Charge(inches, arc)) == expected
+
+
+def test_effective_initiative_caps_at_ten() -> None:
+    """The charge bonus cannot lift Initiative past the printed cap of 10."""
+    fast = _higher_initiative(REPO.units["elven-spearmen"], 9)
+    charger = Contingent(fast, 5)
+    assert effective_initiative(charger, Charge(5, ChargeArc.FLANK)) == 10  # 9 + 4 -> 10
+
+
 def test_fight_charge_makes_the_charger_strike_first() -> None:
     """A charge flips an equal-Initiative combat: the charger swings first.
 
@@ -284,9 +312,16 @@ def test_fight_charge_makes_the_charger_strike_first() -> None:
     """
     spearmen = REPO.units["elven-spearmen"]
     spear = REPO.weapons["thrusting-spear"]
-    charger = Contingent(spearmen, 1, charge=Charge(3, ChargeArc.FRONT))
+    charger = Contingent(spearmen, 1)
     defender = Contingent(spearmen, 1)
-    result = fight(charger, defender, a_weapon=spear, b_weapon=spear, armoury=REPO.armoury)
+    result = fight(
+        charger,
+        defender,
+        a_weapon=spear,
+        b_weapon=spear,
+        context=CombatContext(a_charge=Charge(3, ChargeArc.FRONT)),
+        armoury=REPO.armoury,
+    )
     assert result.first_striker is charger
     assert result.b_casualties[1] == pytest.approx(1 / 6)  # charger struck full-strength
     assert result.a_casualties[1] == pytest.approx(5 / 36)  # defender struck back reduced
@@ -300,9 +335,14 @@ def test_fight_charge_capped_below_the_foe_stays_simultaneous() -> None:
     """
     spearmen = REPO.units["elven-spearmen"]
     spear = REPO.weapons["thrusting-spear"]
-    charger = Contingent(spearmen, 1, charge=Charge(0, ChargeArc.FRONT))
+    charger = Contingent(spearmen, 1)
     result = fight(
-        charger, Contingent(spearmen, 1), a_weapon=spear, b_weapon=spear, armoury=REPO.armoury
+        charger,
+        Contingent(spearmen, 1),
+        a_weapon=spear,
+        b_weapon=spear,
+        context=CombatContext(a_charge=Charge(0, ChargeArc.FRONT)),
+        armoury=REPO.armoury,
     )
     assert result.first_striker is None
 

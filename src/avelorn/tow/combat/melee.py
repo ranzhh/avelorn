@@ -39,7 +39,8 @@ from avelorn.tow.combat.charts import (
     wound_probability,
     wound_target,
 )
-from avelorn.tow.combat.contingent import Contingent
+from avelorn.tow.combat.context import CombatContext
+from avelorn.tow.combat.contingent import Charge, Contingent
 from avelorn.tow.combat.rules import compile_rules
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
@@ -394,12 +395,20 @@ class FightResult:
         return [sum(row[k] for row in self.losses) for k in range(columns)]
 
 
-def _effective_initiative(contingent: Contingent) -> int:
-    # A contingent's Initiative for striking order: its rank-and-file value
-    # plus any charge bonus, capped at 10 as the-combat-phase/charging-units
-    # requires. A profile with no printed Initiative counts as 0.
+def effective_initiative(contingent: Contingent, charge: Charge | None = None) -> int:
+    """The Initiative a contingent strikes at, charge bonus included.
+
+    The whole printed rule in one place: the rank-and-file Initiative,
+    plus +1 per full inch of the ``charge`` capped by the arc charged
+    into (+3 front, +4 flank or rear), the total capped at 10
+    (the-combat-phase/charging-units). A profile with no printed
+    Initiative counts as 0.
+
+    Returns:
+        The Initiative that decides striking order in :func:`fight`.
+    """
     base = contingent.unit.profiles[0][Characteristic.INITIATIVE] or 0
-    bonus = contingent.charge.initiative_bonus() if contingent.charge is not None else 0
+    bonus = 0 if charge is None else min(charge.full_inches, charge.arc.initiative_cap)
     return min(base + bonus, 10)
 
 
@@ -427,6 +436,7 @@ def fight(
     b_weapon: Weapon,
     a_prior_losses: Sequence[float] | None = None,
     b_prior_losses: Sequence[float] | None = None,
+    context: CombatContext | None = None,
     armoury: Registry[Armour] = _NO_ARMOURY,
     rules: Registry[Rule] = _NO_RULES,
 ) -> FightResult:
@@ -443,10 +453,11 @@ def fight(
     (the-combat-phase: who-strikes-first, fight-on). Equal Initiative
     strikes simultaneously, with no such reduction (simultaneous-combat).
 
-    A charging side's ``charge`` adds its Initiative bonus before the
-    comparison (the-combat-phase/charging-units); the modified Initiative
-    is capped at 10. The two sides are otherwise symmetric; only Initiative
-    orders them. Resolution happens in strike order and the joint is
+    ``context`` carries the round's situation — who charged, and how: a
+    side's charge adds its Initiative bonus before the comparison
+    (the-combat-phase/charging-units), the modified Initiative capped at
+    10. The two sides are otherwise symmetric; only Initiative orders
+    them. Resolution happens in strike order and the joint is
     oriented back to the ``(a, b)`` axes the caller passed.
 
     ``a_prior_losses`` / ``b_prior_losses`` let a side enter already thinned:
@@ -481,7 +492,10 @@ def fight(
     b_lost_before = _prior_loss_pmf(b_prior_losses, b.models, "b_prior_losses")
     a_strikes = _engage(a.unit, b.unit, a_weapon, armoury=armoury, rules=rules, hit_modifier=0)
     b_strikes = _engage(b.unit, a.unit, b_weapon, armoury=armoury, rules=rules, hit_modifier=0)
-    a_first = _strikes_first(_effective_initiative(a), _effective_initiative(b))
+    situation = context or CombatContext()
+    a_first = _strikes_first(
+        effective_initiative(a, situation.a_charge), effective_initiative(b, situation.b_charge)
+    )
 
     # Each side may enter already thinned by pre-combat casualties (a Stand &
     # Shoot volley, say); the two are independent, so the round is the

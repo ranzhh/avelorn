@@ -1,12 +1,14 @@
-"""A unit as fielded on the table: the contingent and the charge it made.
+"""A unit as fielded on the table, and the record of a charge move.
 
 The gameplay-side counterpart of the army-list layer
 (:mod:`avelorn.tow.muster`): a :class:`Contingent` is the body the combat
-resolvers take — a datasheet plus the models actually standing — and
-:class:`Charge` is the charge move it may have made this turn, feeding
-its Combat-phase Initiative bonus. Fielding is also where printed
-equipment names stop being strings: :meth:`Contingent.deploy` resolves
-them into a :class:`Loadout`.
+resolvers take — a datasheet plus the models actually standing.
+:class:`Charge` records a charge move — event data, carried by the
+action that resolves it (:func:`~avelorn.tow.combat.charge.charge`, via
+the :class:`~avelorn.tow.combat.context.CombatContext`), never by the
+unit. Fielding is also where printed equipment names stop being
+strings: :meth:`Contingent.deploy` resolves them into a
+:class:`Loadout`.
 """
 
 from dataclasses import dataclass
@@ -40,39 +42,49 @@ class ChargeArc(StrEnum):
 
     The rulebook caps the charge Initiative bonus per arc (front vs flank
     or rear), but flank and rear diverge elsewhere — the combat-result
-    bonuses each grants differ (#28) — so all three are distinguished here.
+    bonuses each grants differ (#28) — so all three are distinguished
+    here, and each arc carries its own printed numbers.
     """
 
     FRONT = "front"
     FLANK = "flank"
     REAR = "rear"
 
+    @property
+    def initiative_cap(self) -> int:
+        """The arc's cap on the charge Initiative bonus.
+
+        Returns:
+            +3 into the front arc, +4 into the flank or rear
+            (the-combat-phase/charging-units).
+        """
+        return 3 if self is ChargeArc.FRONT else 4
+
 
 @dataclass(frozen=True)
 class Charge:
-    """A charge move, feeding the charger's Combat-phase Initiative bonus.
+    """A charge move: how far it carried, into which arc. A pure record.
 
-    A model that charged gains +1 Initiative per full inch it moved before
-    contact — capped at +3 into the enemy's front arc, +4 into its flank or
-    rear (the-combat-phase/charging-units).
-    :func:`~avelorn.tow.combat.melee.fight` caps the resulting Initiative
-    at 10, as the rule requires. The flank/rear *combat-result* bonuses
-    that same arc would grant are a separate, still-deferred concern
-    (#28); only the Initiative modifier is read here.
+    Both facts are read by the rules the charge feeds — the Combat-phase
+    Initiative bonus computes in
+    :func:`~avelorn.tow.combat.melee.effective_initiative`, and the
+    flank/rear combat-result bonuses are a still-deferred concern (#28).
+    The arc has no default: which arc a charge struck is a fact of the
+    move, not a parameter to assume.
     """
 
     full_inches: int
-    arc: ChargeArc = ChargeArc.FRONT
+    arc: ChargeArc
 
-    def initiative_bonus(self) -> int:
-        """The Initiative modifier this charge grants its models.
+    def __post_init__(self) -> None:
+        """Reject a nonsensical move.
 
-        Returns:
-            +1 per full inch moved, clamped to the arc's cap (+3 into the
-            front, +4 into the flank or rear) and never below zero.
+        Raises:
+            ValueError: the charge distance is negative — a programming
+                error, not a zero bonus.
         """
-        cap = 3 if self.arc is ChargeArc.FRONT else 4
-        return min(max(self.full_inches, 0), cap)
+        if self.full_inches < 0:
+            raise ValueError(f"a charge cannot move a negative distance ({self.full_inches})")
 
 
 @dataclass(frozen=True)
@@ -81,12 +93,11 @@ class Contingent:
 
     The datasheet (:class:`~avelorn.tow.schema.unit.Unit`) is a template —
     it carries the *allowed* size, not how many models stand on the table —
-    so ``models`` supplies the fielded count. ``charge`` is the charge this
-    contingent made this turn, if any; its Initiative bonus decides who
-    strikes first in :func:`~avelorn.tow.combat.melee.fight`, and a
-    contingent that did not charge (any shooter among them) leaves it None.
+    so ``models`` supplies the fielded count. Nothing about the turn rides
+    here: a charge is an action's event data
+    (:class:`~avelorn.tow.combat.context.CombatContext`), not unit state.
 
-    Construct one directly — ``Contingent(unit, models, charge)`` — for an
+    Construct one directly — ``Contingent(unit, models)`` — for an
     arbitrary body on the table: a post-casualty remnant, or an isolated count
     for analysis, neither of which need be a legal army-list size. To field a
     mustered list entry instead, use :meth:`deploy`, which takes a
@@ -110,7 +121,6 @@ class Contingent:
 
     unit: Unit
     models: int
-    charge: Charge | None = None
     loadout: Loadout | None = None  # resolved by deploy(); None on direct construction
 
     @classmethod
@@ -120,7 +130,6 @@ class Contingent:
         *,
         weapons: Registry[Weapon],
         armoury: Registry[Armour],
-        charge: Charge | None = None,
     ) -> "Contingent":
         """Field a :class:`~avelorn.tow.muster.Complement`, resolving its equipment.
 
@@ -138,7 +147,6 @@ class Contingent:
             complement: The list entry to field.
             weapons: Weapon entries, resolving printed equipment names.
             armoury: Armour entries, resolving printed equipment names.
-            charge: The charge this contingent made this turn, if any.
 
         Returns:
             The fielded contingent, loadout resolved.
@@ -160,4 +168,4 @@ class Contingent:
                 "special_rules": complement.special_rules,
             }
         )
-        return cls(fielded, complement.size, charge, Loadout(tuple(wielded), tuple(worn)))
+        return cls(fielded, complement.size, Loadout(tuple(wielded), tuple(worn)))
