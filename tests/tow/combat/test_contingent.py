@@ -3,9 +3,9 @@
 import pytest
 
 from avelorn.tow.combat.contingent import Charge, ChargeArc, Contingent, Loadout
-from avelorn.tow.combat.rules import ResolvedRule
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.muster import Complement
+from avelorn.tow.schema.rule import ArmourPiercingEffect
 from avelorn.tow.schema.unit import Unit
 
 REPO = TOWRepository()
@@ -77,7 +77,7 @@ def test_deploy_resolves_equipment_into_the_loadout(spearmen_unit: Unit) -> None
     assert contingent.loadout == Loadout(
         weapons=(REPO.weapons["hand-weapon"], REPO.weapons["thrusting-spear"]),
         armour=(REPO.armoury["light-armour"], REPO.armoury["shield"]),
-        rules=(ResolvedRule(rule=REPO.rules["valour-of-ages"], parameter=None),),
+        rules=(REPO.rules["valour-of-ages"],),
         unresolved_rules=(
             "Close Order",
             "Elven Reflexes",
@@ -131,5 +131,28 @@ def test_deploy_tolerates_rules_without_entries(spearmen_unit: Unit) -> None:
         mustered, weapons=REPO.weapons, armoury=REPO.armoury, rules=REPO.rules
     )
     assert contingent.loadout is not None
-    assert [r.rule.id for r in contingent.loadout.rules] == ["valour-of-ages"]
+    assert [rule.id for rule in contingent.loadout.rules] == ["valour-of-ages"]
     assert "Shieldwall" in contingent.loadout.unresolved_rules
+
+
+def test_deploy_substitutes_rule_parameters_as_printed(spearmen_unit: Unit) -> None:
+    """A parameterised unit rule arrives as the rule printed on the unit.
+
+    No unit in data/ prints one yet, so a doctored datasheet exercises
+    the path: "Armour Bane (2)" resolves to the (X) entry with the 2
+    substituted into its effects, symmetric with the weapons and armour
+    beside it.
+    """
+    doctored = spearmen_unit.model_copy(update={"special_rules": ["Armour Bane (2)"]})
+    contingent = Contingent.deploy(
+        Complement(unit=doctored, size=10),
+        weapons=REPO.weapons,
+        armoury=REPO.armoury,
+        rules=REPO.rules,
+    )
+    assert contingent.loadout is not None
+    (rule,) = contingent.loadout.rules
+    assert rule.name == "Armour Bane (2)"
+    effect = rule.effects[0]
+    assert isinstance(effect, ArmourPiercingEffect)
+    assert effect.amount == 2

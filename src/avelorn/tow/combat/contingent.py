@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from avelorn.core.registry import Registry
-from avelorn.tow.combat.rules import ResolvedRule, resolve_rule
+from avelorn.tow.combat.rules import printed_rule
 from avelorn.tow.muster import Complement
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
@@ -31,8 +31,9 @@ class Loadout:
     printed name stops being a string. The armour is what save resolution
     will read; the weapons are what a per-action choice will pick from;
     ``rules`` are the unit's special rules that resolve against the rule
-    data, parameters included, matched by the same convention the engine
-    uses (:func:`~avelorn.tow.combat.rules.resolve_rule`).
+    data — each the rule exactly as printed, parameters substituted, by
+    the engine's one resolution convention
+    (:func:`~avelorn.tow.combat.rules.printed_rule`).
 
     The two halves miss differently, by design. Equipment coverage is
     complete, so an unresolvable equipment name fails the deploy. Rule
@@ -44,7 +45,7 @@ class Loadout:
 
     weapons: tuple[Weapon, ...]
     armour: tuple[Armour, ...]
-    rules: tuple[ResolvedRule, ...]
+    rules: tuple[Rule, ...]
     unresolved_rules: tuple[str, ...]
 
 
@@ -177,14 +178,14 @@ class Contingent:
                 f"{complement.unit.name}: equipment matches no weapon or armour: {unknown}"
             )
         special_rules = complement.special_rules
-        resolved: list[ResolvedRule] = []
+        resolved: list[Rule] = []
         unresolved: list[str] = []
         for printed in special_rules:
-            match = resolve_rule(printed, rules)
-            if match is None:
+            entry = printed_rule(printed, rules)
+            if entry is None:
                 unresolved.append(printed)
             else:
-                resolved.append(match)
+                resolved.append(entry)
         fielded = complement.unit.model_copy(
             update={
                 "equipment": equipment,
