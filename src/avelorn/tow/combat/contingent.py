@@ -109,12 +109,15 @@ class Contingent:
     here: a charge is an action's event data
     (:class:`~avelorn.tow.combat.context.CombatContext`), not unit state.
 
-    Construct one directly — ``Contingent(unit, models)`` — for an
-    arbitrary body on the table: a post-casualty remnant, or an isolated count
-    for analysis, neither of which need be a legal army-list size. To field a
-    mustered list entry instead, use :meth:`deploy`, which takes a
+    Two constructors resolve a loadout at the muster boundary.
+    :meth:`deploy` fields a mustered list entry — a
     :class:`~avelorn.tow.muster.Complement` (list-legal size, chosen
-    options) and bakes its loadout into the datasheet the engine reads.
+    options), its loadout baked into the datasheet the engine reads.
+    :meth:`field` fields a bare datasheet at its printed, optionless
+    default — any model count, so a remnant or an isolated what-if needs
+    no legal list size. The raw constructor is for bodies whose loadout
+    already exists: a post-casualty remnant is
+    ``dataclasses.replace(contingent, models=survivors)``.
 
     The weapon in use is *not* carried here: it is a per-action choice, so
     the same contingent shoots with its bow one moment and fights the
@@ -133,7 +136,7 @@ class Contingent:
 
     unit: Unit
     models: int
-    loadout: Loadout | None = None  # resolved by deploy(); None on direct construction
+    loadout: Loadout
 
     @classmethod
     def deploy(
@@ -170,27 +173,76 @@ class Contingent:
             ValueError: a piece of equipment matches no weapon or armour
                 entry.
         """
-        equipment = complement.equipment
-        wielded, rest = weapons.resolve(equipment)
-        worn, unknown = armoury.resolve(rest)
-        if unknown:
-            raise ValueError(
-                f"{complement.unit.name}: equipment matches no weapon or armour: {unknown}"
-            )
-        special_rules = complement.special_rules
-        resolved: list[Rule] = []
-        unresolved: list[str] = []
-        for printed in special_rules:
-            entry = printed_rule(printed, rules)
-            if entry is None:
-                unresolved.append(printed)
-            else:
-                resolved.append(entry)
         fielded = complement.unit.model_copy(
             update={
-                "equipment": equipment,
-                "special_rules": special_rules,
+                "equipment": complement.equipment,
+                "special_rules": complement.special_rules,
             }
         )
-        loadout = Loadout(tuple(wielded), tuple(worn), tuple(resolved), tuple(unresolved))
+        loadout, unknown = _resolve_loadout(fielded, weapons=weapons, armoury=armoury, rules=rules)
+        if unknown:
+            raise ValueError(f"{fielded.name}: equipment matches no weapon or armour: {unknown}")
         return cls(fielded, complement.size, loadout)
+
+    @classmethod
+    def field(
+        cls,
+        unit: Unit,
+        models: int,
+        *,
+        weapons: Registry[Weapon],
+        armoury: Registry[Armour],
+        rules: Registry[Rule],
+    ) -> "Contingent":
+        """Field a bare datasheet at its printed, optionless loadout.
+
+        The default per unit: no options chosen, the printed equipment
+        and special rules resolved exactly as :meth:`deploy` resolves a
+        list entry's. ``models`` is any count — a remnant or an isolated
+        what-if needs no legal list size, which is why this does not
+        route through a :class:`~avelorn.tow.muster.Complement`.
+
+        Args:
+            unit: The datasheet to field.
+            models: The models on the table.
+            weapons: Weapon entries, resolving printed equipment names.
+            armoury: Armour entries, resolving printed equipment names.
+            rules: Rule entries, resolving printed special-rule names.
+
+        Returns:
+            The fielded contingent, loadout resolved.
+
+        Raises:
+            ValueError: a piece of equipment matches no weapon or armour
+                entry.
+        """
+        loadout, unknown = _resolve_loadout(unit, weapons=weapons, armoury=armoury, rules=rules)
+        if unknown:
+            raise ValueError(f"{unit.name}: equipment matches no weapon or armour: {unknown}")
+        return cls(unit, models, loadout)
+
+
+def _resolve_loadout(
+    unit: Unit,
+    *,
+    weapons: Registry[Weapon],
+    armoury: Registry[Armour],
+    rules: Registry[Rule],
+) -> tuple[Loadout, list[str]]:
+    # The muster-boundary resolution both constructors share: equipment
+    # partitions into weapons and armour, special rules resolve where
+    # entries exist and ride along printed where they do not. Unknown
+    # equipment comes back for the constructor to refuse — coverage is
+    # complete, so a miss is a typo in the list.
+    wielded, rest = weapons.resolve(unit.equipment)
+    worn, unknown = armoury.resolve(rest)
+    resolved: list[Rule] = []
+    unresolved: list[str] = []
+    for printed in unit.special_rules:
+        entry = printed_rule(printed, rules)
+        if entry is None:
+            unresolved.append(printed)
+        else:
+            resolved.append(entry)
+    loadout = Loadout(tuple(wielded), tuple(worn), tuple(resolved), tuple(unresolved))
+    return loadout, unknown

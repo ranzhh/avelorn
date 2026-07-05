@@ -1,5 +1,7 @@
 """The fielded unit: Contingent.deploy and the Charge bonus."""
 
+from dataclasses import replace
+
 import pytest
 
 from avelorn.tow.combat.contingent import Charge, ChargeArc, Contingent, Loadout
@@ -114,9 +116,35 @@ def test_deploy_rejects_unresolvable_equipment(spearmen_unit: Unit) -> None:
         )
 
 
-def test_direct_construction_carries_no_loadout(spearmen_unit: Unit) -> None:
-    """An arbitrary body on the table has no resolved loadout (yet)."""
-    assert Contingent(spearmen_unit, 5).loadout is None
+def test_field_gives_the_printed_optionless_loadout(spearmen_unit: Unit) -> None:
+    """field() is the per-unit default: the printed lists resolved, no options.
+
+    Any model count is allowed — a what-if body needs no legal list
+    size — and the loadout equals what deploying an optionless
+    complement resolves.
+    """
+    fielded = Contingent.field(
+        spearmen_unit, 1, weapons=REPO.weapons, armoury=REPO.armoury, rules=REPO.rules
+    )
+    deployed = Contingent.deploy(
+        Complement(unit=spearmen_unit, size=10),
+        weapons=REPO.weapons,
+        armoury=REPO.armoury,
+        rules=REPO.rules,
+    )
+    assert fielded.models == 1
+    assert fielded.loadout == deployed.loadout
+
+
+def test_a_remnant_keeps_its_loadout(spearmen_unit: Unit) -> None:
+    """A post-casualty remnant is the same body, thinned: replace the count."""
+    fielded = Contingent.field(
+        spearmen_unit, 10, weapons=REPO.weapons, armoury=REPO.armoury, rules=REPO.rules
+    )
+    remnant = replace(fielded, models=7)
+    assert remnant.models == 7
+    assert remnant.loadout is fielded.loadout
+    assert remnant.unit is fielded.unit
 
 
 def test_deploy_tolerates_rules_without_entries(spearmen_unit: Unit) -> None:

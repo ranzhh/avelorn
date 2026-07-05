@@ -60,8 +60,12 @@ def main() -> None:
     unit_b = repo.units[args.unit_b]
     weapon_a = weapon_b = repo.weapons[args.weapon]
 
-    a = Contingent(unit_a, args.a_fighters)
-    b = Contingent(unit_b, args.b_fighters)
+    a = Contingent.field(
+        unit_a, args.a_fighters, weapons=repo.weapons, armoury=repo.armoury, rules=repo.rules
+    )
+    b = Contingent.field(
+        unit_b, args.b_fighters, weapons=repo.weapons, armoury=repo.armoury, rules=repo.rules
+    )
     result = fight(
         a, b, a_weapon=weapon_a, b_weapon=weapon_b, armoury=repo.armoury, rules=repo.rules
     )
