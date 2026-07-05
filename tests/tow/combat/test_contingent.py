@@ -23,14 +23,10 @@ def spearmen_unit() -> Unit:
 def test_deploy_fields_complement_size_and_loadout(spearmen_unit: Unit) -> None:
     """Contingent.deploy carries the complement's size and chosen loadout."""
     mustered = Complement(unit=spearmen_unit, size=18, options=["Shieldwall"])
-    charge = Charge(6, ChargeArc.FRONT)
 
-    contingent = Contingent.deploy(
-        mustered, weapons=REPO.weapons, armoury=REPO.armoury, charge=charge
-    )
+    contingent = Contingent.deploy(mustered, weapons=REPO.weapons, armoury=REPO.armoury)
 
     assert contingent.models == 18
-    assert contingent.charge is charge
     # The chosen option's rule is what the engine reads, not the printed profile.
     assert "Shieldwall" in contingent.unit.special_rules
     assert "Shieldwall" not in spearmen_unit.special_rules
