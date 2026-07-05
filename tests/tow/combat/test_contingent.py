@@ -3,6 +3,7 @@
 import pytest
 
 from avelorn.tow.combat.contingent import Charge, ChargeArc, Contingent, Loadout
+from avelorn.tow.combat.rules import ResolvedRule
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.muster import Complement
 from avelorn.tow.schema.unit import Unit
@@ -24,7 +25,9 @@ def test_deploy_fields_complement_size_and_loadout(spearmen_unit: Unit) -> None:
     """Contingent.deploy carries the complement's size and chosen loadout."""
     mustered = Complement(unit=spearmen_unit, size=18, options=["Shieldwall"])
 
-    contingent = Contingent.deploy(mustered, weapons=REPO.weapons, armoury=REPO.armoury)
+    contingent = Contingent.deploy(
+        mustered, weapons=REPO.weapons, armoury=REPO.armoury, rules=REPO.rules
+    )
 
     assert contingent.models == 18
     # The chosen option's rule is what the engine reads, not the printed profile.
@@ -35,7 +38,10 @@ def test_deploy_fields_complement_size_and_loadout(spearmen_unit: Unit) -> None:
 def test_deploy_without_options_matches_the_datasheet(spearmen_unit: Unit) -> None:
     """With no options, the fielded loadout equals the printed datasheet."""
     contingent = Contingent.deploy(
-        Complement(unit=spearmen_unit, size=10), weapons=REPO.weapons, armoury=REPO.armoury
+        Complement(unit=spearmen_unit, size=10),
+        weapons=REPO.weapons,
+        armoury=REPO.armoury,
+        rules=REPO.rules,
     )
 
     assert contingent.unit.equipment == spearmen_unit.equipment
@@ -63,11 +69,21 @@ def test_deploy_resolves_equipment_into_the_loadout(spearmen_unit: Unit) -> None
     equipment order.
     """
     contingent = Contingent.deploy(
-        Complement(unit=spearmen_unit, size=10), weapons=REPO.weapons, armoury=REPO.armoury
+        Complement(unit=spearmen_unit, size=10),
+        weapons=REPO.weapons,
+        armoury=REPO.armoury,
+        rules=REPO.rules,
     )
     assert contingent.loadout == Loadout(
         weapons=(REPO.weapons["hand-weapon"], REPO.weapons["thrusting-spear"]),
         armour=(REPO.armoury["light-armour"], REPO.armoury["shield"]),
+        rules=(ResolvedRule(rule=REPO.rules["valour-of-ages"], parameter=None),),
+        unresolved_rules=(
+            "Close Order",
+            "Elven Reflexes",
+            "Martial Prowess",
+            "Regimental Unit",
+        ),
     )
 
 
@@ -75,7 +91,9 @@ def test_deploy_resolves_option_granted_equipment() -> None:
     """Equipment added by a chosen option reaches the resolved loadout."""
     archers = REPO.units["elven-archers"]
     mustered = Complement(unit=archers, size=10, options=["Light Armour"])
-    contingent = Contingent.deploy(mustered, weapons=REPO.weapons, armoury=REPO.armoury)
+    contingent = Contingent.deploy(
+        mustered, weapons=REPO.weapons, armoury=REPO.armoury, rules=REPO.rules
+    )
     assert contingent.loadout is not None
     assert REPO.armoury["light-armour"] in contingent.loadout.armour
 
@@ -89,10 +107,29 @@ def test_deploy_rejects_unresolvable_equipment(spearmen_unit: Unit) -> None:
     typo = spearmen_unit.model_copy(update={"equipment": ["Hand Weapon", "Shjeld"]})
     with pytest.raises(ValueError, match=r"matches no weapon or armour: \['Shjeld'\]"):
         Contingent.deploy(
-            Complement(unit=typo, size=10), weapons=REPO.weapons, armoury=REPO.armoury
+            Complement(unit=typo, size=10),
+            weapons=REPO.weapons,
+            armoury=REPO.armoury,
+            rules=REPO.rules,
         )
 
 
 def test_direct_construction_carries_no_loadout(spearmen_unit: Unit) -> None:
     """An arbitrary body on the table has no resolved loadout (yet)."""
     assert Contingent(spearmen_unit, 5).loadout is None
+
+
+def test_deploy_tolerates_rules_without_entries(spearmen_unit: Unit) -> None:
+    """A special rule with no entry is the norm: carried printed, not lost.
+
+    Option-granted rules resolve on the same terms — Shieldwall has no
+    entry under data/tow/rules/, so it joins the printed remainder that
+    keeps feeding the "not factored" notes.
+    """
+    mustered = Complement(unit=spearmen_unit, size=10, options=["Shieldwall"])
+    contingent = Contingent.deploy(
+        mustered, weapons=REPO.weapons, armoury=REPO.armoury, rules=REPO.rules
+    )
+    assert contingent.loadout is not None
+    assert [r.rule.id for r in contingent.loadout.rules] == ["valour-of-ages"]
+    assert "Shieldwall" in contingent.loadout.unresolved_rules
