@@ -1,8 +1,9 @@
-"""The charge sequence: Stand & Shoot reaction, hand-checked from the charts."""
+"""The charge sequence: the verb, its reactions, and the composed fight."""
 
 import pytest
 
-from avelorn.tow.combat.charge import stand_and_shoot
+from avelorn.tow.combat.charge import StandAndShoot, charge, stand_and_shoot
+from avelorn.tow.combat.context import CombatContext
 from avelorn.tow.combat.contingent import Charge, ChargeArc, Contingent
 from avelorn.tow.combat.melee import combat_result, fight
 from avelorn.tow.combat.shooting import shoot_unit
@@ -85,9 +86,9 @@ def test_charge_sequence_matches_mixing_the_survivor_fights_by_hand() -> None:
     """
     archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
     spear, hand = REPO.weapons["thrusting-spear"], REPO.weapons["hand-weapon"]
-    charge = Charge(6, ChargeArc.FRONT)
+    move = Charge(6, ChargeArc.FRONT)
     models = 3
-    charger = Contingent(spearmen, models, charge=charge)
+    charger = Contingent(spearmen, models)
     defender = Contingent(archers, 3)
     reaction = stand_and_shoot(
         defender, charger, REPO.weapons["longbow"], armoury=REPO.armoury, rules=REPO.rules
@@ -99,6 +100,7 @@ def test_charge_sequence_matches_mixing_the_survivor_fights_by_hand() -> None:
         a_weapon=spear,
         b_weapon=hand,
         a_prior_losses=reaction.casualties,
+        context=CombatContext(a_charge=move),
         armoury=REPO.armoury,
         rules=REPO.rules,
     )
@@ -106,10 +108,11 @@ def test_charge_sequence_matches_mixing_the_survivor_fights_by_hand() -> None:
     manual = [[0.0] * (defender.models + 1) for _ in range(models + 1)]
     for felled, p_felled in enumerate(reaction.casualties):
         survivors = fight(
-            Contingent(spearmen, models - felled, charge=charge),
+            Contingent(spearmen, models - felled),
             defender,
             a_weapon=spear,
             b_weapon=hand,
+            context=CombatContext(a_charge=move),
             armoury=REPO.armoury,
             rules=REPO.rules,
         )
@@ -131,8 +134,9 @@ def test_stand_and_shoot_erodes_the_chargers_combat_result() -> None:
     """
     archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
     spear, hand = REPO.weapons["thrusting-spear"], REPO.weapons["hand-weapon"]
-    charger = Contingent(spearmen, 10, charge=Charge(8, ChargeArc.FRONT))
+    charger = Contingent(spearmen, 10)
     defender = Contingent(archers, 10)
+    situation = CombatContext(a_charge=Charge(8, ChargeArc.FRONT))
     reaction = stand_and_shoot(
         defender, charger, REPO.weapons["longbow"], armoury=REPO.armoury, rules=REPO.rules
     )
@@ -143,6 +147,7 @@ def test_stand_and_shoot_erodes_the_chargers_combat_result() -> None:
             defender,
             a_weapon=spear,
             b_weapon=hand,
+            context=situation,
             armoury=REPO.armoury,
             rules=REPO.rules,
         )
@@ -154,6 +159,7 @@ def test_stand_and_shoot_erodes_the_chargers_combat_result() -> None:
             a_weapon=spear,
             b_weapon=hand,
             a_prior_losses=reaction.casualties,
+            context=situation,
             armoury=REPO.armoury,
             rules=REPO.rules,
         )
@@ -173,3 +179,71 @@ def test_force_short_range_honours_long_range_as_a_no_op() -> None:
         force_short_range=True,
     )
     assert not any("Firing at Long Range" in note for note in forced.notes)
+
+
+# --- charge(): the verb composing reaction and fight ---
+
+
+def test_charge_composes_the_reaction_into_the_fight() -> None:
+    """charge() equals stand_and_shoot and fight composed by hand."""
+    archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
+    spear, hand = REPO.weapons["thrusting-spear"], REPO.weapons["hand-weapon"]
+    longbow = REPO.weapons["longbow"]
+    charger, target = Contingent(spearmen, 10), Contingent(archers, 10)
+    move = Charge(8, ChargeArc.FRONT)
+
+    outcome = charge(
+        charger,
+        target,
+        move=move,
+        charger_weapon=spear,
+        target_weapon=hand,
+        reaction=StandAndShoot(longbow),
+        armoury=REPO.armoury,
+        rules=REPO.rules,
+    )
+
+    volley = stand_and_shoot(target, charger, longbow, armoury=REPO.armoury, rules=REPO.rules)
+    manual = fight(
+        charger,
+        target,
+        a_weapon=spear,
+        b_weapon=hand,
+        a_prior_losses=volley.casualties,
+        context=CombatContext(a_charge=move),
+        armoury=REPO.armoury,
+        rules=REPO.rules,
+    )
+    assert outcome.reaction == volley
+    assert outcome.melee.losses == manual.losses
+    assert outcome.melee.first_striker is charger  # the move raised the charger's Initiative
+
+
+def test_charge_against_a_holding_target_has_no_volley() -> None:
+    """Hold: no reaction volley, and the melee is the plain charged fight."""
+    archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
+    spear, hand = REPO.weapons["thrusting-spear"], REPO.weapons["hand-weapon"]
+    charger, target = Contingent(spearmen, 10), Contingent(archers, 10)
+    move = Charge(8, ChargeArc.FRONT)
+
+    outcome = charge(
+        charger,
+        target,
+        move=move,
+        charger_weapon=spear,
+        target_weapon=hand,
+        armoury=REPO.armoury,
+        rules=REPO.rules,
+    )
+
+    manual = fight(
+        charger,
+        target,
+        a_weapon=spear,
+        b_weapon=hand,
+        context=CombatContext(a_charge=move),
+        armoury=REPO.armoury,
+        rules=REPO.rules,
+    )
+    assert outcome.reaction is None
+    assert outcome.melee.losses == manual.losses

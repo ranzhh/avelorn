@@ -1,12 +1,14 @@
-"""A unit as fielded on the table: the contingent and the charge it made.
+"""A unit as fielded on the table, and the record of a charge move.
 
 The gameplay-side counterpart of the army-list layer
 (:mod:`avelorn.tow.muster`): a :class:`Contingent` is the body the combat
-resolvers take — a datasheet plus the models actually standing — and
-:class:`Charge` is the charge move it may have made this turn, feeding
-its Combat-phase Initiative bonus. Fielding is also where printed
-equipment names stop being strings: :meth:`Contingent.deploy` resolves
-them into a :class:`Loadout`.
+resolvers take — a datasheet plus the models actually standing.
+:class:`Charge` records a charge move — event data, carried by the
+action that resolves it (:func:`~avelorn.tow.combat.charge.charge`, via
+the :class:`~avelorn.tow.combat.context.CombatContext`), never by the
+unit. Fielding is also where printed equipment names stop being
+strings: :meth:`Contingent.deploy` resolves them into a
+:class:`Loadout`.
 """
 
 from dataclasses import dataclass
@@ -91,12 +93,11 @@ class Contingent:
 
     The datasheet (:class:`~avelorn.tow.schema.unit.Unit`) is a template —
     it carries the *allowed* size, not how many models stand on the table —
-    so ``models`` supplies the fielded count. ``charge`` is the charge this
-    contingent made this turn, if any; its Initiative bonus decides who
-    strikes first in :func:`~avelorn.tow.combat.melee.fight`, and a
-    contingent that did not charge (any shooter among them) leaves it None.
+    so ``models`` supplies the fielded count. Nothing about the turn rides
+    here: a charge is an action's event data
+    (:class:`~avelorn.tow.combat.context.CombatContext`), not unit state.
 
-    Construct one directly — ``Contingent(unit, models, charge)`` — for an
+    Construct one directly — ``Contingent(unit, models)`` — for an
     arbitrary body on the table: a post-casualty remnant, or an isolated count
     for analysis, neither of which need be a legal army-list size. To field a
     mustered list entry instead, use :meth:`deploy`, which takes a
@@ -120,7 +121,6 @@ class Contingent:
 
     unit: Unit
     models: int
-    charge: Charge | None = None
     loadout: Loadout | None = None  # resolved by deploy(); None on direct construction
 
     @classmethod
@@ -130,7 +130,6 @@ class Contingent:
         *,
         weapons: Registry[Weapon],
         armoury: Registry[Armour],
-        charge: Charge | None = None,
     ) -> "Contingent":
         """Field a :class:`~avelorn.tow.muster.Complement`, resolving its equipment.
 
@@ -148,7 +147,6 @@ class Contingent:
             complement: The list entry to field.
             weapons: Weapon entries, resolving printed equipment names.
             armoury: Armour entries, resolving printed equipment names.
-            charge: The charge this contingent made this turn, if any.
 
         Returns:
             The fielded contingent, loadout resolved.
@@ -170,4 +168,4 @@ class Contingent:
                 "special_rules": complement.special_rules,
             }
         )
-        return cls(fielded, complement.size, charge, Loadout(tuple(wielded), tuple(worn)))
+        return cls(fielded, complement.size, Loadout(tuple(wielded), tuple(worn)))
