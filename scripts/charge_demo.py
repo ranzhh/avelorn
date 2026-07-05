@@ -24,9 +24,9 @@ import logging
 
 from avelorn.core.dice import expected_value
 from avelorn.core.logging import configure_logging
-from avelorn.tow.combat.charge import stand_and_shoot
+from avelorn.tow.combat.charge import StandAndShoot, charge
 from avelorn.tow.combat.contingent import Charge, ChargeArc, Contingent
-from avelorn.tow.combat.melee import combat_result, fight
+from avelorn.tow.combat.melee import combat_result, effective_initiative
 from avelorn.tow.combat.morale import break_test
 from avelorn.tow.combat.query import Comparator, Predicate, evaluate, fight_distributions
 from avelorn.tow.data import TOWRepository
@@ -67,32 +67,38 @@ def main() -> None:
     hand_weapon = repo.weapons["hand-weapon"]
     longbow = repo.weapons["longbow"]
 
-    spearmen = Contingent(spearmen_unit, args.spearmen, charge=Charge(args.charge_inches))
+    spearmen = Contingent(spearmen_unit, args.spearmen)
     archers = Contingent(archers_unit, args.archers)
+    move = Charge(args.charge_inches, ChargeArc.FRONT)
 
-    reaction = stand_and_shoot(archers, spearmen, longbow, armoury=repo.armoury, rules=repo.rules)
-    melee = fight(
+    outcome = charge(
         spearmen,
         archers,
-        a_weapon=spear,
-        b_weapon=hand_weapon,
-        a_prior_losses=reaction.casualties,
+        move=move,
+        charger_weapon=spear,
+        target_weapon=hand_weapon,
+        reaction=StandAndShoot(longbow),
         armoury=repo.armoury,
         rules=repo.rules,
     )
+    reaction = outcome.reaction
+    assert reaction is not None  # a StandAndShoot reaction was declared
+    melee = outcome.melee
     scored = combat_result(melee)
     breaks = break_test(scored, spearmen_unit, archers_unit)
 
-    move = spearmen_unit.profiles[0][Characteristic.MOVEMENT]
+    movement = spearmen_unit.profiles[0][Characteristic.MOVEMENT]
     init = spearmen_unit.profiles[0][Characteristic.INITIATIVE] or 0
-    bonus = Charge(args.charge_inches, ChargeArc.FRONT).initiative_bonus()
+    charged_init = effective_initiative(spearmen, move)
+    bonus = charged_init - init
     inches = args.charge_inches
     print(f'{args.spearmen} Elven Spearmen charge {args.archers} Elven Archers ({inches}")')
-    if move is None or inches >= move:
+    if movement is None or inches >= movement:
         print("  charge reaction: the Archers Stand & Shoot (bow), then Hold")
     else:
         print(
-            f"  charge reaction: gap < Movement {move}, no Stand & Shoot possible; assumed anyway"
+            f"  charge reaction: gap < Movement {movement}, "
+            "no Stand & Shoot possible; assumed anyway"
         )
     print()
 
@@ -100,7 +106,6 @@ def main() -> None:
     _print_casualties("Spearmen", reaction.casualties, args.spearmen)
     print()
 
-    charged_init = min(init + bonus, 10)
     if melee.first_striker is spearmen:
         order = f"Spearmen first (I{init} +{bonus} charge = I{charged_init} vs Archers I{init})"
     else:
