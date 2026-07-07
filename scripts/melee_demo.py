@@ -17,12 +17,12 @@ import logging
 
 from avelorn.core.dice import expected_value
 from avelorn.core.logging import configure_logging
+from avelorn.tow.combat.context import CombatContext
 from avelorn.tow.combat.contingent import Contingent
 from avelorn.tow.combat.melee import combat_result, fight
 from avelorn.tow.combat.morale import break_test
 from avelorn.tow.combat.query import Comparator, Predicate, evaluate, fight_distributions
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.schema.unit import Characteristic
 
 
 def _print_casualties(label: str, casualties: list[float], fighters: int) -> None:
@@ -49,6 +49,12 @@ def main() -> None:
         "--weapon", default="thrusting-spear", help="weapon slug both sides fight with"
     )
     parser.add_argument(
+        "--first-round",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="whether this is the combat's first round (omit = unknown)",
+    )
+    parser.add_argument(
         "-v", "--verbose", action="store_true", help="emit the DEBUG math trace to stderr"
     )
     args = parser.parse_args()
@@ -66,12 +72,18 @@ def main() -> None:
     b = Contingent.field(
         unit_b, args.b_fighters, weapons=repo.weapons, armoury=repo.armoury, rules=repo.rules
     )
-    result = fight(a, b, a_weapon=weapon_a, b_weapon=weapon_b)
+    result = fight(
+        a,
+        b,
+        a_weapon=weapon_a,
+        b_weapon=weapon_b,
+        context=CombatContext(first_round=args.first_round),
+    )
     scored = combat_result(result)
     breaks = break_test(scored, unit_a, unit_b)
 
-    init_a = unit_a.profiles[0][Characteristic.INITIATIVE]
-    init_b = unit_b.profiles[0][Characteristic.INITIATIVE]
+    init_a = result.a_initiative.value
+    init_b = result.b_initiative.value
     print(
         f"{args.a_fighters} {unit_a.name} fight {args.b_fighters} {unit_b.name} "
         f"({weapon_a.name} vs {weapon_b.name})"

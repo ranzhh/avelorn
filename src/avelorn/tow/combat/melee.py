@@ -364,12 +364,17 @@ class FightResult:
     combat-result margin must be computed from. ``a_casualties`` and
     ``b_casualties`` are its marginals. ``first_striker`` is the
     :class:`Contingent` that struck first by Initiative, or None when equal
-    Initiative made the blows simultaneous.
+    Initiative made the blows simultaneous. ``a_initiative`` and
+    ``b_initiative`` are the effective Initiatives that ordering compared —
+    reported so a caller prints the value the math used, as the shooting
+    result reports its effective To Hit target.
     """
 
     losses: list[list[float]]  # losses[a_lost][b_lost] = joint probability
     first_striker: Contingent | None
     notes: tuple[str, ...] = ()
+    a_initiative: EffectiveCharacteristic = EffectiveCharacteristic(0)
+    b_initiative: EffectiveCharacteristic = EffectiveCharacteristic(0)
 
     @property
     def a_casualties(self) -> list[float]:
@@ -561,7 +566,13 @@ def fight(
         b.unit.name,
         "simultaneous" if first_striker is None else first_striker.unit.name,
     )
-    return FightResult(losses=losses, first_striker=first_striker, notes=notes)
+    return FightResult(
+        losses=losses,
+        first_striker=first_striker,
+        notes=notes,
+        a_initiative=a_initiative,
+        b_initiative=b_initiative,
+    )
 
 
 def _fell(engagement: _Engagement, fighters: int, *, targets: int) -> list[float]:

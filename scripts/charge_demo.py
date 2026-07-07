@@ -26,7 +26,7 @@ from avelorn.core.dice import expected_value
 from avelorn.core.logging import configure_logging
 from avelorn.tow.combat.charge import StandAndShoot, charge
 from avelorn.tow.combat.contingent import Charge, ChargeArc, Contingent
-from avelorn.tow.combat.melee import combat_result, effective_initiative
+from avelorn.tow.combat.melee import combat_result
 from avelorn.tow.combat.morale import break_test
 from avelorn.tow.combat.query import Comparator, Predicate, evaluate, fight_distributions
 from avelorn.tow.data import TOWRepository
@@ -91,9 +91,8 @@ def main() -> None:
     breaks = break_test(scored, spearmen_unit, archers_unit)
 
     movement = spearmen_unit.profiles[0][Characteristic.MOVEMENT]
-    init = spearmen_unit.profiles[0][Characteristic.INITIATIVE] or 0
-    charged_init = effective_initiative(spearmen, move).value
-    bonus = charged_init - init
+    charged_init = melee.a_initiative.value
+    archers_init = melee.b_initiative.value
     inches = args.charge_inches
     print(f'{args.spearmen} Elven Spearmen charge {args.archers} Elven Archers ({inches}")')
     if movement is None or inches >= movement:
@@ -110,9 +109,9 @@ def main() -> None:
     print()
 
     if melee.first_striker is spearmen:
-        order = f"Spearmen first (I{init} +{bonus} charge = I{charged_init} vs Archers I{init})"
+        order = f"Spearmen first (effective I{charged_init} vs Archers I{archers_init})"
     else:
-        order = f'simultaneous (both I{init}; the {inches}" charge adds +{bonus})'
+        order = f"simultaneous (both at effective I{charged_init})"
     print(f"  striking order: {order}")
     print("  (assumes every fighter is in base contact at full Attacks;")
     print("   fighting ranks & supporting attacks not yet modelled — #28)")
