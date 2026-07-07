@@ -402,13 +402,15 @@ def test_fight_first_round_initiative_rule_flips_the_order() -> None:
     Two I4 spearmen bodies strike simultaneously; the +1 first-round
     modifier lifts one side to I5, so it strikes first — and its rule's
     "not factored" note disappears, because the rule is in the math.
+    The foe is fielded without its printed rules, so the real Elven
+    Reflexes in data cannot hand it the same +1.
     """
     spearmen = REPO.units["elven-spearmen"]
     spear = REPO.weapons["thrusting-spear"]
     quick = _reflexive(spearmen)
     result = fight(
         quick,
-        _fielded(spearmen, 1),
+        _fielded(spearmen.model_copy(update={"special_rules": []}), 1),
         a_weapon=spear,
         b_weapon=spear,
         context=CombatContext(first_round=True),
@@ -444,3 +446,82 @@ def test_fight_unknown_round_leaves_the_rule_noted() -> None:
     )
     assert result.first_striker is None
     assert any("Doctored Reflexes" in note for note in result.notes)
+
+
+# --- Elven Reflexes, end to end from data/ ---
+
+
+def _deployed(slug: str, models: int) -> Contingent:
+    return _fielded(REPO.units[slug], models)
+
+
+def test_elven_reflexes_strikes_first_in_the_first_round() -> None:
+    """The data-driven +1 Initiative decides the order against a slower foe.
+
+    Deployed spearmen (I4, Elven Reflexes) against a doctored body of
+    the same profile without the rule: simultaneous in any later round,
+    but in the first round the elves strike at I5 and swing first. The
+    factored rule leaves no "not factored" note.
+    """
+    spearmen = REPO.units["elven-spearmen"]
+    spear = REPO.weapons["thrusting-spear"]
+    elves = _deployed("elven-spearmen", 5)
+    base = spearmen.profiles[0][Characteristic.INITIATIVE]
+    foe = _fielded(spearmen.model_copy(update={"special_rules": []}), 5)
+    first = fight(
+        elves,
+        foe,
+        a_weapon=spear,
+        b_weapon=spear,
+        context=CombatContext(first_round=True),
+    )
+    later = fight(
+        elves,
+        foe,
+        a_weapon=spear,
+        b_weapon=spear,
+        context=CombatContext(first_round=False),
+    )
+    assert base is not None
+    assert first.a_initiative.value == base + 1
+    assert first.first_striker is elves
+    assert not any("Elven Reflexes" in note for note in first.notes)
+    assert later.a_initiative.value == base
+    assert later.first_striker is None
+    assert not any("Elven Reflexes" in note for note in later.notes)
+
+
+def test_elven_reflexes_unknown_round_stays_noted() -> None:
+    """Without the round fact the rule cannot be evaluated: noted, no bonus."""
+    spear = REPO.weapons["thrusting-spear"]
+    elves = _deployed("elven-spearmen", 5)
+    result = fight(
+        elves,
+        _deployed("elven-spearmen", 5),
+        a_weapon=spear,
+        b_weapon=spear,
+    )
+    assert result.first_striker is None
+    assert any("Elven Reflexes" in note for note in result.notes)
+
+
+def test_charge_factors_elven_reflexes_structurally() -> None:
+    """A charge is a combat's first round, so both elven sides gain the +1.
+
+    Deployed spearmen charge deployed archers 3": the mirror-image +1
+    cancels in the order (charge bonus still decides it), and neither
+    side's Elven Reflexes is left in the notes — the rule is in the math.
+    """
+    from avelorn.tow.combat.charge import charge
+
+    result = charge(
+        _deployed("elven-spearmen", 5),
+        _deployed("elven-archers", 5),
+        move=Charge(3, ChargeArc.FRONT),
+        charger_weapon=REPO.weapons["thrusting-spear"],
+        target_weapon=REPO.weapons["hand-weapon"],
+        rules=REPO.rules,
+    )
+    melee = result.melee
+    assert melee.a_initiative.value == melee.b_initiative.value + 3  # charge bonus only
+    assert not any("Elven Reflexes" in note for note in melee.notes)

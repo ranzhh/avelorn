@@ -1,0 +1,17 @@
+# Source: https://tow.whfb.app/special-rules/elven-reflexes
+id: elven-reflexes
+name: Elven Reflexes
+page: 25
+category: Special Rules
+flavour: Elves possess phenomenal speed and grace, striking at their enemies faster than the eye can see.
+paragraphs:
+  - A model with this special rule (but not its mount) has a +1 modifier to its Initiative characteristic (to a maximum of
+    10) during the first round of any combat.
+# Hand-authored, diffable against the paragraphs above.
+# "(but not its mount)" is not modelled: mounts do not exist in the engine yet.
+effects:
+  - when:
+      first_round_of_combat: true
+    then:
+      I: 1
+    maximum: 10
