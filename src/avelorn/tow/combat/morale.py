@@ -27,20 +27,16 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from itertools import product
 
-from avelorn.core.registry import Registry
 from avelorn.tow.combat.characteristic_tests import unit_pass_probability
+from avelorn.tow.combat.contingent import Contingent, Loadout
 from avelorn.tow.combat.melee import CombatResult
-from avelorn.tow.combat.rules import printed_rule
 from avelorn.tow.combat.shooting import ShootingResult
 from avelorn.tow.schema.psychology import PanicCause
-from avelorn.tow.schema.rule import RerollEffect, Rule
+from avelorn.tow.schema.rule import RerollEffect
 from avelorn.tow.schema.stage import Stage
 from avelorn.tow.schema.unit import Characteristic, Unit
 
 logger = logging.getLogger(__name__)
-
-# An empty registry as the default: every rule stays inert, visibly.
-_NO_RULES: Registry[Rule] = Registry(kind="rule")
 
 
 @dataclass(frozen=True)
@@ -57,14 +53,13 @@ class PanicResult:
 
 def make_panic_tests(
     result: ShootingResult,
-    defender: Unit,
+    defender: Contingent,
     *,
-    rules: Registry[Rule] = _NO_RULES,
     battle_strength: int | None = None,
 ) -> PanicResult:
     """Resolve the panic step for one volley's casualty distribution.
 
-    ``rules`` maps printed rule names to rule entries: a re-roll effect
+    The defender's resolved loadout carries its rules: a re-roll effect
     on this seam whose cause filter admits heavy casualties (this
     seam's only cause) re-rolls a failed test — once, whatever the
     source, per the printed re-roll rules. ``battle_strength`` is the
@@ -86,8 +81,8 @@ def make_panic_tests(
     if battle < size:
         raise ValueError(f"battle strength ({battle}) cannot be below current size ({size})")
 
-    p_pass = float(unit_pass_probability(defender, Characteristic.LEADERSHIP))
-    reroll_from = _reroll_grant(defender, rules, PanicCause.HEAVY_CASUALTIES)
+    p_pass = float(unit_pass_probability(defender.unit, Characteristic.LEADERSHIP))
+    reroll_from = _reroll_grant(defender.loadout, PanicCause.HEAVY_CASUALTIES)
     if reroll_from is not None:
         # A failed test is taken again: both dice, same natural bounds,
         # never more than once whatever the source.
@@ -125,21 +120,19 @@ def make_panic_tests(
     )
 
 
-def _reroll_grant(defender: Unit, rules: Registry[Rule], cause: PanicCause) -> str | None:
-    # The first of the defender's rules granting a re-roll on this seam
-    # for this cause; one grant is all a test can ever use.
-    for printed in defender.special_rules:
-        rule = printed_rule(printed, rules)
-        if rule is None:
-            continue
+def _reroll_grant(loadout: Loadout, cause: PanicCause) -> str | None:
+    # The first of the defender's resolved rules granting a re-roll on
+    # this seam for this cause; one grant is all a test can ever use.
+    # Unresolved rules have no entries, so they cannot grant.
+    for rule in loadout.rules:
         for effect in rule.effects:
             if (
                 isinstance(effect, RerollEffect)
                 and effect.stage is Stage.MAKE_PANIC_TESTS
                 and (not effect.causes or cause in effect.causes)
             ):
-                logger.debug("panic re-roll granted by %s", printed)
-                return printed
+                logger.debug("panic re-roll granted by %s", rule.name)
+                return rule.name
     return None
 
 

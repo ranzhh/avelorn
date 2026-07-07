@@ -37,7 +37,6 @@ from avelorn.tow.combat.charts import (
 from avelorn.tow.combat.context import EngagementContext
 from avelorn.tow.combat.contingent import Contingent
 from avelorn.tow.combat.rules import compile_rules
-from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Condition, Rule
 from avelorn.tow.schema.unit import Characteristic
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile
@@ -47,9 +46,7 @@ logger = logging.getLogger(__name__)
 # Rules filed under the shooting phase chapter apply to every volley.
 _SHOOTING_PHASE = "The Shooting Phase"
 
-# Empty registries as defaults: resolution against them misses everything,
-# so an omitted registry degrades to notes exactly like unknown entries do.
-_NO_ARMOURY: Registry[Armour] = Registry(kind="armour")
+# An empty registry as the default: every rule stays unfactored, visibly.
 _NO_RULES: Registry[Rule] = Registry(kind="rule")
 
 
@@ -229,7 +226,6 @@ def shoot_unit(
     defender: Contingent,
     weapon: Weapon,
     *,
-    armoury: Registry[Armour] = _NO_ARMOURY,
     rules: Registry[Rule] = _NO_RULES,
     context: EngagementContext | None = None,
     hit_modifier: int = 0,
@@ -241,11 +237,11 @@ def shoot_unit(
     first (rank-and-file) profile and the weapon's missile profile;
     casualties cap at the defender's fielded ``models``. To resolve a
     partial volley (only some models in range or sight), field the
-    shooting subset as its own contingent. ``armoury`` maps printed
-    equipment names to armour items; ``rules`` maps printed rule names to
-    rule entries, whose effects compile into the dice walk. Anything
-    either mapping does not resolve — and every unit special rule — is
-    not factored into the math but listed in the result's notes.
+    shooting subset as its own contingent. The defender's save folds
+    from its resolved loadout; ``rules`` maps printed rule names to rule
+    entries, whose effects compile into the dice walk for the weapon's
+    and the shooting phase's rules. Unit special rules are not factored
+    into the math yet — every one is listed in the result's notes.
 
     ``context`` is the engagement's situation (moved, distance); rules
     conditioned on facts it leaves unknown stay unfactored and noted.
@@ -300,10 +296,11 @@ def shoot_unit(
         profile.armour_piercing,
     )
 
-    armour_value, notes = defender_armour(target, armoury)
-    for unit in (shooter, target):
+    armour_value = defender_armour(defender.loadout)
+    notes: list[str] = []
+    for side in (shooter, target):
         notes.extend(
-            f"special rule not factored: {rule} ({unit.name})" for rule in unit.special_rules
+            f"special rule not factored: {rule} ({side.name})" for rule in side.special_rules
         )
     conditions = _engagement_conditions(profile, context, force_short_range)
 

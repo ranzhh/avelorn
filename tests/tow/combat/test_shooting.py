@@ -60,24 +60,14 @@ def test_shoot_unit_archers_vs_spearmen() -> None:
         _fielded(archers, 3),
         _fielded(spearmen, 10),
         REPO.weapons["longbow"],
-        armoury=REPO.armoury,
     )
     assert result.hit_target == 3  # BS 4
     assert result.save_target == 5  # 7 - light armour - shield
     assert result.expected_wounds == pytest.approx(2 / 3)
-    assert any("Hand Weapon" in note for note in result.notes)  # melee gear unfactored
+    # Equipment resolved at fielding: nothing about it is left to report.
+    assert not any("equipment not factored" in note for note in result.notes)
     assert any("Valour of Ages" in note for note in result.notes)
     assert any("Armour Bane (1)" in note for note in result.notes)  # weapon rule unfactored
-
-
-def test_shoot_unit_without_armoury_degrades_visibly() -> None:
-    """No armoury means no save — but every ignored item is reported."""
-    archers = REPO.units["elven-archers"]
-    spearmen = REPO.units["elven-spearmen"]
-    result = shoot_unit(_fielded(archers, 3), _fielded(spearmen, 10), REPO.weapons["longbow"])
-    assert result.save_target is None
-    assert any("Light Armour" in note for note in result.notes)
-    assert any("Shield" in note for note in result.notes)
 
 
 def test_defender_size_does_not_affect_wounds() -> None:
@@ -90,8 +80,8 @@ def test_defender_size_does_not_affect_wounds() -> None:
     spearmen = REPO.units["elven-spearmen"]
     longbow = REPO.weapons["longbow"]
 
-    vs_twenty = shoot_unit(archers, _fielded(spearmen, 20), longbow, armoury=REPO.armoury)
-    vs_thirty = shoot_unit(archers, _fielded(spearmen, 30), longbow, armoury=REPO.armoury)
+    vs_twenty = shoot_unit(archers, _fielded(spearmen, 20), longbow)
+    vs_thirty = shoot_unit(archers, _fielded(spearmen, 30), longbow)
 
     assert vs_twenty.p_unsaved == vs_thirty.p_unsaved
     assert vs_twenty.distribution == vs_thirty.distribution
@@ -139,7 +129,6 @@ def test_shoot_unit_caps_casualties_but_not_wounds() -> None:
         _fielded(archers, 30),
         _fielded(spearmen, 5),
         REPO.weapons["longbow"],
-        armoury=REPO.armoury,
     )
     assert result.target_models == 5
     assert len(result.distribution) == 31
@@ -185,7 +174,6 @@ def test_shoot_unit_folds_multi_wound_casualties_and_caps() -> None:
         _fielded(archers, 30),
         _fielded(multi_wound, 5),
         REPO.weapons["longbow"],
-        armoury=REPO.armoury,
     )
     assert result.target_models == 5  # cap now applied
     assert len(result.casualties) == 6  # 0..5 models
@@ -207,7 +195,6 @@ def test_shoot_unit_warbow_uses_wielders_strength() -> None:
         _fielded(sea_guard, 3),
         _fielded(spearmen, 10),
         REPO.weapons["warbow"],
-        armoury=REPO.armoury,
     )
     assert result.hit_target == 3  # BS 4
     assert result.wound_target == 4  # wielder's S3 vs T3

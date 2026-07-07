@@ -82,7 +82,6 @@ def main() -> None:
         charger_weapon=spear,
         target_weapon=hand_weapon,
         reaction=StandAndShoot(longbow),
-        armoury=repo.armoury,
         rules=repo.rules,
     )
     reaction = outcome.reaction

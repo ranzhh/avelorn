@@ -66,9 +66,7 @@ def main() -> None:
     b = Contingent.field(
         unit_b, args.b_fighters, weapons=repo.weapons, armoury=repo.armoury, rules=repo.rules
     )
-    result = fight(
-        a, b, a_weapon=weapon_a, b_weapon=weapon_b, armoury=repo.armoury, rules=repo.rules
-    )
+    result = fight(a, b, a_weapon=weapon_a, b_weapon=weapon_b, rules=repo.rules)
     scored = combat_result(result)
     breaks = break_test(scored, unit_a, unit_b)
 

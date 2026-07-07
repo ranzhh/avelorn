@@ -81,7 +81,6 @@ def main() -> None:
         attacker,
         defender,
         weapon,
-        armoury=repo.armoury,
         rules=repo.rules,
         context=context,
     )
@@ -119,9 +118,7 @@ def main() -> None:
     print(f"  - P(at most 3 survive):        {at_most_3:.3f}")
     print(f"  - P(unit wiped out):           {wiped:.3f}")
 
-    panic = make_panic_tests(
-        result, defender.unit, rules=repo.rules, battle_strength=args.battle_strength
-    )
+    panic = make_panic_tests(result, defender, battle_strength=args.battle_strength)
     print()
     print("  make panic tests:")
     print(f"  - P(test forced):              {panic.p_test:.3f}")

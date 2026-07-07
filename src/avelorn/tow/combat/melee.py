@@ -42,16 +42,13 @@ from avelorn.tow.combat.charts import (
 from avelorn.tow.combat.context import CombatContext
 from avelorn.tow.combat.contingent import Charge, Contingent
 from avelorn.tow.combat.rules import compile_rules
-from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
-from avelorn.tow.schema.unit import Characteristic, Unit
+from avelorn.tow.schema.unit import Characteristic
 from avelorn.tow.schema.weapon import Weapon
 
 logger = logging.getLogger(__name__)
 
-# Empty registries as defaults: resolution against them misses everything,
-# so an omitted registry degrades to notes exactly like unknown entries do.
-_NO_ARMOURY: Registry[Armour] = Registry(kind="armour")
+# An empty registry as the default: every rule stays unfactored, visibly.
 _NO_RULES: Registry[Rule] = Registry(kind="rule")
 
 
@@ -221,11 +218,10 @@ class _Engagement:
 
 
 def _engage(
-    attacker: Unit,
-    defender: Unit,
+    attacker: Contingent,
+    defender: Contingent,
     weapon: Weapon,
     *,
-    armoury: Registry[Armour],
     rules: Registry[Rule],
     hit_modifier: int,
 ) -> _Engagement:
@@ -237,30 +233,32 @@ def _engage(
     profile = weapon.combat_profile
     if profile is None:
         raise ValueError(f"{weapon.name} has no Combat profile; it cannot fight")
-    weapon_skill = attacker.profiles[0][Characteristic.WEAPON_SKILL]
-    target_weapon_skill = defender.profiles[0][Characteristic.WEAPON_SKILL]
-    attacks_per_model = attacker.profiles[0][Characteristic.ATTACKS]
-    toughness = defender.profiles[0][Characteristic.TOUGHNESS]
+    shooter, target = attacker.unit, defender.unit
+    weapon_skill = shooter.profiles[0][Characteristic.WEAPON_SKILL]
+    target_weapon_skill = target.profiles[0][Characteristic.WEAPON_SKILL]
+    attacks_per_model = shooter.profiles[0][Characteristic.ATTACKS]
+    toughness = target.profiles[0][Characteristic.TOUGHNESS]
     if weapon_skill is None:
-        raise ValueError(f"{attacker.name} has no Weapon Skill; it cannot fight")
+        raise ValueError(f"{shooter.name} has no Weapon Skill; it cannot fight")
     if target_weapon_skill is None:
-        raise ValueError(f"{defender.name} has no Weapon Skill; its To Hit is undefined")
+        raise ValueError(f"{target.name} has no Weapon Skill; its To Hit is undefined")
     if attacks_per_model is None:
-        raise ValueError(f"{attacker.name} has no Attacks; it cannot fight")
+        raise ValueError(f"{shooter.name} has no Attacks; it cannot fight")
     if toughness is None:
-        raise ValueError(f"{defender.name} has no Toughness; it cannot be wounded")
+        raise ValueError(f"{target.name} has no Toughness; it cannot be wounded")
 
-    wielder_strength = attacker.profiles[0][Characteristic.STRENGTH]
+    wielder_strength = shooter.profiles[0][Characteristic.STRENGTH]
     if profile.strength.is_relative and wielder_strength is None:
         raise ValueError(
-            f"{weapon.name} strikes at the wielder's Strength, but {attacker.name} has none"
+            f"{weapon.name} strikes at the wielder's Strength, but {shooter.name} has none"
         )
     strength = profile.strength.resolve(wielder_strength or 0)
 
-    armour_value, notes = defender_armour(defender, armoury)
-    for unit in (attacker, defender):
+    armour_value = defender_armour(defender.loadout)
+    notes: list[str] = []
+    for side in (shooter, target):
         notes.extend(
-            f"special rule not factored: {rule} ({unit.name})" for rule in unit.special_rules
+            f"special rule not factored: {rule} ({side.name})" for rule in side.special_rules
         )
     # Melee engagement conditions (charging, flank/rear, ...) are not
     # modelled yet, so no facts are supplied: a rule needing one stays
@@ -276,13 +274,13 @@ def _engage(
     p_unsaved, p_kill, hit = _per_attack(hit, wound, save, None, transforms)
     # Wounds accumulate into whole slain models; a profile with no printed
     # Wounds ("-") is treated as a single-Wound model.
-    defender_wounds = defender.profiles[0][Characteristic.WOUNDS] or 1
+    defender_wounds = target.profiles[0][Characteristic.WOUNDS] or 1
     logger.debug(
         "%s (WS %d, A %d) vs %s (WS %d, T %d): per-attack unsaved p=%.3f",
-        attacker.name,
+        shooter.name,
         weapon_skill,
         attacks_per_model,
-        defender.name,
+        target.name,
         target_weapon_skill,
         toughness,
         p_unsaved,
@@ -306,7 +304,6 @@ def strike_unit(
     defender: Contingent,
     weapon: Weapon,
     *,
-    armoury: Registry[Armour] = _NO_ARMOURY,
     rules: Registry[Rule] = _NO_RULES,
     hit_modifier: int = 0,
 ) -> StrikeResult:
@@ -314,12 +311,12 @@ def strike_unit(
 
     Each fielded model (``attacker.models``) makes its full Attacks with
     the weapon's Combat profile, using each side's first (rank-and-file)
-    profile; casualties cap at the defender's fielded ``models``.
-    ``armoury`` maps printed equipment names to armour items; ``rules``
-    maps printed rule names to rule entries, whose effects compile into
-    the dice walk. Anything either mapping does not resolve — and every
-    unit special rule — is not factored into the math but listed in the
-    result's notes.
+    profile; casualties cap at the defender's fielded ``models``. The
+    defender's save folds from its resolved loadout; ``rules`` maps
+    printed rule names to rule entries, whose effects compile into the
+    dice walk for the weapon's rules. Unit special rules are not
+    factored into the math yet — every one is listed in the result's
+    notes.
 
     Returns:
         The close-combat outcome for this side's blows.
@@ -334,10 +331,9 @@ def strike_unit(
     if fighters < 0:
         raise ValueError("fighters must be >= 0")
     engagement = _engage(
-        attacker.unit,
-        defender.unit,
+        attacker,
+        defender,
         weapon,
-        armoury=armoury,
         rules=rules,
         hit_modifier=hit_modifier,
     )
@@ -437,7 +433,6 @@ def fight(
     a_prior_losses: Sequence[float] | None = None,
     b_prior_losses: Sequence[float] | None = None,
     context: CombatContext | None = None,
-    armoury: Registry[Armour] = _NO_ARMOURY,
     rules: Registry[Rule] = _NO_RULES,
 ) -> FightResult:
     """Resolve one round of close combat between two single-profile units.
@@ -490,8 +485,8 @@ def fight(
         raise ValueError("model counts must be >= 0")
     a_lost_before = _prior_loss_pmf(a_prior_losses, a.models, "a_prior_losses")
     b_lost_before = _prior_loss_pmf(b_prior_losses, b.models, "b_prior_losses")
-    a_strikes = _engage(a.unit, b.unit, a_weapon, armoury=armoury, rules=rules, hit_modifier=0)
-    b_strikes = _engage(b.unit, a.unit, b_weapon, armoury=armoury, rules=rules, hit_modifier=0)
+    a_strikes = _engage(a, b, a_weapon, rules=rules, hit_modifier=0)
+    b_strikes = _engage(b, a, b_weapon, rules=rules, hit_modifier=0)
     situation = context or CombatContext()
     a_first = _strikes_first(
         effective_initiative(a, situation.a_charge), effective_initiative(b, situation.b_charge)
