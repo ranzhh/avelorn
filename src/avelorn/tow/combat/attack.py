@@ -18,7 +18,7 @@ escalate. No rules ship yet; the hooks are exercised by test doubles.
 
 import logging
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from fractions import Fraction
 
@@ -88,11 +88,23 @@ def roll_target(target: int | None) -> RollTarget:
     return RollState.IMPOSSIBLE if target is None else target
 
 
+# Which of the profile's targets each stage's roll reads — declared
+# beside the profile so the stage-to-target correspondence has one home.
+_TARGETS = {
+    Stage.ROLL_TO_HIT: "hit_target",
+    Stage.ROLL_TO_WOUND: "wound_target",
+    Stage.MAKE_ARMOUR_SAVES: "save_target",
+    Stage.WARD_SAVES: "ward_target",
+}
+
+
 @dataclass(frozen=True)
 class AttackProfile:
     """Roll targets and outcome semantics for one attack.
 
-    Each target is either the required roll or a :class:`RollState`.
+    Each target is either the required roll or a :class:`RollState`;
+    :meth:`target` and :meth:`with_target` address them by the stage
+    whose roll they decide, so callers need not know the field names.
     ``unsaved_outcome`` is the class an unsaved wound resolves to;
     transforms escalate it (a Killing Blow turns it into an instant
     kill for the rest of the walk).
@@ -103,6 +115,22 @@ class AttackProfile:
     save_target: RollTarget
     ward_target: RollTarget
     unsaved_outcome: Outcome = Outcome.UNSAVED_WOUND
+
+    def target(self, stage: Stage) -> RollTarget:
+        """The target of ``stage``'s roll; a stage that rolls nothing is a KeyError.
+
+        Returns:
+            The roll target that stage reads.
+        """
+        return getattr(self, _TARGETS[stage])
+
+    def with_target(self, stage: Stage, target: RollTarget) -> "AttackProfile":
+        """A copy with ``stage``'s roll target replaced; a rollless stage is a KeyError.
+
+        Returns:
+            The updated profile.
+        """
+        return replace(self, **{_TARGETS[stage]: target})
 
 
 @dataclass(frozen=True)
@@ -222,12 +250,12 @@ def walk(
                 hooked[Stage.MAKE_ARMOUR_SAVES],
                 _on_success(hooked[Stage.ROLL_TO_WOUND], wound_face, wound_profile),
             )
-            for p_save, _, saved in _roll(save_profile.save_target):
+            for p_save, _, saved in _roll_save(save_profile.save_target):
                 if saved:
                     yield p_hit * p_wound * p_save, Outcome.NONE
                     continue
                 ward_profile = _modify(hooked[Stage.WARD_SAVES], save_profile)
-                for p_ward, _, warded in _roll(ward_profile.ward_target):
+                for p_ward, _, warded in _roll_save(ward_profile.ward_target):
                     yield (
                         p_hit * p_wound * p_save * p_ward,
                         Outcome.NONE if warded else ward_profile.unsaved_outcome,
@@ -283,6 +311,19 @@ def _roll_melee_hit(target: RollTarget) -> Iterator[tuple[Fraction, int, bool]]:
     threshold = max(target, 2)
     for face in _FACES:
         yield _FACE, face, face == 6 or face >= threshold
+
+
+def _roll_save(target: RollTarget) -> Iterator[tuple[Fraction, int, bool]]:
+    # A save worsened past 6+ cannot be attempted at all: the roll is
+    # not taken — no die, no natural face — the walk-side mirror of the
+    # chart-side charts.armour_save_target, which yields no save for a
+    # target past 6+. This is the save rolls' own knowledge; To Hit
+    # differs (a 7+ still rolls, confirmed by a second die), and each
+    # roll states its own overflow, not the modifier that caused it.
+    if isinstance(target, int) and target > 6:
+        yield Fraction(1), 0, False
+        return
+    yield from _roll(target)
 
 
 def _roll(target: RollTarget) -> Iterator[tuple[Fraction, int, bool]]:

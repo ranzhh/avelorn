@@ -10,7 +10,8 @@ from avelorn.tow.combat.contingent import Contingent
 from avelorn.tow.combat.rules import _condition_applies, compile_rules, printed_rule
 from avelorn.tow.combat.shooting import shoot_unit
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.schema.rule import ArmourPiercingEffect
+from avelorn.tow.schema.rule import ModifierEffect, NaturalRoll, Rule, RuleEffect
+from avelorn.tow.schema.stage import Stage
 from avelorn.tow.schema.unit import Unit
 
 REPO = TOWRepository()
@@ -21,6 +22,13 @@ def _fielded(unit: Unit, models: int) -> Contingent:
     return Contingent.field(
         unit, models, weapons=REPO.weapons, armoury=REPO.armoury, rules=REPO.rules
     )
+
+
+def _one_rule(effect: RuleEffect) -> dict[str, Rule]:
+    # One doctored rule, resolved as printed, to compile a single effect
+    # shape the data/ files do not exercise yet.
+    rule = Rule(id="doctored", name="Doctored", paragraphs=["…"], effects=[effect])
+    return {rule.name: rule}
 
 
 def test_printed_rule_exact_name_is_the_entry_itself() -> None:
@@ -39,12 +47,12 @@ def test_printed_rule_substitutes_the_parameter() -> None:
     assert rule.id == "armour-bane"
     assert rule.name == "Armour Bane (1)"
     effect = rule.effects[0]
-    assert isinstance(effect, ArmourPiercingEffect)
-    assert effect.amount == 1
+    assert isinstance(effect, ModifierEffect)
+    assert effect.then == {"armour-piercing": 1}
     # The filed entry is untouched: the placeholder still reads "X".
     filed = REPO.rules["armour-bane"].effects[0]
-    assert isinstance(filed, ArmourPiercingEffect)
-    assert filed.amount == "X"
+    assert isinstance(filed, ModifierEffect)
+    assert filed.then == {"armour-piercing": "X"}
 
 
 def test_printed_rule_unknown_name() -> None:
@@ -83,6 +91,38 @@ def test_compile_parameter_placeholder_without_value_stays_unfactored() -> None:
     transforms, unfactored = compile_rules(["Armour Bane (X)"], REPO.rules)
     assert rule.effects and transforms == []
     assert unfactored == ["Armour Bane (X)"]
+
+
+def test_unconditional_armour_piercing_modifier_factors() -> None:
+    """An AP change with no trigger lands before every save roll.
+
+    The generic modifier path expresses what the old per-kind compiler
+    refused (an AP improvement not gated on a die): hit 3+, wound 4+,
+    save 5+ worsened to 6+ on every attack, p = 2/3 * 1/2 * 5/6 = 5/18.
+    """
+    rules = _one_rule(ModifierEffect(then={"armour-piercing": 1}))
+    transforms, unfactored = compile_rules(["Doctored"], rules)
+    assert unfactored == []
+    profile = AttackProfile(
+        hit_target=3, wound_target=4, save_target=5, ward_target=RollState.IMPOSSIBLE
+    )
+    assert resolve_attack(profile, transforms, hit_roll=HitRoll.SHOOTING).p_unsaved == Fraction(
+        5, 18
+    )
+
+
+def test_trigger_at_or_after_the_landing_stage_stays_unfactored() -> None:
+    """A die can only shape rolls still to come.
+
+    A To Hit change triggered by the To Wound die would land on a roll
+    already made; the rule is honestly unfactored, never a silent no-op.
+    """
+    effect = ModifierEffect(
+        when={"natural": NaturalRoll(face=6, roll=Stage.ROLL_TO_WOUND)}, then={"to-hit": 1}
+    )
+    transforms, unfactored = compile_rules(["Doctored"], _one_rule(effect))
+    assert transforms == []
+    assert unfactored == ["Doctored"]
 
 
 def test_shoot_unit_factors_armour_bane_from_data() -> None:
@@ -238,3 +278,42 @@ def test_conjunctive_condition_with_known_false_member_does_not_apply() -> None:
     assert _condition_applies(both, {moved: False, ranged: None}) is False
     assert _condition_applies(both, {moved: True, ranged: None}) is None
     assert _condition_applies(both, {moved: True, ranged: True}) is True
+
+
+def test_every_modifier_kind_declares_its_roll() -> None:
+    """Each modifier kind maps onto a roll the attack profile carries.
+
+    Drift guard for the table's exhaustiveness: a kind joining the
+    vocabulary must declare which roll it changes, and the profile must
+    carry a target for that roll's stage. Both sides are introspected,
+    so new members are covered automatically.
+    """
+    from typing import get_args
+
+    from avelorn.tow.combat.rules import _ROLLS
+    from avelorn.tow.schema.rule import ModifierKind
+
+    profile = AttackProfile(hit_target=4, wound_target=4, save_target=4, ward_target=4)
+    for kind in get_args(ModifierKind):
+        assert kind in _ROLLS, kind
+        profile.target(_ROLLS[kind].stage)  # KeyError if the stage rolls no target
+
+
+def test_armour_bane_two_leaves_no_save_at_all() -> None:
+    """Armour Bane (2) pushes a 5+ save past 6+: the save is not taken.
+
+    What the moved target means is the roll's own knowledge — a save
+    worse than 6+ cannot be attempted; the modifier only moves the
+    number. Hit 3+, wound 4+, save 5+:
+    p = 2/3 * (2/6 * 4/6 + 1/6 * 1) = 7/27.
+    """
+    bane = printed_rule("Armour Bane (2)", REPO.rules)
+    assert bane is not None
+    transforms, unfactored = compile_rules(["Armour Bane (2)"], {bane.name: bane})
+    assert unfactored == []
+    profile = AttackProfile(
+        hit_target=3, wound_target=4, save_target=5, ward_target=RollState.IMPOSSIBLE
+    )
+    assert resolve_attack(profile, transforms, hit_roll=HitRoll.SHOOTING).p_unsaved == Fraction(
+        7, 27
+    )

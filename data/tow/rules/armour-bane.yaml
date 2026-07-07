@@ -11,7 +11,9 @@ paragraphs:
     (1) special rule, its AP counts as being -1 when making an Armour Save roll against that wound.
 # Hand-authored, diffable against the paragraphs above.
 effects:
-  - kind: armour-piercing
-    stage: roll-to-wound
-    on_natural: 6
-    amount: X
+  - when:
+      natural:
+        face: 6
+        roll: roll-to-wound
+    then:
+      armour-piercing: X

@@ -8,8 +8,7 @@ paragraphs:
     maximum range suffer a -1 To Hit modifier.
 # Hand-authored, diffable against the paragraphs above.
 effects:
-  - kind: to-hit
-    stage: roll-to-hit
-    amount: -1
-    when:
+  - when:
       at_long_range: true
+    then:
+      to-hit: -1

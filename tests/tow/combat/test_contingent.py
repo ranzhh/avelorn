@@ -7,7 +7,7 @@ import pytest
 from avelorn.tow.combat.contingent import Charge, ChargeArc, Contingent, Loadout
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.muster import Complement
-from avelorn.tow.schema.rule import ArmourPiercingEffect
+from avelorn.tow.schema.rule import ModifierEffect
 from avelorn.tow.schema.unit import Unit
 
 REPO = TOWRepository()
@@ -182,8 +182,8 @@ def test_deploy_substitutes_rule_parameters_as_printed(spearmen_unit: Unit) -> N
     (rule,) = contingent.loadout.rules
     assert rule.name == "Armour Bane (2)"
     effect = rule.effects[0]
-    assert isinstance(effect, ArmourPiercingEffect)
-    assert effect.amount == 2
+    assert isinstance(effect, ModifierEffect)
+    assert effect.then == {"armour-piercing": 2}
 
 
 def test_loadout_answers_the_weapon_choice_by_printed_name(spearmen_unit: Unit) -> None:

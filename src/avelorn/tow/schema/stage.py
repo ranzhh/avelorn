@@ -26,3 +26,14 @@ class Stage(StrEnum):
     MAKE_ARMOUR_SAVES = "make-armour-saves"
     WARD_SAVES = "ward-saves"
     MAKE_PANIC_TESTS = "make-panic-tests"
+
+
+# The stages resolved by rolling one die per attack — the dice of the
+# printed attack sequence, and therefore the rolls a "natural face"
+# event can name. Make Panic Tests rolls 2d6 for the whole unit, so no
+# single natural face exists there. Declared beside the stage
+# vocabulary so data validation and the engine's per-roll machinery
+# answer to one set (a drift-guard test holds them together).
+ATTACK_ROLLS = frozenset(
+    {Stage.ROLL_TO_HIT, Stage.ROLL_TO_WOUND, Stage.MAKE_ARMOUR_SAVES, Stage.WARD_SAVES}
+)
