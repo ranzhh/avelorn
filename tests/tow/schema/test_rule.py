@@ -8,6 +8,7 @@ from pydantic import TypeAdapter, ValidationError
 from avelorn.core.loading import load_yaml
 from avelorn.tow.data import DATA_DIR
 from avelorn.tow.schema.rule import NATURAL, Condition, ModifierEffect, Rule, RuleEffect
+from avelorn.tow.schema.unit import Characteristic
 
 _EFFECT = TypeAdapter(RuleEffect)
 
@@ -129,6 +130,20 @@ def test_then_must_move_something() -> None:
     """An empty then is meaningless."""
     with pytest.raises(ValidationError, match="at least 1"):
         _EFFECT.validate_python({"then": {}})
+
+
+def test_then_moves_a_characteristic() -> None:
+    """A profile characteristic is one more quantity a then can move."""
+    effect = _EFFECT.validate_python({"then": {"I": 1}, "maximum": 10})
+    assert isinstance(effect, ModifierEffect)
+    assert effect.then == {Characteristic.INITIATIVE: 1}
+    assert effect.maximum == 10
+
+
+def test_maximum_requires_a_characteristic() -> None:
+    """Only a characteristic prints a ceiling; on a roll it is a data error."""
+    with pytest.raises(ValidationError, match="maximum"):
+        _EFFECT.validate_python({"then": {"to-hit": -1}, "maximum": 10})
 
 
 def test_modifier_rejects_a_spelled_out_stage() -> None:

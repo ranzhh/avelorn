@@ -1,18 +1,30 @@
 """Rule compilation tests: printed names to transforms, from real data."""
 
 from fractions import Fraction
+from typing import Literal
 
 import pytest
 
 from avelorn.tow.combat.attack import AttackProfile, HitRoll, RollState, resolve_attack
 from avelorn.tow.combat.context import EngagementContext
 from avelorn.tow.combat.contingent import Contingent
-from avelorn.tow.combat.rules import _condition_applies, compile_rules, printed_rule
+from avelorn.tow.combat.rules import (
+    _condition_applies,
+    compile_rules,
+    effective_characteristic,
+    printed_rule,
+)
 from avelorn.tow.combat.shooting import shoot_unit
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.schema.rule import ModifierEffect, NaturalRoll, Rule, RuleEffect
+from avelorn.tow.schema.rule import (
+    Condition,
+    ModifierEffect,
+    NaturalRoll,
+    Rule,
+    RuleEffect,
+)
 from avelorn.tow.schema.stage import Stage
-from avelorn.tow.schema.unit import Unit
+from avelorn.tow.schema.unit import Characteristic, Unit
 
 REPO = TOWRepository()
 
@@ -317,3 +329,68 @@ def test_armour_bane_two_leaves_no_save_at_all() -> None:
     assert resolve_attack(profile, transforms, hit_roll=HitRoll.SHOOTING).p_unsaved == Fraction(
         7, 27
     )
+
+
+# --- effective_characteristic: the characteristic-read query ---
+
+
+def _initiative_rule(
+    amount: int | Literal["X"] = 1,
+    maximum: int | None = 10,
+    when: dict[Condition | Literal["natural"], bool | NaturalRoll] | None = None,
+    characteristic: Characteristic = Characteristic.INITIATIVE,
+) -> Rule:
+    effect = ModifierEffect(when=when, then={characteristic: amount}, maximum=maximum)
+    return Rule(id="doctored", name="Doctored (X)", paragraphs=["…"], effects=[effect])
+
+
+def test_effective_characteristic_applies_a_modifier() -> None:
+    """An unconditional +1 lands on the read; the rule is factored."""
+    result = effective_characteristic(4, Characteristic.INITIATIVE, [_initiative_rule()])
+    assert result.value == 5
+    assert result.factored == ("Doctored (X)",)
+    assert result.unfactored == ()
+
+
+def test_effective_characteristic_honours_the_printed_maximum() -> None:
+    """The modified value stops at the effect's printed ceiling."""
+    result = effective_characteristic(
+        9, Characteristic.INITIATIVE, [_initiative_rule(amount=3, maximum=10)]
+    )
+    assert result.value == 10
+
+
+def test_effective_characteristic_unknown_condition_is_unfactored() -> None:
+    """A modifier gated on an unanswered fact does not apply, and is reported."""
+    rule = _initiative_rule(when={Condition.FIRST_ROUND_OF_COMBAT: True})
+    result = effective_characteristic(4, Characteristic.INITIATIVE, [rule], {})
+    assert result.value == 4
+    assert result.factored == ()
+    assert result.unfactored == ("Doctored (X)",)
+
+
+def test_effective_characteristic_false_condition_is_honoured() -> None:
+    """A condition answered False applies nothing — factored, not reported."""
+    rule = _initiative_rule(when={Condition.FIRST_ROUND_OF_COMBAT: True})
+    result = effective_characteristic(
+        4, Characteristic.INITIATIVE, [rule], {Condition.FIRST_ROUND_OF_COMBAT: False}
+    )
+    assert result.value == 4
+    assert result.factored == ("Doctored (X)",)
+    assert result.unfactored == ()
+
+
+def test_effective_characteristic_unbound_parameter_is_unfactored() -> None:
+    """An unsubstituted X cannot apply; the rule is reported instead."""
+    result = effective_characteristic(4, Characteristic.INITIATIVE, [_initiative_rule(amount="X")])
+    assert result.value == 4
+    assert result.unfactored == ("Doctored (X)",)
+
+
+def test_effective_characteristic_ignores_other_characteristics() -> None:
+    """A modifier naming another characteristic is not this query's business."""
+    rule = _initiative_rule(characteristic=Characteristic.STRENGTH)
+    result = effective_characteristic(4, Characteristic.INITIATIVE, [rule])
+    assert result.value == 4
+    assert result.factored == ()
+    assert result.unfactored == ()

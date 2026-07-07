@@ -33,6 +33,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from avelorn.tow.schema.psychology import PanicCause
 from avelorn.tow.schema.stage import ATTACK_ROLLS, Stage
+from avelorn.tow.schema.unit import Characteristic
 
 # The printed convention for a parameterised rule: the name is filed
 # under an "(X)" placeholder ("Armour Bane (X)"), and effects reference
@@ -55,6 +56,7 @@ class Condition(StrEnum):
 
     MOVED = "moved"  # "moved for any reason during this turn"
     AT_LONG_RANGE = "at_long_range"  # "further away than half the weapon's maximum range"
+    FIRST_ROUND_OF_COMBAT = "first_round_of_combat"  # "during the first round of any combat"
 
 
 # The quantities a modifier can change, in the rulebook's own modifier
@@ -118,10 +120,15 @@ class ModifierEffect(BaseModel):
     quantity's own printed sign convention: To Hit penalties negative
     ("-1 To Hit modifier" is ``to-hit: -1``), Armour Piercing
     improvements positive ("improved by 1" is ``armour-piercing: 1``).
+    A quantity is a roll of the attack sequence by its kind, or a
+    profile characteristic by its printed abbreviation ("+1 modifier to
+    its Initiative characteristic" is ``I: 1``) — the former consumed
+    by the dice walk, the latter by the effective-characteristic query.
     The literal ``"X"`` means the rule's bracketed parameter ("the
     amount shown in brackets after the name of this special rule").
-    Where a change lands in the attack sequence follows from its
-    quantity, so no stage is spelled out.
+    Where a change lands follows from its quantity, so no stage is
+    spelled out. ``maximum`` is a printed ceiling on the modified value
+    ("to a maximum of 10"); only a characteristic prints one.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -129,7 +136,8 @@ class ModifierEffect(BaseModel):
     when: Annotated[dict[Condition | Literal["natural"], TriggerFact], Field(min_length=1)] | (
         None
     ) = None
-    then: Annotated[dict[ModifierKind, int | Literal["X"]], Field(min_length=1)]
+    then: Annotated[dict[ModifierKind | Characteristic, int | Literal["X"]], Field(min_length=1)]
+    maximum: int | None = None
 
     @model_validator(mode="after")
     def _facts_match_their_keys(self) -> "ModifierEffect":
@@ -140,6 +148,10 @@ class ModifierEffect(BaseModel):
                 raise ValueError("'natural' names a die's face: {face, roll}")
             if key != NATURAL and not isinstance(fact, bool):
                 raise ValueError(f"condition {key!r} requires true or false")
+        if self.maximum is not None and not any(
+            isinstance(quantity, Characteristic) for quantity in self.then
+        ):
+            raise ValueError("maximum bounds a characteristic; the then moves none")
         return self
 
     @property

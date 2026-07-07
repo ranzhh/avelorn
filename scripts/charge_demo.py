@@ -92,7 +92,7 @@ def main() -> None:
 
     movement = spearmen_unit.profiles[0][Characteristic.MOVEMENT]
     init = spearmen_unit.profiles[0][Characteristic.INITIATIVE] or 0
-    charged_init = effective_initiative(spearmen, move)
+    charged_init = effective_initiative(spearmen, move).value
     bonus = charged_init - init
     inches = args.charge_inches
     print(f'{args.spearmen} Elven Spearmen charge {args.archers} Elven Archers ({inches}")')

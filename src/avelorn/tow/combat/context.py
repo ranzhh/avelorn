@@ -31,9 +31,12 @@ class CombatContext:
     a side that did not charge this turn. The charge feeds the striking
     order today (:func:`~avelorn.tow.combat.melee.effective_initiative`)
     and the charging/arc conditions and combat-result bonuses (#28)
-    later. Grows a field per fact the rules need, like its shooting
-    sibling.
+    later. ``first_round`` is whether this is the first round of the
+    combat ("during the first round of any combat") — a charge's ensuing
+    fight sets it True structurally. Grows a field per fact the rules
+    need, like its shooting sibling.
     """
 
     a_charge: Charge | None = None
     b_charge: Charge | None = None
+    first_round: bool | None = None  # "the first round of any combat"

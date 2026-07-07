@@ -124,6 +124,8 @@ def charge(
         a_weapon=charger_weapon,
         b_weapon=target_weapon,
         a_prior_losses=None if volley is None else volley.casualties,
-        context=CombatContext(a_charge=move),
+        # A charge sets up a new combat, so the round it feeds is that
+        # combat's first — known structurally, not a parameter.
+        context=CombatContext(a_charge=move, first_round=True),
     )
     return ChargeResult(reaction=volley, melee=melee)

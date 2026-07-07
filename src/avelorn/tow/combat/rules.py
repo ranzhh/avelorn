@@ -40,6 +40,7 @@ from avelorn.tow.schema.rule import (
     RuleEffect,
 )
 from avelorn.tow.schema.stage import Stage
+from avelorn.tow.schema.unit import Characteristic
 
 logger = logging.getLogger(__name__)
 
@@ -189,6 +190,11 @@ def _compile_effect(
         if amount == "X":
             # Unsubstituted placeholder: the printed name carried no parameter.
             return None
+        if isinstance(quantity, Characteristic):
+            # Characteristic changes are consumed by the
+            # effective-characteristic query, not the walk; as a weapon
+            # or phase rule they are honestly unfactored.
+            return None
         roll = _ROLLS[quantity]
         change = _move_target(roll, amount)
         if natural is None:
@@ -226,6 +232,81 @@ def _when_natural(
         return change(profile) if rolled == face else profile
 
     return on_success
+
+
+@dataclass(frozen=True)
+class EffectiveCharacteristic:
+    """A characteristic read with rule-granted modifiers applied.
+
+    ``factored`` names the rules whose matching modifiers were evaluated
+    into the value — including those honoured by not applying (condition
+    False). ``unfactored`` names the rules with a matching modifier the
+    conditions could not answer (or an unbound parameter); their change
+    is *not* in the value, and the caller reports them.
+    """
+
+    value: int
+    factored: tuple[str, ...] = ()
+    unfactored: tuple[str, ...] = ()
+
+
+def effective_characteristic(
+    base: int,
+    characteristic: Characteristic,
+    rules: Sequence[Rule],
+    conditions: Mapping[Condition, bool | None] | None = None,
+) -> EffectiveCharacteristic:
+    """Apply the rules' modifiers to one characteristic read.
+
+    The effective-characteristic query: every read of a characteristic a
+    rule can modify goes through here. Scans ``rules`` (a contingent's
+    resolved loadout rules) for characteristic modifiers naming
+    ``characteristic`` and folds them over ``base`` — each gated on the
+    evaluated engagement ``conditions``, each capped by its own printed
+    ``maximum``. Rules touching other characteristics are not this
+    query's business and appear in neither name list.
+
+    All-or-nothing per rule, as at compile: if any matching modifier
+    needs an unknown fact or an unbound parameter, none of that rule's
+    modifiers apply and the rule is reported unfactored.
+
+    Returns:
+        The effective value with the factored and unfactored rule names.
+    """
+    conditions = conditions or {}
+    value = base
+    factored: list[str] = []
+    unfactored: list[str] = []
+    for rule in rules:
+        matching = [
+            (effect, effect.then[characteristic])
+            for effect in rule.effects
+            if isinstance(effect, ModifierEffect) and characteristic in effect.then
+        ]
+        if not matching:
+            continue
+        answers = [
+            (effect, amount, _condition_applies(effect.conditions, conditions))
+            for effect, amount in matching
+        ]
+        if any(
+            amount == "X" or answer is None or effect.natural is not None
+            for effect, amount, answer in answers
+        ):
+            # An unbound parameter, an unanswerable state, or an event
+            # trigger — a characteristic read rolls no die, so a natural
+            # face can never be honoured here.
+            unfactored.append(rule.name)
+            continue
+        for effect, amount, answer in answers:
+            if not answer or not isinstance(amount, int):
+                continue
+            value += amount
+            if effect.maximum is not None:
+                value = min(value, effect.maximum)
+        factored.append(rule.name)
+        logger.debug("%s modifier factored: %s -> %d", characteristic.name, rule.name, value)
+    return EffectiveCharacteristic(value, tuple(factored), tuple(unfactored))
 
 
 def _condition_applies(
