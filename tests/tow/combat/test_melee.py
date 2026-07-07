@@ -91,7 +91,6 @@ def test_strike_unit_spearmen_vs_spearmen() -> None:
         _fielded(spearmen, 5),
         _fielded(spearmen, 10),
         REPO.weapons["thrusting-spear"],
-        armoury=REPO.armoury,
     )
     assert result.attacks == 5  # 5 fighters * A1
     assert result.hit_target == 4
@@ -112,19 +111,8 @@ def test_strike_unit_attacks_scale_with_the_attacks_characteristic() -> None:
         _fielded(two_attacks, 5),
         _fielded(spearmen, 10),
         REPO.weapons["thrusting-spear"],
-        armoury=REPO.armoury,
     )
     assert result.attacks == 10
-
-
-def test_strike_unit_without_armoury_degrades_visibly() -> None:
-    """No armoury: the defender's armour is unresolved and reported, not guessed."""
-    spearmen = REPO.units["elven-spearmen"]
-    result = strike_unit(
-        _fielded(spearmen, 5), _fielded(spearmen, 10), REPO.weapons["thrusting-spear"]
-    )
-    assert result.save_target is None
-    assert any("Light Armour" in note for note in result.notes)
 
 
 def test_strike_unit_rejects_a_missile_only_weapon() -> None:
@@ -157,7 +145,7 @@ def test_fight_equal_initiative_is_simultaneous() -> None:
     spearmen = REPO.units["elven-spearmen"]
     spear = REPO.weapons["thrusting-spear"]
     side = _fielded(spearmen, 1)
-    result = fight(side, side, a_weapon=spear, b_weapon=spear, armoury=REPO.armoury)
+    result = fight(side, side, a_weapon=spear, b_weapon=spear)
     assert result.first_striker is None
     assert result.a_casualties[1] == pytest.approx(1 / 6)
     assert result.b_casualties[1] == pytest.approx(1 / 6)
@@ -174,7 +162,7 @@ def test_fight_higher_initiative_strikes_first_and_takes_less() -> None:
     spear = REPO.weapons["thrusting-spear"]
     faster = _fielded(_higher_initiative(spearmen), 1)
     slower = _fielded(spearmen, 1)
-    result = fight(faster, slower, a_weapon=spear, b_weapon=spear, armoury=REPO.armoury)
+    result = fight(faster, slower, a_weapon=spear, b_weapon=spear)
     assert result.first_striker is faster
     assert result.b_casualties[1] == pytest.approx(1 / 6)  # A full-strength
     assert result.a_casualties[1] == pytest.approx(5 / 36)  # B struck back reduced
@@ -186,7 +174,7 @@ def test_fight_orients_the_joint_to_the_arguments() -> None:
     spear = REPO.weapons["thrusting-spear"]
     slower = _fielded(spearmen, 1)
     faster = _fielded(_higher_initiative(spearmen), 1)
-    result = fight(slower, faster, a_weapon=spear, b_weapon=spear, armoury=REPO.armoury)
+    result = fight(slower, faster, a_weapon=spear, b_weapon=spear)
     assert result.first_striker is faster
     # b (faster) strikes first at full strength -> a falls on 1/6; a's
     # survivors strike back -> b falls on 5/36. Mirror of the test above.
@@ -207,11 +195,8 @@ def test_fight_coupling_reduces_the_return_strike() -> None:
         _fielded(spearmen, 5),
         a_weapon=spear,
         b_weapon=spear,
-        armoury=REPO.armoury,
     )
-    full_strength = strike_unit(
-        _fielded(spearmen, 5), _fielded(spearmen, 5), spear, armoury=REPO.armoury
-    )
+    full_strength = strike_unit(_fielded(spearmen, 5), _fielded(spearmen, 5), spear)
     assert expected_value(result.a_casualties) < expected_value(full_strength.casualties)
     assert any("Fight In Extra Rank" in note for note in result.notes)
 
@@ -226,7 +211,6 @@ def test_fight_rejects_negative_models() -> None:
             _fielded(spearmen, 5),
             a_weapon=spear,
             b_weapon=spear,
-            armoury=REPO.armoury,
         )
 
 
@@ -238,10 +222,8 @@ def test_fight_degenerate_prior_losses_equal_a_plain_fight() -> None:
     spearmen = REPO.units["elven-spearmen"]
     spear = REPO.weapons["thrusting-spear"]
     a, b = _fielded(spearmen, 3), _fielded(spearmen, 3)
-    plain = fight(a, b, a_weapon=spear, b_weapon=spear, armoury=REPO.armoury)
-    with_prior = fight(
-        a, b, a_weapon=spear, b_weapon=spear, a_prior_losses=[1.0], armoury=REPO.armoury
-    )
+    plain = fight(a, b, a_weapon=spear, b_weapon=spear)
+    with_prior = fight(a, b, a_weapon=spear, b_weapon=spear, a_prior_losses=[1.0])
     assert with_prior.losses == plain.losses
 
 
@@ -256,9 +238,7 @@ def test_fight_prior_losses_mix_the_round_over_entering_strength() -> None:
     spearmen = REPO.units["elven-spearmen"]
     spear = REPO.weapons["thrusting-spear"]
     a, b = _fielded(spearmen, 1), _fielded(spearmen, 1)
-    result = fight(
-        a, b, a_weapon=spear, b_weapon=spear, a_prior_losses=[0.5, 0.5], armoury=REPO.armoury
-    )
+    result = fight(a, b, a_weapon=spear, b_weapon=spear, a_prior_losses=[0.5, 0.5])
     assert result.a_casualties[1] == pytest.approx(0.5 * 1 / 6)  # only the full branch
     assert result.b_casualties[1] == pytest.approx(0.5 * 1 / 6)
     assert sum(sum(row) for row in result.losses) == pytest.approx(1.0)
@@ -327,7 +307,6 @@ def test_fight_charge_makes_the_charger_strike_first() -> None:
         a_weapon=spear,
         b_weapon=spear,
         context=CombatContext(a_charge=Charge(3, ChargeArc.FRONT)),
-        armoury=REPO.armoury,
     )
     assert result.first_striker is charger
     assert result.b_casualties[1] == pytest.approx(1 / 6)  # charger struck full-strength
@@ -349,7 +328,6 @@ def test_fight_charge_capped_below_the_foe_stays_simultaneous() -> None:
         a_weapon=spear,
         b_weapon=spear,
         context=CombatContext(a_charge=Charge(0, ChargeArc.FRONT)),
-        armoury=REPO.armoury,
     )
     assert result.first_striker is None
 
@@ -371,7 +349,6 @@ def test_combat_result_first_strike_advantage() -> None:
         _fielded(spearmen, 1),
         a_weapon=spear,
         b_weapon=spear,
-        armoury=REPO.armoury,
     )
     cr = combat_result(result)
     assert cr.p_a_wins == pytest.approx(1 / 6)
@@ -388,7 +365,7 @@ def test_combat_result_simultaneous_is_symmetric() -> None:
     spearmen = REPO.units["elven-spearmen"]
     spear = REPO.weapons["thrusting-spear"]
     side = _fielded(spearmen, 1)
-    cr = combat_result(fight(side, side, a_weapon=spear, b_weapon=spear, armoury=REPO.armoury))
+    cr = combat_result(fight(side, side, a_weapon=spear, b_weapon=spear))
     assert cr.p_a_wins == pytest.approx(cr.p_b_wins)
     assert cr.p_a_wins == pytest.approx(5 / 36)
     assert cr.p_draw == pytest.approx(26 / 36)

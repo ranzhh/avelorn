@@ -16,15 +16,12 @@ from avelorn.tow.combat.context import CombatContext, EngagementContext
 from avelorn.tow.combat.contingent import Charge, Contingent
 from avelorn.tow.combat.melee import FightResult, fight
 from avelorn.tow.combat.shooting import ShootingResult, shoot_unit
-from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.weapon import Weapon
 
 logger = logging.getLogger(__name__)
 
-# Empty registries as defaults: resolution against them misses everything,
-# so an omitted registry degrades to notes exactly like unknown entries do.
-_NO_ARMOURY: Registry[Armour] = Registry(kind="armour")
+# An empty registry as the default: every rule stays unfactored, visibly.
 _NO_RULES: Registry[Rule] = Registry(kind="rule")
 
 # Models making a Stand & Shoot reaction suffer -1 To Hit and no Firing at
@@ -37,7 +34,6 @@ def stand_and_shoot(
     target: Contingent,
     weapon: Weapon,
     *,
-    armoury: Registry[Armour] = _NO_ARMOURY,
     rules: Registry[Rule] = _NO_RULES,
 ) -> ShootingResult:
     """Resolve a Stand & Shoot charge reaction: ``shooter`` shoots the ``target``.
@@ -68,7 +64,6 @@ def stand_and_shoot(
         shooter,
         target,
         weapon,
-        armoury=armoury,
         rules=rules,
         context=EngagementContext(moved=False),
         hit_modifier=_STAND_AND_SHOOT_TO_HIT,
@@ -104,7 +99,6 @@ def charge(
     charger_weapon: Weapon,
     target_weapon: Weapon,
     reaction: StandAndShoot | None = None,
-    armoury: Registry[Armour] = _NO_ARMOURY,
     rules: Registry[Rule] = _NO_RULES,
 ) -> ChargeResult:
     """Resolve ``charger`` charging ``target``: the reaction, then the fight.
@@ -123,7 +117,7 @@ def charge(
     """
     volley = None
     if reaction is not None:
-        volley = stand_and_shoot(target, charger, reaction.weapon, armoury=armoury, rules=rules)
+        volley = stand_and_shoot(target, charger, reaction.weapon, rules=rules)
     melee = fight(
         charger,
         target,
@@ -131,7 +125,6 @@ def charge(
         b_weapon=target_weapon,
         a_prior_losses=None if volley is None else volley.casualties,
         context=CombatContext(a_charge=move),
-        armoury=armoury,
         rules=rules,
     )
     return ChargeResult(reaction=volley, melee=melee)

@@ -29,14 +29,12 @@ def test_stand_and_shoot_applies_the_minus_one_to_hit() -> None:
         _fielded(archers, 10),
         _fielded(spearmen, 10),
         REPO.weapons["longbow"],
-        armoury=REPO.armoury,
         rules=REPO.rules,
     )
     reaction = stand_and_shoot(
         _fielded(archers, 10),
         _fielded(spearmen, 10),
         REPO.weapons["longbow"],
-        armoury=REPO.armoury,
         rules=REPO.rules,
     )
     assert plain.hit_target == 3
@@ -55,14 +53,12 @@ def test_stand_and_shoot_is_exempt_from_firing_at_long_range() -> None:
         _fielded(archers, 10),
         _fielded(spearmen, 10),
         REPO.weapons["longbow"],
-        armoury=REPO.armoury,
         rules=REPO.rules,
     )
     reaction = stand_and_shoot(
         _fielded(archers, 10),
         _fielded(spearmen, 10),
         REPO.weapons["longbow"],
-        armoury=REPO.armoury,
         rules=REPO.rules,
     )
     assert any("Firing at Long Range" in note for note in plain.notes)
@@ -76,7 +72,6 @@ def test_stand_and_shoot_caps_casualties_at_the_charging_unit_size() -> None:
         _fielded(archers, 20),
         _fielded(spearmen, 5),
         REPO.weapons["longbow"],
-        armoury=REPO.armoury,
         rules=REPO.rules,
     )
     assert reaction.target_models == 5
@@ -100,9 +95,7 @@ def test_charge_sequence_matches_mixing_the_survivor_fights_by_hand() -> None:
     models = 3
     charger = _fielded(spearmen, models)
     defender = _fielded(archers, 3)
-    reaction = stand_and_shoot(
-        defender, charger, REPO.weapons["longbow"], armoury=REPO.armoury, rules=REPO.rules
-    )
+    reaction = stand_and_shoot(defender, charger, REPO.weapons["longbow"], rules=REPO.rules)
 
     composed = fight(
         charger,
@@ -111,7 +104,6 @@ def test_charge_sequence_matches_mixing_the_survivor_fights_by_hand() -> None:
         b_weapon=hand,
         a_prior_losses=reaction.casualties,
         context=CombatContext(a_charge=move),
-        armoury=REPO.armoury,
         rules=REPO.rules,
     )
 
@@ -123,7 +115,6 @@ def test_charge_sequence_matches_mixing_the_survivor_fights_by_hand() -> None:
             a_weapon=spear,
             b_weapon=hand,
             context=CombatContext(a_charge=move),
-            armoury=REPO.armoury,
             rules=REPO.rules,
         )
         for a_lost, row in enumerate(survivors.losses):
@@ -147,9 +138,7 @@ def test_stand_and_shoot_erodes_the_chargers_combat_result() -> None:
     charger = _fielded(spearmen, 10)
     defender = _fielded(archers, 10)
     situation = CombatContext(a_charge=Charge(8, ChargeArc.FRONT))
-    reaction = stand_and_shoot(
-        defender, charger, REPO.weapons["longbow"], armoury=REPO.armoury, rules=REPO.rules
-    )
+    reaction = stand_and_shoot(defender, charger, REPO.weapons["longbow"], rules=REPO.rules)
 
     unshot = combat_result(
         fight(
@@ -158,7 +147,6 @@ def test_stand_and_shoot_erodes_the_chargers_combat_result() -> None:
             a_weapon=spear,
             b_weapon=hand,
             context=situation,
-            armoury=REPO.armoury,
             rules=REPO.rules,
         )
     )
@@ -170,7 +158,6 @@ def test_stand_and_shoot_erodes_the_chargers_combat_result() -> None:
             b_weapon=hand,
             a_prior_losses=reaction.casualties,
             context=situation,
-            armoury=REPO.armoury,
             rules=REPO.rules,
         )
     )
@@ -184,7 +171,6 @@ def test_force_short_range_honours_long_range_as_a_no_op() -> None:
         _fielded(archers, 10),
         _fielded(spearmen, 10),
         REPO.weapons["longbow"],
-        armoury=REPO.armoury,
         rules=REPO.rules,
         force_short_range=True,
     )
@@ -209,11 +195,10 @@ def test_charge_composes_the_reaction_into_the_fight() -> None:
         charger_weapon=spear,
         target_weapon=hand,
         reaction=StandAndShoot(longbow),
-        armoury=REPO.armoury,
         rules=REPO.rules,
     )
 
-    volley = stand_and_shoot(target, charger, longbow, armoury=REPO.armoury, rules=REPO.rules)
+    volley = stand_and_shoot(target, charger, longbow, rules=REPO.rules)
     manual = fight(
         charger,
         target,
@@ -221,7 +206,6 @@ def test_charge_composes_the_reaction_into_the_fight() -> None:
         b_weapon=hand,
         a_prior_losses=volley.casualties,
         context=CombatContext(a_charge=move),
-        armoury=REPO.armoury,
         rules=REPO.rules,
     )
     assert outcome.reaction == volley
@@ -242,7 +226,6 @@ def test_charge_against_a_holding_target_has_no_volley() -> None:
         move=move,
         charger_weapon=spear,
         target_weapon=hand,
-        armoury=REPO.armoury,
         rules=REPO.rules,
     )
 
@@ -252,7 +235,6 @@ def test_charge_against_a_holding_target_has_no_volley() -> None:
         a_weapon=spear,
         b_weapon=hand,
         context=CombatContext(a_charge=move),
-        armoury=REPO.armoury,
         rules=REPO.rules,
     )
     assert outcome.reaction is None

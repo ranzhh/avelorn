@@ -94,7 +94,6 @@ def test_shoot_unit_factors_armour_bane_from_data() -> None:
         _fielded(REPO.units["elven-archers"], 3),
         _fielded(REPO.units["elven-spearmen"], 10),
         weapon=REPO.weapons["longbow"],
-        armoury=REPO.armoury,
         rules=REPO.rules,
     )
     assert result.p_unsaved == pytest.approx(13 / 54)
@@ -108,7 +107,6 @@ def test_shoot_unit_without_rules_is_unchanged() -> None:
         _fielded(REPO.units["elven-archers"], 3),
         _fielded(REPO.units["elven-spearmen"], 10),
         weapon=REPO.weapons["longbow"],
-        armoury=REPO.armoury,
     )
     assert result.p_unsaved == pytest.approx(2 / 9)
     assert any("Armour Bane (1)" in note for note in result.notes)
@@ -124,7 +122,6 @@ def test_long_range_penalty_applies_from_data() -> None:
         _fielded(REPO.units["elven-archers"], 3),
         _fielded(REPO.units["elven-spearmen"], 10),
         weapon=REPO.weapons["longbow"],
-        armoury=REPO.armoury,
         rules=REPO.rules,
         context=EngagementContext(moved=False, distance=20),
     )
@@ -141,7 +138,6 @@ def test_condition_false_applies_no_penalty_and_no_note() -> None:
         _fielded(REPO.units["elven-archers"], 3),
         _fielded(REPO.units["elven-spearmen"], 10),
         weapon=REPO.weapons["longbow"],
-        armoury=REPO.armoury,
         rules=REPO.rules,
         context=EngagementContext(moved=False, distance=10),
     )
@@ -155,7 +151,6 @@ def test_unknown_context_leaves_core_rules_unfactored() -> None:
         _fielded(REPO.units["elven-archers"], 3),
         _fielded(REPO.units["elven-spearmen"], 10),
         weapon=REPO.weapons["longbow"],
-        armoury=REPO.armoury,
         rules=REPO.rules,
     )
     assert result.p_unsaved == pytest.approx(13 / 54)
@@ -169,7 +164,6 @@ def test_both_penalties_stack() -> None:
         _fielded(REPO.units["elven-archers"], 3),
         _fielded(REPO.units["elven-spearmen"], 10),
         weapon=REPO.weapons["longbow"],
-        armoury=REPO.armoury,
         rules=REPO.rules,
         context=EngagementContext(moved=True, distance=20),
     )
@@ -191,7 +185,6 @@ def test_move_in_or_stay_out_is_a_wash() -> None:
         _fielded(sea_guard, 10),
         _fielded(spearmen, 10),
         warbow,
-        armoury=REPO.armoury,
         rules=REPO.rules,
         context=EngagementContext(moved=False, distance=15),
     )
@@ -199,7 +192,6 @@ def test_move_in_or_stay_out_is_a_wash() -> None:
         _fielded(sea_guard, 10),
         _fielded(spearmen, 10),
         warbow,
-        armoury=REPO.armoury,
         rules=REPO.rules,
         context=EngagementContext(moved=True, distance=12),
     )
