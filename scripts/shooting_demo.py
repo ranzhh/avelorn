@@ -61,8 +61,20 @@ def main() -> None:
         configure_logging(logging.DEBUG)
 
     repo = TOWRepository()
-    attacker = Contingent(repo.units[args.attacker], args.shooters)
-    defender = Contingent(repo.units[args.defender], args.defenders)
+    attacker = Contingent.field(
+        repo.units[args.attacker],
+        args.shooters,
+        weapons=repo.weapons,
+        armoury=repo.armoury,
+        rules=repo.rules,
+    )
+    defender = Contingent.field(
+        repo.units[args.defender],
+        args.defenders,
+        weapons=repo.weapons,
+        armoury=repo.armoury,
+        rules=repo.rules,
+    )
     weapon = repo.weapons[args.weapon]
     context = EngagementContext(moved=args.moved, distance=args.distance)
     result = shoot_unit(

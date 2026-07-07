@@ -18,6 +18,13 @@ from avelorn.tow.schema.unit import Characteristic, Unit
 REPO = TOWRepository()
 
 
+def _fielded(unit: Unit, models: int) -> Contingent:
+    # Field at the printed, optionless loadout, with the real registries.
+    return Contingent.field(
+        unit, models, weapons=REPO.weapons, armoury=REPO.armoury, rules=REPO.rules
+    )
+
+
 def test_strike_golden_no_save() -> None:
     """WS4 vs WS4 (4+), S4 vs T4 (4+), no armour: p_unsaved = 1/4."""
     result = strike(3, weapon_skill=4, target_weapon_skill=4, strength=4, toughness=4)
@@ -81,8 +88,8 @@ def test_strike_unit_spearmen_vs_spearmen() -> None:
     """
     spearmen = REPO.units["elven-spearmen"]
     result = strike_unit(
-        Contingent(spearmen, 5),
-        Contingent(spearmen, 10),
+        _fielded(spearmen, 5),
+        _fielded(spearmen, 10),
         REPO.weapons["thrusting-spear"],
         armoury=REPO.armoury,
     )
@@ -102,8 +109,8 @@ def test_strike_unit_attacks_scale_with_the_attacks_characteristic() -> None:
     two_attacks = spearmen.model_copy(deep=True)
     two_attacks.profiles[0].characteristics[Characteristic.ATTACKS] = 2
     result = strike_unit(
-        Contingent(two_attacks, 5),
-        Contingent(spearmen, 10),
+        _fielded(two_attacks, 5),
+        _fielded(spearmen, 10),
         REPO.weapons["thrusting-spear"],
         armoury=REPO.armoury,
     )
@@ -114,7 +121,7 @@ def test_strike_unit_without_armoury_degrades_visibly() -> None:
     """No armoury: the defender's armour is unresolved and reported, not guessed."""
     spearmen = REPO.units["elven-spearmen"]
     result = strike_unit(
-        Contingent(spearmen, 5), Contingent(spearmen, 10), REPO.weapons["thrusting-spear"]
+        _fielded(spearmen, 5), _fielded(spearmen, 10), REPO.weapons["thrusting-spear"]
     )
     assert result.save_target is None
     assert any("Light Armour" in note for note in result.notes)
@@ -124,7 +131,7 @@ def test_strike_unit_rejects_a_missile_only_weapon() -> None:
     """A weapon with no Combat profile cannot be used to fight."""
     archers = REPO.units["elven-archers"]
     with pytest.raises(ValueError, match="no Combat profile"):
-        strike_unit(Contingent(archers, 5), Contingent(archers, 10), REPO.weapons["longbow"])
+        strike_unit(_fielded(archers, 5), _fielded(archers, 10), REPO.weapons["longbow"])
 
 
 # --- fight(): one bilateral round with Initiative-ordered coupling ---
@@ -149,7 +156,7 @@ def test_fight_equal_initiative_is_simultaneous() -> None:
     """
     spearmen = REPO.units["elven-spearmen"]
     spear = REPO.weapons["thrusting-spear"]
-    side = Contingent(spearmen, 1)
+    side = _fielded(spearmen, 1)
     result = fight(side, side, a_weapon=spear, b_weapon=spear, armoury=REPO.armoury)
     assert result.first_striker is None
     assert result.a_casualties[1] == pytest.approx(1 / 6)
@@ -165,8 +172,8 @@ def test_fight_higher_initiative_strikes_first_and_takes_less() -> None:
     """
     spearmen = REPO.units["elven-spearmen"]
     spear = REPO.weapons["thrusting-spear"]
-    faster = Contingent(_higher_initiative(spearmen), 1)
-    slower = Contingent(spearmen, 1)
+    faster = _fielded(_higher_initiative(spearmen), 1)
+    slower = _fielded(spearmen, 1)
     result = fight(faster, slower, a_weapon=spear, b_weapon=spear, armoury=REPO.armoury)
     assert result.first_striker is faster
     assert result.b_casualties[1] == pytest.approx(1 / 6)  # A full-strength
@@ -177,8 +184,8 @@ def test_fight_orients_the_joint_to_the_arguments() -> None:
     """When the second argument strikes first, losses stay keyed to (a, b)."""
     spearmen = REPO.units["elven-spearmen"]
     spear = REPO.weapons["thrusting-spear"]
-    slower = Contingent(spearmen, 1)
-    faster = Contingent(_higher_initiative(spearmen), 1)
+    slower = _fielded(spearmen, 1)
+    faster = _fielded(_higher_initiative(spearmen), 1)
     result = fight(slower, faster, a_weapon=spear, b_weapon=spear, armoury=REPO.armoury)
     assert result.first_striker is faster
     # b (faster) strikes first at full strength -> a falls on 1/6; a's
@@ -196,14 +203,14 @@ def test_fight_coupling_reduces_the_return_strike() -> None:
     spearmen = REPO.units["elven-spearmen"]
     spear = REPO.weapons["thrusting-spear"]
     result = fight(
-        Contingent(_higher_initiative(spearmen), 5),
-        Contingent(spearmen, 5),
+        _fielded(_higher_initiative(spearmen), 5),
+        _fielded(spearmen, 5),
         a_weapon=spear,
         b_weapon=spear,
         armoury=REPO.armoury,
     )
     full_strength = strike_unit(
-        Contingent(spearmen, 5), Contingent(spearmen, 5), spear, armoury=REPO.armoury
+        _fielded(spearmen, 5), _fielded(spearmen, 5), spear, armoury=REPO.armoury
     )
     assert expected_value(result.a_casualties) < expected_value(full_strength.casualties)
     assert any("Fight In Extra Rank" in note for note in result.notes)
@@ -215,8 +222,8 @@ def test_fight_rejects_negative_models() -> None:
     spear = REPO.weapons["thrusting-spear"]
     with pytest.raises(ValueError, match="model counts must be >= 0"):
         fight(
-            Contingent(spearmen, -1),
-            Contingent(spearmen, 5),
+            _fielded(spearmen, -1),
+            _fielded(spearmen, 5),
             a_weapon=spear,
             b_weapon=spear,
             armoury=REPO.armoury,
@@ -230,7 +237,7 @@ def test_fight_degenerate_prior_losses_equal_a_plain_fight() -> None:
     """A pmf certain no models were lost reproduces the plain-fight joint."""
     spearmen = REPO.units["elven-spearmen"]
     spear = REPO.weapons["thrusting-spear"]
-    a, b = Contingent(spearmen, 3), Contingent(spearmen, 3)
+    a, b = _fielded(spearmen, 3), _fielded(spearmen, 3)
     plain = fight(a, b, a_weapon=spear, b_weapon=spear, armoury=REPO.armoury)
     with_prior = fight(
         a, b, a_weapon=spear, b_weapon=spear, a_prior_losses=[1.0], armoury=REPO.armoury
@@ -248,7 +255,7 @@ def test_fight_prior_losses_mix_the_round_over_entering_strength() -> None:
     """
     spearmen = REPO.units["elven-spearmen"]
     spear = REPO.weapons["thrusting-spear"]
-    a, b = Contingent(spearmen, 1), Contingent(spearmen, 1)
+    a, b = _fielded(spearmen, 1), _fielded(spearmen, 1)
     result = fight(
         a, b, a_weapon=spear, b_weapon=spear, a_prior_losses=[0.5, 0.5], armoury=REPO.armoury
     )
@@ -261,7 +268,7 @@ def test_fight_prior_losses_reject_more_losses_than_models() -> None:
     """A pmf longer than the side's models + 1 cannot describe its losses."""
     spearmen = REPO.units["elven-spearmen"]
     spear = REPO.weapons["thrusting-spear"]
-    a, b = Contingent(spearmen, 2), Contingent(spearmen, 2)
+    a, b = _fielded(spearmen, 2), _fielded(spearmen, 2)
     with pytest.raises(ValueError, match="a_prior_losses covers more losses"):
         fight(a, b, a_weapon=spear, b_weapon=spear, a_prior_losses=[0.25, 0.25, 0.25, 0.25])
 
@@ -270,7 +277,7 @@ def test_fight_prior_losses_reject_a_non_distribution() -> None:
     """A prior-loss pmf that is not a probability distribution is rejected."""
     spearmen = REPO.units["elven-spearmen"]
     spear = REPO.weapons["thrusting-spear"]
-    a, b = Contingent(spearmen, 2), Contingent(spearmen, 2)
+    a, b = _fielded(spearmen, 2), _fielded(spearmen, 2)
     with pytest.raises(ValueError, match="must sum to 1"):
         fight(a, b, a_weapon=spear, b_weapon=spear, b_prior_losses=[0.5, 0.2])
 
@@ -293,14 +300,14 @@ def test_effective_initiative_applies_the_charge_bonus(
 ) -> None:
     """+1 Initiative per full inch charged, capped by arc, on the I4 base."""
     spearmen = REPO.units["elven-spearmen"]  # I4
-    charger = Contingent(spearmen, 5)
+    charger = _fielded(spearmen, 5)
     assert effective_initiative(charger, Charge(inches, arc)) == expected
 
 
 def test_effective_initiative_caps_at_ten() -> None:
     """The charge bonus cannot lift Initiative past the printed cap of 10."""
     fast = _higher_initiative(REPO.units["elven-spearmen"], 9)
-    charger = Contingent(fast, 5)
+    charger = _fielded(fast, 5)
     assert effective_initiative(charger, Charge(5, ChargeArc.FLANK)) == 10  # 9 + 4 -> 10
 
 
@@ -312,8 +319,8 @@ def test_fight_charge_makes_the_charger_strike_first() -> None:
     """
     spearmen = REPO.units["elven-spearmen"]
     spear = REPO.weapons["thrusting-spear"]
-    charger = Contingent(spearmen, 1)
-    defender = Contingent(spearmen, 1)
+    charger = _fielded(spearmen, 1)
+    defender = _fielded(spearmen, 1)
     result = fight(
         charger,
         defender,
@@ -335,10 +342,10 @@ def test_fight_charge_capped_below_the_foe_stays_simultaneous() -> None:
     """
     spearmen = REPO.units["elven-spearmen"]
     spear = REPO.weapons["thrusting-spear"]
-    charger = Contingent(spearmen, 1)
+    charger = _fielded(spearmen, 1)
     result = fight(
         charger,
-        Contingent(spearmen, 1),
+        _fielded(spearmen, 1),
         a_weapon=spear,
         b_weapon=spear,
         context=CombatContext(a_charge=Charge(0, ChargeArc.FRONT)),
@@ -360,8 +367,8 @@ def test_combat_result_first_strike_advantage() -> None:
     spearmen = REPO.units["elven-spearmen"]
     spear = REPO.weapons["thrusting-spear"]
     result = fight(
-        Contingent(_higher_initiative(spearmen), 1),
-        Contingent(spearmen, 1),
+        _fielded(_higher_initiative(spearmen), 1),
+        _fielded(spearmen, 1),
         a_weapon=spear,
         b_weapon=spear,
         armoury=REPO.armoury,
@@ -380,7 +387,7 @@ def test_combat_result_simultaneous_is_symmetric() -> None:
     """Equal Initiative: the win split is symmetric between the two sides."""
     spearmen = REPO.units["elven-spearmen"]
     spear = REPO.weapons["thrusting-spear"]
-    side = Contingent(spearmen, 1)
+    side = _fielded(spearmen, 1)
     cr = combat_result(fight(side, side, a_weapon=spear, b_weapon=spear, armoury=REPO.armoury))
     assert cr.p_a_wins == pytest.approx(cr.p_b_wins)
     assert cr.p_a_wins == pytest.approx(5 / 36)

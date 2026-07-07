@@ -11,8 +11,16 @@ from avelorn.tow.combat.rules import _condition_applies, compile_rules, printed_
 from avelorn.tow.combat.shooting import shoot_unit
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.schema.rule import ArmourPiercingEffect
+from avelorn.tow.schema.unit import Unit
 
 REPO = TOWRepository()
+
+
+def _fielded(unit: Unit, models: int) -> Contingent:
+    # Field at the printed, optionless loadout, with the real registries.
+    return Contingent.field(
+        unit, models, weapons=REPO.weapons, armoury=REPO.armoury, rules=REPO.rules
+    )
 
 
 def test_printed_rule_exact_name_is_the_entry_itself() -> None:
@@ -83,8 +91,8 @@ def test_shoot_unit_factors_armour_bane_from_data() -> None:
     13/54, the Armour Bane note disappears, and Volley Fire stays noted.
     """
     result = shoot_unit(
-        Contingent(REPO.units["elven-archers"], 3),
-        Contingent(REPO.units["elven-spearmen"], 10),
+        _fielded(REPO.units["elven-archers"], 3),
+        _fielded(REPO.units["elven-spearmen"], 10),
         weapon=REPO.weapons["longbow"],
         armoury=REPO.armoury,
         rules=REPO.rules,
@@ -97,8 +105,8 @@ def test_shoot_unit_factors_armour_bane_from_data() -> None:
 def test_shoot_unit_without_rules_is_unchanged() -> None:
     """No rules registry: every weapon rule stays noted, math unchanged."""
     result = shoot_unit(
-        Contingent(REPO.units["elven-archers"], 3),
-        Contingent(REPO.units["elven-spearmen"], 10),
+        _fielded(REPO.units["elven-archers"], 3),
+        _fielded(REPO.units["elven-spearmen"], 10),
         weapon=REPO.weapons["longbow"],
         armoury=REPO.armoury,
     )
@@ -113,8 +121,8 @@ def test_long_range_penalty_applies_from_data() -> None:
     with Armour Bane live, p = 1/2 * (2/6 * 2/3 + 1/6 * 5/6) = 13/72.
     """
     result = shoot_unit(
-        Contingent(REPO.units["elven-archers"], 3),
-        Contingent(REPO.units["elven-spearmen"], 10),
+        _fielded(REPO.units["elven-archers"], 3),
+        _fielded(REPO.units["elven-spearmen"], 10),
         weapon=REPO.weapons["longbow"],
         armoury=REPO.armoury,
         rules=REPO.rules,
@@ -130,8 +138,8 @@ def test_condition_false_applies_no_penalty_and_no_note() -> None:
     A rule whose condition evaluates False is honoured by not applying.
     """
     result = shoot_unit(
-        Contingent(REPO.units["elven-archers"], 3),
-        Contingent(REPO.units["elven-spearmen"], 10),
+        _fielded(REPO.units["elven-archers"], 3),
+        _fielded(REPO.units["elven-spearmen"], 10),
         weapon=REPO.weapons["longbow"],
         armoury=REPO.armoury,
         rules=REPO.rules,
@@ -144,8 +152,8 @@ def test_condition_false_applies_no_penalty_and_no_note() -> None:
 def test_unknown_context_leaves_core_rules_unfactored() -> None:
     """Without an engagement context the phase rules cannot be evaluated."""
     result = shoot_unit(
-        Contingent(REPO.units["elven-archers"], 3),
-        Contingent(REPO.units["elven-spearmen"], 10),
+        _fielded(REPO.units["elven-archers"], 3),
+        _fielded(REPO.units["elven-spearmen"], 10),
         weapon=REPO.weapons["longbow"],
         armoury=REPO.armoury,
         rules=REPO.rules,
@@ -158,8 +166,8 @@ def test_unknown_context_leaves_core_rules_unfactored() -> None:
 def test_both_penalties_stack() -> None:
     """Moved and at long range: -1 and -1, hit 5+."""
     result = shoot_unit(
-        Contingent(REPO.units["elven-archers"], 3),
-        Contingent(REPO.units["elven-spearmen"], 10),
+        _fielded(REPO.units["elven-archers"], 3),
+        _fielded(REPO.units["elven-spearmen"], 10),
         weapon=REPO.weapons["longbow"],
         armoury=REPO.armoury,
         rules=REPO.rules,
@@ -180,16 +188,16 @@ def test_move_in_or_stay_out_is_a_wash() -> None:
     spearmen = REPO.units["elven-spearmen"]
     warbow = REPO.weapons["warbow"]
     stay = shoot_unit(
-        Contingent(sea_guard, 10),
-        Contingent(spearmen, 10),
+        _fielded(sea_guard, 10),
+        _fielded(spearmen, 10),
         warbow,
         armoury=REPO.armoury,
         rules=REPO.rules,
         context=EngagementContext(moved=False, distance=15),
     )
     move_in = shoot_unit(
-        Contingent(sea_guard, 10),
-        Contingent(spearmen, 10),
+        _fielded(sea_guard, 10),
+        _fielded(spearmen, 10),
         warbow,
         armoury=REPO.armoury,
         rules=REPO.rules,

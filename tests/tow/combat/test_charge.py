@@ -1,5 +1,7 @@
 """The charge sequence: the verb, its reactions, and the composed fight."""
 
+from dataclasses import replace
+
 import pytest
 
 from avelorn.tow.combat.charge import StandAndShoot, charge, stand_and_shoot
@@ -8,23 +10,31 @@ from avelorn.tow.combat.contingent import Charge, ChargeArc, Contingent
 from avelorn.tow.combat.melee import combat_result, fight
 from avelorn.tow.combat.shooting import shoot_unit
 from avelorn.tow.data import TOWRepository
+from avelorn.tow.schema.unit import Unit
 
 REPO = TOWRepository()
+
+
+def _fielded(unit: Unit, models: int) -> Contingent:
+    # Field at the printed, optionless loadout, with the real registries.
+    return Contingent.field(
+        unit, models, weapons=REPO.weapons, armoury=REPO.armoury, rules=REPO.rules
+    )
 
 
 def test_stand_and_shoot_applies_the_minus_one_to_hit() -> None:
     """Archers standing and shooting hit at -1: BS4 (3+) becomes 4+."""
     archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
     plain = shoot_unit(
-        Contingent(archers, 10),
-        Contingent(spearmen, 10),
+        _fielded(archers, 10),
+        _fielded(spearmen, 10),
         REPO.weapons["longbow"],
         armoury=REPO.armoury,
         rules=REPO.rules,
     )
     reaction = stand_and_shoot(
-        Contingent(archers, 10),
-        Contingent(spearmen, 10),
+        _fielded(archers, 10),
+        _fielded(spearmen, 10),
         REPO.weapons["longbow"],
         armoury=REPO.armoury,
         rules=REPO.rules,
@@ -42,15 +52,15 @@ def test_stand_and_shoot_is_exempt_from_firing_at_long_range() -> None:
     """
     archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
     plain = shoot_unit(
-        Contingent(archers, 10),
-        Contingent(spearmen, 10),
+        _fielded(archers, 10),
+        _fielded(spearmen, 10),
         REPO.weapons["longbow"],
         armoury=REPO.armoury,
         rules=REPO.rules,
     )
     reaction = stand_and_shoot(
-        Contingent(archers, 10),
-        Contingent(spearmen, 10),
+        _fielded(archers, 10),
+        _fielded(spearmen, 10),
         REPO.weapons["longbow"],
         armoury=REPO.armoury,
         rules=REPO.rules,
@@ -63,8 +73,8 @@ def test_stand_and_shoot_caps_casualties_at_the_charging_unit_size() -> None:
     """A volley cannot fell more chargers than the charging unit contains."""
     archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
     reaction = stand_and_shoot(
-        Contingent(archers, 20),
-        Contingent(spearmen, 5),
+        _fielded(archers, 20),
+        _fielded(spearmen, 5),
         REPO.weapons["longbow"],
         armoury=REPO.armoury,
         rules=REPO.rules,
@@ -88,8 +98,8 @@ def test_charge_sequence_matches_mixing_the_survivor_fights_by_hand() -> None:
     spear, hand = REPO.weapons["thrusting-spear"], REPO.weapons["hand-weapon"]
     move = Charge(6, ChargeArc.FRONT)
     models = 3
-    charger = Contingent(spearmen, models)
-    defender = Contingent(archers, 3)
+    charger = _fielded(spearmen, models)
+    defender = _fielded(archers, 3)
     reaction = stand_and_shoot(
         defender, charger, REPO.weapons["longbow"], armoury=REPO.armoury, rules=REPO.rules
     )
@@ -108,7 +118,7 @@ def test_charge_sequence_matches_mixing_the_survivor_fights_by_hand() -> None:
     manual = [[0.0] * (defender.models + 1) for _ in range(models + 1)]
     for felled, p_felled in enumerate(reaction.casualties):
         survivors = fight(
-            Contingent(spearmen, models - felled),
+            replace(charger, models=models - felled),
             defender,
             a_weapon=spear,
             b_weapon=hand,
@@ -134,8 +144,8 @@ def test_stand_and_shoot_erodes_the_chargers_combat_result() -> None:
     """
     archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
     spear, hand = REPO.weapons["thrusting-spear"], REPO.weapons["hand-weapon"]
-    charger = Contingent(spearmen, 10)
-    defender = Contingent(archers, 10)
+    charger = _fielded(spearmen, 10)
+    defender = _fielded(archers, 10)
     situation = CombatContext(a_charge=Charge(8, ChargeArc.FRONT))
     reaction = stand_and_shoot(
         defender, charger, REPO.weapons["longbow"], armoury=REPO.armoury, rules=REPO.rules
@@ -171,8 +181,8 @@ def test_force_short_range_honours_long_range_as_a_no_op() -> None:
     """shoot_unit's force_short_range treats the shot as within half range."""
     archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
     forced = shoot_unit(
-        Contingent(archers, 10),
-        Contingent(spearmen, 10),
+        _fielded(archers, 10),
+        _fielded(spearmen, 10),
         REPO.weapons["longbow"],
         armoury=REPO.armoury,
         rules=REPO.rules,
@@ -189,7 +199,7 @@ def test_charge_composes_the_reaction_into_the_fight() -> None:
     archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
     spear, hand = REPO.weapons["thrusting-spear"], REPO.weapons["hand-weapon"]
     longbow = REPO.weapons["longbow"]
-    charger, target = Contingent(spearmen, 10), Contingent(archers, 10)
+    charger, target = _fielded(spearmen, 10), _fielded(archers, 10)
     move = Charge(8, ChargeArc.FRONT)
 
     outcome = charge(
@@ -223,7 +233,7 @@ def test_charge_against_a_holding_target_has_no_volley() -> None:
     """Hold: no reaction volley, and the melee is the plain charged fight."""
     archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
     spear, hand = REPO.weapons["thrusting-spear"], REPO.weapons["hand-weapon"]
-    charger, target = Contingent(spearmen, 10), Contingent(archers, 10)
+    charger, target = _fielded(spearmen, 10), _fielded(archers, 10)
     move = Charge(8, ChargeArc.FRONT)
 
     outcome = charge(

@@ -67,8 +67,12 @@ def main() -> None:
     hand_weapon = repo.weapons["hand-weapon"]
     longbow = repo.weapons["longbow"]
 
-    spearmen = Contingent(spearmen_unit, args.spearmen)
-    archers = Contingent(archers_unit, args.archers)
+    spearmen = Contingent.field(
+        spearmen_unit, args.spearmen, weapons=repo.weapons, armoury=repo.armoury, rules=repo.rules
+    )
+    archers = Contingent.field(
+        archers_unit, args.archers, weapons=repo.weapons, armoury=repo.armoury, rules=repo.rules
+    )
     move = Charge(args.charge_inches, ChargeArc.FRONT)
 
     outcome = charge(
