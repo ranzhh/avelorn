@@ -2,48 +2,44 @@
 
 The Game owns what belongs to neither side — the chapter rules that
 apply to every action of a phase (Firing at Long Range, Moving and
-Shooting), resolved once at :meth:`Game.assemble`, the way a loadout
+Shooting), resolved once at :meth:`TOWGame.assemble`, the way a loadout
 resolves a unit's printed names at fielding. It also owns the turn's
-structure: the printed phase sequence, each phase bound to the game
-with its printed steps and its actions.
+structure: the printed phase sequence, each phase bound to the game —
+one module per phase, under :mod:`avelorn.tow.phases`.
 
-Game owns the rules in force and the turn's structure — **never the
-math**. Every action method is a one-line delegation into the combat
-modules, injecting the game's rules; the underlying functions stay
-importable directly, nothing is moved, only bound. The moment a Game
-method grows a second line of logic, the god object has begun: move the
-logic into a module and delegate.
+The game owns the rules in force and the turn's structure — **never
+the math**. Every action method is a one-line delegation into the
+combat modules, injecting the game's rules; the underlying functions
+stay importable directly, nothing is moved, only bound. The moment a
+game method grows a second line of logic, the god object has begun:
+move the logic into a module and delegate.
 
 Deliberately stateless: "walk the turn step by step" is an ordered
 tuple, not a mutable cursor. Whose turn it is, casualties persisting
-across phases — that is a Battle object *on top of* Game, if ever.
+across phases — that is a Battle object *on top of* the game, if ever.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import ClassVar
 
+from avelorn.core.game import Game
 from avelorn.core.registry import Registry
-from avelorn.tow.combat.charge import ChargeResult, StandAndShoot, charge, stand_and_shoot
-from avelorn.tow.combat.context import CombatContext, EngagementContext
+from avelorn.tow.combat.charge import ChargeResult, StandAndShoot, charge
 from avelorn.tow.combat.contingent import Charge, Contingent
-from avelorn.tow.combat.melee import CombatResult, FightResult, combat_result, fight
-from avelorn.tow.combat.morale import BreakResult, PanicResult, break_test, make_panic_tests
-from avelorn.tow.combat.shooting import ShootingResult, shoot_unit
+from avelorn.tow.phases import CombatPhase, MovementPhase, ShootingPhase, StrategyPhase
 from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.rule import Rule
-from avelorn.tow.schema.stage import Stage
-from avelorn.tow.schema.unit import Unit
 from avelorn.tow.schema.weapon import Weapon
 
 
 @dataclass(frozen=True)
-class Game:
-    """A game in play: the rules in force, bound to the turn's phases.
+class TOWGame(Game):
+    """A game of The Old World in play: rules in force, bound to the turn.
 
     Assemble one from a rule registry (:meth:`assemble`); the chapter
     rules each phase has in force are resolved right there, eagerly —
-    the game's own muster boundary. Walk the turn with :meth:`turn`, or
+    the game's own muster boundary. Walk the turn with ``turn()``, or
     address a phase directly (``game.shooting.volley(...)``); sequences
     that span phases (a charge: declared in Movement, fought in Combat)
     live on the game itself.
@@ -51,8 +47,12 @@ class Game:
 
     in_play: Mapping[Phase, Mapping[str, Rule]]
 
+    # The printed turn sequence, derived from the Phase vocabulary: each
+    # member names the binding property below.
+    phase_sequence: ClassVar[tuple[str, ...]] = tuple(phase.name.lower() for phase in Phase)
+
     @classmethod
-    def assemble(cls, rules: Registry[Rule]) -> "Game":
+    def assemble(cls, rules: Registry[Rule]) -> "TOWGame":
         """Assemble a game from the rules, resolving what each phase has in force.
 
         A chapter rule is in force when its category names the phase and
@@ -74,31 +74,23 @@ class Game:
         }
         return cls(in_play=in_play)
 
-    def turn(self) -> tuple["StrategyPhase", "MovementPhase", "ShootingPhase", "CombatPhase"]:
-        """The turn as printed: the four phases, in order, bound to this game.
-
-        Returns:
-            The phase bindings, in the printed sequence.
-        """
-        return (self.strategy, self.movement, self.shooting, self.combat)
-
     @property
-    def strategy(self) -> "StrategyPhase":
+    def strategy(self) -> StrategyPhase:
         """The Strategy phase, bound to this game."""
         return StrategyPhase(self)
 
     @property
-    def movement(self) -> "MovementPhase":
+    def movement(self) -> MovementPhase:
         """The Movement phase, bound to this game."""
         return MovementPhase(self)
 
     @property
-    def shooting(self) -> "ShootingPhase":
+    def shooting(self) -> ShootingPhase:
         """The Shooting phase, bound to this game."""
         return ShootingPhase(self)
 
     @property
-    def combat(self) -> "CombatPhase":
+    def combat(self) -> CombatPhase:
         """The Combat phase, bound to this game."""
         return CombatPhase(self)
 
@@ -130,151 +122,3 @@ class Game:
             reaction=reaction,
             phase_rules=self.in_play[Phase.SHOOTING],
         )
-
-
-@dataclass(frozen=True)
-class StrategyPhase:
-    """The Strategy phase, bound to a game; none of its actions are modelled yet."""
-
-    game: Game
-    steps: ClassVar[tuple[Stage, ...]] = ()
-
-
-@dataclass(frozen=True)
-class MovementPhase:
-    """The Movement phase, bound to a game: charge reactions resolve here."""
-
-    game: Game
-    steps: ClassVar[tuple[Stage, ...]] = ()
-
-    def stand_and_shoot(
-        self,
-        shooter: Contingent,
-        target: Contingent,
-        weapon: Weapon,
-    ) -> ShootingResult:
-        """The Stand & Shoot charge reaction: one volley at the closing chargers.
-
-        Returns:
-            The volley's outcome — chargers felled before they strike.
-        """
-        return stand_and_shoot(
-            shooter, target, weapon, phase_rules=self.game.in_play[Phase.SHOOTING]
-        )
-
-
-@dataclass(frozen=True)
-class ShootingPhase:
-    """The Shooting phase, bound to a game: its printed steps, its actions.
-
-    ``steps`` is the printed shooting sequence; the binding's methods are
-    the phase's actions, each a one-line delegation with the game's
-    chapter rules in force.
-    """
-
-    game: Game
-    # The printed shooting sequence. Declared here because the game owns
-    # the turn's structure; a drift-guard test holds the order to the
-    # Stage vocabulary's declaration order, which the engine walks.
-    steps: ClassVar[tuple[Stage, ...]] = (
-        Stage.ROLL_TO_HIT,
-        Stage.ROLL_TO_WOUND,
-        Stage.MAKE_ARMOUR_SAVES,
-        Stage.WARD_SAVES,
-        Stage.MAKE_PANIC_TESTS,
-    )
-
-    def volley(
-        self,
-        attacker: Contingent,
-        defender: Contingent,
-        weapon: Weapon,
-        *,
-        context: EngagementContext | None = None,
-        hit_modifier: int = 0,
-    ) -> ShootingResult:
-        """One unit shoots another, under the phase's rules in force.
-
-        Returns:
-            The shooting outcome.
-        """
-        return shoot_unit(
-            attacker,
-            defender,
-            weapon,
-            phase_rules=self.game.in_play[Phase.SHOOTING],
-            context=context,
-            hit_modifier=hit_modifier,
-        )
-
-    def make_panic_tests(
-        self,
-        result: ShootingResult,
-        defender: Contingent,
-        *,
-        battle_strength: int | None = None,
-    ) -> PanicResult:
-        """The panic step for one volley's casualties.
-
-        Returns:
-            The panic outcome distribution.
-        """
-        return make_panic_tests(result, defender, battle_strength=battle_strength)
-
-
-@dataclass(frozen=True)
-class CombatPhase:
-    """The Combat phase, bound to a game: its steps, its round's actions."""
-
-    game: Game
-    # The rolls of the printed combat sequence. The phase's other printed
-    # steps (choose combats, calculate combat result, break tests) join
-    # Stage append-only when rule text demands them, as ever.
-    steps: ClassVar[tuple[Stage, ...]] = (
-        Stage.ROLL_TO_HIT,
-        Stage.ROLL_TO_WOUND,
-        Stage.MAKE_ARMOUR_SAVES,
-        Stage.WARD_SAVES,
-    )
-
-    def fight(
-        self,
-        a: Contingent,
-        b: Contingent,
-        *,
-        a_weapon: Weapon,
-        b_weapon: Weapon,
-        a_prior_losses: Sequence[float] | None = None,
-        b_prior_losses: Sequence[float] | None = None,
-        context: CombatContext | None = None,
-    ) -> FightResult:
-        """One round of close combat between two units.
-
-        Returns:
-            The round's joint casualty distribution.
-        """
-        return fight(
-            a,
-            b,
-            a_weapon=a_weapon,
-            b_weapon=b_weapon,
-            a_prior_losses=a_prior_losses,
-            b_prior_losses=b_prior_losses,
-            context=context,
-        )
-
-    def result(self, fought: FightResult) -> CombatResult:
-        """Score a fought round and name the winner.
-
-        Returns:
-            The win/draw/loss probabilities and signed margin.
-        """
-        return combat_result(fought)
-
-    def break_test(self, scored: CombatResult, a: Unit, b: Unit) -> BreakResult:
-        """The Break test for a scored round, for each side.
-
-        Returns:
-            Each side's break outcome distribution.
-        """
-        return break_test(scored, a, b)

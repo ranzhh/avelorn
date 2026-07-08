@@ -13,7 +13,7 @@ from avelorn.tow.combat.melee import (
     strike_unit,
 )
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.game import Game
+from avelorn.tow.game import TOWGame
 from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.rule import Condition, ModifierEffect, Rule
 from avelorn.tow.schema.unit import Characteristic, Unit
@@ -21,7 +21,7 @@ from avelorn.tow.schema.unit import Characteristic, Unit
 REPO = TOWRepository()
 
 # The shooting phase's rules in force, as the Game assembles them.
-IN_FORCE = Game.assemble(REPO.rules).in_play[Phase.SHOOTING]
+IN_FORCE = TOWGame.assemble(REPO.rules).in_play[Phase.SHOOTING]
 
 
 def _fielded(unit: Unit, models: int) -> Contingent:

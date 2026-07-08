@@ -10,14 +10,14 @@ from avelorn.tow.combat.contingent import Charge, ChargeArc, Contingent
 from avelorn.tow.combat.melee import combat_result, fight
 from avelorn.tow.combat.shooting import shoot_unit
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.game import Game
+from avelorn.tow.game import TOWGame
 from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.unit import Unit
 
 REPO = TOWRepository()
 
 # The shooting phase's rules in force, as the Game assembles them.
-IN_FORCE = Game.assemble(REPO.rules).in_play[Phase.SHOOTING]
+IN_FORCE = TOWGame.assemble(REPO.rules).in_play[Phase.SHOOTING]
 
 
 def _fielded(unit: Unit, models: int) -> Contingent:

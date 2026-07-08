@@ -12,13 +12,13 @@ from avelorn.tow.combat.melee import combat_result, fight
 from avelorn.tow.combat.morale import break_test, make_panic_tests
 from avelorn.tow.combat.shooting import shoot_unit
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.game import Game
+from avelorn.tow.game import TOWGame
 from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.stage import Stage
 from avelorn.tow.schema.unit import Unit
 
 REPO = TOWRepository()
-GAME = Game.assemble(REPO.rules)
+GAME = TOWGame.assemble(REPO.rules)
 
 
 def _fielded(unit: Unit, models: int) -> Contingent:
@@ -60,15 +60,14 @@ def test_the_game_is_a_frozen_value() -> None:
 
 
 def test_turn_is_the_printed_sequence() -> None:
-    """The turn walks the four phases in printed order, each bound to the game."""
-    strategy, movement, shooting, combat = GAME.turn()
-    assert (strategy, movement, shooting, combat) == (
-        GAME.strategy,
-        GAME.movement,
-        GAME.shooting,
-        GAME.combat,
-    )
-    assert all(binding.game is GAME for binding in GAME.turn())
+    """The turn walks the four phases in printed order, each bound to the game.
+
+    The sequence is derived from the Phase vocabulary, so a phase
+    joining the enum without a binding property fails here.
+    """
+    assert GAME.turn() == (GAME.strategy, GAME.movement, GAME.shooting, GAME.combat)
+    for binding in (GAME.strategy, GAME.movement, GAME.shooting, GAME.combat):
+        assert binding.game is GAME
 
 
 @pytest.mark.parametrize("binding", ["strategy", "movement", "shooting", "combat"])

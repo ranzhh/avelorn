@@ -18,7 +18,7 @@ from avelorn.tow.combat.context import EngagementContext
 from avelorn.tow.combat.contingent import Contingent
 from avelorn.tow.combat.query import Comparator, Predicate, query_result
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.game import Game
+from avelorn.tow.game import TOWGame
 
 
 def main() -> None:
@@ -76,7 +76,7 @@ def main() -> None:
     )
     weapon = repo.weapons[args.weapon]
     context = EngagementContext(moved=args.moved, distance=args.distance)
-    game = Game.assemble(repo.rules)
+    game = TOWGame.assemble(repo.rules)
     result = game.shooting.volley(attacker, defender, weapon, context=context)
 
     def fmt_target(target: int | None) -> str:

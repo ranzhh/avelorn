@@ -21,7 +21,7 @@ from avelorn.tow.combat.context import CombatContext
 from avelorn.tow.combat.contingent import Contingent
 from avelorn.tow.combat.query import Comparator, Predicate, evaluate, fight_distributions
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.game import Game
+from avelorn.tow.game import TOWGame
 
 
 def _print_casualties(label: str, casualties: list[float], fighters: int) -> None:
@@ -71,7 +71,7 @@ def main() -> None:
     b = Contingent.field(
         unit_b, args.b_fighters, weapons=repo.weapons, armoury=repo.armoury, rules=repo.rules
     )
-    game = Game.assemble(repo.rules)
+    game = TOWGame.assemble(repo.rules)
     result = game.combat.fight(
         a,
         b,

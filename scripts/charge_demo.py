@@ -28,7 +28,7 @@ from avelorn.tow.combat.charge import StandAndShoot
 from avelorn.tow.combat.contingent import Charge, ChargeArc, Contingent
 from avelorn.tow.combat.query import Comparator, Predicate, evaluate, fight_distributions
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.game import Game
+from avelorn.tow.game import TOWGame
 from avelorn.tow.schema.unit import Characteristic
 
 
@@ -74,7 +74,7 @@ def main() -> None:
     )
     move = Charge(args.charge_inches, ChargeArc.FRONT)
 
-    game = Game.assemble(repo.rules)
+    game = TOWGame.assemble(repo.rules)
     outcome = game.charge(
         spearmen,
         archers,
