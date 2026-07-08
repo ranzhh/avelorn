@@ -2,10 +2,8 @@
 
 The Game owns what belongs to neither side — the chapter rules that
 apply to every action of a phase (Firing at Long Range, Moving and
-Shooting), resolved once at :meth:`TOWGame.assemble`, the way a loadout
-resolves a unit's printed names at fielding. It also owns the turn's
-structure: the printed phase sequence, each phase bound to the game —
-one module per phase, under :mod:`avelorn.tow.phases`.
+Shooting) — and the turn's structure: the printed phase sequence, each
+phase in its own module under :mod:`avelorn.tow.phases`.
 
 The game owns the rules in force and the turn's structure — **never
 the math**. Every action method is a one-line delegation into the
@@ -56,6 +54,10 @@ class TOWGame(Game):
     armoury: Registry[Armour]
     rules: Registry[Rule]
     # The chapter rules each phase has in force, resolved at assembly.
+    # Consumed by the shooting seam today (volleys, and the reaction
+    # volley Movement borrows); combat has no chapter-rule path into the
+    # math yet — wiring one entangles with per-side melee conditions and
+    # is queued work, not a data change.
     in_play: Mapping[Phase, Mapping[str, Rule]]
     # The turn's phases, assembled as values — each owns exactly the
     # rules in force it needs; none holds a reference back to the game.
@@ -96,7 +98,7 @@ class TOWGame(Game):
             rules=repository.rules,
             in_play=in_play,
             strategy=StrategyPhase(),
-            movement=MovementPhase(in_play=in_play[Phase.SHOOTING]),
+            movement=MovementPhase(shooting_in_play=in_play[Phase.SHOOTING]),
             shooting=ShootingPhase(in_play=in_play[Phase.SHOOTING]),
             combat=CombatPhase(),
         )

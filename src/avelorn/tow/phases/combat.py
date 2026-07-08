@@ -16,7 +16,14 @@ from avelorn.tow.schema.weapon import Weapon
 
 @dataclass(frozen=True)
 class CombatPhase(Phase):
-    """The Combat phase: its steps, its round's actions."""
+    """The Combat phase: its steps, its round's actions.
+
+    Carries no rules in force yet: the combat chapter's rules have no
+    path into the fight's math (that wiring entangles with per-side
+    melee conditions and is queued work). A combat chapter rule gaining
+    effects today would be assembled into ``game.in_play`` but not
+    honoured — the gap is here, stated, not hidden.
+    """
 
     # The rolls of the printed combat sequence. The phase's other printed
     # steps (choose combats, calculate combat result, break tests) join

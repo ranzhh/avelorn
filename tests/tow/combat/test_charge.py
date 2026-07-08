@@ -11,14 +11,14 @@ from avelorn.tow.combat.contingent import Charge, ChargeArc, Contingent
 from avelorn.tow.combat.melee import combat_result, fight
 from avelorn.tow.combat.shooting import shoot_unit
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.game import TOWGame
 from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.unit import Unit
 
 REPO = TOWRepository()
 
-# The shooting phase's rules in force, as the Game assembles them.
-IN_FORCE = TOWGame.assemble(REPO).in_play[Phase.SHOOTING]
+# The shooting chapter's rules in force, built directly: these tests
+# exercise the combat layer, which must not depend on game assembly.
+IN_FORCE = {r.name: r for r in REPO.rules.values() if r.category == Phase.SHOOTING and r.effects}
 
 
 def _fielded(unit: Unit, models: int) -> Contingent:

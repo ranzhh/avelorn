@@ -15,11 +15,13 @@ from avelorn.tow.schema.weapon import Weapon
 class MovementPhase(Phase):
     """The Movement phase: the charge, and the reactions that answer it.
 
-    ``in_play`` are the shooting chapter's rules in force — a Stand &
-    Shoot reaction volley resolves under them.
+    ``shooting_in_play`` are the *shooting* chapter's rules in force —
+    a Stand & Shoot reaction volley resolves under them. The movement
+    chapter's own rules have no path into the math yet; when one gains
+    effects, this phase grows its own ``in_play`` beside this field.
     """
 
-    in_play: Mapping[str, Rule]
+    shooting_in_play: Mapping[str, Rule]
 
     def charge(
         self,
@@ -46,7 +48,7 @@ class MovementPhase(Phase):
             charger_weapon=charger_weapon,
             target_weapon=target_weapon,
             reaction=reaction,
-            phase_rules=self.in_play,
+            phase_rules=self.shooting_in_play,
         )
 
     def stand_and_shoot(
@@ -60,4 +62,4 @@ class MovementPhase(Phase):
         Returns:
             The volley's outcome — chargers felled before they strike.
         """
-        return stand_and_shoot(shooter, target, weapon, phase_rules=self.in_play)
+        return stand_and_shoot(shooter, target, weapon, phase_rules=self.shooting_in_play)
