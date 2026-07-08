@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from avelorn.tow.phases.phase import Phase
+from avelorn.core.game import Phase
 
 
 @dataclass(frozen=True)

@@ -4,11 +4,11 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import ClassVar
 
+from avelorn.core.game import Phase
 from avelorn.tow.combat.context import CombatContext
 from avelorn.tow.combat.contingent import Contingent
 from avelorn.tow.combat.melee import CombatResult, FightResult, combat_result, fight
 from avelorn.tow.combat.morale import BreakResult, break_test
-from avelorn.tow.phases.phase import Phase
 from avelorn.tow.schema.stage import Stage
 from avelorn.tow.schema.unit import Unit
 from avelorn.tow.schema.weapon import Weapon
