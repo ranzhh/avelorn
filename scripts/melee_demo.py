@@ -19,7 +19,6 @@ from avelorn.core.dice import expected_value
 from avelorn.core.logging import configure_logging
 from avelorn.tow.combat.context import CombatContext
 from avelorn.tow.combat.query import Comparator, Predicate, evaluate, fight_distributions
-from avelorn.tow.data import TOWRepository
 from avelorn.tow.game import TOWGame
 
 
@@ -59,7 +58,7 @@ def main() -> None:
     if args.verbose:
         configure_logging(logging.DEBUG)
 
-    game = TOWGame.assemble(TOWRepository())
+    game = TOWGame.load_data()
     unit_a = game.units[args.unit_a]
     unit_b = game.units[args.unit_b]
     weapon_a = weapon_b = game.weapons[args.weapon]

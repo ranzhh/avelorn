@@ -16,7 +16,6 @@ import logging
 from avelorn.core.logging import configure_logging
 from avelorn.tow.combat.context import EngagementContext
 from avelorn.tow.combat.query import Comparator, Predicate, query_result
-from avelorn.tow.data import TOWRepository
 from avelorn.tow.game import TOWGame
 
 
@@ -58,7 +57,7 @@ def main() -> None:
     if args.verbose:
         configure_logging(logging.DEBUG)
 
-    game = TOWGame.assemble(TOWRepository())
+    game = TOWGame.load_data()
     attacker = game.field(game.units[args.attacker], args.shooters)
     defender = game.field(game.units[args.defender], args.defenders)
     weapon = game.weapons[args.weapon]

@@ -91,6 +91,20 @@ class TOWGame(Game):
             in_play=in_play,
         )
 
+    @classmethod
+    def load_data(cls) -> "TOWGame":
+        """Load the printed corpus from data/ and assemble the game in play.
+
+        The one-call entry point: the repository is an implementation
+        detail here — the game holds the data from then on. To assemble
+        from a corpus you already loaded (or doctored), use
+        :meth:`assemble`.
+
+        Returns:
+            The assembled game.
+        """
+        return cls.assemble(TOWRepository())
+
     def field(self, unit: Unit, models: int) -> Contingent:
         """Field a bare datasheet at its printed, optionless loadout.
 

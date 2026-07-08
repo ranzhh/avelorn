@@ -27,7 +27,6 @@ from avelorn.core.logging import configure_logging
 from avelorn.tow.combat.charge import StandAndShoot
 from avelorn.tow.combat.contingent import Charge, ChargeArc
 from avelorn.tow.combat.query import Comparator, Predicate, evaluate, fight_distributions
-from avelorn.tow.data import TOWRepository
 from avelorn.tow.game import TOWGame
 from avelorn.tow.schema.unit import Characteristic
 
@@ -56,7 +55,7 @@ def main() -> None:
     if args.verbose:
         configure_logging(logging.DEBUG)
 
-    game = TOWGame.assemble(TOWRepository())
+    game = TOWGame.load_data()
     spearmen_unit = game.units["elven-spearmen"]
     archers_unit = game.units["elven-archers"]
     # The scene fixes each unit's weapon for the phase it acts in: the
