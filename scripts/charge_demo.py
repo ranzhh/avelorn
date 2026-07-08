@@ -24,12 +24,11 @@ import logging
 
 from avelorn.core.dice import expected_value
 from avelorn.core.logging import configure_logging
-from avelorn.tow.combat.charge import StandAndShoot, charge
+from avelorn.tow.combat.charge import StandAndShoot
 from avelorn.tow.combat.contingent import Charge, ChargeArc, Contingent
-from avelorn.tow.combat.melee import combat_result
-from avelorn.tow.combat.morale import break_test
 from avelorn.tow.combat.query import Comparator, Predicate, evaluate, fight_distributions
 from avelorn.tow.data import TOWRepository
+from avelorn.tow.game import Game
 from avelorn.tow.schema.unit import Characteristic
 
 
@@ -75,20 +74,20 @@ def main() -> None:
     )
     move = Charge(args.charge_inches, ChargeArc.FRONT)
 
-    outcome = charge(
+    game = Game.assemble(repo.rules)
+    outcome = game.charge(
         spearmen,
         archers,
         move=move,
         charger_weapon=spear,
         target_weapon=hand_weapon,
         reaction=StandAndShoot(longbow),
-        rules=repo.rules,
     )
     reaction = outcome.reaction
     assert reaction is not None  # a StandAndShoot reaction was declared
     melee = outcome.melee
-    scored = combat_result(melee)
-    breaks = break_test(scored, spearmen_unit, archers_unit)
+    scored = game.combat.result(melee)
+    breaks = game.combat.break_test(scored, spearmen_unit, archers_unit)
 
     movement = spearmen_unit.profiles[0][Characteristic.MOVEMENT]
     charged_init = melee.a_initiative.value

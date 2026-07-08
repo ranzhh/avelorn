@@ -19,10 +19,9 @@ from avelorn.core.dice import expected_value
 from avelorn.core.logging import configure_logging
 from avelorn.tow.combat.context import CombatContext
 from avelorn.tow.combat.contingent import Contingent
-from avelorn.tow.combat.melee import combat_result, fight
-from avelorn.tow.combat.morale import break_test
 from avelorn.tow.combat.query import Comparator, Predicate, evaluate, fight_distributions
 from avelorn.tow.data import TOWRepository
+from avelorn.tow.game import Game
 
 
 def _print_casualties(label: str, casualties: list[float], fighters: int) -> None:
@@ -72,15 +71,16 @@ def main() -> None:
     b = Contingent.field(
         unit_b, args.b_fighters, weapons=repo.weapons, armoury=repo.armoury, rules=repo.rules
     )
-    result = fight(
+    game = Game.assemble(repo.rules)
+    result = game.combat.fight(
         a,
         b,
         a_weapon=weapon_a,
         b_weapon=weapon_b,
         context=CombatContext(first_round=args.first_round),
     )
-    scored = combat_result(result)
-    breaks = break_test(scored, unit_a, unit_b)
+    scored = game.combat.result(result)
+    breaks = game.combat.break_test(scored, unit_a, unit_b)
 
     init_a = result.a_initiative.value
     init_b = result.b_initiative.value

@@ -16,10 +16,9 @@ import logging
 from avelorn.core.logging import configure_logging
 from avelorn.tow.combat.context import EngagementContext
 from avelorn.tow.combat.contingent import Contingent
-from avelorn.tow.combat.morale import make_panic_tests
 from avelorn.tow.combat.query import Comparator, Predicate, query_result
-from avelorn.tow.combat.shooting import shoot_unit
 from avelorn.tow.data import TOWRepository
+from avelorn.tow.game import Game
 
 
 def main() -> None:
@@ -77,13 +76,8 @@ def main() -> None:
     )
     weapon = repo.weapons[args.weapon]
     context = EngagementContext(moved=args.moved, distance=args.distance)
-    result = shoot_unit(
-        attacker,
-        defender,
-        weapon,
-        rules=repo.rules,
-        context=context,
-    )
+    game = Game.assemble(repo.rules)
+    result = game.shooting.volley(attacker, defender, weapon, context=context)
 
     def fmt_target(target: int | None) -> str:
         return f"{target}+" if target is not None else "-"
@@ -118,7 +112,7 @@ def main() -> None:
     print(f"  - P(at most 3 survive):        {at_most_3:.3f}")
     print(f"  - P(unit wiped out):           {wiped:.3f}")
 
-    panic = make_panic_tests(result, defender, battle_strength=args.battle_strength)
+    panic = game.shooting.make_panic_tests(result, defender, battle_strength=args.battle_strength)
     print()
     print("  make panic tests:")
     print(f"  - P(test forced):              {panic.p_test:.3f}")
