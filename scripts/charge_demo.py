@@ -89,14 +89,12 @@ def main() -> None:
     inches = args.charge_inches
     print(f'{args.spearmen} Elven Spearmen charge {args.archers} Elven Archers ({inches}")')
     if movement is None or inches >= movement:
-        print("  charge reaction: the Archers Stand & Shoot (bow), then Hold")
+        print("  charge reaction: the Archers Stand & Shoot (bow), then Hold\n")
     else:
         print(
             f"  charge reaction: gap < Movement {movement}, "
-            "no Stand & Shoot possible; assumed anyway"
+            "no Stand & Shoot possible; assumed anyway\n"
         )
-    print()
-
     print("  Stand & Shoot (Archers -> charging Spearmen, -1 To Hit, no long range):")
     _print_casualties("Spearmen", reaction.casualties, args.spearmen)
     print()
@@ -105,31 +103,25 @@ def main() -> None:
         order = f"Spearmen first (effective I{charged_init} vs Archers I{archers_init})"
     else:
         order = f"simultaneous (both at effective I{charged_init})"
-    print(f"  striking order: {order}")
-    print("  (assumes every fighter is in base contact at full Attacks;")
-    print("   fighting ranks & supporting attacks not yet modelled — #28)")
-    print()
+    print(f"  striking order: {order}\n")
 
     _print_casualties("Spearmen (A, melee)", melee.a_casualties, args.spearmen)
     print()
     _print_casualties("Archers (B, melee)", melee.b_casualties, args.archers)
-    print()
 
     # Expectations add whatever the correlation, so the total the chargers
     # lose across the sequence is the Stand & Shoot mean plus the melee mean.
     shot = expected_value(reaction.casualties)
     slain = expected_value(melee.a_casualties)
-    print(f"  expected Spearmen lost over the whole charge: {shot + slain:.2f} of {args.spearmen}")
-    print(f"  (Stand & Shoot {shot:.2f} + melee {slain:.2f})")
-    print()
-
-    print("  combat result (melee only):")
-    print(f"  - P(Spearmen win): {scored.p_a_wins:.3f}")
-    print(f"  - P(draw):         {scored.p_draw:.3f}")
-    print(f"  - P(Archers win):  {scored.p_b_wins:.3f}")
-    print()
-
-    print("  break test (only the loser tests):")
+    print(
+        f"\n  expected Spearmen lost over the whole charge: "
+        f"{shot + slain:.2f} of {args.spearmen} (Stand & Shoot {shot:.2f} + melee {slain:.2f})\n"
+        f"\n  combat result (melee only):\n"
+        f"  - P(Spearmen win): {scored.p_a_wins:.3f}\n"
+        f"  - P(draw):         {scored.p_draw:.3f}\n"
+        f"  - P(Archers win):  {scored.p_b_wins:.3f}\n"
+        f"\n  break test (only the loser tests):"
+    )
     for label, side in (("Spearmen", breaks.a), ("Archers", breaks.b)):
         lost = side.p_gives_ground + side.p_falls_back + side.p_breaks
         print(
@@ -137,18 +129,18 @@ def main() -> None:
             f"falls back {side.p_falls_back:.3f}, breaks {side.p_breaks:.3f}"
         )
     print(f"  - draw, neither tests: {breaks.p_draw:.3f}")
-    print()
 
     dists = fight_distributions(melee)
-    print("  exact queries:")
     archers_bloodied = evaluate(dists["b_casualties"], Predicate(Comparator.AT_LEAST, 1))
     spearmen_clean = evaluate(dists["a_survivors"], Predicate(Comparator.EXACTLY, args.spearmen))
-    print(f"  - P(Archers lose at least one in the melee): {archers_bloodied:.3f}")
-    print(f"  - P(no Spearman falls in the melee):         {spearmen_clean:.3f}")
+    print(
+        f"\n  exact queries:\n"
+        f"  - P(Archers lose at least one in the melee): {archers_bloodied:.3f}\n"
+        f"  - P(no Spearman falls in the melee):         {spearmen_clean:.3f}"
+    )
 
     if melee.notes:
-        print()
-        print("  not factored into the math:")
+        print("\n  not factored into the math:")
         for note in melee.notes:
             print(f"  - {note}")
 
