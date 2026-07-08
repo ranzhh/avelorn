@@ -77,15 +77,18 @@ def _with_parameter(effect: RuleEffect, parameter: int) -> RuleEffect:
 
 def compile_rules(
     printed_rules: Sequence[str],
-    rules: Registry[Rule],
+    resolved: Mapping[str, Rule],
     conditions: Mapping[Condition, bool | None] | None = None,
 ) -> tuple[list[Transform], list[str]]:
     """Compile printed rule names into transforms.
 
-    ``conditions`` are the evaluated engagement facts by
-    :class:`Condition`; None means unknown. A rule whose condition needs
-    an unknown fact is unfactored and reported; a rule whose condition
-    evaluates False is honoured by not applying — no transform, no note.
+    ``resolved`` maps printed names to their rules as printed — built at
+    the muster boundary (a loadout's ``weapon_rules``) or from a registry
+    scan; a name absent from it is not modelled. ``conditions`` are the
+    evaluated engagement facts by :class:`Condition`; None means unknown.
+    A rule whose condition needs an unknown fact is unfactored and
+    reported; a rule whose condition evaluates False is honoured by not
+    applying — no transform, no note.
 
     Returns:
         The compiled transforms, and the printed names that could not be
@@ -96,7 +99,7 @@ def compile_rules(
     transforms: list[Transform] = []
     unfactored: list[str] = []
     for printed in printed_rules:
-        rule = printed_rule(printed, rules)
+        rule = resolved.get(printed)
         compiled = _compile(rule, conditions) if rule is not None else None
         if compiled is None:
             unfactored.append(printed)

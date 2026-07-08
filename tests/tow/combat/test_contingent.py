@@ -184,3 +184,42 @@ def test_deploy_substitutes_rule_parameters_as_printed(spearmen_unit: Unit) -> N
     effect = rule.effects[0]
     assert isinstance(effect, ArmourPiercingEffect)
     assert effect.amount == 2
+
+
+def test_loadout_answers_the_weapon_choice_by_printed_name(spearmen_unit: Unit) -> None:
+    """The per-action choice picks a carried weapon by its printed name."""
+    fielded = Contingent.field(
+        spearmen_unit, 10, weapons=REPO.weapons, armoury=REPO.armoury, rules=REPO.rules
+    )
+    assert fielded.loadout.weapon("Thrusting Spear") is REPO.weapons["thrusting-spear"]
+    with pytest.raises(ValueError, match="no 'Longbow' in this loadout; carried: Hand Weapon"):
+        fielded.loadout.weapon("Longbow")
+
+
+def test_loadout_resolves_the_carried_weapons_rules(spearmen_unit: Unit) -> None:
+    """Weapon-rule names with entries resolve into the loadout's index.
+
+    The archers' longbow prints Armour Bane (1) and Volley Fire: the
+    first has an entry and resolves as printed; the second has none and
+    is simply absent — the per-action compile reports it unfactored.
+    """
+    archers = Contingent.field(
+        REPO.units["elven-archers"],
+        10,
+        weapons=REPO.weapons,
+        armoury=REPO.armoury,
+        rules=REPO.rules,
+    )
+    index = archers.loadout.weapon_rules
+    assert set(index) == {"Armour Bane (1)"}
+    assert index["Armour Bane (1)"].name == "Armour Bane (1)"
+
+
+def test_an_uncarried_weapon_cannot_be_fought_with(spearmen_unit: Unit) -> None:
+    """Every action's weapon choice is confirmed against the loadout."""
+    fielded = Contingent.field(
+        spearmen_unit, 10, weapons=REPO.weapons, armoury=REPO.armoury, rules=REPO.rules
+    )
+    assert fielded.wields(REPO.weapons["thrusting-spear"]) is REPO.weapons["thrusting-spear"]
+    with pytest.raises(ValueError, match="does not carry 'Longbow'"):
+        fielded.wields(REPO.weapons["longbow"])
