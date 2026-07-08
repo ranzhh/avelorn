@@ -25,7 +25,7 @@ import logging
 from avelorn.core.dice import expected_value
 from avelorn.core.logging import configure_logging
 from avelorn.tow.combat.charge import StandAndShoot
-from avelorn.tow.combat.contingent import Charge, ChargeArc, Contingent
+from avelorn.tow.combat.contingent import Charge, ChargeArc
 from avelorn.tow.combat.query import Comparator, Predicate, evaluate, fight_distributions
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.game import TOWGame
@@ -56,25 +56,20 @@ def main() -> None:
     if args.verbose:
         configure_logging(logging.DEBUG)
 
-    repo = TOWRepository()
-    spearmen_unit = repo.units["elven-spearmen"]
-    archers_unit = repo.units["elven-archers"]
+    game = TOWGame.assemble(TOWRepository())
+    spearmen_unit = game.units["elven-spearmen"]
+    archers_unit = game.units["elven-archers"]
     # The scene fixes each unit's weapon for the phase it acts in: the
     # Archers shoot the Longbow, then defend with a Hand Weapon; the Spearmen
     # charge home with the Thrusting Spear.
-    spear = repo.weapons["thrusting-spear"]
-    hand_weapon = repo.weapons["hand-weapon"]
-    longbow = repo.weapons["longbow"]
+    spear = game.weapons["thrusting-spear"]
+    hand_weapon = game.weapons["hand-weapon"]
+    longbow = game.weapons["longbow"]
 
-    spearmen = Contingent.field(
-        spearmen_unit, args.spearmen, weapons=repo.weapons, armoury=repo.armoury, rules=repo.rules
-    )
-    archers = Contingent.field(
-        archers_unit, args.archers, weapons=repo.weapons, armoury=repo.armoury, rules=repo.rules
-    )
+    spearmen = game.field(spearmen_unit, args.spearmen)
+    archers = game.field(archers_unit, args.archers)
     move = Charge(args.charge_inches, ChargeArc.FRONT)
 
-    game = TOWGame.assemble(repo.rules)
     outcome = game.charge(
         spearmen,
         archers,

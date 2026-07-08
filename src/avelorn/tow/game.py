@@ -27,9 +27,13 @@ from avelorn.core.game import Game
 from avelorn.core.registry import Registry
 from avelorn.tow.combat.charge import ChargeResult, StandAndShoot, charge
 from avelorn.tow.combat.contingent import Charge, Contingent
+from avelorn.tow.data import TOWRepository
+from avelorn.tow.muster import Complement
 from avelorn.tow.phases import CombatPhase, MovementPhase, ShootingPhase, StrategyPhase
+from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.rule import Rule
+from avelorn.tow.schema.unit import Unit
 from avelorn.tow.schema.weapon import Weapon
 
 
@@ -37,7 +41,7 @@ from avelorn.tow.schema.weapon import Weapon
 class TOWGame(Game):
     """A game of The Old World in play: rules in force, bound to the turn.
 
-    Assemble one from a rule registry (:meth:`assemble`); the chapter
+    Assemble one from the loaded corpus (:meth:`assemble`); the chapter
     rules each phase has in force are resolved right there, eagerly —
     the game's own muster boundary. Walk the turn with ``turn()``, or
     address a phase directly (``game.shooting.volley(...)``); sequences
@@ -45,6 +49,13 @@ class TOWGame(Game):
     live on the game itself.
     """
 
+    # The printed corpus, as loaded: the game's registries, kept for the
+    # muster boundary (field/deploy), where printed names stop being strings.
+    units: Registry[Unit]
+    weapons: Registry[Weapon]
+    armoury: Registry[Armour]
+    rules: Registry[Rule]
+    # The chapter rules each phase has in force, resolved at assembly.
     in_play: Mapping[Phase, Mapping[str, Rule]]
 
     # The printed turn sequence, derived from the Phase vocabulary: each
@@ -52,8 +63,8 @@ class TOWGame(Game):
     phase_sequence: ClassVar[tuple[str, ...]] = tuple(phase.name.lower() for phase in Phase)
 
     @classmethod
-    def assemble(cls, rules: Registry[Rule]) -> "TOWGame":
-        """Assemble a game from the rules, resolving what each phase has in force.
+    def assemble(cls, repository: TOWRepository) -> "TOWGame":
+        """Assemble a game from the loaded corpus, resolving each phase's rules in force.
 
         A chapter rule is in force when its category names the phase and
         it carries effects — recognised chapter text *without* effects is
@@ -67,12 +78,38 @@ class TOWGame(Game):
         in_play = {
             phase: {
                 rule.name: rule
-                for rule in rules.values()
+                for rule in repository.rules.values()
                 if rule.category == phase and rule.effects
             }
             for phase in Phase
         }
-        return cls(in_play=in_play)
+        return cls(
+            units=repository.units,
+            weapons=repository.weapons,
+            armoury=repository.armoury,
+            rules=repository.rules,
+            in_play=in_play,
+        )
+
+    def field(self, unit: Unit, models: int) -> Contingent:
+        """Field a bare datasheet at its printed, optionless loadout.
+
+        Returns:
+            The fielded contingent, loadout resolved with the game's registries.
+        """
+        return Contingent.field(
+            unit, models, weapons=self.weapons, armoury=self.armoury, rules=self.rules
+        )
+
+    def deploy(self, complement: Complement) -> Contingent:
+        """Field a mustered list entry, resolving its chosen loadout.
+
+        Returns:
+            The fielded contingent, loadout resolved with the game's registries.
+        """
+        return Contingent.deploy(
+            complement, weapons=self.weapons, armoury=self.armoury, rules=self.rules
+        )
 
     @property
     def strategy(self) -> StrategyPhase:

@@ -18,12 +18,28 @@ from avelorn.tow.schema.stage import Stage
 from avelorn.tow.schema.unit import Unit
 
 REPO = TOWRepository()
-GAME = TOWGame.assemble(REPO.rules)
+GAME = TOWGame.assemble(REPO)
 
 
 def _fielded(unit: Unit, models: int) -> Contingent:
-    return Contingent.field(
-        unit, models, weapons=REPO.weapons, armoury=REPO.armoury, rules=REPO.rules
+    return GAME.field(unit, models)
+
+
+def test_field_delegates_to_the_muster_boundary() -> None:
+    """game.field is Contingent.field with the game's registries injected."""
+    spearmen = REPO.units["elven-spearmen"]
+    assert GAME.field(spearmen, 5) == Contingent.field(
+        spearmen, 5, weapons=REPO.weapons, armoury=REPO.armoury, rules=REPO.rules
+    )
+
+
+def test_deploy_delegates_to_the_muster_boundary() -> None:
+    """game.deploy is Contingent.deploy with the game's registries injected."""
+    from avelorn.tow.muster import Complement
+
+    entry = Complement(unit=REPO.units["elven-spearmen"], size=10)
+    assert GAME.deploy(entry) == Contingent.deploy(
+        entry, weapons=REPO.weapons, armoury=REPO.armoury, rules=REPO.rules
     )
 
 

@@ -21,7 +21,7 @@ from avelorn.tow.schema.unit import Characteristic, Unit
 REPO = TOWRepository()
 
 # The shooting phase's rules in force, as the Game assembles them.
-IN_FORCE = TOWGame.assemble(REPO.rules).in_play[Phase.SHOOTING]
+IN_FORCE = TOWGame.assemble(REPO).in_play[Phase.SHOOTING]
 
 
 def _fielded(unit: Unit, models: int) -> Contingent:

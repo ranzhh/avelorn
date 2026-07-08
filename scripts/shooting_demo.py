@@ -15,7 +15,6 @@ import logging
 
 from avelorn.core.logging import configure_logging
 from avelorn.tow.combat.context import EngagementContext
-from avelorn.tow.combat.contingent import Contingent
 from avelorn.tow.combat.query import Comparator, Predicate, query_result
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.game import TOWGame
@@ -59,24 +58,11 @@ def main() -> None:
     if args.verbose:
         configure_logging(logging.DEBUG)
 
-    repo = TOWRepository()
-    attacker = Contingent.field(
-        repo.units[args.attacker],
-        args.shooters,
-        weapons=repo.weapons,
-        armoury=repo.armoury,
-        rules=repo.rules,
-    )
-    defender = Contingent.field(
-        repo.units[args.defender],
-        args.defenders,
-        weapons=repo.weapons,
-        armoury=repo.armoury,
-        rules=repo.rules,
-    )
-    weapon = repo.weapons[args.weapon]
+    game = TOWGame.assemble(TOWRepository())
+    attacker = game.field(game.units[args.attacker], args.shooters)
+    defender = game.field(game.units[args.defender], args.defenders)
+    weapon = game.weapons[args.weapon]
     context = EngagementContext(moved=args.moved, distance=args.distance)
-    game = TOWGame.assemble(repo.rules)
     result = game.shooting.volley(attacker, defender, weapon, context=context)
 
     def fmt_target(target: int | None) -> str:
