@@ -4,7 +4,7 @@ import pytest
 
 from avelorn.core.dice import binomial_distribution, expected_value
 from avelorn.tow.combat.context import CombatContext
-from avelorn.tow.combat.contingent import Charge, ChargeArc, Contingent
+from avelorn.tow.combat.contingent import Charge, ChargeArc, Contingent, Loadout
 from avelorn.tow.combat.melee import (
     combat_result,
     effective_initiative,
@@ -13,6 +13,7 @@ from avelorn.tow.combat.melee import (
     strike_unit,
 )
 from avelorn.tow.data import TOWRepository
+from avelorn.tow.schema.rule import Condition, ModifierEffect, Rule
 from avelorn.tow.schema.unit import Characteristic, Unit
 
 REPO = TOWRepository()
@@ -281,14 +282,14 @@ def test_effective_initiative_applies_the_charge_bonus(
     """+1 Initiative per full inch charged, capped by arc, on the I4 base."""
     spearmen = REPO.units["elven-spearmen"]  # I4
     charger = _fielded(spearmen, 5)
-    assert effective_initiative(charger, Charge(inches, arc)) == expected
+    assert effective_initiative(charger, Charge(inches, arc)).value == expected
 
 
 def test_effective_initiative_caps_at_ten() -> None:
     """The charge bonus cannot lift Initiative past the printed cap of 10."""
     fast = _higher_initiative(REPO.units["elven-spearmen"], 9)
     charger = _fielded(fast, 5)
-    assert effective_initiative(charger, Charge(5, ChargeArc.FLANK)) == 10  # 9 + 4 -> 10
+    assert effective_initiative(charger, Charge(5, ChargeArc.FLANK)).value == 10  # 9 + 4 -> 10
 
 
 def test_fight_charge_makes_the_charger_strike_first() -> None:
@@ -369,3 +370,77 @@ def test_combat_result_simultaneous_is_symmetric() -> None:
     assert cr.p_a_wins == pytest.approx(cr.p_b_wins)
     assert cr.p_a_wins == pytest.approx(5 / 36)
     assert cr.p_draw == pytest.approx(26 / 36)
+
+
+# --- rule-granted Initiative modifiers, consumed through the loadout ---
+
+
+def _reflexive(unit: Unit) -> Contingent:
+    # A deployed-style contingent whose one rule grants +1 Initiative in
+    # the first round of combat: the loadout built directly, the rule a
+    # double for any characteristic-modifier rule.
+    rule = Rule(
+        id="doctored-reflexes",
+        name="Doctored Reflexes",
+        paragraphs=["…"],
+        effects=[
+            ModifierEffect(
+                when={Condition.FIRST_ROUND_OF_COMBAT: True},
+                then={Characteristic.INITIATIVE: 1},
+                maximum=10,
+            )
+        ],
+    )
+    doctored = unit.model_copy(update={"special_rules": ["Doctored Reflexes"]})
+    spear = REPO.weapons["thrusting-spear"]
+    return Contingent(doctored, 1, Loadout((spear,), (), (rule,), ()))
+
+
+def test_fight_first_round_initiative_rule_flips_the_order() -> None:
+    """In the combat's first round the rule-bearer strikes first.
+
+    Two I4 spearmen bodies strike simultaneously; the +1 first-round
+    modifier lifts one side to I5, so it strikes first — and its rule's
+    "not factored" note disappears, because the rule is in the math.
+    """
+    spearmen = REPO.units["elven-spearmen"]
+    spear = REPO.weapons["thrusting-spear"]
+    quick = _reflexive(spearmen)
+    result = fight(
+        quick,
+        _fielded(spearmen, 1),
+        a_weapon=spear,
+        b_weapon=spear,
+        context=CombatContext(first_round=True),
+    )
+    assert result.first_striker is quick
+    assert not any("Doctored Reflexes" in note for note in result.notes)
+
+
+def test_fight_later_round_initiative_rule_is_honoured_by_not_applying() -> None:
+    """Past the first round the modifier grants nothing — and is not noted."""
+    spearmen = REPO.units["elven-spearmen"]
+    spear = REPO.weapons["thrusting-spear"]
+    result = fight(
+        _reflexive(spearmen),
+        _fielded(spearmen, 1),
+        a_weapon=spear,
+        b_weapon=spear,
+        context=CombatContext(first_round=False),
+    )
+    assert result.first_striker is None
+    assert not any("Doctored Reflexes" in note for note in result.notes)
+
+
+def test_fight_unknown_round_leaves_the_rule_noted() -> None:
+    """Without the round fact the modifier cannot be evaluated: unfactored."""
+    spearmen = REPO.units["elven-spearmen"]
+    spear = REPO.weapons["thrusting-spear"]
+    result = fight(
+        _reflexive(spearmen),
+        _fielded(spearmen, 1),
+        a_weapon=spear,
+        b_weapon=spear,
+    )
+    assert result.first_striker is None
+    assert any("Doctored Reflexes" in note for note in result.notes)

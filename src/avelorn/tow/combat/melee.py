@@ -15,9 +15,10 @@ the other strikes back — is composed on top of this, later.
 """
 
 import logging
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, replace
 from math import isclose
+from typing import assert_never
 
 from avelorn.core.dice import expected_value
 from avelorn.tow.combat.armour import defender_armour
@@ -40,8 +41,13 @@ from avelorn.tow.combat.charts import (
 )
 from avelorn.tow.combat.context import CombatContext
 from avelorn.tow.combat.contingent import Charge, Contingent
-from avelorn.tow.combat.rules import compile_rules
-from avelorn.tow.schema.unit import Characteristic
+from avelorn.tow.combat.rules import (
+    EffectiveCharacteristic,
+    compile_rules,
+    effective_characteristic,
+)
+from avelorn.tow.schema.rule import Condition
+from avelorn.tow.schema.unit import Characteristic, Unit
 from avelorn.tow.schema.weapon import Weapon
 
 logger = logging.getLogger(__name__)
@@ -252,9 +258,7 @@ def _engage(
     armour_value = defender_armour(defender.loadout)
     notes: list[str] = []
     for side in (shooter, target):
-        notes.extend(
-            f"special rule not factored: {rule} ({side.name})" for rule in side.special_rules
-        )
+        notes.extend(_unfactored_rule_note(rule, side) for rule in side.special_rules)
     # Melee engagement conditions (charging, flank/rear, ...) are not
     # modelled yet, so no facts are supplied: a rule needing one stays
     # unfactored and noted.
@@ -379,21 +383,59 @@ class FightResult:
         return [sum(row[k] for row in self.losses) for k in range(columns)]
 
 
-def effective_initiative(contingent: Contingent, charge: Charge | None = None) -> int:
-    """The Initiative a contingent strikes at, charge bonus included.
+def _unfactored_rule_note(printed: str, unit: Unit) -> str:
+    # The one phrasing of "this unit rule is not in the math" — built
+    # here and matched in fight() when a rule *is* factored.
+    return f"special rule not factored: {printed} ({unit.name})"
+
+
+def _combat_conditions(
+    context: CombatContext | None, charge: Charge | None
+) -> dict[Condition, bool | None]:
+    # One fact per Condition member for one side of the combat; None =
+    # unknown. Exhaustive like the shooting producer: a new member fails
+    # the type check until it is answered here.
+    def fact(condition: Condition) -> bool | None:
+        match condition:
+            case Condition.MOVED:
+                # A charge is a move; a side that did not charge may
+                # still have moved earlier in the turn — unknown.
+                return True if charge is not None else None
+            case Condition.AT_LONG_RANGE:
+                return False  # no shot is taken in close combat
+            case Condition.FIRST_ROUND_OF_COMBAT:
+                return context.first_round if context is not None else None
+            case unanswered:
+                assert_never(unanswered)
+
+    return {condition: fact(condition) for condition in Condition}
+
+
+def effective_initiative(
+    contingent: Contingent,
+    charge: Charge | None = None,
+    conditions: Mapping[Condition, bool | None] | None = None,
+) -> EffectiveCharacteristic:
+    """The Initiative a contingent strikes at, all printed modifiers included.
 
     The whole printed rule in one place: the rank-and-file Initiative,
-    plus +1 per full inch of the ``charge`` capped by the arc charged
-    into (+3 front, +4 flank or rear), the total capped at 10
-    (the-combat-phase/charging-units). A profile with no printed
-    Initiative counts as 0.
+    modified by the loadout's rule-granted characteristic modifiers
+    under the evaluated ``conditions``, plus +1 per full inch of the
+    ``charge`` capped by the arc charged into (+3 front, +4 flank or
+    rear), the total capped at 10 (the-combat-phase/charging-units). A
+    profile with no printed Initiative counts as 0.
 
     Returns:
-        The Initiative that decides striking order in :func:`fight`.
+        The Initiative that decides striking order in :func:`fight`,
+        with the rule names factored into it and those left unfactored —
+        the caller reports the latter.
     """
     base = contingent.unit.profiles[0][Characteristic.INITIATIVE] or 0
+    modified = effective_characteristic(
+        base, Characteristic.INITIATIVE, contingent.loadout.rules, conditions
+    )
     bonus = 0 if charge is None else min(charge.full_inches, charge.arc.initiative_cap)
-    return min(base + bonus, 10)
+    return replace(modified, value=min(modified.value + bonus, 10))
 
 
 def _prior_loss_pmf(pmf: Sequence[float] | None, models: int, name: str) -> Sequence[float]:
@@ -450,8 +492,11 @@ def fight(
     ``models``. The returned ``losses`` count only this round's melee
     casualties, so pre-combat losses never inflate the combat result.
 
-    Deferred and noted, not modelled here: Always Strikes First/Last and
-    the Initiative modifiers granted by special rules (Elven Reflexes) or
+    Rule-granted characteristic modifiers on the unit (Elven Reflexes)
+    apply to the striking order through the loadout of a contingent
+    fielded with deploy(), gated on the context's facts; one left
+    unevaluated stays noted. Deferred and noted, not modelled here:
+    Always Strikes First/Last and the Initiative modifiers granted by
     weapons (a Thrusting Spear's bonus when charged) — surfaced in the
     result's notes; the break test, ranks and supporting attacks (#28),
     split-profile champions (#46), and multi-unit combats. Every fighter is
@@ -475,9 +520,13 @@ def fight(
     a_strikes = _engage(a, b, a_weapon, hit_modifier=0)
     b_strikes = _engage(b, a, b_weapon, hit_modifier=0)
     situation = context or CombatContext()
-    a_first = _strikes_first(
-        effective_initiative(a, situation.a_charge), effective_initiative(b, situation.b_charge)
+    a_initiative = effective_initiative(
+        a, situation.a_charge, _combat_conditions(situation, situation.a_charge)
     )
+    b_initiative = effective_initiative(
+        b, situation.b_charge, _combat_conditions(situation, situation.b_charge)
+    )
+    a_first = _strikes_first(a_initiative.value, b_initiative.value)
 
     # Each side may enter already thinned by pre-combat casualties (a Stand &
     # Shoot volley, say); the two are independent, so the round is the
@@ -494,7 +543,18 @@ def fight(
                     losses[a_lost][b_lost] += weight * mass
 
     first_striker = None if a_first is None else (a if a_first else b)
-    notes = tuple(dict.fromkeys([*a_strikes.notes, *b_strikes.notes]))
+    # A rule factored into the striking order is in the math: its blanket
+    # "not factored" note no longer holds and is dropped.
+    factored = {
+        _unfactored_rule_note(name, side.unit)
+        for side, initiative in ((a, a_initiative), (b, b_initiative))
+        for name in initiative.factored
+    }
+    notes = tuple(
+        note
+        for note in dict.fromkeys([*a_strikes.notes, *b_strikes.notes])
+        if note not in factored
+    )
     logger.debug(
         "fight: %s vs %s, first=%s",
         a.unit.name,

@@ -326,3 +326,16 @@ def test_wound_modifier_cannot_defeat_the_natural_one() -> None:
     assert resolve_attack(profile, [plus_one], hit_roll=HitRoll.SHOOTING).p_unsaved == Fraction(
         5, 6
     )
+
+
+def test_profile_targets_cover_exactly_the_attack_rolls() -> None:
+    """The profile carries a target for each attack roll, and no other stage.
+
+    Drift guard: the schema's ATTACK_ROLLS (the rolls a natural-face
+    event may name) and the profile's stage-addressed targets are one
+    set — a roll joining either side must join both.
+    """
+    from avelorn.tow.combat.attack import _TARGETS
+    from avelorn.tow.schema.stage import ATTACK_ROLLS
+
+    assert set(_TARGETS) == ATTACK_ROLLS

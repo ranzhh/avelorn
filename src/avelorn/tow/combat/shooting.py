@@ -215,6 +215,10 @@ def _engagement_conditions(
                 return context.moved if context is not None else None
             case Condition.AT_LONG_RANGE:
                 return False if force_short_range else _at_long_range(profile, context)
+            case Condition.FIRST_ROUND_OF_COMBAT:
+                # A volley is not struck in a round of close combat (a
+                # unit in combat cannot shoot), so the fact never arises.
+                return False
             case unanswered:
                 assert_never(unanswered)
 

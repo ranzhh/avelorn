@@ -8,33 +8,46 @@ a bracketed number after the name ("Armour Bane (1)") is the parameter
 of the rule filed under the "(X)" placeholder ("the amount shown in
 brackets after the name of this special rule").
 
-Compilation is all-or-nothing per rule: if any effect names a stage the
-engine does not know, or needs a parameter the printed name did not
-supply, the whole rule stays unfactored — reported, never partially or
-silently applied. A rule with no effects at all is likewise unfactored:
-recognised text the engine cannot yet honour.
+Every modifier compiles through one path: evaluate its engagement
+condition, look up the roll its kind changes — each kind's meaning is
+declared once, in the table of rolls — and hook the walk there: before
+the roll for an unconditional change, on the trigger die's success for
+an ``on_natural`` one. New conditional-modifier rules are data through
+this path, not new code; only mechanics no modifier can express earn a
+kind (and a handler) of their own.
+
+Compilation is all-or-nothing per rule: if any effect names a trigger
+the engine cannot honour, or needs a parameter the printed name did
+not supply, the whole rule stays unfactored — reported, never
+partially or silently applied. A rule with no effects at all is
+likewise unfactored: recognised text the engine cannot yet honour.
 """
 
 import logging
 import re
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
-from dataclasses import replace
+from dataclasses import dataclass
 
 from avelorn.core.registry import Registry, UnknownNameError
-from avelorn.tow.combat.attack import AttackProfile, RollState, Transform
+from avelorn.tow.combat.attack import AttackProfile, Transform
 from avelorn.tow.schema.rule import (
-    ArmourPiercingEffect,
+    PARAMETER_SUFFIX,
     Condition,
+    ModifierEffect,
+    ModifierKind,
     Rule,
     RuleEffect,
-    ToHitEffect,
 )
+from avelorn.tow.schema.stage import Stage
+from avelorn.tow.schema.unit import Characteristic
 
 logger = logging.getLogger(__name__)
 
 _PARAMETERISED = re.compile(r"^(?P<base>.+) \((?P<value>\d+)\)$")
-_PARAMETER_PLACEHOLDER = " (X)"
+
+# The attack sequence's order, for "can this die still shape that roll".
+_SEQUENCE = {stage: position for position, stage in enumerate(Stage)}
 
 
 def printed_rule(printed: str, rules: Registry[Rule]) -> Rule | None:
@@ -58,7 +71,7 @@ def printed_rule(printed: str, rules: Registry[Rule]) -> Rule | None:
         return rules.by_name(printed)
     if match := _PARAMETERISED.match(printed):
         with suppress(UnknownNameError):
-            entry = rules.by_name(match.group("base") + _PARAMETER_PLACEHOLDER)
+            entry = rules.by_name(match.group("base") + PARAMETER_SUFFIX)
             parameter = int(match.group("value"))
             effects = [_with_parameter(effect, parameter) for effect in entry.effects]
             return entry.model_copy(update={"name": printed, "effects": effects})
@@ -67,11 +80,18 @@ def printed_rule(printed: str, rules: Registry[Rule]) -> Rule | None:
 
 def _with_parameter(effect: RuleEffect, parameter: int) -> RuleEffect:
     # Substitute the printed parameter into every "X" placeholder the
-    # effect carries. Introspects the effect's fields, so a new
-    # X-bearing kind participates automatically.
-    placeholders = {
-        name: parameter for name in type(effect).model_fields if getattr(effect, name) == "X"
-    }
+    # effect carries, looking inside mappings (a then's amounts).
+    # Introspects the effect's fields, so a new X-bearing field
+    # participates automatically.
+    placeholders: dict = {}
+    for name in type(effect).model_fields:
+        value = getattr(effect, name)
+        if value == "X":
+            placeholders[name] = parameter
+        elif isinstance(value, Mapping) and "X" in value.values():
+            placeholders[name] = {
+                key: parameter if amount == "X" else amount for key, amount in value.items()
+            }
     return effect.model_copy(update=placeholders) if placeholders else effect
 
 
@@ -125,38 +145,168 @@ def _compile(rule: Rule, conditions: Mapping[Condition, bool | None]) -> list[Tr
     return transforms
 
 
+@dataclass(frozen=True)
+class _Roll:
+    """The roll a modifier kind changes: where it happens, how its target moves."""
+
+    stage: Stage  # the stage whose roll the kind's quantity decides
+    sign: int  # multiplies the printed amount into target movement
+
+
+# What each modifier kind means, declared once; a drift-guard test keeps
+# it covering the whole kind vocabulary. The printed sign conventions
+# differ per quantity, and ``sign`` carries them: To Hit modifiers speak
+# roll-side (a -1 penalty *raises* the target, so the target moves
+# against the amount), Armour Piercing speaks piercing-side (a +1
+# improvement worsens the save target by the same amount). What a moved
+# target *means* — a 7+ that confirms, a save that cannot be attempted —
+# is each roll's own knowledge, in the walk, never stated here.
+_ROLLS: Mapping[ModifierKind, _Roll] = {
+    "to-hit": _Roll(Stage.ROLL_TO_HIT, sign=-1),
+    "armour-piercing": _Roll(Stage.MAKE_ARMOUR_SAVES, sign=+1),
+}
+
+
 def _compile_effect(
     effect: RuleEffect, conditions: Mapping[Condition, bool | None]
 ) -> list[Transform] | None:
-    # Dispatches on the effect kind; grows as kinds join. Every registry
-    # stage is hookable today; when the registry outgrows the walk (a
-    # named seam the engine does not hook yet), a named-but-unhooked
-    # check returns None here — not modelled, not an error.
-    match effect:
-        case ArmourPiercingEffect():
-            if effect.amount == "X" or effect.on_natural is None:
-                # An unsubstituted "X" (the printed name carried no
-                # parameter), or an unconditional AP change (which belongs
-                # on the chart-side AP, not a walk transform).
-                return None
-            return [
-                Transform(
-                    stage=effect.stage,
-                    on_success=_worsen_save_on_natural(effect.on_natural, effect.amount),
-                )
-            ]
-        case ToHitEffect():
-            applies = _condition_applies(effect.when, conditions)
-            if applies is None:
-                return None  # the context cannot answer the condition
-            if not applies:
-                return []  # honoured: the situation does not arise
-            return [Transform(stage=effect.stage, modify_targets=_shift_hit(effect.amount))]
-        case _:
-            # Effects for other seams (e.g. re-rolls on make-panic-tests)
-            # are not attack transforms; their seams consume them
-            # directly. As a weapon rule they are honestly unfactored.
+    # One effect, top to bottom: bail where the walk cannot honour it,
+    # gate on the when's state, then hook each then entry's changed
+    # roll — before its own roll, or on the natural die when the when
+    # names one.
+    if not isinstance(effect, ModifierEffect):
+        # Effects for other seams (e.g. re-rolls on make-panic-tests)
+        # are not attack transforms; their seams consume them directly.
+        # As a weapon rule they are honestly unfactored.
+        return None
+    applies = _condition_applies(effect.conditions, conditions)
+    if applies is None:
+        return None  # the context cannot answer the condition
+    if not applies:
+        return []  # honoured: the situation does not arise
+    natural = effect.natural
+    transforms: list[Transform] = []
+    for quantity, amount in effect.then.items():
+        if amount == "X":
+            # Unsubstituted placeholder: the printed name carried no parameter.
             return None
+        if isinstance(quantity, Characteristic):
+            # Characteristic changes are consumed by the
+            # effective-characteristic query, not the walk; as a weapon
+            # or phase rule they are honestly unfactored.
+            return None
+        roll = _ROLLS[quantity]
+        change = _move_target(roll, amount)
+        if natural is None:
+            transforms.append(Transform(stage=roll.stage, modify_targets=change))
+            continue
+        if _SEQUENCE[natural.roll] >= _SEQUENCE[roll.stage]:
+            # A die can only shape rolls still to come; an event at or
+            # after the changed roll cannot be honoured.
+            return None
+        transforms.append(
+            Transform(stage=natural.roll, on_success=_when_natural(natural.face, change))
+        )
+    return transforms
+
+
+def _move_target(roll: _Roll, amount: int) -> Callable[[AttackProfile], AttackProfile]:
+    # The one profile change every modifier kind shares: move the roll's
+    # target by the printed amount under the kind's sign convention. A
+    # target that is no die (a RollState) has nothing to move.
+    def change(profile: AttackProfile) -> AttackProfile:
+        target = profile.target(roll.stage)
+        if not isinstance(target, int):
+            return profile
+        return profile.with_target(roll.stage, target + roll.sign * amount)
+
+    return change
+
+
+def _when_natural(
+    face: int, change: Callable[[AttackProfile], AttackProfile]
+) -> Callable[[int, AttackProfile], AttackProfile]:
+    # Fire the change only when the trigger stage's die shows the
+    # natural face; the walk hands the face to on_success hooks.
+    def on_success(rolled: int, profile: AttackProfile) -> AttackProfile:
+        return change(profile) if rolled == face else profile
+
+    return on_success
+
+
+@dataclass(frozen=True)
+class EffectiveCharacteristic:
+    """A characteristic read with rule-granted modifiers applied.
+
+    ``factored`` names the rules whose matching modifiers were evaluated
+    into the value — including those honoured by not applying (condition
+    False). ``unfactored`` names the rules with a matching modifier the
+    conditions could not answer (or an unbound parameter); their change
+    is *not* in the value, and the caller reports them.
+    """
+
+    value: int
+    factored: tuple[str, ...] = ()
+    unfactored: tuple[str, ...] = ()
+
+
+def effective_characteristic(
+    base: int,
+    characteristic: Characteristic,
+    rules: Sequence[Rule],
+    conditions: Mapping[Condition, bool | None] | None = None,
+) -> EffectiveCharacteristic:
+    """Apply the rules' modifiers to one characteristic read.
+
+    The effective-characteristic query: every read of a characteristic a
+    rule can modify goes through here. Scans ``rules`` (a contingent's
+    resolved loadout rules) for characteristic modifiers naming
+    ``characteristic`` and folds them over ``base`` — each gated on the
+    evaluated engagement ``conditions``, each capped by its own printed
+    ``maximum``. Rules touching other characteristics are not this
+    query's business and appear in neither name list.
+
+    All-or-nothing per rule, as at compile: if any matching modifier
+    needs an unknown fact or an unbound parameter, none of that rule's
+    modifiers apply and the rule is reported unfactored.
+
+    Returns:
+        The effective value with the factored and unfactored rule names.
+    """
+    conditions = conditions or {}
+    value = base
+    factored: list[str] = []
+    unfactored: list[str] = []
+    for rule in rules:
+        matching = [
+            (effect, effect.then[characteristic])
+            for effect in rule.effects
+            if isinstance(effect, ModifierEffect) and characteristic in effect.then
+        ]
+        if not matching:
+            continue
+        answers = [
+            (effect, amount, _condition_applies(effect.conditions, conditions))
+            for effect, amount in matching
+        ]
+        if any(
+            amount == "X" or answer is None or effect.natural is not None
+            for effect, amount, answer in answers
+        ):
+            # An unbound parameter, an unanswerable state, or an event
+            # trigger — a characteristic read rolls no die, so a natural
+            # face can never be honoured here.
+            unfactored.append(rule.name)
+            continue
+        for effect, amount, answer in answers:
+            if not answer or not isinstance(amount, int):
+                continue
+            value += amount
+            if effect.maximum is not None:
+                value = min(value, effect.maximum)
+        factored.append(rule.name)
+        logger.debug("%s modifier factored: %s -> %d", characteristic.name, rule.name, value)
+    return EffectiveCharacteristic(value, tuple(factored), tuple(unfactored))
 
 
 def _condition_applies(
@@ -175,27 +325,3 @@ def _condition_applies(
         elif actual != required:
             return False  # definitely does not apply, whatever the unknowns
     return None if unknown else True
-
-
-def _shift_hit(amount: int) -> Callable[[AttackProfile], AttackProfile]:
-    # Printed sign convention: a -1 To Hit modifier raises the target by 1.
-    def apply(profile: AttackProfile) -> AttackProfile:
-        if not isinstance(profile.hit_target, int):
-            return profile
-        return replace(profile, hit_target=profile.hit_target - amount)
-
-    return apply
-
-
-def _worsen_save_on_natural(
-    natural: int, amount: int
-) -> Callable[[int, AttackProfile], AttackProfile]:
-    # Armour Piercing improves by ``amount``: the save target worsens by
-    # the same amount, and past 6+ there is no save at all.
-    def apply(face: int, profile: AttackProfile) -> AttackProfile:
-        if face != natural or not isinstance(profile.save_target, int):
-            return profile
-        worsened = profile.save_target + amount
-        return replace(profile, save_target=worsened if worsened <= 6 else RollState.IMPOSSIBLE)
-
-    return apply
