@@ -9,9 +9,9 @@ volley itself and stays callable on its own.
 """
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
 
-from avelorn.core.registry import Registry
 from avelorn.tow.combat.context import CombatContext, EngagementContext
 from avelorn.tow.combat.contingent import Charge, Contingent
 from avelorn.tow.combat.melee import FightResult, fight
@@ -22,7 +22,8 @@ from avelorn.tow.schema.weapon import Weapon
 logger = logging.getLogger(__name__)
 
 # An empty registry as the default: every rule stays unfactored, visibly.
-_NO_RULES: Registry[Rule] = Registry(kind="rule")
+# No rules in force: the volley resolves under weapon and armour alone.
+_NONE_IN_PLAY: Mapping[str, Rule] = {}
 
 # Models making a Stand & Shoot reaction suffer -1 To Hit and no Firing at
 # Long Range modifier (the-shooting-phase/standing-and-shooting).
@@ -34,7 +35,7 @@ def stand_and_shoot(
     target: Contingent,
     weapon: Weapon,
     *,
-    rules: Registry[Rule] = _NO_RULES,
+    phase_rules: Mapping[str, Rule] = _NONE_IN_PLAY,
 ) -> ShootingResult:
     """Resolve a Stand & Shoot charge reaction: ``shooter`` shoots the ``target``.
 
@@ -64,7 +65,7 @@ def stand_and_shoot(
         shooter,
         target,
         weapon,
-        rules=rules,
+        phase_rules=phase_rules,
         context=EngagementContext(moved=False),
         hit_modifier=_STAND_AND_SHOOT_TO_HIT,
         force_short_range=True,
@@ -99,7 +100,7 @@ def charge(
     charger_weapon: Weapon,
     target_weapon: Weapon,
     reaction: StandAndShoot | None = None,
-    rules: Registry[Rule] = _NO_RULES,
+    phase_rules: Mapping[str, Rule] = _NONE_IN_PLAY,
 ) -> ChargeResult:
     """Resolve ``charger`` charging ``target``: the reaction, then the fight.
 
@@ -117,7 +118,7 @@ def charge(
     """
     volley = None
     if reaction is not None:
-        volley = stand_and_shoot(target, charger, reaction.weapon, rules=rules)
+        volley = stand_and_shoot(target, charger, reaction.weapon, phase_rules=phase_rules)
     melee = fight(
         charger,
         target,

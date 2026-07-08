@@ -49,7 +49,6 @@ class Game:
     live on the game itself.
     """
 
-    rules: Registry[Rule]
     in_play: Mapping[Phase, Mapping[str, Rule]]
 
     @classmethod
@@ -73,7 +72,7 @@ class Game:
             }
             for phase in Phase
         }
-        return cls(rules=rules, in_play=in_play)
+        return cls(in_play=in_play)
 
     def turn(self) -> tuple["StrategyPhase", "MovementPhase", "ShootingPhase", "CombatPhase"]:
         """The turn as printed: the four phases, in order, bound to this game.
@@ -129,7 +128,7 @@ class Game:
             charger_weapon=charger_weapon,
             target_weapon=target_weapon,
             reaction=reaction,
-            rules=self.rules,
+            phase_rules=self.in_play[Phase.SHOOTING],
         )
 
 
@@ -159,7 +158,9 @@ class MovementPhase:
         Returns:
             The volley's outcome — chargers felled before they strike.
         """
-        return stand_and_shoot(shooter, target, weapon, rules=self.game.rules)
+        return stand_and_shoot(
+            shooter, target, weapon, phase_rules=self.game.in_play[Phase.SHOOTING]
+        )
 
 
 @dataclass(frozen=True)
@@ -201,7 +202,7 @@ class ShootingPhase:
             attacker,
             defender,
             weapon,
-            rules=self.game.rules,
+            phase_rules=self.game.in_play[Phase.SHOOTING],
             context=context,
             hit_modifier=hit_modifier,
         )

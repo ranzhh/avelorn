@@ -56,7 +56,7 @@ def test_phases_without_chapter_rules_have_none_in_force() -> None:
 def test_the_game_is_a_frozen_value() -> None:
     """Assembled once, never mutated: the rules in force cannot be reassigned."""
     with pytest.raises(dataclasses.FrozenInstanceError):
-        setattr(GAME, "rules", REPO.rules)  # noqa: B010 — the point is the freeze
+        setattr(GAME, "in_play", {})  # noqa: B010 — the point is the freeze
 
 
 def test_turn_is_the_printed_sequence() -> None:
@@ -89,7 +89,9 @@ def test_volley_delegates_to_shoot_unit() -> None:
     longbow = REPO.weapons["longbow"]
     context = EngagementContext(moved=False, distance=20)
     bound = GAME.shooting.volley(archers, spearmen, longbow, context=context)
-    direct = shoot_unit(archers, spearmen, longbow, rules=REPO.rules, context=context)
+    direct = shoot_unit(
+        archers, spearmen, longbow, phase_rules=GAME.in_play[Phase.SHOOTING], context=context
+    )
     assert bound == direct
 
 
@@ -137,6 +139,6 @@ def test_charge_spans_the_phases_on_the_game_itself() -> None:
         charger_weapon=REPO.weapons["thrusting-spear"],
         target_weapon=REPO.weapons["hand-weapon"],
         reaction=StandAndShoot(REPO.weapons["longbow"]),
-        rules=REPO.rules,
+        phase_rules=GAME.in_play[Phase.SHOOTING],
     )
     assert bound == direct
