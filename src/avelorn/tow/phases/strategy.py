@@ -1,7 +1,10 @@
 """The Strategy phase."""
 
-from avelorn.tow.phases.binding import PhaseBinding
+from dataclasses import dataclass
+
+from avelorn.tow.phases.phase import Phase
 
 
-class StrategyPhase(PhaseBinding):
-    """The Strategy phase, bound to a game; none of its actions are modelled yet."""
+@dataclass(frozen=True)
+class StrategyPhase(Phase):
+    """The Strategy phase; none of its actions are modelled yet."""

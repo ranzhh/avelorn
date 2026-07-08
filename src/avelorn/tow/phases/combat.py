@@ -1,20 +1,22 @@
 """The Combat phase: the round, its result, the Break test."""
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import ClassVar
 
 from avelorn.tow.combat.context import CombatContext
 from avelorn.tow.combat.contingent import Contingent
 from avelorn.tow.combat.melee import CombatResult, FightResult, combat_result, fight
 from avelorn.tow.combat.morale import BreakResult, break_test
-from avelorn.tow.phases.binding import PhaseBinding
+from avelorn.tow.phases.phase import Phase
 from avelorn.tow.schema.stage import Stage
 from avelorn.tow.schema.unit import Unit
 from avelorn.tow.schema.weapon import Weapon
 
 
-class CombatPhase(PhaseBinding):
-    """The Combat phase, bound to a game: its steps, its round's actions."""
+@dataclass(frozen=True)
+class CombatPhase(Phase):
+    """The Combat phase: its steps, its round's actions."""
 
     # The rolls of the printed combat sequence. The phase's other printed
     # steps (choose combats, calculate combat result, break tests) join

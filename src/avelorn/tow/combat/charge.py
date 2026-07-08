@@ -73,10 +73,29 @@ def stand_and_shoot(
 
 
 @dataclass(frozen=True)
+class Hold:
+    """The Hold charge reaction: brace and await the charge."""
+
+
+@dataclass(frozen=True)
 class StandAndShoot:
     """The Stand & Shoot charge reaction: the target fires as the chargers close."""
 
     weapon: Weapon  # the missile weapon; must be carried by the reacting unit
+
+
+@dataclass(frozen=True)
+class Flee:
+    """The Flee charge reaction; declared in the vocabulary, not modelled yet."""
+
+
+# The printed vocabulary, exhaustive: "There are three charge reactions
+# available to the inactive player: Hold, Stand & Shoot and Flee"
+# (the-movement-phase/charge-reactions, p.120).
+ChargeReaction = Hold | StandAndShoot | Flee
+
+# The default declaration: a target that declares nothing holds.
+HOLD = Hold()
 
 
 @dataclass(frozen=True)
@@ -99,15 +118,16 @@ def charge(
     move: Charge,
     charger_weapon: Weapon,
     target_weapon: Weapon,
-    reaction: StandAndShoot | None = None,
+    reaction: ChargeReaction = HOLD,
     phase_rules: Mapping[str, Rule] = _NONE_IN_PLAY,
 ) -> ChargeResult:
     """Resolve ``charger`` charging ``target``: the reaction, then the fight.
 
     The sequence as the rulebook plays it. The target answers with its
-    declared ``reaction`` — :class:`StandAndShoot`, one volley at the
-    closing chargers, or None for Hold (Flee is not modelled yet) — and
-    the survivors fight one round of close combat, the chargers'
+    declared ``reaction`` — one of the printed three: :class:`Hold`,
+    :class:`StandAndShoot` (one volley at the closing chargers), or
+    :class:`Flee` (a loud error until it is modelled) — and the
+    survivors fight one round of close combat, the chargers'
     Initiative raised by the ``move`` (the-combat-phase/charging-units).
     Each side fights with its chosen Combat weapon. The reaction's
     casualties enter the melee as the chargers' prior losses, so the
@@ -115,10 +135,19 @@ def charge(
 
     Returns:
         The composed outcome: the reaction volley, if any, and the fight.
+
+    Raises:
+        ValueError: the declared reaction is Flee, which is not
+            modelled yet.
     """
     volley = None
-    if reaction is not None:
-        volley = stand_and_shoot(target, charger, reaction.weapon, phase_rules=phase_rules)
+    match reaction:
+        case StandAndShoot(weapon=weapon):
+            volley = stand_and_shoot(target, charger, weapon, phase_rules=phase_rules)
+        case Flee():
+            raise ValueError("the Flee charge reaction is not modelled yet")
+        case Hold():
+            pass
     melee = fight(
         charger,
         target,

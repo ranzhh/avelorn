@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 
-from avelorn.tow.combat.charge import StandAndShoot, charge, stand_and_shoot
+from avelorn.tow.combat.charge import Flee, StandAndShoot, charge, stand_and_shoot
 from avelorn.tow.combat.context import CombatContext
 from avelorn.tow.combat.contingent import Charge, ChargeArc, Contingent
 from avelorn.tow.combat.melee import combat_result, fight
@@ -238,3 +238,37 @@ def test_charge_against_a_holding_target_has_no_volley() -> None:
     )
     assert outcome.reaction is None
     assert outcome.melee.losses == manual.losses
+
+
+def test_the_reaction_vocabulary_is_the_printed_three() -> None:
+    """Hold is the default and takes no volley; Flee is a loud error.
+
+    "There are three charge reactions available to the inactive player:
+    Hold, Stand & Shoot and Flee" (the-movement-phase/charge-reactions).
+    Flee is in the vocabulary but not modelled, and refusing loudly
+    beats resolving a charge whose target silently stood still.
+    """
+    charger = _fielded(REPO.units["elven-spearmen"], 5)
+    target = _fielded(REPO.units["elven-archers"], 5)
+    spear = REPO.weapons["thrusting-spear"]
+    hand = REPO.weapons["hand-weapon"]
+    move = Charge(3, ChargeArc.FRONT)
+    held = charge(
+        charger,
+        target,
+        move=move,
+        charger_weapon=spear,
+        target_weapon=hand,
+        phase_rules=IN_FORCE,
+    )
+    assert held.reaction is None  # Hold: no volley precedes the fight
+    with pytest.raises(ValueError, match="Flee"):
+        charge(
+            charger,
+            target,
+            move=move,
+            charger_weapon=spear,
+            target_weapon=hand,
+            reaction=Flee(),
+            phase_rules=IN_FORCE,
+        )

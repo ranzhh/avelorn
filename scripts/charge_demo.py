@@ -69,7 +69,7 @@ def main() -> None:
     archers = game.field(archers_unit, args.archers)
     move = Charge(args.charge_inches, ChargeArc.FRONT)
 
-    outcome = game.charge(
+    outcome = game.movement.charge(
         spearmen,
         archers,
         move=move,

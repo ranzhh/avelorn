@@ -25,8 +25,7 @@ from typing import ClassVar
 
 from avelorn.core.game import Game
 from avelorn.core.registry import Registry
-from avelorn.tow.combat.charge import ChargeResult, StandAndShoot, charge
-from avelorn.tow.combat.contingent import Charge, Contingent
+from avelorn.tow.combat.contingent import Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.muster import Complement
 from avelorn.tow.phases import CombatPhase, MovementPhase, ShootingPhase, StrategyPhase
@@ -41,12 +40,13 @@ from avelorn.tow.schema.weapon import Weapon
 class TOWGame(Game):
     """A game of The Old World in play: rules in force, bound to the turn.
 
-    Assemble one from the loaded corpus (:meth:`assemble`); the chapter
-    rules each phase has in force are resolved right there, eagerly —
-    the game's own muster boundary. Walk the turn with ``turn()``, or
-    address a phase directly (``game.shooting.volley(...)``); sequences
-    that span phases (a charge: declared in Movement, fought in Combat)
-    live on the game itself.
+    Assemble one from the loaded corpus (:meth:`assemble`, or
+    :meth:`load_data` straight from data/); the chapter rules each
+    phase has in force are resolved right there, eagerly — the game's
+    own muster boundary — and each phase is assembled as a value owning
+    exactly what it needs. Walk the turn with ``turn()``, or address a
+    phase directly (``game.shooting.volley(...)``,
+    ``game.movement.charge(...)``).
     """
 
     # The printed corpus, as loaded: the game's registries, kept for the
@@ -57,6 +57,12 @@ class TOWGame(Game):
     rules: Registry[Rule]
     # The chapter rules each phase has in force, resolved at assembly.
     in_play: Mapping[Phase, Mapping[str, Rule]]
+    # The turn's phases, assembled as values — each owns exactly the
+    # rules in force it needs; none holds a reference back to the game.
+    strategy: StrategyPhase
+    movement: MovementPhase
+    shooting: ShootingPhase
+    combat: CombatPhase
 
     # The printed turn sequence, derived from the Phase vocabulary: each
     # member names the binding property below.
@@ -89,6 +95,10 @@ class TOWGame(Game):
             armoury=repository.armoury,
             rules=repository.rules,
             in_play=in_play,
+            strategy=StrategyPhase(),
+            movement=MovementPhase(in_play=in_play[Phase.SHOOTING]),
+            shooting=ShootingPhase(in_play=in_play[Phase.SHOOTING]),
+            combat=CombatPhase(),
         )
 
     @classmethod
@@ -123,53 +133,4 @@ class TOWGame(Game):
         """
         return Contingent.deploy(
             complement, weapons=self.weapons, armoury=self.armoury, rules=self.rules
-        )
-
-    @property
-    def strategy(self) -> StrategyPhase:
-        """The Strategy phase, bound to this game."""
-        return StrategyPhase(self)
-
-    @property
-    def movement(self) -> MovementPhase:
-        """The Movement phase, bound to this game."""
-        return MovementPhase(self)
-
-    @property
-    def shooting(self) -> ShootingPhase:
-        """The Shooting phase, bound to this game."""
-        return ShootingPhase(self)
-
-    @property
-    def combat(self) -> CombatPhase:
-        """The Combat phase, bound to this game."""
-        return CombatPhase(self)
-
-    def charge(
-        self,
-        charger: Contingent,
-        target: Contingent,
-        *,
-        move: Charge,
-        charger_weapon: Weapon,
-        target_weapon: Weapon,
-        reaction: StandAndShoot | None = None,
-    ) -> ChargeResult:
-        """Resolve a charge: declaration and reaction, then the fight it feeds.
-
-        A charge spans phases — declared and reacted to in Movement,
-        fought in Combat — so the game, owner of the turn, is what walks
-        it across them.
-
-        Returns:
-            The composed outcome: the reaction volley, if any, and the fight.
-        """
-        return charge(
-            charger,
-            target,
-            move=move,
-            charger_weapon=charger_weapon,
-            target_weapon=target_weapon,
-            reaction=reaction,
-            phase_rules=self.in_play[Phase.SHOOTING],
         )

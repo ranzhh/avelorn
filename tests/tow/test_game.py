@@ -76,14 +76,12 @@ def test_the_game_is_a_frozen_value() -> None:
 
 
 def test_turn_is_the_printed_sequence() -> None:
-    """The turn walks the four phases in printed order, each bound to the game.
+    """The turn walks the four phases in printed order.
 
     The sequence is derived from the Phase vocabulary, so a phase
-    joining the enum without a binding property fails here.
+    joining the enum without a matching field fails here.
     """
     assert GAME.turn() == (GAME.strategy, GAME.movement, GAME.shooting, GAME.combat)
-    for binding in (GAME.strategy, GAME.movement, GAME.shooting, GAME.combat):
-        assert binding.game is GAME
 
 
 @pytest.mark.parametrize("binding", ["strategy", "movement", "shooting", "combat"])
@@ -134,12 +132,12 @@ def test_fight_result_and_break_test_delegate() -> None:
     )
 
 
-def test_charge_spans_the_phases_on_the_game_itself() -> None:
-    """game.charge is the charge sequence with the game's rules injected."""
+def test_the_charge_is_a_movement_action() -> None:
+    """game.movement.charge is the charge sequence, rules in force injected."""
     spearmen = _fielded(REPO.units["elven-spearmen"], 5)
     archers = _fielded(REPO.units["elven-archers"], 5)
     move = Charge(3, ChargeArc.FRONT)
-    bound = GAME.charge(
+    bound = GAME.movement.charge(
         spearmen,
         archers,
         move=move,
