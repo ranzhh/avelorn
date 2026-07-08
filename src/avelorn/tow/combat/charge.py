@@ -12,6 +12,7 @@ import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from avelorn.core.errors import UnmodelledRuleError
 from avelorn.tow.combat.context import CombatContext, EngagementContext
 from avelorn.tow.combat.contingent import Charge, Contingent
 from avelorn.tow.combat.melee import FightResult, fight
@@ -137,15 +138,15 @@ def charge(
         The composed outcome: the reaction volley, if any, and the fight.
 
     Raises:
-        ValueError: the declared reaction is Flee, which is not
-            modelled yet.
+        UnmodelledRuleError: the declared reaction is Flee, which is
+            not modelled yet.
     """
     volley = None
     match reaction:
         case StandAndShoot(weapon=weapon):
             volley = stand_and_shoot(target, charger, weapon, phase_rules=phase_rules)
         case Flee():
-            raise ValueError("the Flee charge reaction is not modelled yet")
+            raise UnmodelledRuleError("the Flee charge reaction is not modelled yet")
         case Hold():
             pass
     melee = fight(

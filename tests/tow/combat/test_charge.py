@@ -4,6 +4,7 @@ from dataclasses import replace
 
 import pytest
 
+from avelorn.core.errors import UnmodelledRuleError
 from avelorn.tow.combat.charge import Flee, StandAndShoot, charge, stand_and_shoot
 from avelorn.tow.combat.context import CombatContext
 from avelorn.tow.combat.contingent import Charge, ChargeArc, Contingent
@@ -262,7 +263,7 @@ def test_the_reaction_vocabulary_is_the_printed_three() -> None:
         phase_rules=IN_FORCE,
     )
     assert held.reaction is None  # Hold: no volley precedes the fight
-    with pytest.raises(ValueError, match="Flee"):
+    with pytest.raises(UnmodelledRuleError, match="Flee"):
         charge(
             charger,
             target,
