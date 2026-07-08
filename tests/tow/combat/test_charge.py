@@ -104,7 +104,6 @@ def test_charge_sequence_matches_mixing_the_survivor_fights_by_hand() -> None:
         b_weapon=hand,
         a_prior_losses=reaction.casualties,
         context=CombatContext(a_charge=move),
-        rules=REPO.rules,
     )
 
     manual = [[0.0] * (defender.models + 1) for _ in range(models + 1)]
@@ -115,7 +114,6 @@ def test_charge_sequence_matches_mixing_the_survivor_fights_by_hand() -> None:
             a_weapon=spear,
             b_weapon=hand,
             context=CombatContext(a_charge=move),
-            rules=REPO.rules,
         )
         for a_lost, row in enumerate(survivors.losses):
             for b_lost, mass in enumerate(row):
@@ -147,7 +145,6 @@ def test_stand_and_shoot_erodes_the_chargers_combat_result() -> None:
             a_weapon=spear,
             b_weapon=hand,
             context=situation,
-            rules=REPO.rules,
         )
     )
     shot = combat_result(
@@ -158,7 +155,6 @@ def test_stand_and_shoot_erodes_the_chargers_combat_result() -> None:
             b_weapon=hand,
             a_prior_losses=reaction.casualties,
             context=situation,
-            rules=REPO.rules,
         )
     )
     assert shot.p_a_wins < unshot.p_a_wins
@@ -206,7 +202,6 @@ def test_charge_composes_the_reaction_into_the_fight() -> None:
         b_weapon=hand,
         a_prior_losses=volley.casualties,
         context=CombatContext(a_charge=move),
-        rules=REPO.rules,
     )
     assert outcome.reaction == volley
     assert outcome.melee.losses == manual.losses
@@ -235,7 +230,6 @@ def test_charge_against_a_holding_target_has_no_volley() -> None:
         a_weapon=spear,
         b_weapon=hand,
         context=CombatContext(a_charge=move),
-        rules=REPO.rules,
     )
     assert outcome.reaction is None
     assert outcome.melee.losses == manual.losses

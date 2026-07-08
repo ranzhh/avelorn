@@ -75,7 +75,7 @@ def stand_and_shoot(
 class StandAndShoot:
     """The Stand & Shoot charge reaction: the target fires as the chargers close."""
 
-    weapon: Weapon  # the missile weapon the reacting unit shoots with
+    weapon: Weapon  # the missile weapon; must be carried by the reacting unit
 
 
 @dataclass(frozen=True)
@@ -125,6 +125,5 @@ def charge(
         b_weapon=target_weapon,
         a_prior_losses=None if volley is None else volley.casualties,
         context=CombatContext(a_charge=move),
-        rules=rules,
     )
     return ChargeResult(reaction=volley, melee=melee)

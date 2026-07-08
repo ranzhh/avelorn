@@ -59,7 +59,8 @@ def test_compile_armour_bane_from_data_reproduces_the_golden() -> None:
     to 6+, so p = 2/3 * (2/6 * 2/3 + 1/6 * 5/6) = 13/54 — previously
     proven by a hand-written test double, now driven by the rule file.
     """
-    transforms, unfactored = compile_rules(["Armour Bane (1)"], REPO.rules)
+    index = _fielded(REPO.units["elven-archers"], 1).loadout.weapon_rules
+    transforms, unfactored = compile_rules(["Armour Bane (1)"], index)
     assert unfactored == []
     profile = AttackProfile(
         hit_target=3, wound_target=4, save_target=5, ward_target=RollState.IMPOSSIBLE
@@ -101,15 +102,22 @@ def test_shoot_unit_factors_armour_bane_from_data() -> None:
     assert any("Volley Fire" in note for note in result.notes)
 
 
-def test_shoot_unit_without_rules_is_unchanged() -> None:
-    """No rules registry: every weapon rule stays noted, math unchanged."""
+def test_weapon_rules_factor_from_the_loadout_alone() -> None:
+    """No registry at the action: the weapon's rules ride with the unit.
+
+    Fielding resolved the Longbow's Armour Bane (1), so the volley
+    factors it (2/9 -> 13/54 per shot) with no ``rules=`` passed at all;
+    Volley Fire has no entry and stays noted. Only the shooting phase's
+    own chapter rules still come from the registry.
+    """
     result = shoot_unit(
         _fielded(REPO.units["elven-archers"], 3),
         _fielded(REPO.units["elven-spearmen"], 10),
         weapon=REPO.weapons["longbow"],
     )
-    assert result.p_unsaved == pytest.approx(2 / 9)
-    assert any("Armour Bane (1)" in note for note in result.notes)
+    assert result.p_unsaved == pytest.approx(13 / 54)
+    assert not any("Armour Bane" in note for note in result.notes)
+    assert any("Volley Fire" in note for note in result.notes)
 
 
 def test_long_range_penalty_applies_from_data() -> None:

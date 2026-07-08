@@ -237,11 +237,16 @@ def shoot_unit(
     first (rank-and-file) profile and the weapon's missile profile;
     casualties cap at the defender's fielded ``models``. To resolve a
     partial volley (only some models in range or sight), field the
-    shooting subset as its own contingent. The defender's save folds
-    from its resolved loadout; ``rules`` maps printed rule names to rule
-    entries, whose effects compile into the dice walk for the weapon's
-    and the shooting phase's rules. Unit special rules are not factored
-    into the math yet — every one is listed in the result's notes.
+    shooting subset as its own contingent. ``weapon`` is the per-action
+    choice and must be carried — resolve a text boundary's printed name
+    through ``attacker.loadout.weapon(...)``; the weapon's rules compile
+    from the loadout's resolved index, and the defender's save folds
+    from its loadout. ``rules`` is
+    the registry the shooting phase's own chapter rules (Firing at Long
+    Range, Moving and Shooting) are scanned from — the one remaining
+    registry parameter, pending a home for rules that belong to the game
+    rather than to either side. Unit special rules are not factored into
+    the math yet — every one is listed in the result's notes.
 
     ``context`` is the engagement's situation (moved, distance); rules
     conditioned on facts it leaves unknown stay unfactored and noted.
@@ -255,9 +260,10 @@ def shoot_unit(
         The shooting outcome.
 
     Raises:
-        ValueError: if the weapon has no missile profile, the attacker
-            profile has no Ballistic Skill, the defender profile has no
-            Toughness, or the weapon shoots at the wielder's Strength and
+        ValueError: if the weapon is not carried or has no missile
+            profile, the attacker profile has no Ballistic Skill, the
+            defender profile has no Toughness, or the weapon shoots at
+            the wielder's Strength and
             the attacker profile has none.
     """
     shooters, defenders = attacker.models, defender.models
@@ -268,9 +274,10 @@ def shoot_unit(
     # per-profile resolution with the volley combined. Requires a notion
     # of unit composition (which models are actually fielded), which the
     # schema does not have yet.
-    profile = weapon.missile_profile
+    chosen = attacker.wields(weapon)
+    profile = chosen.missile_profile
     if profile is None:
-        raise ValueError(f"{weapon.name} has no missile profile; it cannot shoot")
+        raise ValueError(f"{chosen.name} has no missile profile; it cannot shoot")
     ballistic_skill = shooter.profiles[0][Characteristic.BALLISTIC_SKILL]
     toughness = target.profiles[0][Characteristic.TOUGHNESS]
     if ballistic_skill is None:
@@ -281,7 +288,7 @@ def shoot_unit(
     wielder_strength = shooter.profiles[0][Characteristic.STRENGTH]
     if profile.strength.is_relative and wielder_strength is None:
         raise ValueError(
-            f"{weapon.name} shoots at the wielder's Strength, but {shooter.name} has none"
+            f"{chosen.name} shoots at the wielder's Strength, but {shooter.name} has none"
         )
     strength = profile.strength.resolve(wielder_strength or 0)
     logger.debug(
@@ -289,7 +296,7 @@ def shoot_unit(
         shooters,
         shooter.name,
         ballistic_skill,
-        weapon.name,
+        chosen.name,
         target.name,
         toughness,
         strength,
@@ -307,16 +314,16 @@ def shoot_unit(
     # Weapon rules with compiled effects join the dice walk; the rest are
     # reported, exactly as before. Shooting-phase chapter rules (Firing
     # at Long Range, Moving and Shooting) apply to every volley.
-    transforms, unfactored = compile_rules(profile.special_rules, rules, conditions)
-    notes.extend(f"weapon rule not factored: {rule} ({weapon.name})" for rule in unfactored)
-    phase_rules = sorted(
-        r.name for r in rules.values() if r.category == _SHOOTING_PHASE and r.effects
+    transforms, unfactored = compile_rules(
+        profile.special_rules, attacker.loadout.weapon_rules, conditions
     )
-    phase_transforms, phase_unfactored = compile_rules(phase_rules, rules, conditions)
+    notes.extend(f"weapon rule not factored: {rule} ({chosen.name})" for rule in unfactored)
+    in_play = {r.name: r for r in rules.values() if r.category == _SHOOTING_PHASE and r.effects}
+    phase_transforms, phase_unfactored = compile_rules(sorted(in_play), in_play, conditions)
     transforms.extend(phase_transforms)
     notes.extend(f"core rule not factored: {name}" for name in phase_unfactored)
-    if weapon.notes is not None:
-        notes.append(f"weapon notes not factored ({weapon.name}): {weapon.notes}")
+    if chosen.notes is not None:
+        notes.append(f"weapon notes not factored ({chosen.name}): {chosen.notes}")
 
     # Wounds accumulate into whole slain models; a profile with no printed
     # Wounds ("-") is treated as a single-Wound model.

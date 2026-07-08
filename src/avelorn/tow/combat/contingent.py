@@ -11,7 +11,8 @@ unit. Fielding is also where printed names stop being strings:
 :class:`Loadout`.
 """
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from enum import StrEnum
 
 from avelorn.core.registry import Registry
@@ -38,15 +39,42 @@ class Loadout:
     The two halves miss differently, by design. Equipment coverage is
     complete, so an unresolvable equipment name fails the deploy. Rule
     entries exist only for what the engine can honour, so a rule without
-    one is the norm — those names ride along printed, in
+    one is the norm — unit rules without entries ride along printed, in
     :attr:`unresolved_rules`, and keep feeding the "not factored" notes
-    rather than silently vanishing.
+    rather than silently vanishing, and a weapon-rule name absent from
+    :attr:`weapon_rules` compiles to unfactored the same way.
     """
 
     weapons: tuple[Weapon, ...]
     armour: tuple[Armour, ...]
     rules: tuple[Rule, ...]
     unresolved_rules: tuple[str, ...]
+    # Every rule name printed on a carried weapon's profiles that has an
+    # entry, resolved as printed — the per-action compile looks names up
+    # here instead of in a registry. Names without entries are simply
+    # absent and compile to unfactored, as ever.
+    weapon_rules: Mapping[str, Rule] = field(default_factory=dict)
+
+    def weapon(self, name: str) -> Weapon:
+        """The carried weapon with the given printed name.
+
+        The text boundary's resolver: a CLI argument or an API request
+        names the weapon, this turns it into the entry once, and the
+        engine works with the object from there
+        (:meth:`Contingent.wields` confirms it is carried).
+
+        Returns:
+            The carried weapon entry.
+
+        Raises:
+            ValueError: no carried weapon has that name — a unit fights
+                with what it carries.
+        """
+        for weapon in self.weapons:
+            if weapon.name == name:
+                return weapon
+        carried = ", ".join(weapon.name for weapon in self.weapons) or "nothing"
+        raise ValueError(f"no {name!r} in this loadout; carried: {carried}")
 
 
 class ChargeArc(StrEnum):
@@ -137,6 +165,25 @@ class Contingent:
     unit: Unit
     models: int
     loadout: Loadout
+
+    def wields(self, weapon: Weapon) -> Weapon:
+        """The weapon, confirmed carried: a unit fights with what it has.
+
+        Every action's weapon choice passes through here, so an
+        arbitrary entry cannot be fought with — only what was fielded.
+
+        Returns:
+            The same weapon, when the loadout carries it.
+
+        Raises:
+            ValueError: the loadout does not carry it.
+        """
+        if weapon not in self.loadout.weapons:
+            carried = ", ".join(w.name for w in self.loadout.weapons) or "nothing"
+            raise ValueError(
+                f"{self.unit.name} does not carry {weapon.name!r}; carried: {carried}"
+            )
+        return weapon
 
     @classmethod
     def deploy(
@@ -244,5 +291,13 @@ def _resolve_loadout(
             unresolved.append(printed)
         else:
             resolved.append(entry)
-    loadout = Loadout(tuple(wielded), tuple(worn), tuple(resolved), tuple(unresolved))
+    weapon_rules: dict[str, Rule] = {}
+    for weapon in wielded:
+        for profile in weapon.profiles:
+            for printed in profile.special_rules:
+                if printed not in weapon_rules and (entry := printed_rule(printed, rules)):
+                    weapon_rules[printed] = entry
+    loadout = Loadout(
+        tuple(wielded), tuple(worn), tuple(resolved), tuple(unresolved), weapon_rules
+    )
     return loadout, unknown

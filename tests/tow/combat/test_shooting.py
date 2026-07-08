@@ -52,7 +52,8 @@ def test_shoot_unit_archers_vs_spearmen() -> None:
     """End-to-end from data files: 3 Elven Archers shoot Elven Spearmen.
 
     Spearmen carry light armour (6+) and a shield (+1), so they save on
-    5+; the longbow has no AP. Expected kills = 3 * 2/9.
+    5+; the longbow's Armour Bane (1), resolved at fielding, worsens it
+    to 6+ on a natural 6 To Wound. Expected wounds = 3 * 13/54.
     """
     archers = REPO.units["elven-archers"]
     spearmen = REPO.units["elven-spearmen"]
@@ -62,12 +63,13 @@ def test_shoot_unit_archers_vs_spearmen() -> None:
         REPO.weapons["longbow"],
     )
     assert result.hit_target == 3  # BS 4
-    assert result.save_target == 5  # 7 - light armour - shield
-    assert result.expected_wounds == pytest.approx(2 / 3)
-    # Equipment resolved at fielding: nothing about it is left to report.
+    assert result.save_target == 5  # 7 - light armour - shield (the chart value)
+    assert result.expected_wounds == pytest.approx(3 * 13 / 54)  # Armour Bane factored
+    # Equipment and the weapon's modelled rules resolved at fielding:
+    # neither is left to report.
     assert not any("equipment not factored" in note for note in result.notes)
+    assert not any("Armour Bane" in note for note in result.notes)
     assert any("Valour of Ages" in note for note in result.notes)
-    assert any("Armour Bane (1)" in note for note in result.notes)  # weapon rule unfactored
 
 
 def test_defender_size_does_not_affect_wounds() -> None:
@@ -206,6 +208,7 @@ def test_shoot_unit_rejects_wielder_strength_weapon_without_strength() -> None:
     spearmen = REPO.units["elven-spearmen"]
     strengthless = spearmen.model_copy(deep=True)
     strengthless.profiles[0].characteristics[Characteristic.STRENGTH] = None
+    strengthless.equipment.append("Warbow")  # carried, so the choice is legal
     with pytest.raises(ValueError, match="wielder's Strength"):
         shoot_unit(_fielded(strengthless, 1), _fielded(spearmen, 10), REPO.weapons["warbow"])
 
@@ -222,6 +225,7 @@ def test_shoot_unit_rejects_missing_ballistic_skill() -> None:
     spearmen = REPO.units["elven-spearmen"]
     crewless = spearmen.model_copy(deep=True)
     crewless.profiles[0].characteristics[Characteristic.BALLISTIC_SKILL] = None
+    crewless.equipment.append("Longbow")  # carried, so the choice is legal
     with pytest.raises(ValueError, match="Ballistic Skill"):
         shoot_unit(_fielded(crewless, 1), _fielded(spearmen, 10), REPO.weapons["longbow"])
 
