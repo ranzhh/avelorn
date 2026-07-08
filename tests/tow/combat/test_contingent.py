@@ -79,10 +79,9 @@ def test_deploy_resolves_equipment_into_the_loadout(spearmen_unit: Unit) -> None
     assert contingent.loadout == Loadout(
         weapons=(REPO.weapons["hand-weapon"], REPO.weapons["thrusting-spear"]),
         armour=(REPO.armoury["light-armour"], REPO.armoury["shield"]),
-        rules=(REPO.rules["valour-of-ages"],),
+        rules=(REPO.rules["elven-reflexes"], REPO.rules["valour-of-ages"]),
         unresolved_rules=(
             "Close Order",
-            "Elven Reflexes",
             "Martial Prowess",
             "Regimental Unit",
         ),
@@ -159,7 +158,7 @@ def test_deploy_tolerates_rules_without_entries(spearmen_unit: Unit) -> None:
         mustered, weapons=REPO.weapons, armoury=REPO.armoury, rules=REPO.rules
     )
     assert contingent.loadout is not None
-    assert [rule.id for rule in contingent.loadout.rules] == ["valour-of-ages"]
+    assert [rule.id for rule in contingent.loadout.rules] == ["elven-reflexes", "valour-of-ages"]
     assert "Shieldwall" in contingent.loadout.unresolved_rules
 
 
