@@ -10,12 +10,11 @@ rather than silently ignored.
 """
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import assert_never
 
 from avelorn.core.dice import expected_value
-from avelorn.core.registry import Registry
 from avelorn.tow.combat.armour import defender_armour
 from avelorn.tow.combat.attack import (
     AttackProfile,
@@ -43,11 +42,10 @@ from avelorn.tow.schema.weapon import Weapon, WeaponProfile
 
 logger = logging.getLogger(__name__)
 
-# Rules filed under the shooting phase chapter apply to every volley.
-_SHOOTING_PHASE = "The Shooting Phase"
 
 # An empty registry as the default: every rule stays unfactored, visibly.
-_NO_RULES: Registry[Rule] = Registry(kind="rule")
+# No rules in force: the volley resolves under weapon and armour alone.
+_NONE_IN_PLAY: Mapping[str, Rule] = {}
 
 
 @dataclass(frozen=True)
@@ -230,7 +228,7 @@ def shoot_unit(
     defender: Contingent,
     weapon: Weapon,
     *,
-    rules: Registry[Rule] = _NO_RULES,
+    phase_rules: Mapping[str, Rule] = _NONE_IN_PLAY,
     context: EngagementContext | None = None,
     hit_modifier: int = 0,
     force_short_range: bool = False,
@@ -245,11 +243,11 @@ def shoot_unit(
     choice and must be carried — resolve a text boundary's printed name
     through ``attacker.loadout.weapon(...)``; the weapon's rules compile
     from the loadout's resolved index, and the defender's save folds
-    from its loadout. ``rules`` is
-    the registry the shooting phase's own chapter rules (Firing at Long
-    Range, Moving and Shooting) are scanned from — the one remaining
-    registry parameter, pending a home for rules that belong to the game
-    rather than to either side. Unit special rules are not factored into
+    from its loadout. ``phase_rules`` are the phase's rules in force —
+    the chapter rules that apply to every volley (Firing at Long Range,
+    Moving and Shooting), resolved by printed name; the Game assembles
+    the mapping once (game.in_play), the way a loadout resolves a
+    unit's names at fielding. Unit special rules are not factored into
     the math yet — every one is listed in the result's notes.
 
     ``context`` is the engagement's situation (moved, distance); rules
@@ -322,8 +320,9 @@ def shoot_unit(
         profile.special_rules, attacker.loadout.weapon_rules, conditions
     )
     notes.extend(f"weapon rule not factored: {rule} ({chosen.name})" for rule in unfactored)
-    in_play = {r.name: r for r in rules.values() if r.category == _SHOOTING_PHASE and r.effects}
-    phase_transforms, phase_unfactored = compile_rules(sorted(in_play), in_play, conditions)
+    phase_transforms, phase_unfactored = compile_rules(
+        sorted(phase_rules), phase_rules, conditions
+    )
     transforms.extend(phase_transforms)
     notes.extend(f"core rule not factored: {name}" for name in phase_unfactored)
     if chosen.notes is not None:

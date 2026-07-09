@@ -13,6 +13,8 @@ something to degrade visibly.
 from collections.abc import Iterable, Iterator, Mapping
 from typing import Protocol
 
+from avelorn.core.errors import AvelornError
+
 
 class Keyed(Protocol):
     """Anything registrable: a slug identity and a printed display name."""
@@ -21,7 +23,7 @@ class Keyed(Protocol):
     name: str
 
 
-class UnknownNameError(LookupError):
+class UnknownNameError(AvelornError, LookupError):
     """No registered entry carries the requested display name."""
 
     def __init__(self, kind: str, name: str) -> None:

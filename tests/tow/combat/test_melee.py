@@ -13,10 +13,15 @@ from avelorn.tow.combat.melee import (
     strike_unit,
 )
 from avelorn.tow.data import TOWRepository
+from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.rule import Condition, ModifierEffect, Rule
 from avelorn.tow.schema.unit import Characteristic, Unit
 
 REPO = TOWRepository()
+
+# The shooting chapter's rules in force, built directly: these tests
+# exercise the combat layer, which must not depend on game assembly.
+IN_FORCE = {r.name: r for r in REPO.rules.values() if r.category == Phase.SHOOTING and r.effects}
 
 
 def _fielded(unit: Unit, models: int) -> Contingent:
@@ -520,7 +525,7 @@ def test_charge_factors_elven_reflexes_structurally() -> None:
         move=Charge(3, ChargeArc.FRONT),
         charger_weapon=REPO.weapons["thrusting-spear"],
         target_weapon=REPO.weapons["hand-weapon"],
-        rules=REPO.rules,
+        phase_rules=IN_FORCE,
     )
     melee = result.melee
     assert melee.a_initiative.value == melee.b_initiative.value + 3  # charge bonus only

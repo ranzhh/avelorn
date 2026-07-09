@@ -9,9 +9,11 @@ volley itself and stays callable on its own.
 """
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import assert_never
 
-from avelorn.core.registry import Registry
+from avelorn.core.errors import UnmodelledRuleError
 from avelorn.tow.combat.context import CombatContext, EngagementContext
 from avelorn.tow.combat.contingent import Charge, Contingent
 from avelorn.tow.combat.melee import FightResult, fight
@@ -22,7 +24,8 @@ from avelorn.tow.schema.weapon import Weapon
 logger = logging.getLogger(__name__)
 
 # An empty registry as the default: every rule stays unfactored, visibly.
-_NO_RULES: Registry[Rule] = Registry(kind="rule")
+# No rules in force: the volley resolves under weapon and armour alone.
+_NONE_IN_PLAY: Mapping[str, Rule] = {}
 
 # Models making a Stand & Shoot reaction suffer -1 To Hit and no Firing at
 # Long Range modifier (the-shooting-phase/standing-and-shooting).
@@ -34,7 +37,7 @@ def stand_and_shoot(
     target: Contingent,
     weapon: Weapon,
     *,
-    rules: Registry[Rule] = _NO_RULES,
+    phase_rules: Mapping[str, Rule] = _NONE_IN_PLAY,
 ) -> ShootingResult:
     """Resolve a Stand & Shoot charge reaction: ``shooter`` shoots the ``target``.
 
@@ -64,7 +67,7 @@ def stand_and_shoot(
         shooter,
         target,
         weapon,
-        rules=rules,
+        phase_rules=phase_rules,
         context=EngagementContext(moved=False),
         hit_modifier=_STAND_AND_SHOOT_TO_HIT,
         force_short_range=True,
@@ -72,10 +75,29 @@ def stand_and_shoot(
 
 
 @dataclass(frozen=True)
+class Hold:
+    """The Hold charge reaction: brace and await the charge."""
+
+
+@dataclass(frozen=True)
 class StandAndShoot:
     """The Stand & Shoot charge reaction: the target fires as the chargers close."""
 
     weapon: Weapon  # the missile weapon; must be carried by the reacting unit
+
+
+@dataclass(frozen=True)
+class Flee:
+    """The Flee charge reaction; declared in the vocabulary, not modelled yet."""
+
+
+# The printed vocabulary, exhaustive: "There are three charge reactions
+# available to the inactive player: Hold, Stand & Shoot and Flee"
+# (the-movement-phase/charge-reactions, p.120).
+ChargeReaction = Hold | StandAndShoot | Flee
+
+# The default declaration: a target that declares nothing holds.
+HOLD = Hold()
 
 
 @dataclass(frozen=True)
@@ -98,15 +120,16 @@ def charge(
     move: Charge,
     charger_weapon: Weapon,
     target_weapon: Weapon,
-    reaction: StandAndShoot | None = None,
-    rules: Registry[Rule] = _NO_RULES,
+    reaction: ChargeReaction = HOLD,
+    phase_rules: Mapping[str, Rule] = _NONE_IN_PLAY,
 ) -> ChargeResult:
     """Resolve ``charger`` charging ``target``: the reaction, then the fight.
 
     The sequence as the rulebook plays it. The target answers with its
-    declared ``reaction`` — :class:`StandAndShoot`, one volley at the
-    closing chargers, or None for Hold (Flee is not modelled yet) — and
-    the survivors fight one round of close combat, the chargers'
+    declared ``reaction`` — one of the printed three: :class:`Hold`,
+    :class:`StandAndShoot` (one volley at the closing chargers), or
+    :class:`Flee` (a loud error until it is modelled) — and the
+    survivors fight one round of close combat, the chargers'
     Initiative raised by the ``move`` (the-combat-phase/charging-units).
     Each side fights with its chosen Combat weapon. The reaction's
     casualties enter the melee as the chargers' prior losses, so the
@@ -114,10 +137,23 @@ def charge(
 
     Returns:
         The composed outcome: the reaction volley, if any, and the fight.
+
+    Raises:
+        UnmodelledRuleError: the declared reaction is Flee, which is
+            not modelled yet.
     """
     volley = None
-    if reaction is not None:
-        volley = stand_and_shoot(target, charger, reaction.weapon, rules=rules)
+    match reaction:
+        case StandAndShoot(weapon=weapon):
+            volley = stand_and_shoot(target, charger, weapon, phase_rules=phase_rules)
+        case Flee():
+            raise UnmodelledRuleError("the Flee charge reaction is not modelled yet")
+        case Hold():
+            pass
+        case unanswered:
+            # A reaction joining the vocabulary must be answered here —
+            # a charge whose target silently did nothing is the wrong game.
+            assert_never(unanswered)
     melee = fight(
         charger,
         target,

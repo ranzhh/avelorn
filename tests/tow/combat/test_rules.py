@@ -16,6 +16,7 @@ from avelorn.tow.combat.rules import (
 )
 from avelorn.tow.combat.shooting import shoot_unit
 from avelorn.tow.data import TOWRepository
+from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.rule import (
     Condition,
     ModifierEffect,
@@ -27,6 +28,10 @@ from avelorn.tow.schema.stage import Stage
 from avelorn.tow.schema.unit import Characteristic, Unit
 
 REPO = TOWRepository()
+
+# The shooting chapter's rules in force, built directly: these tests
+# exercise the combat layer, which must not depend on game assembly.
+IN_FORCE = {r.name: r for r in REPO.rules.values() if r.category == Phase.SHOOTING and r.effects}
 
 
 def _fielded(unit: Unit, models: int) -> Contingent:
@@ -147,7 +152,7 @@ def test_shoot_unit_factors_armour_bane_from_data() -> None:
         _fielded(REPO.units["elven-archers"], 3),
         _fielded(REPO.units["elven-spearmen"], 10),
         weapon=REPO.weapons["longbow"],
-        rules=REPO.rules,
+        phase_rules=IN_FORCE,
     )
     assert result.p_unsaved == pytest.approx(13 / 54)
     assert not any("Armour Bane" in note for note in result.notes)
@@ -182,7 +187,7 @@ def test_long_range_penalty_applies_from_data() -> None:
         _fielded(REPO.units["elven-archers"], 3),
         _fielded(REPO.units["elven-spearmen"], 10),
         weapon=REPO.weapons["longbow"],
-        rules=REPO.rules,
+        phase_rules=IN_FORCE,
         context=EngagementContext(moved=False, distance=20),
     )
     assert result.p_unsaved == pytest.approx(13 / 72)
@@ -198,7 +203,7 @@ def test_condition_false_applies_no_penalty_and_no_note() -> None:
         _fielded(REPO.units["elven-archers"], 3),
         _fielded(REPO.units["elven-spearmen"], 10),
         weapon=REPO.weapons["longbow"],
-        rules=REPO.rules,
+        phase_rules=IN_FORCE,
         context=EngagementContext(moved=False, distance=10),
     )
     assert result.p_unsaved == pytest.approx(13 / 54)
@@ -211,7 +216,7 @@ def test_unknown_context_leaves_core_rules_unfactored() -> None:
         _fielded(REPO.units["elven-archers"], 3),
         _fielded(REPO.units["elven-spearmen"], 10),
         weapon=REPO.weapons["longbow"],
-        rules=REPO.rules,
+        phase_rules=IN_FORCE,
     )
     assert result.p_unsaved == pytest.approx(13 / 54)
     assert any("core rule not factored: Firing at Long Range" in n for n in result.notes)
@@ -224,7 +229,7 @@ def test_both_penalties_stack() -> None:
         _fielded(REPO.units["elven-archers"], 3),
         _fielded(REPO.units["elven-spearmen"], 10),
         weapon=REPO.weapons["longbow"],
-        rules=REPO.rules,
+        phase_rules=IN_FORCE,
         context=EngagementContext(moved=True, distance=20),
     )
     assert result.hit_target == 5
@@ -245,14 +250,14 @@ def test_move_in_or_stay_out_is_a_wash() -> None:
         _fielded(sea_guard, 10),
         _fielded(spearmen, 10),
         warbow,
-        rules=REPO.rules,
+        phase_rules=IN_FORCE,
         context=EngagementContext(moved=False, distance=15),
     )
     move_in = shoot_unit(
         _fielded(sea_guard, 10),
         _fielded(spearmen, 10),
         warbow,
-        rules=REPO.rules,
+        phase_rules=IN_FORCE,
         context=EngagementContext(moved=True, distance=12),
     )
     assert stay.hit_target == move_in.hit_target == 4

@@ -4,15 +4,21 @@ from dataclasses import replace
 
 import pytest
 
-from avelorn.tow.combat.charge import StandAndShoot, charge, stand_and_shoot
+from avelorn.core.errors import UnmodelledRuleError
+from avelorn.tow.combat.charge import Flee, StandAndShoot, charge, stand_and_shoot
 from avelorn.tow.combat.context import CombatContext
 from avelorn.tow.combat.contingent import Charge, ChargeArc, Contingent
 from avelorn.tow.combat.melee import combat_result, fight
 from avelorn.tow.combat.shooting import shoot_unit
 from avelorn.tow.data import TOWRepository
+from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.unit import Unit
 
 REPO = TOWRepository()
+
+# The shooting chapter's rules in force, built directly: these tests
+# exercise the combat layer, which must not depend on game assembly.
+IN_FORCE = {r.name: r for r in REPO.rules.values() if r.category == Phase.SHOOTING and r.effects}
 
 
 def _fielded(unit: Unit, models: int) -> Contingent:
@@ -29,13 +35,13 @@ def test_stand_and_shoot_applies_the_minus_one_to_hit() -> None:
         _fielded(archers, 10),
         _fielded(spearmen, 10),
         REPO.weapons["longbow"],
-        rules=REPO.rules,
+        phase_rules=IN_FORCE,
     )
     reaction = stand_and_shoot(
         _fielded(archers, 10),
         _fielded(spearmen, 10),
         REPO.weapons["longbow"],
-        rules=REPO.rules,
+        phase_rules=IN_FORCE,
     )
     assert plain.hit_target == 3
     assert reaction.hit_target == 4  # -1 To Hit for Standing and Shooting
@@ -53,13 +59,13 @@ def test_stand_and_shoot_is_exempt_from_firing_at_long_range() -> None:
         _fielded(archers, 10),
         _fielded(spearmen, 10),
         REPO.weapons["longbow"],
-        rules=REPO.rules,
+        phase_rules=IN_FORCE,
     )
     reaction = stand_and_shoot(
         _fielded(archers, 10),
         _fielded(spearmen, 10),
         REPO.weapons["longbow"],
-        rules=REPO.rules,
+        phase_rules=IN_FORCE,
     )
     assert any("Firing at Long Range" in note for note in plain.notes)
     assert not any("Firing at Long Range" in note for note in reaction.notes)
@@ -72,7 +78,7 @@ def test_stand_and_shoot_caps_casualties_at_the_charging_unit_size() -> None:
         _fielded(archers, 20),
         _fielded(spearmen, 5),
         REPO.weapons["longbow"],
-        rules=REPO.rules,
+        phase_rules=IN_FORCE,
     )
     assert reaction.target_models == 5
     assert len(reaction.casualties) == 6  # 0..5
@@ -95,7 +101,7 @@ def test_charge_sequence_matches_mixing_the_survivor_fights_by_hand() -> None:
     models = 3
     charger = _fielded(spearmen, models)
     defender = _fielded(archers, 3)
-    reaction = stand_and_shoot(defender, charger, REPO.weapons["longbow"], rules=REPO.rules)
+    reaction = stand_and_shoot(defender, charger, REPO.weapons["longbow"], phase_rules=IN_FORCE)
 
     composed = fight(
         charger,
@@ -136,7 +142,7 @@ def test_stand_and_shoot_erodes_the_chargers_combat_result() -> None:
     charger = _fielded(spearmen, 10)
     defender = _fielded(archers, 10)
     situation = CombatContext(a_charge=Charge(8, ChargeArc.FRONT))
-    reaction = stand_and_shoot(defender, charger, REPO.weapons["longbow"], rules=REPO.rules)
+    reaction = stand_and_shoot(defender, charger, REPO.weapons["longbow"], phase_rules=IN_FORCE)
 
     unshot = combat_result(
         fight(
@@ -167,7 +173,7 @@ def test_force_short_range_honours_long_range_as_a_no_op() -> None:
         _fielded(archers, 10),
         _fielded(spearmen, 10),
         REPO.weapons["longbow"],
-        rules=REPO.rules,
+        phase_rules=IN_FORCE,
         force_short_range=True,
     )
     assert not any("Firing at Long Range" in note for note in forced.notes)
@@ -191,10 +197,10 @@ def test_charge_composes_the_reaction_into_the_fight() -> None:
         charger_weapon=spear,
         target_weapon=hand,
         reaction=StandAndShoot(longbow),
-        rules=REPO.rules,
+        phase_rules=IN_FORCE,
     )
 
-    volley = stand_and_shoot(target, charger, longbow, rules=REPO.rules)
+    volley = stand_and_shoot(target, charger, longbow, phase_rules=IN_FORCE)
     manual = fight(
         charger,
         target,
@@ -221,7 +227,7 @@ def test_charge_against_a_holding_target_has_no_volley() -> None:
         move=move,
         charger_weapon=spear,
         target_weapon=hand,
-        rules=REPO.rules,
+        phase_rules=IN_FORCE,
     )
 
     manual = fight(
@@ -233,3 +239,37 @@ def test_charge_against_a_holding_target_has_no_volley() -> None:
     )
     assert outcome.reaction is None
     assert outcome.melee.losses == manual.losses
+
+
+def test_the_reaction_vocabulary_is_the_printed_three() -> None:
+    """Hold is the default and takes no volley; Flee is a loud error.
+
+    "There are three charge reactions available to the inactive player:
+    Hold, Stand & Shoot and Flee" (the-movement-phase/charge-reactions).
+    Flee is in the vocabulary but not modelled, and refusing loudly
+    beats resolving a charge whose target silently stood still.
+    """
+    charger = _fielded(REPO.units["elven-spearmen"], 5)
+    target = _fielded(REPO.units["elven-archers"], 5)
+    spear = REPO.weapons["thrusting-spear"]
+    hand = REPO.weapons["hand-weapon"]
+    move = Charge(3, ChargeArc.FRONT)
+    held = charge(
+        charger,
+        target,
+        move=move,
+        charger_weapon=spear,
+        target_weapon=hand,
+        phase_rules=IN_FORCE,
+    )
+    assert held.reaction is None  # Hold: no volley precedes the fight
+    with pytest.raises(UnmodelledRuleError, match="Flee"):
+        charge(
+            charger,
+            target,
+            move=move,
+            charger_weapon=spear,
+            target_weapon=hand,
+            reaction=Flee(),
+            phase_rules=IN_FORCE,
+        )

@@ -18,11 +18,8 @@ import logging
 from avelorn.core.dice import expected_value
 from avelorn.core.logging import configure_logging
 from avelorn.tow.combat.context import CombatContext
-from avelorn.tow.combat.contingent import Contingent
-from avelorn.tow.combat.melee import combat_result, fight
-from avelorn.tow.combat.morale import break_test
 from avelorn.tow.combat.query import Comparator, Predicate, evaluate, fight_distributions
-from avelorn.tow.data import TOWRepository
+from avelorn.tow.game import TOWGame
 
 
 def _print_casualties(label: str, casualties: list[float], fighters: int) -> None:
@@ -61,26 +58,22 @@ def main() -> None:
     if args.verbose:
         configure_logging(logging.DEBUG)
 
-    repo = TOWRepository()
-    unit_a = repo.units[args.unit_a]
-    unit_b = repo.units[args.unit_b]
-    weapon_a = weapon_b = repo.weapons[args.weapon]
+    game = TOWGame.load_data()
+    unit_a = game.units[args.unit_a]
+    unit_b = game.units[args.unit_b]
+    weapon_a = weapon_b = game.weapons[args.weapon]
 
-    a = Contingent.field(
-        unit_a, args.a_fighters, weapons=repo.weapons, armoury=repo.armoury, rules=repo.rules
-    )
-    b = Contingent.field(
-        unit_b, args.b_fighters, weapons=repo.weapons, armoury=repo.armoury, rules=repo.rules
-    )
-    result = fight(
+    a = game.field(unit_a, args.a_fighters)
+    b = game.field(unit_b, args.b_fighters)
+    result = game.combat.fight(
         a,
         b,
         a_weapon=weapon_a,
         b_weapon=weapon_b,
         context=CombatContext(first_round=args.first_round),
     )
-    scored = combat_result(result)
-    breaks = break_test(scored, unit_a, unit_b)
+    scored = game.combat.result(result)
+    breaks = game.combat.break_test(scored, unit_a, unit_b)
 
     init_a = result.a_initiative.value
     init_b = result.b_initiative.value
@@ -89,26 +82,22 @@ def main() -> None:
         f"({weapon_a.name} vs {weapon_b.name})"
     )
     if result.first_striker is None:
-        print(f"  striking order: simultaneous (both Initiative {init_a})")
+        print(f"  striking order: simultaneous (both Initiative {init_a})\n")
     else:
         first = "A" if result.first_striker is a else "B"
-        print(f"  striking order: {first} strikes first (Initiative {init_a} vs {init_b})")
-    print("  (assumes every fighter is in base contact at full Attacks;")
-    print("   fighting ranks & supporting attacks not yet modelled — #28)")
-    print()
+        print(f"  striking order: {first} strikes first (Initiative {init_a} vs {init_b})\n")
 
     _print_casualties(f"{unit_a.name} (A)", result.a_casualties, args.a_fighters)
     print()
     _print_casualties(f"{unit_b.name} (B)", result.b_casualties, args.b_fighters)
 
-    print()
-    print("  combat result:")
-    print(f"  - P(A wins):  {scored.p_a_wins:.3f}")
-    print(f"  - P(draw):    {scored.p_draw:.3f}")
-    print(f"  - P(B wins):  {scored.p_b_wins:.3f}")
-
-    print()
-    print("  break test (only the loser tests):")
+    print(
+        f"\n  combat result:\n"
+        f"  - P(A wins):  {scored.p_a_wins:.3f}\n"
+        f"  - P(draw):    {scored.p_draw:.3f}\n"
+        f"  - P(B wins):  {scored.p_b_wins:.3f}\n"
+        f"\n  break test (only the loser tests):"
+    )
     for label, side in (("A", breaks.a), ("B", breaks.b)):
         lost = side.p_gives_ground + side.p_falls_back + side.p_breaks
         print(
@@ -119,16 +108,16 @@ def main() -> None:
 
     # Exact distributional queries over the round, via the query layer.
     dists = fight_distributions(result)
-    print()
-    print("  exact queries:")
     b_bloodied = evaluate(dists["b_casualties"], Predicate(Comparator.AT_LEAST, 1))
     a_unscathed = evaluate(dists["a_survivors"], Predicate(Comparator.EXACTLY, args.a_fighters))
-    print(f"  - P(B loses at least one): {b_bloodied:.3f}")
-    print(f"  - P(A comes through unscathed): {a_unscathed:.3f}")
+    print(
+        f"\n  exact queries:\n"
+        f"  - P(B loses at least one): {b_bloodied:.3f}\n"
+        f"  - P(A comes through unscathed): {a_unscathed:.3f}"
+    )
 
     if result.notes:
-        print()
-        print("  not factored into the math:")
+        print("\n  not factored into the math:")
         for note in result.notes:
             print(f"  - {note}")
 
