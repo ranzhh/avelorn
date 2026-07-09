@@ -15,7 +15,7 @@ the other strikes back — is composed on top of this, later.
 """
 
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, replace
 from math import isclose
 from typing import assert_never
@@ -257,8 +257,6 @@ def _engage(
 
     armour_value = defender_armour(defender.loadout)
     notes: list[str] = []
-    for side in (shooter, target):
-        notes.extend(_unfactored_rule_note(rule, side) for rule in side.special_rules)
     # Melee engagement conditions (charging, flank/rear, ...) are not
     # modelled yet, so no facts are supplied: a rule needing one stays
     # unfactored and noted.
@@ -348,7 +346,11 @@ def strike_unit(
         p_unsaved=engagement.p_unsaved,
         distribution=distribution,
         casualties=casualties,
-        notes=engagement.notes,
+        notes=(
+            *_unit_rule_notes(attacker.unit),
+            *_unit_rule_notes(defender.unit),
+            *engagement.notes,
+        ),
         target_models=defenders,
     )
 
@@ -388,10 +390,15 @@ class FightResult:
         return [sum(row[k] for row in self.losses) for k in range(columns)]
 
 
-def _unfactored_rule_note(printed: str, unit: Unit) -> str:
-    # The one phrasing of "this unit rule is not in the math" — built
-    # here and matched in fight() when a rule *is* factored.
-    return f"special rule not factored: {printed} ({unit.name})"
+def _unit_rule_notes(unit: Unit, claimed: Collection[str] = ()) -> list[str]:
+    # The one owner of a unit rule's disposition: noted unless a consumer
+    # claimed it (the initiative read claims what it factored, honoured
+    # no-ops included). Notes are built once, never parsed or matched.
+    return [
+        f"special rule not factored: {printed} ({unit.name})"
+        for printed in unit.special_rules
+        if printed not in claimed
+    ]
 
 
 def _combat_conditions(
@@ -548,17 +555,17 @@ def fight(
                     losses[a_lost][b_lost] += weight * mass
 
     first_striker = None if a_first is None else (a if a_first else b)
-    # A rule factored into the striking order is in the math: its blanket
-    # "not factored" note no longer holds and is dropped.
-    factored = {
-        _unfactored_rule_note(name, side.unit)
-        for side, initiative in ((a, a_initiative), (b, b_initiative))
-        for name in initiative.factored
-    }
+    # A rule factored into the striking order is in the math — claimed,
+    # so never noted; a mirror match dedups the identical remainder.
     notes = tuple(
-        note
-        for note in dict.fromkeys([*a_strikes.notes, *b_strikes.notes])
-        if note not in factored
+        dict.fromkeys(
+            [
+                *_unit_rule_notes(a.unit, claimed=a_initiative.factored),
+                *_unit_rule_notes(b.unit, claimed=b_initiative.factored),
+                *a_strikes.notes,
+                *b_strikes.notes,
+            ]
+        )
     )
     logger.debug(
         "fight: %s vs %s, first=%s",
