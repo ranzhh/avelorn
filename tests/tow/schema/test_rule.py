@@ -202,3 +202,16 @@ def test_reroll_effect_rejects_unknown_cause() -> None:
         _EFFECT.validate_python(
             {"kind": "re-roll", "stage": "make-panic-tests", "causes": ["bad-day"]}
         )
+
+
+def test_then_speaks_to_one_seam() -> None:
+    """One effect may not move a roll quantity and a characteristic together.
+
+    The dice walk consumes roll quantities and the characteristic read
+    consumes characteristics; all-or-nothing reporting holds per
+    consumer, so a mixed then could be half-consumed while its rule's
+    note is dropped whole. A rule whose sentence does both writes two
+    effects.
+    """
+    with pytest.raises(ValidationError, match="may not mix"):
+        _EFFECT.validate_python({"then": {"to-hit": -1, "I": 1}})

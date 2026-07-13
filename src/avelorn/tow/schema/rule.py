@@ -154,6 +154,18 @@ class ModifierEffect(BaseModel):
             raise ValueError("maximum bounds a characteristic; the then moves none")
         return self
 
+    @model_validator(mode="after")
+    def _then_speaks_to_one_seam(self) -> "ModifierEffect":
+        # Roll quantities are consumed by the dice walk, characteristics
+        # by the effective-characteristic query. All-or-nothing
+        # reporting holds per consumer, so one effect may not straddle
+        # them: a mixed then could be half-consumed while its rule's
+        # note is dropped whole. Split the sentence into two effects.
+        seams = {isinstance(quantity, Characteristic) for quantity in self.then}
+        if len(seams) == 2:
+            raise ValueError("a then may not mix roll quantities with characteristics")
+        return self
+
     @property
     def natural(self) -> NaturalRoll | None:
         """The event trigger, if the when names one.
