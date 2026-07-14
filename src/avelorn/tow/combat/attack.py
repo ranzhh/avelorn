@@ -90,26 +90,17 @@ def roll_target(target: int | None) -> RollTarget:
     return RollState.IMPOSSIBLE if target is None else target
 
 
-# Which of the profile's targets each stage's roll reads — declared
-# beside the profile so the stage-to-target correspondence has one home.
-_TARGETS = {
-    Stage.ROLL_TO_HIT: "hit_target",
-    Stage.ROLL_TO_WOUND: "wound_target",
-    Stage.MAKE_ARMOUR_SAVES: "save_target",
-    Stage.WARD_SAVES: "ward_target",
-}
-
-
 @dataclass(frozen=True)
 class AttackProfile:
     """Roll targets and outcome semantics for one attack.
 
     Each target is either the required roll or a :class:`RollState`;
     :meth:`target` and :meth:`with_target` address them by the stage
-    whose roll they decide, so callers need not know the field names.
-    ``unsaved_outcome`` is the class an unsaved wound resolves to;
-    transforms escalate it (a Killing Blow turns it into an instant
-    kill for the rest of the walk).
+    whose roll they decide, so no caller spells a field name. Both
+    matches are held to the schema's ATTACK_ROLLS by a drift-guard
+    test. ``unsaved_outcome`` is the class an unsaved wound resolves
+    to; transforms escalate it (a Killing Blow turns it into an
+    instant kill for the rest of the walk).
     """
 
     hit_target: RollTarget
@@ -119,20 +110,46 @@ class AttackProfile:
     unsaved_outcome: Outcome = Outcome.UNSAVED_WOUND
 
     def target(self, stage: Stage) -> RollTarget:
-        """The target of ``stage``'s roll; a stage that rolls nothing is a KeyError.
+        """The target of ``stage``'s roll.
 
         Returns:
             The roll target that stage reads.
+
+        Raises:
+            KeyError: ``stage`` rolls no target of this profile.
         """
-        return getattr(self, _TARGETS[stage])
+        match stage:
+            case Stage.ROLL_TO_HIT:
+                return self.hit_target
+            case Stage.ROLL_TO_WOUND:
+                return self.wound_target
+            case Stage.MAKE_ARMOUR_SAVES:
+                return self.save_target
+            case Stage.WARD_SAVES:
+                return self.ward_target
+            case rollless:
+                raise KeyError(rollless)
 
     def with_target(self, stage: Stage, target: RollTarget) -> "AttackProfile":
-        """A copy with ``stage``'s roll target replaced; a rollless stage is a KeyError.
+        """A copy with ``stage``'s roll target replaced.
 
         Returns:
             The updated profile.
+
+        Raises:
+            KeyError: ``stage`` rolls no target of this profile.
         """
-        return replace(self, **{_TARGETS[stage]: target})
+        match stage:
+            case Stage.ROLL_TO_HIT:
+                return replace(self, hit_target=target)
+            case Stage.ROLL_TO_WOUND:
+                return replace(self, wound_target=target)
+            case Stage.MAKE_ARMOUR_SAVES:
+                return replace(self, save_target=target)
+            case Stage.WARD_SAVES:
+                return replace(self, ward_target=target)
+            case rollless:
+                raise KeyError(rollless)
 
 
 @dataclass(frozen=True)

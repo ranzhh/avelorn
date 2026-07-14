@@ -337,10 +337,17 @@ def test_profile_targets_cover_exactly_the_attack_rolls() -> None:
     event may name) and the profile's stage-addressed targets are one
     set — a roll joining either side must join both.
     """
-    from avelorn.tow.combat.attack import _TARGETS
     from avelorn.tow.schema.stage import ATTACK_ROLLS
 
-    assert set(_TARGETS) == ATTACK_ROLLS
+    profile = AttackProfile(hit_target=3, wound_target=4, save_target=5, ward_target=6)
+    for stage in Stage:
+        if stage in ATTACK_ROLLS:
+            assert profile.with_target(stage, 2).target(stage) == 2
+        else:
+            with pytest.raises(KeyError):
+                profile.target(stage)
+            with pytest.raises(KeyError):
+                profile.with_target(stage, 2)
 
 
 # --- Modifier records: the walk interprets data, not closures ---
