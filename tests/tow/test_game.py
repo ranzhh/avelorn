@@ -88,13 +88,13 @@ def test_turn_is_the_printed_sequence() -> None:
 def test_steps_follow_the_stage_declaration_order(binding: str) -> None:
     """Each phase's printed steps keep the Stage vocabulary's order.
 
-    Drift guard: the engine's walk derives its ordering from Stage
-    declaration order, so a phase's steps must never disagree with it.
-    Vacuous for phases with no steps yet — deliberately: the guard is
-    already standing when they gain their first.
+    Every step knows its stage; the walk derives its ordering from
+    Stage declaration order, so a phase's steps must never disagree
+    with it. Vacuous for phases with no steps yet — deliberately: the
+    guard is already standing when they gain their first.
     """
-    steps = getattr(GAME, binding).steps
-    assert list(steps) == [stage for stage in Stage if stage in set(steps)]
+    stages = [step.stage for step in getattr(GAME, binding).steps]
+    assert stages == [stage for stage in Stage if stage in set(stages)]
 
 
 def test_volley_delegates_to_shoot_unit() -> None:
@@ -160,18 +160,18 @@ def test_the_charge_is_a_movement_action() -> None:
 
 
 def test_each_phase_declares_the_dice_the_engine_rolls() -> None:
-    """The phase is the declaration of its dice; the factory answers to it.
+    """The phase's steps are the declaration; the attack factory answers to it.
 
-    Drift guard: an attack built for a phase must roll exactly the dice
-    that phase declares, in printed order — and the dice cover the
-    phase's roll steps.
+    Drift guard: an attack built for a phase must roll exactly the
+    attack dice its steps declare, in printed order. Steps that are no
+    attack roll (the panic test's unit-wide 2D6) sit in the same tuple,
+    each knowing what it rolls.
     """
-    from avelorn.tow.combat.attack import AttackProfile
+    from avelorn.tow.combat.attack import AttackProfile, AttackRoll
 
     shot = AttackProfile.shooting(hit_target=4, wound_target=4, save_target=4, ward_target=4)
     blow = AttackProfile.melee(hit_target=4, wound_target=4, save_target=4, ward_target=4)
-    assert tuple(type(roll) for roll in shot.rolls) == GAME.shooting.rolls
-    assert tuple(type(roll) for roll in blow.rolls) == GAME.combat.rolls
-    for phase in (GAME.shooting, GAME.combat):
-        roll_steps = [stage for stage in phase.steps if stage in {r.stage for r in phase.rolls}]
-        assert roll_steps == [roll.stage for roll in phase.rolls]
+    attack_steps = tuple(s for s in GAME.shooting.steps if issubclass(s, AttackRoll))
+    assert tuple(type(roll) for roll in shot.rolls) == attack_steps
+    attack_steps = tuple(s for s in GAME.combat.steps if issubclass(s, AttackRoll))
+    assert tuple(type(roll) for roll in blow.rolls) == attack_steps

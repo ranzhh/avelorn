@@ -25,9 +25,12 @@ casualty outcome branches through the trigger and the test, exactly.
 import logging
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from fractions import Fraction
 from itertools import product
+from typing import ClassVar
 
-from avelorn.tow.combat.characteristic_tests import unit_pass_probability
+from avelorn.tow.combat.attack import Roll
+from avelorn.tow.combat.characteristic_tests import pass_probability
 from avelorn.tow.combat.contingent import Contingent, Loadout
 from avelorn.tow.combat.melee import CombatResult
 from avelorn.tow.combat.shooting import ShootingResult
@@ -37,6 +40,28 @@ from avelorn.tow.schema.stage import Stage
 from avelorn.tow.schema.unit import Characteristic, Unit
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class PanicTest(Roll):
+    """The Make Panic Tests step's dice: 2D6 against the unit's Leadership.
+
+    Rolled once for the whole unit — no single natural face exists, so
+    it is no attack roll and a ``natural:`` trigger cannot name it. The
+    printed bounds (a double 6 always fails, a double 1 always passes)
+    live in the characteristic-test procedure this delegates to.
+    """
+
+    leadership: int | None
+    stage: ClassVar[Stage] = Stage.MAKE_PANIC_TESTS
+
+    def chance(self) -> Fraction:
+        """The probability the test passes.
+
+        Returns:
+            The exact pass probability, 0 for no Leadership at all.
+        """
+        return pass_probability(Characteristic.LEADERSHIP, self.leadership)
 
 
 @dataclass(frozen=True)
@@ -81,7 +106,8 @@ def make_panic_tests(
     if battle < size:
         raise ValueError(f"battle strength ({battle}) cannot be below current size ({size})")
 
-    p_pass = float(unit_pass_probability(defender.unit, Characteristic.LEADERSHIP))
+    test = PanicTest(defender.unit.highest(Characteristic.LEADERSHIP))
+    p_pass = float(test.chance())
     reroll_from = _reroll_grant(defender.loadout, PanicCause.HEAVY_CASUALTIES)
     if reroll_from is not None:
         # A failed test is taken again: both dice, same natural bounds,

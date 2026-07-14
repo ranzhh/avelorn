@@ -78,6 +78,30 @@ def roll_target(target: int | None) -> RollTarget:
 
 @dataclass(frozen=True)
 class Roll:
+    """The dice of one printed step: every step knows what it rolls.
+
+    The common shape of everything a phase's steps roll — an attack
+    die, a 2D6 Leadership test, whatever the step prints. Subclasses
+    own their printed semantics and answer :meth:`chance`; a phase's
+    ``steps`` tuple is made of these, one kind per step.
+    """
+
+    stage: ClassVar[Stage]
+
+    def chance(self) -> Fraction:
+        """The probability this roll succeeds; each kind answers its own.
+
+        Returns:
+            The exact success probability.
+
+        Raises:
+            NotImplementedError: the base knows no dice of its own.
+        """
+        raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class AttackRoll(Roll):
     """One roll of the printed attack sequence: its stage, its target, its die.
 
     Subclasses own their printed semantics — everything the die means
@@ -90,7 +114,6 @@ class Roll:
     """
 
     target: RollTarget
-    stage: ClassVar[Stage]
 
     def branches(self) -> Iterator[tuple[Fraction, int, bool]]:
         """Enumerate this roll's die, branch by branch.
@@ -126,7 +149,7 @@ CONFIRM_TARGETS = {7: 4, 8: 5, 9: 6}
 
 
 @dataclass(frozen=True)
-class RollToHitShooting(Roll):
+class RollToHitShooting(AttackRoll):
     """The Roll to Hit of shooting: a target of 7+ confirms on a second die.
 
     Its combat peer is :class:`RollToHitCombat`; the rulebook prints
@@ -157,7 +180,7 @@ class RollToHitShooting(Roll):
 
 
 @dataclass(frozen=True)
-class RollToHitCombat(Roll):
+class RollToHitCombat(AttackRoll):
     """The Roll to Hit of close combat: a natural 6 always hits, a natural 1 always misses.
 
     Its shooting peer is :class:`RollToHitShooting`; here no
@@ -182,7 +205,7 @@ class RollToHitCombat(Roll):
 
 
 @dataclass(frozen=True)
-class RollToWound(Roll):
+class RollToWound(AttackRoll):
     """The Roll to Wound: the shared die, no specials of its own yet.
 
     Wound-roll particulars join here when a rule needs them — nothing
@@ -193,7 +216,7 @@ class RollToWound(Roll):
 
 
 @dataclass(frozen=True)
-class Save(Roll):
+class Save(AttackRoll):
     """A save: a target worsened past 6+ cannot be attempted.
 
     No roll is taken — no die, no natural face — the walk-side mirror of
@@ -240,7 +263,7 @@ class AttackProfile:
     kill for the rest of the walk).
     """
 
-    rolls: tuple[Roll, ...]
+    rolls: tuple[AttackRoll, ...]
     unsaved_outcome: Outcome = Outcome.UNSAVED_WOUND
 
     @classmethod
@@ -293,7 +316,7 @@ class AttackProfile:
             unsaved_outcome=unsaved_outcome,
         )
 
-    def roll(self, stage: Stage) -> Roll:
+    def roll(self, stage: Stage) -> AttackRoll:
         """The roll of ``stage``, semantics and current target together.
 
         Returns:

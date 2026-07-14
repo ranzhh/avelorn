@@ -8,10 +8,9 @@ from avelorn.core.game import Phase
 from avelorn.tow.combat.attack import ArmourSave, Roll, RollToHitShooting, RollToWound, WardSave
 from avelorn.tow.combat.context import EngagementContext
 from avelorn.tow.combat.contingent import Contingent
-from avelorn.tow.combat.morale import PanicResult, make_panic_tests
+from avelorn.tow.combat.morale import PanicResult, PanicTest, make_panic_tests
 from avelorn.tow.combat.shooting import ShootingResult, shoot_unit
 from avelorn.tow.schema.rule import Rule
-from avelorn.tow.schema.stage import Stage
 from avelorn.tow.schema.weapon import Weapon
 
 
@@ -25,22 +24,16 @@ class ShootingPhase(Phase):
 
     in_play: Mapping[str, Rule]
 
-    # The phase's dice, in printed order, each owning its semantics
-    # (this Roll to Hit confirms 7+). This is the declaration: a
-    # drift-guard test holds the attack factory to it.
-    rolls: ClassVar[tuple[type[Roll], ...]] = (
+    # The printed shooting sequence: every step knows what it rolls —
+    # attack dice with their semantics (this Roll to Hit confirms 7+),
+    # then the unit-wide 2D6 panic test. The declaration: drift guards
+    # hold the attack factory and the Stage order to it.
+    steps: ClassVar[tuple[type[Roll], ...]] = (
         RollToHitShooting,
         RollToWound,
         ArmourSave,
         WardSave,
-    )
-    # The printed shooting sequence.
-    steps: ClassVar[tuple[Stage, ...]] = (
-        Stage.ROLL_TO_HIT,
-        Stage.ROLL_TO_WOUND,
-        Stage.MAKE_ARMOUR_SAVES,
-        Stage.WARD_SAVES,
-        Stage.MAKE_PANIC_TESTS,
+        PanicTest,
     )
 
     def volley(
