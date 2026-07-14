@@ -240,6 +240,28 @@ class Contingent:
         """
         return Formation(self.models, self.frontage)
 
+    @property
+    def rank_bonus(self) -> int:
+        """The combat-result Rank Bonus this contingent's formation claims.
+
+        +1 for each rank behind the first that is wide enough to count,
+        capped by the troop type. A full rank at the frontage counts; an
+        incomplete rear rank counts when it holds the troop type's
+        required models. A troop type that does not rank up claims none.
+        Counted from the fielded models — the round's starting formation.
+
+        Returns:
+            The Rank Bonus, from 0 up to the troop type's maximum.
+        """
+        profile = self.unit.rank_and_file
+        per_rank = profile.models_per_rank
+        if per_rank is None or self.frontage < per_rank:
+            return 0
+        formation = self.formation
+        rear = 1 if formation.remainder >= per_rank else 0
+        ranks_behind_first = formation.full_ranks + rear - 1
+        return min(max(ranks_behind_first, 0), profile.max_rank_bonus)
+
     def wields(self, weapon: Weapon) -> Weapon:
         """The weapon, confirmed carried: a unit fights with what it has.
 

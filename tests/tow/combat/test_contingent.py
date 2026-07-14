@@ -292,3 +292,37 @@ def test_frontage_must_be_a_positive_width(spearmen_unit: Unit) -> None:
     """A frontage below one model wide is a programming error, not a zero."""
     with pytest.raises(ValueError, match="at least 1 model wide"):
         _fielded(spearmen_unit, 10, frontage=0)
+
+
+# --- the rank bonus a formation claims ---
+
+
+def test_rank_bonus_counts_ranks_behind_the_first(spearmen_unit: Unit) -> None:
+    """Regular Infantry (5 wide): +1 for each full rank behind the first."""
+    assert _fielded(spearmen_unit, 5).rank_bonus == 0  # one rank
+    assert _fielded(spearmen_unit, 10).rank_bonus == 1  # two ranks
+    assert _fielded(spearmen_unit, 15).rank_bonus == 2  # three ranks
+
+
+def test_rank_bonus_is_capped_by_troop_type(spearmen_unit: Unit) -> None:
+    """Regular Infantry cap the bonus at +2, however deep the unit ranks."""
+    assert _fielded(spearmen_unit, 25).rank_bonus == 2  # five ranks, capped
+
+
+def test_a_rear_rank_counts_only_when_wide_enough(spearmen_unit: Unit) -> None:
+    """Ranked six wide, an incomplete rear rank counts only with five in it."""
+    assert _fielded(spearmen_unit, 10, frontage=6).rank_bonus == 0  # 6 + rear of 4
+    assert _fielded(spearmen_unit, 11, frontage=6).rank_bonus == 1  # 6 + rear of 5
+
+
+def test_a_wider_frontage_trades_ranks_for_width(spearmen_unit: Unit) -> None:
+    """Ranking wider claims fewer ranks: ten models ten wide is a single rank."""
+    assert _fielded(spearmen_unit, 10, frontage=10).rank_bonus == 0
+
+
+def test_a_troop_type_that_does_not_rank_up_claims_no_bonus(spearmen_unit: Unit) -> None:
+    """A single-model troop type claims no bonus, however many models."""
+    monster = spearmen_unit.model_copy(
+        update={"troop_type_profile": REPO.troop_types["monstrous-creature"]}
+    )
+    assert _fielded(monster, 6).rank_bonus == 0
