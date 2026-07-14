@@ -5,7 +5,7 @@ from typing import Literal
 
 import pytest
 
-from avelorn.tow.combat.attack import AttackProfile, HitRoll, RollState, resolve_attack
+from avelorn.tow.combat.attack import AttackProfile, RollState, resolve_attack
 from avelorn.tow.combat.context import EngagementContext
 from avelorn.tow.combat.contingent import Contingent
 from avelorn.tow.combat.rules import (
@@ -87,12 +87,10 @@ def test_compile_armour_bane_from_data_reproduces_the_golden() -> None:
     index = _fielded(REPO.units["elven-archers"], 1).loadout.weapon_rules
     transforms, unfactored = compile_rules(["Armour Bane (1)"], index)
     assert unfactored == []
-    profile = AttackProfile(
+    profile = AttackProfile.shooting(
         hit_target=3, wound_target=4, save_target=5, ward_target=RollState.IMPOSSIBLE
     )
-    assert resolve_attack(profile, transforms, hit_roll=HitRoll.SHOOTING).p_unsaved == Fraction(
-        13, 54
-    )
+    assert resolve_attack(profile, transforms).p_unsaved == Fraction(13, 54)
 
 
 def test_compile_effectless_rule_stays_unfactored() -> None:
@@ -120,12 +118,10 @@ def test_unconditional_armour_piercing_modifier_factors() -> None:
     rules = _one_rule(ModifierEffect(then={"armour-piercing": 1}))
     transforms, unfactored = compile_rules(["Doctored"], rules)
     assert unfactored == []
-    profile = AttackProfile(
+    profile = AttackProfile.shooting(
         hit_target=3, wound_target=4, save_target=5, ward_target=RollState.IMPOSSIBLE
     )
-    assert resolve_attack(profile, transforms, hit_roll=HitRoll.SHOOTING).p_unsaved == Fraction(
-        5, 18
-    )
+    assert resolve_attack(profile, transforms).p_unsaved == Fraction(5, 18)
 
 
 def test_trigger_at_or_after_the_landing_stage_stays_unfactored() -> None:
@@ -310,7 +306,7 @@ def test_every_modifier_kind_declares_its_roll() -> None:
     from avelorn.tow.combat.rules import _ROLLS
     from avelorn.tow.schema.rule import ModifierKind
 
-    profile = AttackProfile(hit_target=4, wound_target=4, save_target=4, ward_target=4)
+    profile = AttackProfile.shooting(hit_target=4, wound_target=4, save_target=4, ward_target=4)
     for kind in get_args(ModifierKind):
         assert kind in _ROLLS, kind
         profile.target(_ROLLS[kind].stage)  # KeyError if the stage rolls no target
@@ -328,12 +324,10 @@ def test_armour_bane_two_leaves_no_save_at_all() -> None:
     assert bane is not None
     transforms, unfactored = compile_rules(["Armour Bane (2)"], {bane.name: bane})
     assert unfactored == []
-    profile = AttackProfile(
+    profile = AttackProfile.shooting(
         hit_target=3, wound_target=4, save_target=5, ward_target=RollState.IMPOSSIBLE
     )
-    assert resolve_attack(profile, transforms, hit_roll=HitRoll.SHOOTING).p_unsaved == Fraction(
-        7, 27
-    )
+    assert resolve_attack(profile, transforms).p_unsaved == Fraction(7, 27)
 
 
 # --- effective_characteristic: the characteristic-read query ---

@@ -24,7 +24,6 @@ from avelorn.core.dice import expected_value
 from avelorn.tow.combat.armour import defender_armour
 from avelorn.tow.combat.attack import (
     AttackProfile,
-    HitRoll,
     Modifier,
     Outcome,
     Transform,
@@ -183,7 +182,7 @@ def _per_attack(
     # target after the rules' changes — the counts that depend only on the matchup,
     # not on how many models are swinging.
     resolution = resolve_attack(
-        AttackProfile(
+        AttackProfile.melee(
             hit_target=hit,
             wound_target=roll_target(wound),
             save_target=roll_target(save),
@@ -191,7 +190,6 @@ def _per_attack(
         ),
         modifiers,
         transforms,
-        hit_roll=HitRoll.MELEE,
     )
     effective = resolution.hit_target if isinstance(resolution.hit_target, int) else hit
     return float(resolution.p_unsaved), float(resolution.p_of(Outcome.INSTANT_KILL)), effective

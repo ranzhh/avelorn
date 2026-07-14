@@ -235,7 +235,8 @@ def _killing_blow_double() -> Transform:
         if face != 6:
             return profile
         return replace(
-            profile, save_target=RollState.IMPOSSIBLE, unsaved_outcome=Outcome.INSTANT_KILL
+            profile.with_target(Stage.MAKE_ARMOUR_SAVES, RollState.IMPOSSIBLE),
+            unsaved_outcome=Outcome.INSTANT_KILL,
         )
 
     return Transform(stage=Stage.ROLL_TO_WOUND, on_success=escalate)

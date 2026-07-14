@@ -22,8 +22,8 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from fractions import Fraction
+from typing import ClassVar
 
-from avelorn.tow.combat.charts import CONFIRM_TARGETS
 from avelorn.tow.schema.rule import NaturalRoll
 from avelorn.tow.schema.stage import Stage
 
@@ -31,20 +31,6 @@ logger = logging.getLogger(__name__)
 
 _FACE = Fraction(1, 6)
 _FACES = range(1, 7)
-
-
-class HitRoll(StrEnum):
-    """How a To Hit roll resolves beyond the die's face.
-
-    Shooting confirms a target of 7+ with a second roll ("7 to Hit");
-    close combat has no confirmation step — a natural 6 always hits and a
-    natural 1 always misses, regardless of modifiers
-    (the-combat-phase/roll-to-hit-combat). The two stages share the rest
-    of the walk.
-    """
-
-    SHOOTING = "shooting"
-    MELEE = "melee"
 
 
 class Outcome(StrEnum):
@@ -91,65 +77,278 @@ def roll_target(target: int | None) -> RollTarget:
 
 
 @dataclass(frozen=True)
-class AttackProfile:
-    """Roll targets and outcome semantics for one attack.
+class Roll:
+    """One roll of the printed attack sequence: its stage, its target, its die.
 
-    Each target is either the required roll or a :class:`RollState`;
-    :meth:`target` and :meth:`with_target` address them by the stage
-    whose roll they decide, so no caller spells a field name. Both
-    matches are held to the schema's ATTACK_ROLLS by a drift-guard
-    test. ``unsaved_outcome`` is the class an unsaved wound resolves
-    to; transforms escalate it (a Killing Blow turns it into an
-    instant kill for the rest of the walk).
+    Subclasses own their printed semantics — everything the die means
+    beyond its face. :meth:`branches` enumerates the roll exactly,
+    ``(probability, natural face, success)`` per branch, probabilities
+    summing to 1. A :class:`RollState` target takes no die (face 0), so
+    face-triggered rules cannot fire there; every rolled die clamps at
+    2+ — a natural 1 always fails, regardless of modifiers (the rulebook
+    states it per roll, e.g. "Rolls of a Natural 1", p.140).
     """
 
-    hit_target: RollTarget
-    wound_target: RollTarget
-    save_target: RollTarget
-    ward_target: RollTarget
+    target: RollTarget
+    stage: ClassVar[Stage]
+
+    def branches(self) -> Iterator[tuple[Fraction, int, bool]]:
+        """Enumerate this roll's die, branch by branch.
+
+        Yields:
+            ``(probability, natural face, success)`` per branch.
+        """
+        if self.target is RollState.IMPOSSIBLE:
+            yield Fraction(1), 0, False
+            return
+        if self.target is RollState.AUTOMATIC:
+            yield Fraction(1), 0, True
+            return
+        threshold = max(self.target, 2)
+        for face in _FACES:
+            yield _FACE, face, face >= threshold
+
+    def chance(self) -> Fraction:
+        """The probability this roll succeeds, summed over its branches.
+
+        The reported per-stage figures (charts) derive from this, so
+        the die's semantics have one declaration.
+
+        Returns:
+            The exact success probability.
+        """
+        return sum((p for p, _, success in self.branches() if success), Fraction(0))
+
+
+# A To Hit target of 7+ resolves as a natural 6 confirmed at this
+# target ("7 to Hit"); 10+ is impossible.
+CONFIRM_TARGETS = {7: 4, 8: 5, 9: 6}
+
+
+@dataclass(frozen=True)
+class RollToHitShooting(Roll):
+    """The Roll to Hit of shooting: a target of 7+ confirms on a second die.
+
+    Its combat peer is :class:`RollToHitCombat`; the rulebook prints
+    them as separate sections (roll-to-hit-shooting).
+
+    The yielded natural face is the first die's — for the confirmation,
+    the 6 that is being confirmed.
+    """
+
+    stage: ClassVar[Stage] = Stage.ROLL_TO_HIT
+
+    def branches(self) -> Iterator[tuple[Fraction, int, bool]]:
+        """Enumerate the shooting To Hit die, confirming 7+ targets.
+
+        Yields:
+            ``(probability, natural face, success)`` per branch.
+        """
+        if isinstance(self.target, RollState) or self.target <= 6:
+            yield from super().branches()
+            return
+        confirm = CONFIRM_TARGETS.get(self.target)
+        for face in _FACES:
+            if face != 6 or confirm is None:
+                yield _FACE, face, False
+            else:
+                for confirm_face in _FACES:
+                    yield _FACE * _FACE, face, confirm_face >= confirm
+
+
+@dataclass(frozen=True)
+class RollToHitCombat(Roll):
+    """The Roll to Hit of close combat: a natural 6 always hits, a natural 1 always misses.
+
+    Its shooting peer is :class:`RollToHitShooting`; here no
+    confirmation step exists (roll-to-hit-combat) — a target above 6
+    still hits one time in six.
+    """
+
+    stage: ClassVar[Stage] = Stage.ROLL_TO_HIT
+
+    def branches(self) -> Iterator[tuple[Fraction, int, bool]]:
+        """Enumerate the close-combat To Hit die.
+
+        Yields:
+            ``(probability, natural face, success)`` per branch.
+        """
+        if isinstance(self.target, RollState):
+            yield from super().branches()
+            return
+        threshold = max(self.target, 2)
+        for face in _FACES:
+            yield _FACE, face, face == 6 or face >= threshold
+
+
+@dataclass(frozen=True)
+class RollToWound(Roll):
+    """The Roll to Wound: the shared die, no specials of its own yet.
+
+    Wound-roll particulars join here when a rule needs them — nothing
+    modelled today pushes a wound target beyond the printed chart.
+    """
+
+    stage: ClassVar[Stage] = Stage.ROLL_TO_WOUND
+
+
+@dataclass(frozen=True)
+class Save(Roll):
+    """A save: a target worsened past 6+ cannot be attempted.
+
+    No roll is taken — no die, no natural face — the walk-side mirror of
+    the chart, which yields no save for a target past 6+. To Hit
+    differs: its 7+ still rolls, and confirms.
+    """
+
+    def branches(self) -> Iterator[tuple[Fraction, int, bool]]:
+        """Enumerate the save's die; past 6+ there is nothing to roll.
+
+        Yields:
+            ``(probability, natural face, success)`` per branch.
+        """
+        if isinstance(self.target, int) and self.target > 6:
+            yield Fraction(1), 0, False
+            return
+        yield from super().branches()
+
+
+@dataclass(frozen=True)
+class ArmourSave(Save):
+    """The armour save, as Make Armour Saves rolls it."""
+
+    stage: ClassVar[Stage] = Stage.MAKE_ARMOUR_SAVES
+
+
+@dataclass(frozen=True)
+class WardSave(Save):
+    """The ward save; save semantics, its own stage."""
+
+    stage: ClassVar[Stage] = Stage.WARD_SAVES
+
+
+@dataclass(frozen=True)
+class AttackProfile:
+    """One attack: its rolls in printed sequence, and outcome semantics.
+
+    Built by :meth:`shooting` or :meth:`melee` — the two printed attack
+    sequences differ only in how their Roll to Hit resolves, and each
+    roll owns its own semantics. :meth:`target` and :meth:`with_target`
+    address targets by the stage whose roll they decide.
+    ``unsaved_outcome`` is the class an unsaved wound resolves to;
+    transforms escalate it (a Killing Blow turns it into an instant
+    kill for the rest of the walk).
+    """
+
+    rolls: tuple[Roll, ...]
     unsaved_outcome: Outcome = Outcome.UNSAVED_WOUND
 
+    @classmethod
+    def shooting(
+        cls,
+        *,
+        hit_target: RollTarget,
+        wound_target: RollTarget,
+        save_target: RollTarget,
+        ward_target: RollTarget,
+        unsaved_outcome: Outcome = Outcome.UNSAVED_WOUND,
+    ) -> "AttackProfile":
+        """A shooting attack: its Roll to Hit confirms targets of 7+.
+
+        Returns:
+            The profile, each target on its sequence's own roll.
+        """
+        return cls(
+            rolls=(
+                RollToHitShooting(hit_target),
+                RollToWound(wound_target),
+                ArmourSave(save_target),
+                WardSave(ward_target),
+            ),
+            unsaved_outcome=unsaved_outcome,
+        )
+
+    @classmethod
+    def melee(
+        cls,
+        *,
+        hit_target: RollTarget,
+        wound_target: RollTarget,
+        save_target: RollTarget,
+        ward_target: RollTarget,
+        unsaved_outcome: Outcome = Outcome.UNSAVED_WOUND,
+    ) -> "AttackProfile":
+        """A close-combat attack: a natural 6 always hits, a natural 1 always misses.
+
+        Returns:
+            The profile, each target on its sequence's own roll.
+        """
+        return cls(
+            rolls=(
+                RollToHitCombat(hit_target),
+                RollToWound(wound_target),
+                ArmourSave(save_target),
+                WardSave(ward_target),
+            ),
+            unsaved_outcome=unsaved_outcome,
+        )
+
+    def roll(self, stage: Stage) -> Roll:
+        """The roll of ``stage``, semantics and current target together.
+
+        Returns:
+            The roll that stage makes.
+
+        Raises:
+            KeyError: ``stage`` rolls nothing in this attack.
+        """
+        for roll in self.rolls:
+            if roll.stage is stage:
+                return roll
+        raise KeyError(stage)
+
     def target(self, stage: Stage) -> RollTarget:
-        """The target of ``stage``'s roll.
+        """The target of ``stage``'s roll; a rollless stage is :meth:`roll`'s KeyError.
 
         Returns:
             The roll target that stage reads.
-
-        Raises:
-            KeyError: ``stage`` rolls no target of this profile.
         """
-        match stage:
-            case Stage.ROLL_TO_HIT:
-                return self.hit_target
-            case Stage.ROLL_TO_WOUND:
-                return self.wound_target
-            case Stage.MAKE_ARMOUR_SAVES:
-                return self.save_target
-            case Stage.WARD_SAVES:
-                return self.ward_target
-            case rollless:
-                raise KeyError(rollless)
+        return self.roll(stage).target
 
     def with_target(self, stage: Stage, target: RollTarget) -> "AttackProfile":
-        """A copy with ``stage``'s roll target replaced.
+        """A copy with the target of ``stage``'s roll replaced (KeyError via :meth:`roll`).
 
         Returns:
             The updated profile.
-
-        Raises:
-            KeyError: ``stage`` rolls no target of this profile.
         """
-        match stage:
-            case Stage.ROLL_TO_HIT:
-                return replace(self, hit_target=target)
-            case Stage.ROLL_TO_WOUND:
-                return replace(self, wound_target=target)
-            case Stage.MAKE_ARMOUR_SAVES:
-                return replace(self, save_target=target)
-            case Stage.WARD_SAVES:
-                return replace(self, ward_target=target)
-            case rollless:
-                raise KeyError(rollless)
+        self.roll(stage)  # the stage must roll something here
+        return replace(
+            self,
+            rolls=tuple(
+                replace(roll, target=target) if roll.stage is stage else roll
+                for roll in self.rolls
+            ),
+        )
+
+    @property
+    def hit_target(self) -> RollTarget:
+        """The Roll to Hit's target."""
+        return self.target(Stage.ROLL_TO_HIT)
+
+    @property
+    def wound_target(self) -> RollTarget:
+        """The Roll to Wound's target."""
+        return self.target(Stage.ROLL_TO_WOUND)
+
+    @property
+    def save_target(self) -> RollTarget:
+        """The armour save's target."""
+        return self.target(Stage.MAKE_ARMOUR_SAVES)
+
+    @property
+    def ward_target(self) -> RollTarget:
+        """The ward save's target."""
+        return self.target(Stage.WARD_SAVES)
 
 
 @dataclass(frozen=True)
@@ -240,23 +439,20 @@ def resolve_attack(
     profile: AttackProfile,
     modifiers: Sequence[Modifier] = (),
     transforms: Sequence[Transform] = (),
-    *,
-    hit_roll: HitRoll,
 ) -> AttackResolution:
     """Resolve one attack by walking its dice exactly.
 
     ``modifiers`` are the compiled records of printed conditional
-    modifiers; ``transforms`` the bespoke code hooks. ``hit_roll``
-    selects how the To Hit die resolves (shooting's 7+ confirmation
-    versus close combat's natural-6-always-hits); it leaves every other
-    stage unchanged. It is required — the phase is known at the calling
-    helper (``shoot``/``strike``), never assumed here.
+    modifiers; ``transforms`` the bespoke code hooks. How each die
+    resolves is the profile's own rolls' knowledge — a shooting attack
+    confirms 7+ To Hit, a close-combat one never does — fixed where the
+    profile was built (:meth:`AttackProfile.shooting` / ``melee``).
 
     Returns:
         The exact per-attack outcome-class probabilities.
     """
     outcomes: dict[Outcome, Fraction] = {}
-    for p_path, outcome in walk(profile, modifiers, transforms, hit_roll=hit_roll):
+    for p_path, outcome in walk(profile, modifiers, transforms):
         outcomes[outcome] = outcomes.get(outcome, Fraction(0)) + p_path
     before, _ = _plan(modifiers)
     effective = _before_roll(Stage.ROLL_TO_HIT, profile, before, _by_stage(transforms))
@@ -274,8 +470,6 @@ def walk(
     profile: AttackProfile,
     modifiers: Sequence[Modifier] = (),
     transforms: Sequence[Transform] = (),
-    *,
-    hit_roll: HitRoll,
 ) -> Iterator[tuple[Fraction, Outcome]]:
     """Enumerate every dice path of one attack, applying the rules' changes.
 
@@ -297,28 +491,27 @@ def walk(
         shown = [m for m in fired[stage] if m.trigger is not None and m.trigger.face == face]
         return _on_success(hooked[stage], face, _moved(prof, shown))
 
-    roll_hit = _roll_melee_hit if hit_roll is HitRoll.MELEE else _roll_to_hit
     hit_profile = before_roll(Stage.ROLL_TO_HIT, profile)
-    for p_hit, hit_face, hit in roll_hit(hit_profile.hit_target):
+    for p_hit, hit_face, hit in hit_profile.roll(Stage.ROLL_TO_HIT).branches():
         if not hit:
             yield p_hit, Outcome.NONE
             continue
         wound_profile = before_roll(
             Stage.ROLL_TO_WOUND, on_success(Stage.ROLL_TO_HIT, hit_face, hit_profile)
         )
-        for p_wound, wound_face, wounded in _roll(wound_profile.wound_target):
+        for p_wound, wound_face, wounded in wound_profile.roll(Stage.ROLL_TO_WOUND).branches():
             if not wounded:
                 yield p_hit * p_wound, Outcome.NONE
                 continue
             save_profile = before_roll(
                 Stage.MAKE_ARMOUR_SAVES, on_success(Stage.ROLL_TO_WOUND, wound_face, wound_profile)
             )
-            for p_save, _, saved in _roll_save(save_profile.save_target):
+            for p_save, _, saved in save_profile.roll(Stage.MAKE_ARMOUR_SAVES).branches():
                 if saved:
                     yield p_hit * p_wound * p_save, Outcome.NONE
                     continue
                 ward_profile = before_roll(Stage.WARD_SAVES, save_profile)
-                for p_ward, _, warded in _roll_save(ward_profile.ward_target):
+                for p_ward, _, warded in ward_profile.roll(Stage.WARD_SAVES).branches():
                     yield (
                         p_hit * p_wound * p_save * p_ward,
                         Outcome.NONE if warded else ward_profile.unsaved_outcome,
@@ -380,64 +573,3 @@ def _on_success(transforms: list[Transform], face: int, profile: AttackProfile) 
         if transform.on_success is not None:
             profile = transform.on_success(face, profile)
     return profile
-
-
-def _roll_to_hit(target: RollTarget) -> Iterator[tuple[Fraction, int, bool]]:
-    # Mirrors charts.hit_probability: a natural 1 always fails; targets of
-    # 7+ resolve as a natural 6 confirmed at CONFIRM_TARGETS[target]; 10+
-    # is impossible. The yielded face is the natural die.
-    if isinstance(target, RollState) or target <= 6:
-        yield from _roll(target)
-        return
-    confirm = CONFIRM_TARGETS.get(target)
-    for face in _FACES:
-        if face != 6 or confirm is None:
-            yield _FACE, face, False
-        else:
-            for confirm_face in _FACES:
-                yield _FACE * _FACE, face, confirm_face >= confirm
-
-
-def _roll_melee_hit(target: RollTarget) -> Iterator[tuple[Fraction, int, bool]]:
-    # Close combat has no 7+ confirmation: a natural 6 always hits and a
-    # natural 1 always misses, regardless of modifiers
-    # (the-combat-phase/roll-to-hit-combat). This differs from _roll only
-    # at targets of 7+, where a natural 6 still hits rather than failing.
-    # RollStates carry no die, so no natural face fires — deferred to _roll.
-    if isinstance(target, RollState):
-        yield from _roll(target)
-        return
-    threshold = max(target, 2)
-    for face in _FACES:
-        yield _FACE, face, face == 6 or face >= threshold
-
-
-def _roll_save(target: RollTarget) -> Iterator[tuple[Fraction, int, bool]]:
-    # A save worsened past 6+ cannot be attempted at all: the roll is
-    # not taken — no die, no natural face — the walk-side mirror of the
-    # chart-side charts.armour_save_target, which yields no save for a
-    # target past 6+. This is the save rolls' own knowledge; To Hit
-    # differs (a 7+ still rolls, confirmed by a second die), and each
-    # roll states its own overflow, not the modifier that caused it.
-    if isinstance(target, int) and target > 6:
-        yield Fraction(1), 0, False
-        return
-    yield from _roll(target)
-
-
-def _roll(target: RollTarget) -> Iterator[tuple[Fraction, int, bool]]:
-    # A RollState is decided without a die: one certain branch, face 0
-    # (never a natural anything, so face-triggered transforms cannot
-    # fire). Every rolled die clamps at 2+: a natural 1 always fails,
-    # "regardless of modifiers" — the rulebook states it per roll (e.g.
-    # "Rolls of a Natural 1", p.140, for rolls To Wound), and transforms
-    # may push any target below 2.
-    if target is RollState.IMPOSSIBLE:
-        yield Fraction(1), 0, False
-        return
-    if target is RollState.AUTOMATIC:
-        yield Fraction(1), 0, True
-        return
-    threshold = max(target, 2)
-    for face in _FACES:
-        yield _FACE, face, face >= threshold
