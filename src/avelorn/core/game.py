@@ -17,12 +17,13 @@ class Phase:
 
     A phase is a value the game assembles, owning exactly what it
     needs — no reference back to the game. ``steps`` is the phase's
-    printed step sequence in the concrete game's own step vocabulary;
-    its actions are methods, each a thin delegation into the game's
-    logic modules, never logic of their own.
+    printed step sequence; what a step *is* stays the concrete game's
+    concern (by convention, something that knows how it resolves — its
+    dice, its procedure). Actions are methods, each a thin delegation
+    into the game's logic modules, never logic of their own.
     """
 
-    steps: ClassVar[tuple[str, ...]] = ()
+    steps: ClassVar[tuple[object, ...]] = ()
 
 
 class Game:

@@ -9,12 +9,15 @@ the-combat-phase/roll-to-hit-combat.
 
 import logging
 
-from avelorn.core.dice import p_d6_at_least
+from avelorn.tow.combat.attack import (
+    ArmourSave,
+    RollToHitCombat,
+    RollToHitShooting,
+    RollToWound,
+    roll_target,
+)
 
 logger = logging.getLogger(__name__)
-
-# Target 7+ resolves as a natural 6 re-rolled at this target; 10+ is impossible.
-CONFIRM_TARGETS = {7: 4, 8: 5, 9: 6}
 
 # A model wearing no armour counts as 7+ for modifier purposes; improvements cap at 2+.
 UNARMOURED = 7
@@ -124,18 +127,13 @@ def armour_save_target(armour_value: int | None, armour_piercing: int = 0) -> in
 def hit_probability(target: int) -> float:
     """Probability that one shooting attack hits, given its To Hit target.
 
-    Encodes two rulebook rules: a natural 1 always fails (so targets of
-    1 or less still fail one time in six), and targets of 7+ resolve as
-    a natural 6 re-rolled (7: 4+, 8: 5+, 9: 6; 10+ impossible).
+    A natural 1 always fails; targets of 7+ confirm on a second die
+    ("7 to Hit"). Derived from the walk's own Roll to Hit.
 
     Returns:
         The hit probability, in [0.0, 5/6].
     """
-    if target <= 6:
-        p = p_d6_at_least(max(target, 2))
-    else:
-        confirm = CONFIRM_TARGETS.get(target)
-        p = 0.0 if confirm is None else (1 / 6) * p_d6_at_least(confirm)
+    p = float(RollToHitShooting(target).chance())
     logger.debug("hit %s -> p=%.3f", _fmt_target(target), p)
     return p
 
@@ -143,14 +141,14 @@ def hit_probability(target: int) -> float:
 def melee_hit_probability(target: int) -> float:
     """Probability that one close-combat attack hits, given its To Hit target.
 
-    A natural 1 always fails and a natural 6 always hits (regardless of
-    modifiers), and there is no 7+ confirmation: a target above 6 still
-    hits one time in six (the-combat-phase/roll-to-hit-combat).
+    A natural 1 always fails and a natural 6 always hits, with no 7+
+    confirmation (the-combat-phase/roll-to-hit-combat). Derived from
+    the walk's own close-combat Roll to Hit.
 
     Returns:
         The hit probability, in [1/6, 5/6].
     """
-    p = p_d6_at_least(max(target, 2)) if target <= 6 else 1 / 6
+    p = float(RollToHitCombat(target).chance())
     logger.debug("melee hit %s -> p=%.3f", _fmt_target(target), p)
     return p
 
@@ -158,15 +156,11 @@ def melee_hit_probability(target: int) -> float:
 def wound_probability(target: int | None) -> float:
     """Probability that one wound roll succeeds; a natural 1 always fails.
 
-    "Rolls of a Natural 1" (p.140): a natural 1 on a roll To Wound is a
-    fail regardless of modifiers — hence the clamp, even though the
-    unmodified chart never produces a target below 2.
-
     Returns:
         The success probability, or 0.0 when ``target`` is None (the
         chart shows "-": the attack cannot wound).
     """
-    p = 0.0 if target is None else p_d6_at_least(max(target, 2))
+    p = float(RollToWound(roll_target(target)).chance())
     logger.debug("wound %s -> p=%.3f", _fmt_target(target), p)
     return p
 
@@ -177,6 +171,6 @@ def save_probability(target: int | None) -> float:
     Returns:
         The success probability, or 0.0 when ``target`` is None (no save).
     """
-    p = 0.0 if target is None else p_d6_at_least(max(target, 2))
+    p = float(ArmourSave(roll_target(target)).chance())
     logger.debug("save %s -> p=%.3f", _fmt_target(target), p)
     return p

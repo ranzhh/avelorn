@@ -18,7 +18,6 @@ from avelorn.core.dice import expected_value
 from avelorn.tow.combat.armour import defender_armour
 from avelorn.tow.combat.attack import (
     AttackProfile,
-    HitRoll,
     Modifier,
     Outcome,
     Transform,
@@ -143,7 +142,7 @@ def shoot(
     # speak the printed convention (None for "-"/no save); the walk speaks
     # roll states — converted here.
     resolution = resolve_attack(
-        AttackProfile(
+        AttackProfile.shooting(
             hit_target=hit,
             wound_target=roll_target(wound),
             save_target=roll_target(save),
@@ -151,7 +150,6 @@ def shoot(
         ),
         modifiers,
         transforms,
-        hit_roll=HitRoll.SHOOTING,
     )
     p_unsaved = float(resolution.p_unsaved)
     p_kill = float(resolution.p_of(Outcome.INSTANT_KILL))
