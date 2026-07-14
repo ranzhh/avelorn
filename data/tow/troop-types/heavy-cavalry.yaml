@@ -1,0 +1,5 @@
+# Source: https://tow.whfb.app/troop-types-at-a-glance/troop-type-table
+id: heavy-cavalry
+name: Heavy Cavalry
+models_per_rank: 4
+max_rank_bonus: 1

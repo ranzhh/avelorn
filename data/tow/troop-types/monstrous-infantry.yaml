@@ -1,0 +1,5 @@
+# Source: https://tow.whfb.app/troop-types-at-a-glance/troop-type-table
+id: monstrous-infantry
+name: Monstrous Infantry
+models_per_rank: 3
+max_rank_bonus: 2

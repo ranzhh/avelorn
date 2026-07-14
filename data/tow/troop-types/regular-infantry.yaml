@@ -1,0 +1,5 @@
+# Source: https://tow.whfb.app/troop-types-at-a-glance/troop-type-table
+id: regular-infantry
+name: Regular Infantry
+models_per_rank: 5
+max_rank_bonus: 2

@@ -287,14 +287,15 @@ class Contingent:
             weapons: Weapon entries, resolving printed equipment names.
             armoury: Armour entries, resolving printed equipment names.
             rules: Rule entries, resolving printed special-rule names.
-            frontage: The formation width in files; a single rank when omitted.
+            frontage: The formation width in files; the troop type's default
+                width when omitted.
 
         Returns:
             The fielded contingent, loadout resolved.
 
         Raises:
             ValueError: a piece of equipment matches no weapon or armour
-                entry.
+                entry, or the datasheet's troop-type profile is unresolved.
         """
         fielded = complement.unit.model_copy(
             update={
@@ -305,7 +306,11 @@ class Contingent:
         loadout, unknown = _resolve_loadout(fielded, weapons=weapons, armoury=armoury, rules=rules)
         if unknown:
             raise ValueError(f"{fielded.name}: equipment matches no weapon or armour: {unknown}")
-        width = frontage if frontage is not None else max(complement.size, 1)
+        width = (
+            frontage
+            if frontage is not None
+            else fielded.rank_and_file.default_frontage(complement.size)
+        )
         return cls(fielded, complement.size, loadout, width)
 
     @classmethod
@@ -333,19 +338,20 @@ class Contingent:
             weapons: Weapon entries, resolving printed equipment names.
             armoury: Armour entries, resolving printed equipment names.
             rules: Rule entries, resolving printed special-rule names.
-            frontage: The formation width in files; a single rank when omitted.
+            frontage: The formation width in files; the troop type's default
+                width when omitted.
 
         Returns:
             The fielded contingent, loadout resolved.
 
         Raises:
             ValueError: a piece of equipment matches no weapon or armour
-                entry.
+                entry, or the datasheet's troop-type profile is unresolved.
         """
         loadout, unknown = _resolve_loadout(unit, weapons=weapons, armoury=armoury, rules=rules)
         if unknown:
             raise ValueError(f"{unit.name}: equipment matches no weapon or armour: {unknown}")
-        width = frontage if frontage is not None else max(models, 1)
+        width = frontage if frontage is not None else unit.rank_and_file.default_frontage(models)
         return cls(unit, models, loadout, width)
 
 

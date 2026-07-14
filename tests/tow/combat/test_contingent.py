@@ -8,7 +8,7 @@ from avelorn.tow.combat.contingent import Charge, ChargeArc, Contingent, Formati
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.muster import Complement
 from avelorn.tow.schema.rule import ModifierEffect
-from avelorn.tow.schema.unit import Unit
+from avelorn.tow.schema.unit import TroopType, Unit
 
 REPO = TOWRepository()
 
@@ -254,19 +254,38 @@ def test_formation_geometry() -> None:
 # --- frontage: the formation's width ---
 
 
-def test_a_fielded_contingent_has_a_concrete_frontage(spearmen_unit: Unit) -> None:
-    """A unit on the table is in a formation, so its frontage is always a width.
+def test_frontage_defaults_to_the_troop_types_rank_width(spearmen_unit: Unit) -> None:
+    """With no width chosen, a unit ranks at its troop type's rank width.
 
-    With no width chosen, fielding lays the unit out in a single rank.
+    Elven Spearmen are Regular Infantry: five models to a rank. The
+    datasheet's troop-type profile, resolved at load, is what fielding
+    reads.
     """
     fielded = _fielded(spearmen_unit, 10)
-    assert fielded.frontage == 10
-    assert fielded.formation == Formation(models=10, frontage=10)
+    assert fielded.unit.troop_type_profile == REPO.troop_types["regular-infantry"]
+    assert fielded.frontage == 5
+    assert fielded.formation == Formation(models=10, frontage=5)
 
 
-def test_a_chosen_frontage_is_kept(spearmen_unit: Unit) -> None:
-    """A width given at fielding is the contingent's frontage."""
-    assert _fielded(spearmen_unit, 10, frontage=5).frontage == 5
+def test_a_chosen_frontage_overrides_the_default(spearmen_unit: Unit) -> None:
+    """A width given at fielding is the contingent's frontage, default or not."""
+    assert _fielded(spearmen_unit, 10, frontage=8).frontage == 8
+
+
+def test_fielding_an_unresolved_datasheet_is_refused(spearmen_unit: Unit) -> None:
+    """A datasheet with no resolved troop-type profile cannot be fielded."""
+    raw = spearmen_unit.model_copy(update={"troop_type_profile": None})
+    with pytest.raises(ValueError, match="troop-type profile unresolved"):
+        _fielded(raw, 10)
+
+
+def test_every_troop_type_has_a_profile() -> None:
+    """Drift guard: the registry covers the TroopType vocabulary exactly.
+
+    So a troop type joining the enum must gain a data file, and no stray
+    profile can name a troop type the enum does not.
+    """
+    assert {p.name for p in REPO.troop_types.values()} == {t.value for t in TroopType}
 
 
 def test_frontage_must_be_a_positive_width(spearmen_unit: Unit) -> None:
