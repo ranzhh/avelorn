@@ -35,8 +35,11 @@ class MovementPhase(Phase):
     ) -> ChargeResult:
         """A charge is declared, answered, and driven home.
 
-        The fight the charge feeds resolves by the Combat phase's rules,
-        composed here so the sequence plays as the rulebook plays it.
+        The Stand & Shoot reaction volley resolves under the shooting
+        chapter's rules. The fight the charge feeds does not yet see the
+        combat chapter's rules: the charge threads only the shooting rules
+        it holds, and wiring the combat rules through waits until a combat
+        chapter rule has effects to honour.
 
         Returns:
             The composed outcome: the reaction volley, if any, and the fight.

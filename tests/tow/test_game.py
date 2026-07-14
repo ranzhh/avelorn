@@ -125,7 +125,14 @@ def test_fight_result_and_break_test_delegate() -> None:
     spear = REPO.weapons["thrusting-spear"]
     context = CombatContext(first_round=True)
     bound = GAME.combat.fight(a, b, a_weapon=spear, b_weapon=spear, context=context)
-    direct = fight(a, b, a_weapon=spear, b_weapon=spear, context=context)
+    direct = fight(
+        a,
+        b,
+        a_weapon=spear,
+        b_weapon=spear,
+        context=context,
+        phase_rules=GAME.in_play[Phase.COMBAT],
+    )
     assert bound == direct
     scored = GAME.combat.result(bound)
     assert scored == combat_result(direct)
