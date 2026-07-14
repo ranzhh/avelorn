@@ -12,6 +12,9 @@ from typing import Annotated, Self
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.functional_validators import BeforeValidator
 
+from avelorn.core.registry import Registry
+from avelorn.tow.schema.troop_type import TroopTypeProfile
+
 
 def _dash_to_none(value: object) -> object:
     if value == "-":
@@ -178,11 +181,50 @@ class Unit(BaseModel):
     points: int = Field(ge=0)  # per model
     unit_size: UnitSize
     troop_type: TroopType
+    # The troop type's data, resolved from the troop-type registry when the
+    # repository loads the datasheet — None on a datasheet validated in
+    # isolation (a raw file, the importer), where only the printed enum is
+    # known. See TOWRepository.units.
+    troop_type_profile: TroopTypeProfile | None = None
     base_size: BaseSize | None = None
     profiles: list[Profile] = Field(min_length=1)
     equipment: list[str] = Field(default_factory=list)
     special_rules: list[str] = Field(default_factory=list)  # rule names, as printed
     options: list[UnitOption] = Field(default_factory=list)
+
+    @property
+    def rank_and_file(self) -> TroopTypeProfile:
+        """The troop type's data, resolved — how this unit ranks up.
+
+        The repository attaches it when it loads the datasheet
+        (:attr:`troop_type_profile`); a datasheet validated in isolation
+        has none and cannot be fielded, since a body on the table must
+        know how it forms ranks.
+
+        Returns:
+            The resolved troop-type profile.
+
+        Raises:
+            ValueError: the profile is unresolved — the datasheet was
+                loaded outside the repository.
+        """
+        if self.troop_type_profile is None:
+            raise ValueError(
+                f"{self.name}: troop-type profile unresolved; "
+                "load the datasheet through the repository"
+            )
+        return self.troop_type_profile
+
+    def with_troop_type(self, troop_types: Registry[TroopTypeProfile]) -> "Unit":
+        """This datasheet with its troop-type profile resolved from the registry.
+
+        The repository calls this as it loads a unit, so the datasheet
+        carries how it ranks up without a registry in hand later.
+
+        Returns:
+            A copy carrying the resolved :attr:`troop_type_profile`.
+        """
+        return self.model_copy(update={"troop_type_profile": troop_types.by_name(self.troop_type)})
 
     def highest(self, characteristic: Characteristic) -> int | None:
         """The unit's highest value for a characteristic.

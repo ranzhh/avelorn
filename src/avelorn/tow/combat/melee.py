@@ -385,7 +385,9 @@ class FightResult:
     Initiative made the blows simultaneous. ``a_initiative`` and
     ``b_initiative`` are the effective Initiatives that ordering compared —
     reported so a caller prints the value the math used, as the shooting
-    result reports its effective To Hit target.
+    result reports its effective To Hit target. ``a_rank_bonus`` and
+    ``b_rank_bonus`` are each side's combat-result Rank Bonus, which
+    :func:`combat_result` adds to that side's score.
     """
 
     losses: list[list[float]]  # losses[a_lost][b_lost] = joint probability
@@ -393,6 +395,8 @@ class FightResult:
     notes: tuple[str, ...] = ()
     a_initiative: EffectiveCharacteristic = EffectiveCharacteristic(0)
     b_initiative: EffectiveCharacteristic = EffectiveCharacteristic(0)
+    a_rank_bonus: int = 0
+    b_rank_bonus: int = 0
 
     @property
     def a_casualties(self) -> list[float]:
@@ -616,6 +620,8 @@ def fight(
         notes=notes,
         a_initiative=a_initiative,
         b_initiative=b_initiative,
+        a_rank_bonus=a.rank_bonus,
+        b_rank_bonus=b.rank_bonus,
     )
 
 
@@ -697,7 +703,6 @@ def _round_joint(
 
 
 _UNMODELLED_COMBAT_RESULT: tuple[str, ...] = (
-    "combat result component not factored: rank bonus (#28)",
     "combat result component not factored: standards (#28)",
     "combat result component not factored: flank & rear attacks (#28)",
     "combat result component not factored: the high ground (#28)",
@@ -711,8 +716,8 @@ class CombatResult:
 
     ``margin`` maps a signed lead ``m`` to P(A's score - B's score == m);
     positive means A is ahead. A side's score is the unsaved wounds it
-    inflicted — the only combat-result component modelled, the rest listed
-    in ``notes`` (#28). For 1-Wound models wounds inflicted equal models
+    inflicted plus its Rank Bonus; the remaining components are listed in
+    ``notes`` (#28). For 1-Wound models wounds inflicted equal models
     removed; the wound-count for multi-Wound models is not modelled. The
     signed ``margin`` is what the Break test adds to the loser's roll.
     """
@@ -728,21 +733,23 @@ def combat_result(result: FightResult) -> CombatResult:
     """Score a fought round by unsaved wounds inflicted and name the winner.
 
     Composes on a :class:`FightResult`'s joint loss distribution: A's score
-    is how many models (= wounds, for 1-Wound units) B lost, B's the
-    reverse. Because the two sides are correlated under Initiative order,
-    the win/draw/win split and the signed margin come from the joint, not
-    from differencing the marginals.
+    is how many models (= wounds, for 1-Wound units) B lost plus A's Rank
+    Bonus, B's the reverse. The rank bonuses are fixed per side, so they
+    shift every lead by the same constant. Because the two sides are
+    correlated under Initiative order, the win/draw/win split and the
+    signed margin come from the joint, not from differencing the marginals.
 
     Returns:
         The exact win/draw/loss probabilities and signed margin distribution.
     """
     margin: dict[int, float] = {}
     p_a_wins = p_draw = p_b_wins = 0.0
+    rank_delta = result.a_rank_bonus - result.b_rank_bonus
     for a_lost, row in enumerate(result.losses):
         for b_lost, mass in enumerate(row):
             if mass == 0.0:
                 continue
-            lead = b_lost - a_lost  # A scores B's losses; B scores A's
+            lead = (b_lost - a_lost) + rank_delta  # A scores B's losses + ranks; B the reverse
             margin[lead] = margin.get(lead, 0.0) + mass
             if lead > 0:
                 p_a_wins += mass

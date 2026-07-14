@@ -6,6 +6,7 @@ from avelorn.core.dice import binomial_distribution, expected_value
 from avelorn.tow.combat.context import CombatContext
 from avelorn.tow.combat.contingent import Charge, ChargeArc, Contingent, Loadout
 from avelorn.tow.combat.melee import (
+    FightResult,
     combat_result,
     effective_initiative,
     fight,
@@ -364,7 +365,22 @@ def test_combat_result_first_strike_advantage() -> None:
     assert cr.margin[1] == pytest.approx(6 / 36)  # A ahead by one wound
     assert cr.margin[-1] == pytest.approx(5 / 36)  # B ahead by one wound
     assert sum(cr.margin.values()) == pytest.approx(1.0)
-    assert any("rank bonus" in note for note in cr.notes)
+
+
+def test_combat_result_adds_the_rank_bonus_to_the_score() -> None:
+    """A side's Rank Bonus shifts every combat-result lead by that constant.
+
+    With a symmetric loss joint the plain result is even; giving A +2 and
+    B +0 shifts every margin up by 2, so A wins outright.
+    """
+    losses = [[0.25, 0.25], [0.25, 0.25]]  # symmetric: each side loses 0 or 1
+    plain = combat_result(FightResult(losses=losses, first_striker=None))
+    ranked = combat_result(
+        FightResult(losses=losses, first_striker=None, a_rank_bonus=2, b_rank_bonus=0)
+    )
+    assert plain.p_a_wins == pytest.approx(plain.p_b_wins)
+    assert {lead + 2: mass for lead, mass in plain.margin.items()} == ranked.margin
+    assert ranked.p_a_wins == pytest.approx(1.0)
 
 
 def test_combat_result_simultaneous_is_symmetric() -> None:
@@ -399,7 +415,7 @@ def _reflexive(unit: Unit) -> Contingent:
     )
     doctored = unit.model_copy(update={"special_rules": ["Doctored Reflexes"]})
     spear = REPO.weapons["thrusting-spear"]
-    return Contingent(doctored, 1, Loadout((spear,), (), (rule,), ()))
+    return Contingent(doctored, 1, Loadout((spear,), (), (rule,), ()), frontage=1)
 
 
 def test_fight_first_round_initiative_rule_flips_the_order() -> None:

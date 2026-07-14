@@ -12,6 +12,7 @@ from avelorn.core.loading import load_yaml, load_yaml_dir
 from avelorn.core.registry import Registry
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
+from avelorn.tow.schema.troop_type import TroopTypeProfile
 from avelorn.tow.schema.unit import Unit
 from avelorn.tow.schema.weapon import Weapon
 
@@ -36,9 +37,16 @@ class TOWRepository:
 
     @cached_property
     def units(self) -> Registry[Unit]:
-        """Every army's roster (unit slugs are unique across armies)."""
+        """Every army's roster, each datasheet's troop-type profile resolved.
+
+        The datasheet prints its troop type as a name; loading resolves
+        that against the troop-type table and attaches the profile, so a
+        unit carries how it ranks up without a registry in hand later.
+        """
         paths = sorted(self._data_dir.glob("tow/armies/*/units/*.yaml"))
-        return Registry((load_yaml(path, Unit) for path in paths), kind="unit")
+        troop_types = self.troop_types
+        units = (load_yaml(path, Unit).with_troop_type(troop_types) for path in paths)
+        return Registry(units, kind="unit")
 
     @cached_property
     def weapons(self) -> Registry[Weapon]:
@@ -54,3 +62,9 @@ class TOWRepository:
     def rules(self) -> Registry[Rule]:
         """Special rules."""
         return Registry(load_yaml_dir(self._data_dir / "tow/rules", Rule), kind="rule")
+
+    @cached_property
+    def troop_types(self) -> Registry[TroopTypeProfile]:
+        """The troop-type table: each troop type's rank-and-file data."""
+        loaded = load_yaml_dir(self._data_dir / "tow/troop-types", TroopTypeProfile)
+        return Registry(loaded, kind="troop type")

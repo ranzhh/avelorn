@@ -24,7 +24,9 @@ def _spearmen(*rules: Rule) -> Contingent:
     # loadout is built directly so the data-file Valour of Ages cannot
     # sneak a re-roll grant into the plain goldens; the model count is
     # inert (the panic step sizes itself from the result).
-    return Contingent(REPO.units["elven-spearmen"], 8, Loadout((), (), tuple(rules), ()))
+    return Contingent(
+        REPO.units["elven-spearmen"], 8, Loadout((), (), tuple(rules), ()), frontage=8
+    )
 
 
 def _result(casualties: list[float], size: int) -> ShootingResult:

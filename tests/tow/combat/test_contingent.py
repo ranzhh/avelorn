@@ -4,11 +4,11 @@ from dataclasses import replace
 
 import pytest
 
-from avelorn.tow.combat.contingent import Charge, ChargeArc, Contingent, Loadout
+from avelorn.tow.combat.contingent import Charge, ChargeArc, Contingent, Formation, Loadout
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.muster import Complement
 from avelorn.tow.schema.rule import ModifierEffect
-from avelorn.tow.schema.unit import Unit
+from avelorn.tow.schema.unit import TroopType, Unit
 
 REPO = TOWRepository()
 
@@ -21,6 +21,18 @@ def spearmen_unit() -> Unit:
         The validated unit model.
     """
     return REPO.units["elven-spearmen"]
+
+
+def _fielded(unit: Unit, models: int, frontage: int | None = None) -> Contingent:
+    # Field at the optionless loadout, optionally at a chosen frontage.
+    return Contingent.field(
+        unit,
+        models,
+        weapons=REPO.weapons,
+        armoury=REPO.armoury,
+        rules=REPO.rules,
+        frontage=frontage,
+    )
 
 
 def test_deploy_fields_complement_size_and_loadout(spearmen_unit: Unit) -> None:
@@ -222,3 +234,95 @@ def test_an_uncarried_weapon_cannot_be_fought_with(spearmen_unit: Unit) -> None:
     assert fielded.wields(REPO.weapons["thrusting-spear"]) is REPO.weapons["thrusting-spear"]
     with pytest.raises(ValueError, match="does not carry 'Longbow'"):
         fielded.wields(REPO.weapons["longbow"])
+
+
+# --- Formation: the geometry of ranks and files ---
+
+
+def test_formation_geometry() -> None:
+    """files, ranks, full_ranks and remainder over a five-wide formation."""
+    full = Formation(models=10, frontage=5)  # two complete ranks
+    assert (full.files, full.full_ranks, full.remainder, full.ranks) == (5, 2, 0, 2)
+
+    ragged = Formation(models=12, frontage=5)  # 5 + 5 + a rear rank of 2
+    assert (ragged.files, ragged.full_ranks, ragged.remainder, ragged.ranks) == (5, 2, 2, 3)
+
+    thin = Formation(models=3, frontage=5)  # one incomplete rank
+    assert (thin.files, thin.full_ranks, thin.remainder, thin.ranks) == (3, 0, 3, 1)
+
+
+# --- frontage: the formation's width ---
+
+
+def test_frontage_defaults_to_the_troop_types_rank_width(spearmen_unit: Unit) -> None:
+    """With no width chosen, a unit ranks at its troop type's rank width.
+
+    Elven Spearmen are Regular Infantry: five models to a rank. The
+    datasheet's troop-type profile, resolved at load, is what fielding
+    reads.
+    """
+    fielded = _fielded(spearmen_unit, 10)
+    assert fielded.unit.troop_type_profile == REPO.troop_types["regular-infantry"]
+    assert fielded.frontage == 5
+    assert fielded.formation == Formation(models=10, frontage=5)
+
+
+def test_a_chosen_frontage_overrides_the_default(spearmen_unit: Unit) -> None:
+    """A width given at fielding is the contingent's frontage, default or not."""
+    assert _fielded(spearmen_unit, 10, frontage=8).frontage == 8
+
+
+def test_fielding_an_unresolved_datasheet_is_refused(spearmen_unit: Unit) -> None:
+    """A datasheet with no resolved troop-type profile cannot be fielded."""
+    raw = spearmen_unit.model_copy(update={"troop_type_profile": None})
+    with pytest.raises(ValueError, match="troop-type profile unresolved"):
+        _fielded(raw, 10)
+
+
+def test_every_troop_type_has_a_profile() -> None:
+    """Drift guard: the registry covers the TroopType vocabulary exactly.
+
+    So a troop type joining the enum must gain a data file, and no stray
+    profile can name a troop type the enum does not.
+    """
+    assert {p.name for p in REPO.troop_types.values()} == {t.value for t in TroopType}
+
+
+def test_frontage_must_be_a_positive_width(spearmen_unit: Unit) -> None:
+    """A frontage below one model wide is a programming error, not a zero."""
+    with pytest.raises(ValueError, match="at least 1 model wide"):
+        _fielded(spearmen_unit, 10, frontage=0)
+
+
+# --- the rank bonus a formation claims ---
+
+
+def test_rank_bonus_counts_ranks_behind_the_first(spearmen_unit: Unit) -> None:
+    """Regular Infantry (5 wide): +1 for each full rank behind the first."""
+    assert _fielded(spearmen_unit, 5).rank_bonus == 0  # one rank
+    assert _fielded(spearmen_unit, 10).rank_bonus == 1  # two ranks
+    assert _fielded(spearmen_unit, 15).rank_bonus == 2  # three ranks
+
+
+def test_rank_bonus_is_capped_by_troop_type(spearmen_unit: Unit) -> None:
+    """Regular Infantry cap the bonus at +2, however deep the unit ranks."""
+    assert _fielded(spearmen_unit, 25).rank_bonus == 2  # five ranks, capped
+
+
+def test_a_rear_rank_counts_only_when_wide_enough(spearmen_unit: Unit) -> None:
+    """Ranked six wide, an incomplete rear rank counts only with five in it."""
+    assert _fielded(spearmen_unit, 10, frontage=6).rank_bonus == 0  # 6 + rear of 4
+    assert _fielded(spearmen_unit, 11, frontage=6).rank_bonus == 1  # 6 + rear of 5
+
+
+def test_a_wider_frontage_trades_ranks_for_width(spearmen_unit: Unit) -> None:
+    """Ranking wider claims fewer ranks: ten models ten wide is a single rank."""
+    assert _fielded(spearmen_unit, 10, frontage=10).rank_bonus == 0
+
+
+def test_a_troop_type_that_does_not_rank_up_claims_no_bonus(spearmen_unit: Unit) -> None:
+    """A single-model troop type claims no bonus, however many models."""
+    monster = spearmen_unit.model_copy(
+        update={"troop_type_profile": REPO.troop_types["monstrous-creature"]}
+    )
+    assert _fielded(monster, 6).rank_bonus == 0

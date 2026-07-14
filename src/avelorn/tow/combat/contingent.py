@@ -144,6 +144,41 @@ class Charge:
 
 
 @dataclass(frozen=True)
+class Formation:
+    """A body of models arrayed a fixed number wide, in ranks and files.
+
+    Pure geometry: how ``models`` stand when the formation is ``frontage``
+    models wide. ``files`` is the width (the front rank's models), ``ranks``
+    the depth, ``full_ranks`` the complete ranks at the full width, and
+    ``remainder`` the models in an incomplete rear rank (0 when the last
+    rank is full). Knows nothing of troop type or combat.
+    """
+
+    models: int
+    frontage: int
+
+    @property
+    def files(self) -> int:
+        """The width: models standing in the front (widest) rank."""
+        return min(self.models, self.frontage)
+
+    @property
+    def full_ranks(self) -> int:
+        """The number of complete ranks, each at the full frontage."""
+        return self.models // self.frontage
+
+    @property
+    def remainder(self) -> int:
+        """Models in the incomplete rear rank; 0 when the last rank is full."""
+        return self.models % self.frontage
+
+    @property
+    def ranks(self) -> int:
+        """The depth: how many ranks, the rear one possibly incomplete."""
+        return self.full_ranks + (1 if self.remainder else 0)
+
+
+@dataclass(frozen=True)
 class Contingent:
     """A unit as fielded: its datasheet and the models on the table.
 
@@ -181,6 +216,51 @@ class Contingent:
     unit: Unit
     models: int
     loadout: Loadout
+    # The formation's width in models (its files). A unit on the table is
+    # always in some formation, so this is a concrete width, resolved at
+    # the fielding boundary. (Skirmishers, who form no ranks, are not
+    # modelled yet.)
+    frontage: int
+
+    def __post_init__(self) -> None:
+        """Reject a frontage that is not a positive width.
+
+        Raises:
+            ValueError: ``frontage`` is below one model wide.
+        """
+        if self.frontage < 1:
+            raise ValueError(f"frontage must be at least 1 model wide, got {self.frontage}")
+
+    @property
+    def formation(self) -> Formation:
+        """How the contingent's models stand in ranks and files.
+
+        Returns:
+            The formation geometry for this contingent's models and frontage.
+        """
+        return Formation(self.models, self.frontage)
+
+    @property
+    def rank_bonus(self) -> int:
+        """The combat-result Rank Bonus this contingent's formation claims.
+
+        +1 for each rank behind the first that is wide enough to count,
+        capped by the troop type. A full rank at the frontage counts; an
+        incomplete rear rank counts when it holds the troop type's
+        required models. A troop type that does not rank up claims none.
+        Counted from the fielded models — the round's starting formation.
+
+        Returns:
+            The Rank Bonus, from 0 up to the troop type's maximum.
+        """
+        profile = self.unit.rank_and_file
+        per_rank = profile.models_per_rank
+        if per_rank is None or self.frontage < per_rank:
+            return 0
+        formation = self.formation
+        rear = 1 if formation.remainder >= per_rank else 0
+        ranks_behind_first = formation.full_ranks + rear - 1
+        return min(max(ranks_behind_first, 0), profile.max_rank_bonus)
 
     def wields(self, weapon: Weapon) -> Weapon:
         """The weapon, confirmed carried: a unit fights with what it has.
@@ -209,6 +289,7 @@ class Contingent:
         weapons: Registry[Weapon],
         armoury: Registry[Armour],
         rules: Registry[Rule],
+        frontage: int | None = None,
     ) -> "Contingent":
         """Field a :class:`~avelorn.tow.muster.Complement`, resolving its equipment.
 
@@ -228,13 +309,15 @@ class Contingent:
             weapons: Weapon entries, resolving printed equipment names.
             armoury: Armour entries, resolving printed equipment names.
             rules: Rule entries, resolving printed special-rule names.
+            frontage: The formation width in files; the troop type's default
+                width when omitted.
 
         Returns:
             The fielded contingent, loadout resolved.
 
         Raises:
             ValueError: a piece of equipment matches no weapon or armour
-                entry.
+                entry, or the datasheet's troop-type profile is unresolved.
         """
         fielded = complement.unit.model_copy(
             update={
@@ -245,7 +328,12 @@ class Contingent:
         loadout, unknown = _resolve_loadout(fielded, weapons=weapons, armoury=armoury, rules=rules)
         if unknown:
             raise ValueError(f"{fielded.name}: equipment matches no weapon or armour: {unknown}")
-        return cls(fielded, complement.size, loadout)
+        width = (
+            frontage
+            if frontage is not None
+            else fielded.rank_and_file.default_frontage(complement.size)
+        )
+        return cls(fielded, complement.size, loadout, width)
 
     @classmethod
     def field(
@@ -256,6 +344,7 @@ class Contingent:
         weapons: Registry[Weapon],
         armoury: Registry[Armour],
         rules: Registry[Rule],
+        frontage: int | None = None,
     ) -> "Contingent":
         """Field a bare datasheet at its printed, optionless loadout.
 
@@ -271,18 +360,21 @@ class Contingent:
             weapons: Weapon entries, resolving printed equipment names.
             armoury: Armour entries, resolving printed equipment names.
             rules: Rule entries, resolving printed special-rule names.
+            frontage: The formation width in files; the troop type's default
+                width when omitted.
 
         Returns:
             The fielded contingent, loadout resolved.
 
         Raises:
             ValueError: a piece of equipment matches no weapon or armour
-                entry.
+                entry, or the datasheet's troop-type profile is unresolved.
         """
         loadout, unknown = _resolve_loadout(unit, weapons=weapons, armoury=armoury, rules=rules)
         if unknown:
             raise ValueError(f"{unit.name}: equipment matches no weapon or armour: {unknown}")
-        return cls(unit, models, loadout)
+        width = frontage if frontage is not None else unit.rank_and_file.default_frontage(models)
+        return cls(unit, models, loadout, width)
 
 
 def _resolve_loadout(
