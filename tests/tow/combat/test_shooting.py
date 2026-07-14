@@ -5,6 +5,7 @@ from dataclasses import replace
 import pytest
 
 from avelorn.tow.combat.attack import AttackProfile, Outcome, RollState, Transform
+from avelorn.tow.combat.context import EngagementContext
 from avelorn.tow.combat.contingent import Contingent
 from avelorn.tow.combat.shooting import _engagement_conditions, shoot, shoot_unit
 from avelorn.tow.data import TOWRepository
@@ -138,6 +139,85 @@ def test_only_the_front_rank_fires() -> None:
         REPO.weapons["longbow"],
     )
     assert result.shots == 5
+
+
+def test_volley_fire_adds_half_of_each_rear_rank_when_stationary() -> None:
+    """A stationary Volley Fire weapon adds half of each rear rank (rounding up).
+
+    Ten archers five wide with longbows: the front five fire, plus
+    ceil(5/2) = 3 from the second rank — eight shots. Factored into the
+    count, the rule leaves no note.
+    """
+    archers = REPO.units["elven-archers"]
+    spearmen = REPO.units["elven-spearmen"]
+    result = shoot_unit(
+        _fielded(archers, 10, frontage=5),
+        _fielded(spearmen, 20),
+        REPO.weapons["longbow"],
+        context=EngagementContext(moved=False),
+    )
+    assert result.shots == 8
+    assert not any("Volley Fire" in note for note in result.notes)
+
+
+def test_volley_fire_needs_the_movement_fact() -> None:
+    """Without knowing the unit stayed put, Volley Fire is unclaimed: front rank, noted."""
+    archers = REPO.units["elven-archers"]
+    spearmen = REPO.units["elven-spearmen"]
+    result = shoot_unit(
+        _fielded(archers, 10, frontage=5),
+        _fielded(spearmen, 20),
+        REPO.weapons["longbow"],
+    )
+    assert result.shots == 5
+    assert any("Volley Fire" in note for note in result.notes)
+
+
+def test_volley_fire_does_not_apply_to_a_unit_that_moved() -> None:
+    """A unit that moved cannot volley fire: front rank only, honoured with no note."""
+    archers = REPO.units["elven-archers"]
+    spearmen = REPO.units["elven-spearmen"]
+    result = shoot_unit(
+        _fielded(archers, 10, frontage=5),
+        _fielded(spearmen, 20),
+        REPO.weapons["longbow"],
+        context=EngagementContext(moved=True),
+    )
+    assert result.shots == 5
+    assert not any("Volley Fire" in note for note in result.notes)
+
+
+def test_volley_fire_never_on_a_stand_and_shoot() -> None:
+    """A Stand & Shoot reaction cannot volley fire, even standing still."""
+    archers = REPO.units["elven-archers"]
+    spearmen = REPO.units["elven-spearmen"]
+    result = shoot_unit(
+        _fielded(archers, 10, frontage=5),
+        _fielded(spearmen, 20),
+        REPO.weapons["longbow"],
+        context=EngagementContext(moved=False),
+        stand_and_shoot=True,
+    )
+    assert result.shots == 5
+    assert not any("Volley Fire" in note for note in result.notes)
+
+
+def test_forcing_short_range_alone_does_not_forbid_volley_fire() -> None:
+    """Only a Stand & Shoot forbids Volley Fire, not the short-range mechanic.
+
+    A future ability that forces a shot short of its range must leave
+    Volley Fire available; the ban keys off the reaction, not the flag.
+    """
+    archers = REPO.units["elven-archers"]
+    spearmen = REPO.units["elven-spearmen"]
+    result = shoot_unit(
+        _fielded(archers, 10, frontage=5),
+        _fielded(spearmen, 20),
+        REPO.weapons["longbow"],
+        context=EngagementContext(moved=False),
+        force_short_range=True,
+    )
+    assert result.shots == 8  # front five plus three from the second rank
 
 
 def test_shoot_unit_caps_casualties_but_not_wounds() -> None:

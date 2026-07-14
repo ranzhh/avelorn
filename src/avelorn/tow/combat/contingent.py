@@ -177,6 +177,19 @@ class Formation:
         """The depth: how many ranks, the rear one possibly incomplete."""
         return self.full_ranks + (1 if self.remainder else 0)
 
+    @property
+    def rear_rank_sizes(self) -> tuple[int, ...]:
+        """The model count of each rank behind the front, front to back.
+
+        Empty for a single-rank formation. The ranks a Volley Fire draws
+        its extra shots from, and the supporting ranks a melee will draw
+        on, read their sizes from here.
+        """
+        sizes = [self.frontage] * self.full_ranks
+        if self.remainder:
+            sizes.append(self.remainder)
+        return tuple(sizes[1:])
+
 
 @dataclass(frozen=True)
 class Contingent:

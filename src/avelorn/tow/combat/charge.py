@@ -48,7 +48,8 @@ def stand_and_shoot(
     a **-1 To Hit** for firing at a fast-closing target, and **no Firing at
     Long Range penalty** — the shot lands even beyond the weapon's maximum
     range, at no range modifier. The shooters are standing (they have not
-    moved), so Moving and Shooting does not apply either. The charging unit
+    moved), so Moving and Shooting does not apply either — but Volley Fire
+    is forbidden on this reaction, so only the front rank fires. The charging unit
     is **not** required to make a Panic test for these casualties, so no
     morale seam is composed on the result — the survivors simply press home
     the charge.
@@ -71,6 +72,7 @@ def stand_and_shoot(
         context=EngagementContext(moved=False),
         hit_modifier=_STAND_AND_SHOOT_TO_HIT,
         force_short_range=True,
+        stand_and_shoot=True,
     )
 
 
