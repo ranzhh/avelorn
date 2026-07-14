@@ -243,24 +243,24 @@ def _engage(
     profile = weapon.combat_profile
     if profile is None:
         raise ValueError(f"{weapon.name} has no Combat profile; it cannot fight")
-    shooter, target = attacker.unit, defender.unit
-    weapon_skill = shooter.profiles[0][Characteristic.WEAPON_SKILL]
+    striker, target = attacker.unit, defender.unit
+    weapon_skill = striker.profiles[0][Characteristic.WEAPON_SKILL]
     target_weapon_skill = target.profiles[0][Characteristic.WEAPON_SKILL]
-    attacks_per_model = shooter.profiles[0][Characteristic.ATTACKS]
+    attacks_per_model = striker.profiles[0][Characteristic.ATTACKS]
     toughness = target.profiles[0][Characteristic.TOUGHNESS]
     if weapon_skill is None:
-        raise ValueError(f"{shooter.name} has no Weapon Skill; it cannot fight")
+        raise ValueError(f"{striker.name} has no Weapon Skill; it cannot fight")
     if target_weapon_skill is None:
         raise ValueError(f"{target.name} has no Weapon Skill; its To Hit is undefined")
     if attacks_per_model is None:
-        raise ValueError(f"{shooter.name} has no Attacks; it cannot fight")
+        raise ValueError(f"{striker.name} has no Attacks; it cannot fight")
     if toughness is None:
         raise ValueError(f"{target.name} has no Toughness; it cannot be wounded")
 
-    wielder_strength = shooter.profiles[0][Characteristic.STRENGTH]
+    wielder_strength = striker.profiles[0][Characteristic.STRENGTH]
     if profile.strength.is_relative and wielder_strength is None:
         raise ValueError(
-            f"{weapon.name} strikes at the wielder's Strength, but {shooter.name} has none"
+            f"{weapon.name} strikes at the wielder's Strength, but {striker.name} has none"
         )
     strength = profile.strength.resolve(wielder_strength or 0)
 
@@ -290,7 +290,7 @@ def _engage(
     defender_wounds = target.profiles[0][Characteristic.WOUNDS] or 1
     logger.debug(
         "%s (WS %d, A %d) vs %s (WS %d, T %d): per-attack unsaved p=%.3f",
-        shooter.name,
+        striker.name,
         weapon_skill,
         attacks_per_model,
         target.name,
@@ -324,9 +324,9 @@ def strike_unit(
     Each fielded model (``attacker.models``) makes its full Attacks with
     the weapon's Combat profile, using each side's first (rank-and-file)
     profile; casualties cap at the defender's fielded ``models``. The
-    defender's save folds from its resolved loadout; ``rules`` maps
-    printed rule names to rule entries, whose effects compile into the
-    dice walk for the weapon's rules. Unit special rules are not
+    defender's save folds from its resolved loadout, and the weapon's
+    rules compile into the dice walk from the attacker's resolved loadout
+    (``attacker.loadout.weapon_rules``). Unit special rules are not
     factored into the math yet — every one is listed in the result's
     notes.
 
