@@ -54,10 +54,10 @@ class TOWGame(Game):
     armoury: Registry[Armour]
     rules: Registry[Rule]
     # The chapter rules each phase has in force, resolved at assembly.
-    # Consumed by the shooting seam today (volleys, and the reaction
-    # volley Movement borrows); combat has no chapter-rule path into the
-    # math yet — wiring one entangles with per-side melee conditions and
-    # is queued work, not a data change.
+    # Consumed by the shooting seam (volleys, and the reaction volley
+    # Movement borrows) and the combat seam (every round, gated by each
+    # side's conditions); a chapter rule gaining effects is a data change
+    # honoured by whichever phase names it.
     in_play: Mapping[Phase, Mapping[str, Rule]]
     # The turn's phases, assembled as values — each owns exactly the
     # rules in force it needs; none holds a reference back to the game.
@@ -100,7 +100,7 @@ class TOWGame(Game):
             strategy=StrategyPhase(),
             movement=MovementPhase(shooting_in_play=in_play[Phase.SHOOTING]),
             shooting=ShootingPhase(in_play=in_play[Phase.SHOOTING]),
-            combat=CombatPhase(),
+            combat=CombatPhase(in_play=in_play[Phase.COMBAT]),
         )
 
     @classmethod

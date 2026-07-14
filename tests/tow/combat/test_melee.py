@@ -287,14 +287,15 @@ def test_effective_initiative_applies_the_charge_bonus(
     """+1 Initiative per full inch charged, capped by arc, on the I4 base."""
     spearmen = REPO.units["elven-spearmen"]  # I4
     charger = _fielded(spearmen, 5)
-    assert effective_initiative(charger, Charge(inches, arc)).value == expected
+    assert effective_initiative(charger, Charge(inches, arc).initiative_bonus).value == expected
 
 
 def test_effective_initiative_caps_at_ten() -> None:
     """The charge bonus cannot lift Initiative past the printed cap of 10."""
     fast = _higher_initiative(REPO.units["elven-spearmen"], 9)
     charger = _fielded(fast, 5)
-    assert effective_initiative(charger, Charge(5, ChargeArc.FLANK)).value == 10  # 9 + 4 -> 10
+    bonus = Charge(5, ChargeArc.FLANK).initiative_bonus
+    assert effective_initiative(charger, bonus).value == 10  # 9 + 4 -> 10
 
 
 def test_fight_charge_makes_the_charger_strike_first() -> None:
@@ -530,3 +531,59 @@ def test_charge_factors_elven_reflexes_structurally() -> None:
     melee = result.melee
     assert melee.a_initiative.value == melee.b_initiative.value + 3  # charge bonus only
     assert not any("Elven Reflexes" in note for note in melee.notes)
+
+
+# --- combat chapter rules in force, factored into the strike ---
+
+
+def _combat_chapter_rule(name: str, when: dict | None = None) -> Rule:
+    # A Combat-phase chapter rule granting +1 To Hit: a double for any
+    # rule the chapter puts in force, factored into every strike under it.
+    return Rule(
+        id="doctored-combat-rule",
+        name=name,
+        paragraphs=["…"],
+        category=Phase.COMBAT,
+        effects=[ModifierEffect(when=when, then={"to-hit": 1})],
+    )
+
+
+def test_fight_factors_a_combat_chapter_rule() -> None:
+    """A combat chapter rule in force reaches the strike's dice.
+
+    An unconditional +1 To Hit, passed as ``phase_rules``, lifts both
+    sides' hit rolls, so each inflicts more casualties than the same fight
+    with no rule in force — and it leaves no "core rule not factored"
+    note, because it is in the math. This is the seam: a combat chapter
+    rule gaining effects is honoured, no new code.
+    """
+    spearmen = REPO.units["elven-spearmen"]
+    spear = REPO.weapons["thrusting-spear"]
+    a, b = _fielded(spearmen, 5), _fielded(spearmen, 5)
+    rule = _combat_chapter_rule("Doctored Combat Rule")
+    plain = fight(a, b, a_weapon=spear, b_weapon=spear)
+    in_force = fight(a, b, a_weapon=spear, b_weapon=spear, phase_rules={rule.name: rule})
+    assert expected_value(in_force.a_casualties) > expected_value(plain.a_casualties)
+    assert expected_value(in_force.b_casualties) > expected_value(plain.b_casualties)
+    assert not any("core rule" in note for note in in_force.notes)
+
+
+def test_fight_leaves_an_unanswerable_combat_rule_noted() -> None:
+    """A combat chapter rule the conditions cannot answer stays noted.
+
+    Conditioned on the first round of combat but fought without that
+    fact: the modifier is not in the math (casualties match the plain
+    fight) and the rule is reported "core rule not factored", never
+    silently dropped.
+    """
+    spearmen = REPO.units["elven-spearmen"]
+    spear = REPO.weapons["thrusting-spear"]
+    a, b = _fielded(spearmen, 5), _fielded(spearmen, 5)
+    rule = _combat_chapter_rule(
+        "Doctored First-Round Rule", when={Condition.FIRST_ROUND_OF_COMBAT: True}
+    )
+    plain = fight(a, b, a_weapon=spear, b_weapon=spear)
+    noted = fight(a, b, a_weapon=spear, b_weapon=spear, phase_rules={rule.name: rule})
+    assert noted.a_casualties == plain.a_casualties
+    assert noted.b_casualties == plain.b_casualties
+    assert any("core rule not factored: Doctored First-Round Rule" in n for n in noted.notes)

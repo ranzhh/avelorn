@@ -1,6 +1,6 @@
 """The Combat phase: the round, its result, the Break test."""
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import ClassVar
 
@@ -10,6 +10,7 @@ from avelorn.tow.combat.context import CombatContext
 from avelorn.tow.combat.contingent import Contingent
 from avelorn.tow.combat.melee import CombatResult, FightResult, combat_result, fight
 from avelorn.tow.combat.morale import BreakResult, break_test
+from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.unit import Unit
 from avelorn.tow.schema.weapon import Weapon
 
@@ -18,12 +19,14 @@ from avelorn.tow.schema.weapon import Weapon
 class CombatPhase(Phase):
     """The Combat phase: its steps, its round's actions.
 
-    Carries no rules in force yet: the combat chapter's rules have no
-    path into the fight's math (that wiring entangles with per-side
-    melee conditions and is queued work). A combat chapter rule gaining
-    effects today would be assembled into ``game.in_play`` but not
-    honoured — the gap is here, stated, not hidden.
+    ``in_play`` are the chapter's rules in force — every round of combat
+    resolves under them, gated by each side's engagement conditions. No
+    combat chapter rule carries effects in the data today, so the mapping
+    is empty in practice; the path is here, so a rule gaining effects is a
+    data change, honoured like its shooting sibling, not new code.
     """
+
+    in_play: Mapping[str, Rule]
 
     # The printed combat sequence's modelled steps: every step knows
     # what it rolls — this Roll to Hit never confirms (a natural 6
@@ -61,6 +64,7 @@ class CombatPhase(Phase):
             a_prior_losses=a_prior_losses,
             b_prior_losses=b_prior_losses,
             context=context,
+            phase_rules=self.in_play,
         )
 
     def result(self, fought: FightResult) -> CombatResult:

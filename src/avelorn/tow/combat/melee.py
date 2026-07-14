@@ -46,11 +46,16 @@ from avelorn.tow.combat.rules import (
     compile_rules,
     effective_characteristic,
 )
-from avelorn.tow.schema.rule import Condition
+from avelorn.tow.schema.rule import Condition, Rule
 from avelorn.tow.schema.unit import Characteristic, Unit
 from avelorn.tow.schema.weapon import Weapon
 
 logger = logging.getLogger(__name__)
+
+# No rules in force: the fight resolves under weapon and armour alone.
+# The empty mapping is the honest default — a combat that names no chapter
+# rules factors none, exactly as a volley does (shooting's _NONE_IN_PLAY).
+_NONE_IN_PLAY: Mapping[str, Rule] = {}
 
 
 @dataclass(frozen=True)
@@ -226,6 +231,8 @@ def _engage(
     weapon: Weapon,
     *,
     hit_modifier: int,
+    conditions: Mapping[Condition, bool | None] | None = None,
+    phase_rules: Mapping[str, Rule] = _NONE_IN_PLAY,
 ) -> _Engagement:
     # The matchup half of a strike, shared by strike_unit and fight:
     # extract rank-and-file stats, resolve the weapon's Combat profile and
@@ -259,11 +266,18 @@ def _engage(
 
     armour_value = defender_armour(defender.loadout)
     notes: list[str] = []
-    # Melee engagement conditions (charging, flank/rear, ...) are not
-    # modelled yet, so no facts are supplied: a rule needing one stays
-    # unfactored and noted.
-    modifiers, unfactored = compile_rules(profile.special_rules, attacker.loadout.weapon_rules)
+    # This striker's engagement conditions gate its rules, exactly as a
+    # volley's do: a weapon rule whose condition the facts answer is
+    # factored (True) or honoured as a no-op (False), one they leave
+    # unknown stays noted. The combat chapter's rules in force
+    # (phase_rules) apply to every strike, gated by the same facts.
+    modifiers, unfactored = compile_rules(
+        profile.special_rules, attacker.loadout.weapon_rules, conditions
+    )
     notes.extend(f"weapon rule not factored: {rule} ({weapon.name})" for rule in unfactored)
+    phase_modifiers, phase_unfactored = compile_rules(sorted(phase_rules), phase_rules, conditions)
+    modifiers.extend(phase_modifiers)
+    notes.extend(f"core rule not factored: {name}" for name in phase_unfactored)
     if weapon.notes is not None:
         notes.append(f"weapon notes not factored ({weapon.name}): {weapon.notes}")
 
@@ -427,17 +441,23 @@ def _combat_conditions(
 
 def effective_initiative(
     contingent: Contingent,
-    charge: Charge | None = None,
+    charge_bonus: int = 0,
     conditions: Mapping[Condition, bool | None] | None = None,
 ) -> EffectiveCharacteristic:
     """The Initiative a contingent strikes at, all printed modifiers included.
 
-    The whole printed rule in one place: the rank-and-file Initiative,
-    modified by the loadout's rule-granted characteristic modifiers
-    under the evaluated ``conditions``, plus +1 per full inch of the
-    ``charge`` capped by the arc charged into (+3 front, +4 flank or
-    rear), the total capped at 10 (the-combat-phase/charging-units). A
-    profile with no printed Initiative counts as 0.
+    The striking-order assembler, and the one home of the Initiative
+    ceiling: the rank-and-file Initiative, modified by the loadout's
+    rule-granted characteristic modifiers under the evaluated
+    ``conditions``, plus the ``charge_bonus`` the charge already
+    arc-capped (:attr:`~avelorn.tow.combat.contingent.Charge.initiative_bonus`),
+    the total capped at 10 (the-combat-phase/charging-units). A profile
+    with no printed Initiative counts as 0.
+
+    The charge reaches here once, and only as a number: its facts (that
+    the charger moved) travel in ``conditions``, its Initiative
+    contribution as ``charge_bonus`` — the :class:`Charge` object is not
+    passed, so it cannot arrive twice.
 
     Returns:
         The Initiative that decides striking order in :func:`fight`,
@@ -448,8 +468,7 @@ def effective_initiative(
     modified = effective_characteristic(
         base, Characteristic.INITIATIVE, contingent.loadout.rules, conditions
     )
-    bonus = 0 if charge is None else min(charge.full_inches, charge.arc.initiative_cap)
-    return replace(modified, value=min(modified.value + bonus, 10))
+    return replace(modified, value=min(modified.value + charge_bonus, 10))
 
 
 def _prior_loss_pmf(pmf: Sequence[float] | None, models: int, name: str) -> Sequence[float]:
@@ -477,6 +496,7 @@ def fight(
     a_prior_losses: Sequence[float] | None = None,
     b_prior_losses: Sequence[float] | None = None,
     context: CombatContext | None = None,
+    phase_rules: Mapping[str, Rule] = _NONE_IN_PLAY,
 ) -> FightResult:
     """Resolve one round of close combat between two single-profile units.
 
@@ -497,6 +517,13 @@ def fight(
     10. The two sides are otherwise symmetric; only Initiative orders
     them. Resolution happens in strike order and the joint is
     oriented back to the ``(a, b)`` axes the caller passed.
+
+    ``phase_rules`` are the combat chapter's rules in force — resolved by
+    printed name, they apply to every strike this round, gated by each
+    side's conditions, exactly as a volley's shooting-phase rules do
+    (:func:`~avelorn.tow.combat.shooting.shoot_unit`). The Game assembles
+    the mapping once (``game.in_play``); omitted, no chapter rule is in
+    force and none is factored.
 
     ``a_prior_losses`` / ``b_prior_losses`` let a side enter already thinned:
     a pmf whose index ``k`` is P(that side lost ``k`` models *before* any
@@ -531,15 +558,23 @@ def fight(
         raise ValueError("model counts must be >= 0")
     a_lost_before = _prior_loss_pmf(a_prior_losses, a.models, "a_prior_losses")
     b_lost_before = _prior_loss_pmf(b_prior_losses, b.models, "b_prior_losses")
-    a_strikes = _engage(a, b, a_weapon, hit_modifier=0)
-    b_strikes = _engage(b, a, b_weapon, hit_modifier=0)
     situation = context or CombatContext()
-    a_initiative = effective_initiative(
-        a, situation.a_charge, _combat_conditions(situation, situation.a_charge)
+    # Each side's engagement conditions, evaluated once: the same facts
+    # gate its strike's dice walk (weapon and chapter rules) and its
+    # striking-order Initiative — no fact is computed for one and denied
+    # the other.
+    a_conditions = _combat_conditions(situation, situation.a_charge)
+    b_conditions = _combat_conditions(situation, situation.b_charge)
+    a_strikes = _engage(
+        a, b, a_weapon, hit_modifier=0, conditions=a_conditions, phase_rules=phase_rules
     )
-    b_initiative = effective_initiative(
-        b, situation.b_charge, _combat_conditions(situation, situation.b_charge)
+    b_strikes = _engage(
+        b, a, b_weapon, hit_modifier=0, conditions=b_conditions, phase_rules=phase_rules
     )
+    a_bonus = 0 if situation.a_charge is None else situation.a_charge.initiative_bonus
+    b_bonus = 0 if situation.b_charge is None else situation.b_charge.initiative_bonus
+    a_initiative = effective_initiative(a, a_bonus, a_conditions)
+    b_initiative = effective_initiative(b, b_bonus, b_conditions)
     a_first = _strikes_first(a_initiative.value, b_initiative.value)
 
     # Each side may enter already thinned by pre-combat casualties (a Stand &

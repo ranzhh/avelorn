@@ -126,6 +126,22 @@ class Charge:
         if self.full_inches < 0:
             raise ValueError(f"a charge cannot move a negative distance ({self.full_inches})")
 
+    @property
+    def initiative_bonus(self) -> int:
+        """The Initiative bonus this charge grants its charger.
+
+        +1 per full inch moved, capped by the arc struck (+3 into the
+        front, +4 into the flank or rear; the-combat-phase/charging-units).
+        A charge knows only its own contribution: the rulebook's total
+        Initiative ceiling of 10 is the striking-order assembler's to
+        apply (:func:`~avelorn.tow.combat.melee.effective_initiative`),
+        not the charge's.
+
+        Returns:
+            The arc-capped Initiative bonus, +0 for a standing start.
+        """
+        return min(self.full_inches, self.arc.initiative_cap)
+
 
 @dataclass(frozen=True)
 class Contingent:
