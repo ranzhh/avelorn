@@ -441,17 +441,23 @@ def _combat_conditions(
 
 def effective_initiative(
     contingent: Contingent,
-    charge: Charge | None = None,
+    charge_bonus: int = 0,
     conditions: Mapping[Condition, bool | None] | None = None,
 ) -> EffectiveCharacteristic:
     """The Initiative a contingent strikes at, all printed modifiers included.
 
-    The whole printed rule in one place: the rank-and-file Initiative,
-    modified by the loadout's rule-granted characteristic modifiers
-    under the evaluated ``conditions``, plus +1 per full inch of the
-    ``charge`` capped by the arc charged into (+3 front, +4 flank or
-    rear), the total capped at 10 (the-combat-phase/charging-units). A
-    profile with no printed Initiative counts as 0.
+    The striking-order assembler, and the one home of the Initiative
+    ceiling: the rank-and-file Initiative, modified by the loadout's
+    rule-granted characteristic modifiers under the evaluated
+    ``conditions``, plus the ``charge_bonus`` the charge already
+    arc-capped (:attr:`~avelorn.tow.combat.contingent.Charge.initiative_bonus`),
+    the total capped at 10 (the-combat-phase/charging-units). A profile
+    with no printed Initiative counts as 0.
+
+    The charge reaches here once, and only as a number: its facts (that
+    the charger moved) travel in ``conditions``, its Initiative
+    contribution as ``charge_bonus`` — the :class:`Charge` object is not
+    passed, so it cannot arrive twice.
 
     Returns:
         The Initiative that decides striking order in :func:`fight`,
@@ -462,8 +468,7 @@ def effective_initiative(
     modified = effective_characteristic(
         base, Characteristic.INITIATIVE, contingent.loadout.rules, conditions
     )
-    bonus = 0 if charge is None else min(charge.full_inches, charge.arc.initiative_cap)
-    return replace(modified, value=min(modified.value + bonus, 10))
+    return replace(modified, value=min(modified.value + charge_bonus, 10))
 
 
 def _prior_loss_pmf(pmf: Sequence[float] | None, models: int, name: str) -> Sequence[float]:
@@ -566,8 +571,10 @@ def fight(
     b_strikes = _engage(
         b, a, b_weapon, hit_modifier=0, conditions=b_conditions, phase_rules=phase_rules
     )
-    a_initiative = effective_initiative(a, situation.a_charge, a_conditions)
-    b_initiative = effective_initiative(b, situation.b_charge, b_conditions)
+    a_bonus = 0 if situation.a_charge is None else situation.a_charge.initiative_bonus
+    b_bonus = 0 if situation.b_charge is None else situation.b_charge.initiative_bonus
+    a_initiative = effective_initiative(a, a_bonus, a_conditions)
+    b_initiative = effective_initiative(b, b_bonus, b_conditions)
     a_first = _strikes_first(a_initiative.value, b_initiative.value)
 
     # Each side may enter already thinned by pre-combat casualties (a Stand &

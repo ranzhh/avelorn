@@ -287,14 +287,15 @@ def test_effective_initiative_applies_the_charge_bonus(
     """+1 Initiative per full inch charged, capped by arc, on the I4 base."""
     spearmen = REPO.units["elven-spearmen"]  # I4
     charger = _fielded(spearmen, 5)
-    assert effective_initiative(charger, Charge(inches, arc)).value == expected
+    assert effective_initiative(charger, Charge(inches, arc).initiative_bonus).value == expected
 
 
 def test_effective_initiative_caps_at_ten() -> None:
     """The charge bonus cannot lift Initiative past the printed cap of 10."""
     fast = _higher_initiative(REPO.units["elven-spearmen"], 9)
     charger = _fielded(fast, 5)
-    assert effective_initiative(charger, Charge(5, ChargeArc.FLANK)).value == 10  # 9 + 4 -> 10
+    bonus = Charge(5, ChargeArc.FLANK).initiative_bonus
+    assert effective_initiative(charger, bonus).value == 10  # 9 + 4 -> 10
 
 
 def test_fight_charge_makes_the_charger_strike_first() -> None:
