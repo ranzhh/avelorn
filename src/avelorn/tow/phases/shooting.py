@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 from avelorn.core.game import Phase
+from avelorn.tow.combat.attack import ArmourSave, Roll, RollToHitShooting, RollToWound, WardSave
 from avelorn.tow.combat.context import EngagementContext
 from avelorn.tow.combat.contingent import Contingent
 from avelorn.tow.combat.morale import PanicResult, make_panic_tests
@@ -24,6 +25,15 @@ class ShootingPhase(Phase):
 
     in_play: Mapping[str, Rule]
 
+    # The phase's dice, in printed order, each owning its semantics
+    # (this Roll to Hit confirms 7+). This is the declaration: a
+    # drift-guard test holds the attack factory to it.
+    rolls: ClassVar[tuple[type[Roll], ...]] = (
+        RollToHitShooting,
+        RollToWound,
+        ArmourSave,
+        WardSave,
+    )
     # The printed shooting sequence.
     steps: ClassVar[tuple[Stage, ...]] = (
         Stage.ROLL_TO_HIT,

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 from avelorn.core.game import Phase
+from avelorn.tow.combat.attack import ArmourSave, Roll, RollToHitCombat, RollToWound, WardSave
 from avelorn.tow.combat.context import CombatContext
 from avelorn.tow.combat.contingent import Contingent
 from avelorn.tow.combat.melee import CombatResult, FightResult, combat_result, fight
@@ -25,6 +26,15 @@ class CombatPhase(Phase):
     honoured — the gap is here, stated, not hidden.
     """
 
+    # The phase's dice, in printed order — this Roll to Hit never
+    # confirms: a natural 6 always hits. This is the declaration: a
+    # drift-guard test holds the attack factory to it.
+    rolls: ClassVar[tuple[type[Roll], ...]] = (
+        RollToHitCombat,
+        RollToWound,
+        ArmourSave,
+        WardSave,
+    )
     # The rolls of the printed combat sequence. The phase's other printed
     # steps (choose combats, calculate combat result, break tests) join
     # Stage append-only when rule text demands them, as ever.

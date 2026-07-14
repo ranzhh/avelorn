@@ -157,3 +157,21 @@ def test_the_charge_is_a_movement_action() -> None:
         phase_rules=GAME.in_play[Phase.SHOOTING],
     )
     assert bound == direct
+
+
+def test_each_phase_declares_the_dice_the_engine_rolls() -> None:
+    """The phase is the declaration of its dice; the factory answers to it.
+
+    Drift guard: an attack built for a phase must roll exactly the dice
+    that phase declares, in printed order — and the dice cover the
+    phase's roll steps.
+    """
+    from avelorn.tow.combat.attack import AttackProfile
+
+    shot = AttackProfile.shooting(hit_target=4, wound_target=4, save_target=4, ward_target=4)
+    blow = AttackProfile.melee(hit_target=4, wound_target=4, save_target=4, ward_target=4)
+    assert tuple(type(roll) for roll in shot.rolls) == GAME.shooting.rolls
+    assert tuple(type(roll) for roll in blow.rolls) == GAME.combat.rolls
+    for phase in (GAME.shooting, GAME.combat):
+        roll_steps = [stage for stage in phase.steps if stage in {r.stage for r in phase.rolls}]
+        assert roll_steps == [roll.stage for roll in phase.rolls]
