@@ -236,11 +236,13 @@ def shoot_unit(
 ) -> ShootingResult:
     """Resolve ``attacker`` shooting a volley of ``weapon`` at ``defender``.
 
-    One shot per fielded model (``attacker.models``), using each side's
-    first (rank-and-file) profile and the weapon's missile profile;
-    casualties cap at the defender's fielded ``models``. To resolve a
-    partial volley (only some models in range or sight), field the
-    shooting subset as its own contingent. ``weapon`` is the per-action
+    One shot per model in the unit's front rank (``attacker.formation.files``),
+    using each side's first (rank-and-file) profile and the weapon's
+    missile profile; casualties cap at the defender's fielded ``models``.
+    Only the front rank fires on flat ground; a hill would add a rank
+    (not modelled). To resolve a partial volley (only some models in range
+    or sight), field the shooting subset as its own contingent. ``weapon``
+    is the per-action
     choice and must be carried — resolve a text boundary's printed name
     through ``attacker.loadout.weapon(...)``; the weapon's rules compile
     from the loadout's resolved index, and the defender's save folds
@@ -269,7 +271,10 @@ def shoot_unit(
             the wielder's Strength and
             the attacker profile has none.
     """
-    shooters, defenders = attacker.models, defender.models
+    # Only the unit's front rank fires (shooting-with-more-than-one-rank);
+    # a unit on a hill fires with one rank more, not modelled — flat ground
+    # is assumed. Casualties still cap at the whole target unit's size.
+    shooters, defenders = attacker.formation.files, defender.models
     shooter, target = attacker.unit, defender.unit
     # TODO: profile selection is naive. A unit that bought a champion
     # shoots with the champion too (possibly at higher BS, e.g. an

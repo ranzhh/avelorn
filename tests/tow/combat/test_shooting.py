@@ -15,10 +15,15 @@ from avelorn.tow.schema.unit import Characteristic, Unit
 REPO = TOWRepository()
 
 
-def _fielded(unit: Unit, models: int) -> Contingent:
+def _fielded(unit: Unit, models: int, frontage: int | None = None) -> Contingent:
     # Field at the printed, optionless loadout, with the real registries.
     return Contingent.field(
-        unit, models, weapons=REPO.weapons, armoury=REPO.armoury, rules=REPO.rules
+        unit,
+        models,
+        weapons=REPO.weapons,
+        armoury=REPO.armoury,
+        rules=REPO.rules,
+        frontage=frontage,
     )
 
 
@@ -119,16 +124,33 @@ def test_shoot_rejects_negative_targets() -> None:
         shoot(3, ballistic_skill=4, strength=3, toughness=3, targets=-1)
 
 
-def test_shoot_unit_caps_casualties_but_not_wounds() -> None:
-    """``defenders`` bounds casualties while leaving the wound math intact.
+def test_only_the_front_rank_fires() -> None:
+    """A unit fires with its front rank, not every model.
 
-    30 archers into 5 spearmen: the wound distribution is unbounded over
-    30 shots, but the spearmen unit can lose at most 5 models.
+    Ten archers ranked five wide stand in two ranks; only the front five
+    fire on flat ground.
     """
     archers = REPO.units["elven-archers"]
     spearmen = REPO.units["elven-spearmen"]
     result = shoot_unit(
-        _fielded(archers, 30),
+        _fielded(archers, 10, frontage=5),
+        _fielded(spearmen, 20),
+        REPO.weapons["longbow"],
+    )
+    assert result.shots == 5
+
+
+def test_shoot_unit_caps_casualties_but_not_wounds() -> None:
+    """``defenders`` bounds casualties while leaving the wound math intact.
+
+    30 archers ranked one rank wide (so all fire) into 5 spearmen: the
+    wound distribution is unbounded over 30 shots, but the spearmen unit
+    can lose at most 5 models.
+    """
+    archers = REPO.units["elven-archers"]
+    spearmen = REPO.units["elven-spearmen"]
+    result = shoot_unit(
+        _fielded(archers, 30, frontage=30),
         _fielded(spearmen, 5),
         REPO.weapons["longbow"],
     )
@@ -164,16 +186,17 @@ def test_shoot_rejects_non_positive_wounds_per_model() -> None:
 def test_shoot_unit_folds_multi_wound_casualties_and_caps() -> None:
     """A W3 target: wounds fold into slain models, then cap at the unit size.
 
-    30 archers into 5 Wounds-3 models: casualties are models removed (three
-    wounds each), capped at 5, and fewer than the wounds inflicted. The
-    old "carry-over not modelled" disclaimer is gone.
+    30 archers ranked one rank wide (so all fire) into 5 Wounds-3 models:
+    casualties are models removed (three wounds each), capped at 5, and
+    fewer than the wounds inflicted. The old "carry-over not modelled"
+    disclaimer is gone.
     """
     archers = REPO.units["elven-archers"]
     spearmen = REPO.units["elven-spearmen"]
     multi_wound = spearmen.model_copy(deep=True)
     multi_wound.profiles[0].characteristics[Characteristic.WOUNDS] = 3
     result = shoot_unit(
-        _fielded(archers, 30),
+        _fielded(archers, 30, frontage=30),
         _fielded(multi_wound, 5),
         REPO.weapons["longbow"],
     )
