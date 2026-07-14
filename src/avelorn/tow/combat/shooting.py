@@ -19,6 +19,7 @@ from avelorn.tow.combat.armour import defender_armour
 from avelorn.tow.combat.attack import (
     AttackProfile,
     HitRoll,
+    Modifier,
     Outcome,
     Transform,
     resolve_attack,
@@ -100,6 +101,7 @@ def shoot(
     hit_modifier: int = 0,
     wounds_per_model: int = 1,
     targets: int | None = None,
+    modifiers: Sequence[Modifier] = (),
     transforms: Sequence[Transform] = (),
     notes: tuple[str, ...] = (),
 ) -> ShootingResult:
@@ -113,9 +115,9 @@ def shoot(
     models than the unit contains. The unsaved-wound ``distribution`` is
     unaffected by either; it never depends on the receiving unit.
 
-    ``transforms`` are rule hooks applied to each attack's dice walk —
-    the seam the rules compiler will wire; nothing in production passes
-    any yet.
+    ``modifiers`` are the compiled records of printed conditional
+    modifiers, applied to each attack's dice walk; ``transforms`` are
+    bespoke code hooks — the escape hatch for what a record cannot say.
 
     Returns:
         The per-shot probabilities, the distribution of unsaved wounds, and
@@ -147,12 +149,13 @@ def shoot(
             save_target=roll_target(save),
             ward_target=roll_target(ward_target),
         ),
+        modifiers,
         transforms,
         hit_roll=HitRoll.SHOOTING,
     )
     p_unsaved = float(resolution.p_unsaved)
     p_kill = float(resolution.p_of(Outcome.INSTANT_KILL))
-    # Report the walk's effective To Hit target (transforms included) so
+    # Report the walk's effective To Hit target (modifiers included) so
     # the printed target matches the math; other stages keep chart values.
     if isinstance(resolution.hit_target, int):
         hit = resolution.hit_target
@@ -316,14 +319,12 @@ def shoot_unit(
     # Weapon rules with compiled effects join the dice walk; the rest are
     # reported, exactly as before. Shooting-phase chapter rules (Firing
     # at Long Range, Moving and Shooting) apply to every volley.
-    transforms, unfactored = compile_rules(
+    modifiers, unfactored = compile_rules(
         profile.special_rules, attacker.loadout.weapon_rules, conditions
     )
     notes.extend(f"weapon rule not factored: {rule} ({chosen.name})" for rule in unfactored)
-    phase_transforms, phase_unfactored = compile_rules(
-        sorted(phase_rules), phase_rules, conditions
-    )
-    transforms.extend(phase_transforms)
+    phase_modifiers, phase_unfactored = compile_rules(sorted(phase_rules), phase_rules, conditions)
+    modifiers.extend(phase_modifiers)
     notes.extend(f"core rule not factored: {name}" for name in phase_unfactored)
     if chosen.notes is not None:
         notes.append(f"weapon notes not factored ({chosen.name}): {chosen.notes}")
@@ -342,6 +343,6 @@ def shoot_unit(
         hit_modifier=hit_modifier,
         wounds_per_model=defender_wounds,
         targets=defenders,
-        transforms=transforms,
+        modifiers=modifiers,
         notes=tuple(notes),
     )

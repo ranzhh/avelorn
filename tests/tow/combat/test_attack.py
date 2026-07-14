@@ -12,6 +12,7 @@ import pytest
 from avelorn.tow.combat.attack import (
     AttackProfile,
     HitRoll,
+    Modifier,
     Outcome,
     RollState,
     RollTarget,
@@ -20,6 +21,7 @@ from avelorn.tow.combat.attack import (
     walk,
 )
 from avelorn.tow.combat.charts import hit_probability, save_probability, wound_probability
+from avelorn.tow.schema.rule import NaturalRoll
 from avelorn.tow.schema.stage import Stage
 
 # Every shape the charts can hand the resolver: impossible (0, 10+) and
@@ -157,9 +159,9 @@ def test_on_success_double_reproduces_armour_bane_golden() -> None:
         hit_target=3, wound_target=4, save_target=5, ward_target=RollState.IMPOSSIBLE
     )
     double = Transform(stage=Stage.ROLL_TO_WOUND, on_success=_worsen_save_on_natural_six)
-    assert resolve_attack(profile, [double], hit_roll=HitRoll.SHOOTING).p_unsaved == Fraction(
-        13, 54
-    )
+    assert resolve_attack(
+        profile, transforms=[double], hit_roll=HitRoll.SHOOTING
+    ).p_unsaved == Fraction(13, 54)
 
 
 def test_modify_targets_double_equals_baked_in_modifier() -> None:
@@ -175,7 +177,7 @@ def test_modify_targets_double_equals_baked_in_modifier() -> None:
     plus_one = Transform(stage=Stage.ROLL_TO_HIT, modify_targets=improve_hit)
     baked = replace(profile, hit_target=3)
     assert (
-        resolve_attack(profile, [plus_one], hit_roll=HitRoll.SHOOTING).p_unsaved
+        resolve_attack(profile, transforms=[plus_one], hit_roll=HitRoll.SHOOTING).p_unsaved
         == resolve_attack(baked, hit_roll=HitRoll.SHOOTING).p_unsaved
     )
 
@@ -203,12 +205,12 @@ def test_transforms_apply_in_priority_order() -> None:
     p_hit_wound = Fraction(5, 6) * Fraction(5, 6)
     # set(2) first, then +1 -> save on 3+ (fails 2/6).
     first = resolve_attack(
-        profile, [worsen_one(1), set_to_two(0)], hit_roll=HitRoll.SHOOTING
+        profile, transforms=[worsen_one(1), set_to_two(0)], hit_roll=HitRoll.SHOOTING
     ).p_unsaved
     assert first == p_hit_wound * Fraction(2, 6)
     # +1 first (5 -> 6), then set(2) -> save on 2+ (fails 1/6).
     second = resolve_attack(
-        profile, [worsen_one(0), set_to_two(1)], hit_roll=HitRoll.SHOOTING
+        profile, transforms=[worsen_one(0), set_to_two(1)], hit_roll=HitRoll.SHOOTING
     ).p_unsaved
     assert second == p_hit_wound * Fraction(1, 6)
 
@@ -238,7 +240,7 @@ def test_instant_kill_double_reproduces_spike_classes() -> None:
         hit_target=3, wound_target=4, save_target=5, ward_target=RollState.IMPOSSIBLE
     )
     double = Transform(stage=Stage.ROLL_TO_WOUND, on_success=_killing_blow)
-    resolution = resolve_attack(profile, [double], hit_roll=HitRoll.SHOOTING)
+    resolution = resolve_attack(profile, transforms=[double], hit_roll=HitRoll.SHOOTING)
     assert resolution.p_of(Outcome.INSTANT_KILL) == Fraction(1, 9)
     assert resolution.p_of(Outcome.UNSAVED_WOUND) == Fraction(4, 27)
     assert resolution.p_unsaved == Fraction(1, 9) + Fraction(4, 27)
@@ -249,7 +251,7 @@ def test_ward_save_applies_to_instant_kills() -> None:
     """A 5+ ward scales the kill class by its failure chance (4/6)."""
     profile = AttackProfile(hit_target=3, wound_target=4, save_target=5, ward_target=5)
     double = Transform(stage=Stage.ROLL_TO_WOUND, on_success=_killing_blow)
-    resolution = resolve_attack(profile, [double], hit_roll=HitRoll.SHOOTING)
+    resolution = resolve_attack(profile, transforms=[double], hit_roll=HitRoll.SHOOTING)
     assert resolution.p_of(Outcome.INSTANT_KILL) == Fraction(1, 9) * Fraction(4, 6)
 
 
@@ -299,7 +301,7 @@ def test_automatic_wounds_cannot_killing_blow() -> None:
         ward_target=RollState.IMPOSSIBLE,
     )
     double = Transform(stage=Stage.ROLL_TO_WOUND, on_success=_killing_blow)
-    resolution = resolve_attack(profile, [double], hit_roll=HitRoll.SHOOTING)
+    resolution = resolve_attack(profile, transforms=[double], hit_roll=HitRoll.SHOOTING)
     assert resolution.p_of(Outcome.INSTANT_KILL) == 0
     assert resolution.p_of(Outcome.UNSAVED_WOUND) == Fraction(4, 6) * Fraction(4, 6)
 
@@ -323,9 +325,9 @@ def test_wound_modifier_cannot_defeat_the_natural_one() -> None:
         return replace(p, wound_target=p.wound_target - 1)
 
     plus_one = Transform(stage=Stage.ROLL_TO_WOUND, modify_targets=improve_wound)
-    assert resolve_attack(profile, [plus_one], hit_roll=HitRoll.SHOOTING).p_unsaved == Fraction(
-        5, 6
-    )
+    assert resolve_attack(
+        profile, transforms=[plus_one], hit_roll=HitRoll.SHOOTING
+    ).p_unsaved == Fraction(5, 6)
 
 
 def test_profile_targets_cover_exactly_the_attack_rolls() -> None:
@@ -335,7 +337,89 @@ def test_profile_targets_cover_exactly_the_attack_rolls() -> None:
     event may name) and the profile's stage-addressed targets are one
     set — a roll joining either side must join both.
     """
-    from avelorn.tow.combat.attack import _TARGETS
     from avelorn.tow.schema.stage import ATTACK_ROLLS
 
-    assert set(_TARGETS) == ATTACK_ROLLS
+    profile = AttackProfile(hit_target=3, wound_target=4, save_target=5, ward_target=6)
+    for stage in Stage:
+        if stage in ATTACK_ROLLS:
+            assert profile.with_target(stage, 2).target(stage) == 2
+        else:
+            with pytest.raises(KeyError):
+                profile.target(stage)
+            with pytest.raises(KeyError):
+                profile.with_target(stage, 2)
+
+
+# --- Modifier records: the walk interprets data, not closures ---
+
+
+def test_untriggered_modifier_moves_its_roll_before_it_is_made() -> None:
+    """A record with no trigger moves its landing roll's target every attack.
+
+    Hit 4+ moved by -1 (a "+1 to hit"): 3+ at p = 4/6, and the effective
+    target is reported.
+    """
+    profile = AttackProfile(
+        hit_target=4,
+        wound_target=RollState.AUTOMATIC,
+        save_target=RollState.IMPOSSIBLE,
+        ward_target=RollState.IMPOSSIBLE,
+    )
+    plus_one = Modifier(lands_on=Stage.ROLL_TO_HIT, move=-1)
+    resolution = resolve_attack(profile, [plus_one], hit_roll=HitRoll.SHOOTING)
+    assert resolution.p_unsaved == Fraction(4, 6)
+    assert resolution.hit_target == 3
+
+
+def test_triggered_modifier_reproduces_the_armour_bane_golden() -> None:
+    """The record form of Armour Bane: natural 6 To Wound, save +1.
+
+    Hit 3+, wound 4+, save 5+ -> 13/54, the golden the closure doubles
+    proved and the compiler now emits as data.
+    """
+    profile = AttackProfile(
+        hit_target=3, wound_target=4, save_target=5, ward_target=RollState.IMPOSSIBLE
+    )
+    bane = Modifier(
+        lands_on=Stage.MAKE_ARMOUR_SAVES,
+        move=1,
+        trigger=NaturalRoll(face=6, roll=Stage.ROLL_TO_WOUND),
+    )
+    assert resolve_attack(profile, [bane], hit_roll=HitRoll.SHOOTING).p_unsaved == Fraction(13, 54)
+
+
+def test_triggered_modifier_stays_quiet_on_other_faces() -> None:
+    """A trigger on a face the die never shows changes nothing.
+
+    The same record triggered by a natural 2 To Wound on a 4+ wound
+    target can never fire (2 is a miss), so the math equals the plain
+    profile.
+    """
+    profile = AttackProfile(
+        hit_target=3, wound_target=4, save_target=5, ward_target=RollState.IMPOSSIBLE
+    )
+    never = Modifier(
+        lands_on=Stage.MAKE_ARMOUR_SAVES,
+        move=1,
+        trigger=NaturalRoll(face=2, roll=Stage.ROLL_TO_WOUND),
+    )
+    assert (
+        resolve_attack(profile, [never], hit_roll=HitRoll.SHOOTING).p_unsaved
+        == resolve_attack(profile, hit_roll=HitRoll.SHOOTING).p_unsaved
+    )
+
+
+def test_modifier_cannot_move_a_rollless_target() -> None:
+    """A target that is no die (a RollState) has nothing to move.
+
+    Moving an IMPOSSIBLE save leaves it impossible: no save appears from
+    a modifier alone.
+    """
+    profile = AttackProfile(
+        hit_target=RollState.AUTOMATIC,
+        wound_target=RollState.AUTOMATIC,
+        save_target=RollState.IMPOSSIBLE,
+        ward_target=RollState.IMPOSSIBLE,
+    )
+    improve_save = Modifier(lands_on=Stage.MAKE_ARMOUR_SAVES, move=-2)
+    assert resolve_attack(profile, [improve_save], hit_roll=HitRoll.SHOOTING).p_unsaved == 1
