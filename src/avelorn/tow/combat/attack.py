@@ -8,12 +8,13 @@ individual stages and dice ("on a natural 6 To Wound" needs the die,
 not just its probability). Probabilities are exact fractions, converted
 to float at the caller's edge.
 
-Rules hook the walk as :class:`Transform`s: target modifications apply
-before a stage's roll, on-success effects see the natural face and
-shape the rest of the walk. An attack ends in an :class:`Outcome`
+Printed conditional modifiers reach the walk as :class:`Modifier`
+records — which roll's target moves, by how much, on which natural
+face — readable as data. Bespoke rules the records cannot say hook in
+as :class:`Transform` code. An attack ends in an :class:`Outcome`
 class — nothing, an unsaved wound, or the rulebook's "Instant Kills"
 shape ("loses all of its remaining Wounds") — which transforms may
-escalate. No rules ship yet; the hooks are exercised by test doubles.
+escalate.
 """
 
 import logging
@@ -23,6 +24,7 @@ from enum import StrEnum
 from fractions import Fraction
 
 from avelorn.tow.combat.charts import CONFIRM_TARGETS
+from avelorn.tow.schema.rule import NaturalRoll
 from avelorn.tow.schema.stage import Stage
 
 logger = logging.getLogger(__name__)
@@ -134,8 +136,36 @@ class AttackProfile:
 
 
 @dataclass(frozen=True)
+class Modifier:
+    """One compiled modifier: move a roll's target by a signed amount.
+
+    The declarative form of the printed conditional modifiers — what the
+    rules compiler emits and the walk interprets, readable as data:
+    ``lands_on`` is the roll whose target moves, ``move`` the movement
+    with the printed sign conventions already folded in, and ``trigger``
+    the natural roll that fires it (the change then holds for the rest
+    of that attack) — or None for a modifier applied before its roll on
+    every attack. A trigger always precedes its landing roll; the
+    compiler refuses the rest.
+
+    What a moved target *means* stays each roll's own knowledge (a To
+    Hit of 7+ confirms, a save past 6+ takes no roll), and a target
+    that is no die (a RollState) has nothing to move.
+    """
+
+    lands_on: Stage
+    move: int
+    trigger: NaturalRoll | None = None
+
+
+@dataclass(frozen=True)
 class Transform:
-    """A rule's hook into one stage of the attack sequence.
+    """A bespoke rule's code hook into one stage of the attack sequence.
+
+    The escape hatch for what a :class:`Modifier` record cannot say —
+    escalating the outcome class (Killing Blow), rewriting targets from
+    arbitrary state. Printed conditional modifiers compile to records
+    instead; a Transform is hand-written, as itself.
 
     ``modify_targets`` runs before the stage's roll and returns updated
     targets ("+1 to hit"). ``on_success`` runs after the stage's roll
@@ -191,24 +221,28 @@ class AttackResolution:
 
 def resolve_attack(
     profile: AttackProfile,
+    modifiers: Sequence[Modifier] = (),
     transforms: Sequence[Transform] = (),
     *,
     hit_roll: HitRoll,
 ) -> AttackResolution:
     """Resolve one attack by walking its dice exactly.
 
-    ``hit_roll`` selects how the To Hit die resolves (shooting's 7+
-    confirmation versus close combat's natural-6-always-hits); it leaves
-    every other stage unchanged. It is required — the phase is known at
-    the calling helper (``shoot``/``strike``), never assumed here.
+    ``modifiers`` are the compiled records of printed conditional
+    modifiers; ``transforms`` the bespoke code hooks. ``hit_roll``
+    selects how the To Hit die resolves (shooting's 7+ confirmation
+    versus close combat's natural-6-always-hits); it leaves every other
+    stage unchanged. It is required — the phase is known at the calling
+    helper (``shoot``/``strike``), never assumed here.
 
     Returns:
         The exact per-attack outcome-class probabilities.
     """
     outcomes: dict[Outcome, Fraction] = {}
-    for p_path, outcome in walk(profile, transforms, hit_roll=hit_roll):
+    for p_path, outcome in walk(profile, modifiers, transforms, hit_roll=hit_roll):
         outcomes[outcome] = outcomes.get(outcome, Fraction(0)) + p_path
-    effective = _modify(_by_stage(transforms)[Stage.ROLL_TO_HIT], profile)
+    before, _ = _plan(modifiers)
+    effective = _before_roll(Stage.ROLL_TO_HIT, profile, before, _by_stage(transforms))
     resolution = AttackResolution(outcomes=outcomes, hit_target=effective.hit_target)
     logger.debug(
         "attack walk: p_unsaved = %s = %.4f (instant kill %s)",
@@ -221,45 +255,93 @@ def resolve_attack(
 
 def walk(
     profile: AttackProfile,
+    modifiers: Sequence[Modifier] = (),
     transforms: Sequence[Transform] = (),
     *,
     hit_roll: HitRoll,
 ) -> Iterator[tuple[Fraction, Outcome]]:
-    """Enumerate every dice path of one attack, applying transforms.
+    """Enumerate every dice path of one attack, applying the rules' changes.
+
+    At every stage: untriggered modifiers landing there move its target,
+    bespoke hooks run, the die rolls, and a success fires the modifiers
+    triggered by its natural face — shaping the rolls still to come.
 
     Yields:
         ``(probability, outcome)`` per path; the probabilities of all
         paths sum to exactly 1.
     """
+    before, fired = _plan(modifiers)
     hooked = _by_stage(transforms)
+
+    def before_roll(stage: Stage, prof: AttackProfile) -> AttackProfile:
+        return _before_roll(stage, prof, before, hooked)
+
+    def on_success(stage: Stage, face: int, prof: AttackProfile) -> AttackProfile:
+        shown = [m for m in fired[stage] if m.trigger is not None and m.trigger.face == face]
+        return _on_success(hooked[stage], face, _moved(prof, shown))
+
     roll_hit = _roll_melee_hit if hit_roll is HitRoll.MELEE else _roll_to_hit
-    hit_profile = _modify(hooked[Stage.ROLL_TO_HIT], profile)
+    hit_profile = before_roll(Stage.ROLL_TO_HIT, profile)
     for p_hit, hit_face, hit in roll_hit(hit_profile.hit_target):
         if not hit:
             yield p_hit, Outcome.NONE
             continue
-        wound_profile = _modify(
-            hooked[Stage.ROLL_TO_WOUND],
-            _on_success(hooked[Stage.ROLL_TO_HIT], hit_face, hit_profile),
+        wound_profile = before_roll(
+            Stage.ROLL_TO_WOUND, on_success(Stage.ROLL_TO_HIT, hit_face, hit_profile)
         )
         for p_wound, wound_face, wounded in _roll(wound_profile.wound_target):
             if not wounded:
                 yield p_hit * p_wound, Outcome.NONE
                 continue
-            save_profile = _modify(
-                hooked[Stage.MAKE_ARMOUR_SAVES],
-                _on_success(hooked[Stage.ROLL_TO_WOUND], wound_face, wound_profile),
+            save_profile = before_roll(
+                Stage.MAKE_ARMOUR_SAVES, on_success(Stage.ROLL_TO_WOUND, wound_face, wound_profile)
             )
             for p_save, _, saved in _roll_save(save_profile.save_target):
                 if saved:
                     yield p_hit * p_wound * p_save, Outcome.NONE
                     continue
-                ward_profile = _modify(hooked[Stage.WARD_SAVES], save_profile)
+                ward_profile = before_roll(Stage.WARD_SAVES, save_profile)
                 for p_ward, _, warded in _roll_save(ward_profile.ward_target):
                     yield (
                         p_hit * p_wound * p_save * p_ward,
                         Outcome.NONE if warded else ward_profile.unsaved_outcome,
                     )
+
+
+def _plan(
+    modifiers: Sequence[Modifier],
+) -> tuple[dict[Stage, list[Modifier]], dict[Stage, list[Modifier]]]:
+    # Where each record acts: untriggered modifiers act before their
+    # landing roll; triggered ones act when their trigger's die succeeds.
+    before: dict[Stage, list[Modifier]] = {stage: [] for stage in Stage}
+    fired: dict[Stage, list[Modifier]] = {stage: [] for stage in Stage}
+    for modifier in modifiers:
+        if modifier.trigger is None:
+            before[modifier.lands_on].append(modifier)
+        else:
+            fired[modifier.trigger.roll].append(modifier)
+    return before, fired
+
+
+def _moved(profile: AttackProfile, modifiers: list[Modifier]) -> AttackProfile:
+    # Move each record's landing target; a target that is no die (a
+    # RollState) has nothing to move.
+    for modifier in modifiers:
+        target = profile.target(modifier.lands_on)
+        if isinstance(target, int):
+            profile = profile.with_target(modifier.lands_on, target + modifier.move)
+    return profile
+
+
+def _before_roll(
+    stage: Stage,
+    profile: AttackProfile,
+    before: dict[Stage, list[Modifier]],
+    hooked: dict[Stage, list[Transform]],
+) -> AttackProfile:
+    # Records first, then bespoke hooks: a hand-written Transform sees
+    # the targets the printed modifiers already moved.
+    return _modify(hooked[stage], _moved(profile, before[stage]))
 
 
 def _by_stage(transforms: Sequence[Transform]) -> dict[Stage, list[Transform]]:

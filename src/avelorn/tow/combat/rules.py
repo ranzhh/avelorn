@@ -1,9 +1,9 @@
-"""Compile rule effects into attack transforms.
+"""Compile rule effects into attack modifiers.
 
 Printed rule names on units and weapons resolve against the rule
 entries under ``data/tow/rules/``; a resolved rule's effects compile
-into :class:`~avelorn.tow.combat.attack.Transform`s the dice walk
-applies. Resolution honours the convention the rules themselves print:
+into :class:`~avelorn.tow.combat.attack.Modifier` records the dice walk
+interprets. Resolution honours the convention the rules themselves print:
 a bracketed number after the name ("Armour Bane (1)") is the parameter
 of the rule filed under the "(X)" placeholder ("the amount shown in
 brackets after the name of this special rule").
@@ -25,12 +25,12 @@ likewise unfactored: recognised text the engine cannot yet honour.
 
 import logging
 import re
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
 
 from avelorn.core.registry import Registry, UnknownNameError
-from avelorn.tow.combat.attack import AttackProfile, Transform
+from avelorn.tow.combat.attack import Modifier
 from avelorn.tow.schema.rule import (
     PARAMETER_SUFFIX,
     Condition,
@@ -99,8 +99,8 @@ def compile_rules(
     printed_rules: Sequence[str],
     resolved: Mapping[str, Rule],
     conditions: Mapping[Condition, bool | None] | None = None,
-) -> tuple[list[Transform], list[str]]:
-    """Compile printed rule names into transforms.
+) -> tuple[list[Modifier], list[str]]:
+    """Compile printed rule names into modifier records.
 
     ``resolved`` maps printed names to their rules as printed — built at
     the muster boundary (a loadout's ``weapon_rules``) or from a registry
@@ -108,15 +108,16 @@ def compile_rules(
     evaluated engagement facts by :class:`Condition`; None means unknown.
     A rule whose condition needs an unknown fact is unfactored and
     reported; a rule whose condition evaluates False is honoured by not
-    applying — no transform, no note.
+    applying — no modifier, no note.
 
     Returns:
-        The compiled transforms, and the printed names that could not be
-        factored into the math (unresolved, effect-less, or carrying an
-        effect the engine cannot honour yet) — the caller reports those.
+        The compiled modifier records, and the printed names that could
+        not be factored into the math (unresolved, effect-less, or
+        carrying an effect the engine cannot honour yet) — the caller
+        reports those.
     """
     conditions = conditions or {}
-    transforms: list[Transform] = []
+    modifiers: list[Modifier] = []
     unfactored: list[str] = []
     for printed in printed_rules:
         rule = resolved.get(printed)
@@ -125,24 +126,24 @@ def compile_rules(
             unfactored.append(printed)
         else:
             if compiled:
-                logger.debug("rule factored: %s -> %d transform(s)", printed, len(compiled))
-            transforms.extend(compiled)
-    return transforms, unfactored
+                logger.debug("rule factored: %s -> %d modifier(s)", printed, len(compiled))
+            modifiers.extend(compiled)
+    return modifiers, unfactored
 
 
-def _compile(rule: Rule, conditions: Mapping[Condition, bool | None]) -> list[Transform] | None:
+def _compile(rule: Rule, conditions: Mapping[Condition, bool | None]) -> list[Modifier] | None:
     # All-or-nothing: every effect must compile, or the rule is
     # unfactored. An effect whose condition evaluates False compiles to
-    # no transforms — honoured, not unfactored.
+    # no modifiers — honoured, not unfactored.
     if not rule.effects:
         return None
-    transforms: list[Transform] = []
+    modifiers: list[Modifier] = []
     for effect in rule.effects:
         compiled = _compile_effect(effect, conditions)
         if compiled is None:
             return None
-        transforms.extend(compiled)
-    return transforms
+        modifiers.extend(compiled)
+    return modifiers
 
 
 @dataclass(frozen=True)
@@ -169,14 +170,13 @@ _ROLLS: Mapping[ModifierKind, _Roll] = {
 
 def _compile_effect(
     effect: RuleEffect, conditions: Mapping[Condition, bool | None]
-) -> list[Transform] | None:
+) -> list[Modifier] | None:
     # One effect, top to bottom: bail where the walk cannot honour it,
-    # gate on the when's state, then hook each then entry's changed
-    # roll — before its own roll, or on the natural die when the when
-    # names one.
+    # gate on the when's state, then record each then entry as data —
+    # which roll's target moves, by how much, on which natural face.
     if not isinstance(effect, ModifierEffect):
         # Effects for other seams (e.g. re-rolls on make-panic-tests)
-        # are not attack transforms; their seams consume them directly.
+        # are not attack modifiers; their seams consume them directly.
         # As a weapon rule they are honestly unfactored.
         return None
     applies = _condition_applies(effect.conditions, conditions)
@@ -185,7 +185,7 @@ def _compile_effect(
     if not applies:
         return []  # honoured: the situation does not arise
     natural = effect.natural
-    transforms: list[Transform] = []
+    modifiers: list[Modifier] = []
     for quantity, amount in effect.then.items():
         if amount == "X":
             # Unsubstituted placeholder: the printed name carried no parameter.
@@ -196,42 +196,12 @@ def _compile_effect(
             # or phase rule they are honestly unfactored.
             return None
         roll = _ROLLS[quantity]
-        change = _move_target(roll, amount)
-        if natural is None:
-            transforms.append(Transform(stage=roll.stage, modify_targets=change))
-            continue
-        if _SEQUENCE[natural.roll] >= _SEQUENCE[roll.stage]:
+        if natural is not None and _SEQUENCE[natural.roll] >= _SEQUENCE[roll.stage]:
             # A die can only shape rolls still to come; an event at or
             # after the changed roll cannot be honoured.
             return None
-        transforms.append(
-            Transform(stage=natural.roll, on_success=_when_natural(natural.face, change))
-        )
-    return transforms
-
-
-def _move_target(roll: _Roll, amount: int) -> Callable[[AttackProfile], AttackProfile]:
-    # The one profile change every modifier kind shares: move the roll's
-    # target by the printed amount under the kind's sign convention. A
-    # target that is no die (a RollState) has nothing to move.
-    def change(profile: AttackProfile) -> AttackProfile:
-        target = profile.target(roll.stage)
-        if not isinstance(target, int):
-            return profile
-        return profile.with_target(roll.stage, target + roll.sign * amount)
-
-    return change
-
-
-def _when_natural(
-    face: int, change: Callable[[AttackProfile], AttackProfile]
-) -> Callable[[int, AttackProfile], AttackProfile]:
-    # Fire the change only when the trigger stage's die shows the
-    # natural face; the walk hands the face to on_success hooks.
-    def on_success(rolled: int, profile: AttackProfile) -> AttackProfile:
-        return change(profile) if rolled == face else profile
-
-    return on_success
+        modifiers.append(Modifier(lands_on=roll.stage, move=roll.sign * amount, trigger=natural))
+    return modifiers
 
 
 @dataclass(frozen=True)

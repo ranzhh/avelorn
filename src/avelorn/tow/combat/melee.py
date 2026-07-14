@@ -25,6 +25,7 @@ from avelorn.tow.combat.armour import defender_armour
 from avelorn.tow.combat.attack import (
     AttackProfile,
     HitRoll,
+    Modifier,
     Outcome,
     Transform,
     resolve_attack,
@@ -102,6 +103,7 @@ def strike(
     hit_modifier: int = 0,
     wounds_per_model: int = 1,
     targets: int | None = None,
+    modifiers: Sequence[Modifier] = (),
     transforms: Sequence[Transform] = (),
     notes: tuple[str, ...] = (),
 ) -> StrikeResult:
@@ -112,7 +114,7 @@ def strike(
     convention (a penalty is negative and raises the target). Wounds,
     saves and casualty accumulation match shooting: see
     :func:`~avelorn.tow.combat.shooting.shoot` for ``wounds_per_model``,
-    ``targets`` and ``transforms``.
+    ``targets``, ``modifiers`` and ``transforms``.
 
     Returns:
         The per-attack probabilities, the distribution of unsaved wounds,
@@ -132,7 +134,7 @@ def strike(
     hit = melee_hit_target(weapon_skill, target_weapon_skill, hit_modifier)
     wound = wound_target(strength, toughness)
     save = armour_save_target(armour_value, armour_piercing)
-    p_unsaved, p_kill, hit = _per_attack(hit, wound, save, ward_target, transforms)
+    p_unsaved, p_kill, hit = _per_attack(hit, wound, save, ward_target, modifiers, transforms)
     p_hit = melee_hit_probability(hit)
     p_wound = wound_probability(wound)
     logger.debug(
@@ -173,11 +175,12 @@ def _per_attack(
     wound: int | None,
     save: int | None,
     ward: int | None,
-    transforms: Sequence[Transform],
+    modifiers: Sequence[Modifier],
+    transforms: Sequence[Transform] = (),
 ) -> tuple[float, float, int]:
     # Walk one melee attack's dice exactly, returning its per-attack
     # unsaved-wound and instant-kill probabilities and the effective To Hit
-    # target after transforms — the counts that depend only on the matchup,
+    # target after the rules' changes — the counts that depend only on the matchup,
     # not on how many models are swinging.
     resolution = resolve_attack(
         AttackProfile(
@@ -186,6 +189,7 @@ def _per_attack(
             save_target=roll_target(save),
             ward_target=roll_target(ward),
         ),
+        modifiers,
         transforms,
         hit_roll=HitRoll.MELEE,
     )
@@ -260,7 +264,7 @@ def _engage(
     # Melee engagement conditions (charging, flank/rear, ...) are not
     # modelled yet, so no facts are supplied: a rule needing one stays
     # unfactored and noted.
-    transforms, unfactored = compile_rules(profile.special_rules, attacker.loadout.weapon_rules)
+    modifiers, unfactored = compile_rules(profile.special_rules, attacker.loadout.weapon_rules)
     notes.extend(f"weapon rule not factored: {rule} ({weapon.name})" for rule in unfactored)
     if weapon.notes is not None:
         notes.append(f"weapon notes not factored ({weapon.name}): {weapon.notes}")
@@ -268,7 +272,7 @@ def _engage(
     hit = melee_hit_target(weapon_skill, target_weapon_skill, hit_modifier)
     wound = wound_target(strength, toughness)
     save = armour_save_target(armour_value, profile.armour_piercing)
-    p_unsaved, p_kill, hit = _per_attack(hit, wound, save, None, transforms)
+    p_unsaved, p_kill, hit = _per_attack(hit, wound, save, None, modifiers)
     # Wounds accumulate into whole slain models; a profile with no printed
     # Wounds ("-") is treated as a single-Wound model.
     defender_wounds = target.profiles[0][Characteristic.WOUNDS] or 1
