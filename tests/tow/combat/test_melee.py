@@ -399,7 +399,7 @@ def _reflexive(unit: Unit) -> Contingent:
     )
     doctored = unit.model_copy(update={"special_rules": ["Doctored Reflexes"]})
     spear = REPO.weapons["thrusting-spear"]
-    return Contingent(doctored, 1, Loadout((spear,), (), (rule,), ()))
+    return Contingent(doctored, 1, Loadout((spear,), (), (rule,), ()), frontage=1)
 
 
 def test_fight_first_round_initiative_rule_flips_the_order() -> None:

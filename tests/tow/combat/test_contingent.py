@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 
-from avelorn.tow.combat.contingent import Charge, ChargeArc, Contingent, Loadout
+from avelorn.tow.combat.contingent import Charge, ChargeArc, Contingent, Formation, Loadout
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.muster import Complement
 from avelorn.tow.schema.rule import ModifierEffect
@@ -21,6 +21,18 @@ def spearmen_unit() -> Unit:
         The validated unit model.
     """
     return REPO.units["elven-spearmen"]
+
+
+def _fielded(unit: Unit, models: int, frontage: int | None = None) -> Contingent:
+    # Field at the optionless loadout, optionally at a chosen frontage.
+    return Contingent.field(
+        unit,
+        models,
+        weapons=REPO.weapons,
+        armoury=REPO.armoury,
+        rules=REPO.rules,
+        frontage=frontage,
+    )
 
 
 def test_deploy_fields_complement_size_and_loadout(spearmen_unit: Unit) -> None:
@@ -222,3 +234,42 @@ def test_an_uncarried_weapon_cannot_be_fought_with(spearmen_unit: Unit) -> None:
     assert fielded.wields(REPO.weapons["thrusting-spear"]) is REPO.weapons["thrusting-spear"]
     with pytest.raises(ValueError, match="does not carry 'Longbow'"):
         fielded.wields(REPO.weapons["longbow"])
+
+
+# --- Formation: the geometry of ranks and files ---
+
+
+def test_formation_geometry() -> None:
+    """files, ranks, full_ranks and remainder over a five-wide formation."""
+    full = Formation(models=10, frontage=5)  # two complete ranks
+    assert (full.files, full.full_ranks, full.remainder, full.ranks) == (5, 2, 0, 2)
+
+    ragged = Formation(models=12, frontage=5)  # 5 + 5 + a rear rank of 2
+    assert (ragged.files, ragged.full_ranks, ragged.remainder, ragged.ranks) == (5, 2, 2, 3)
+
+    thin = Formation(models=3, frontage=5)  # one incomplete rank
+    assert (thin.files, thin.full_ranks, thin.remainder, thin.ranks) == (3, 0, 3, 1)
+
+
+# --- frontage: the formation's width ---
+
+
+def test_a_fielded_contingent_has_a_concrete_frontage(spearmen_unit: Unit) -> None:
+    """A unit on the table is in a formation, so its frontage is always a width.
+
+    With no width chosen, fielding lays the unit out in a single rank.
+    """
+    fielded = _fielded(spearmen_unit, 10)
+    assert fielded.frontage == 10
+    assert fielded.formation == Formation(models=10, frontage=10)
+
+
+def test_a_chosen_frontage_is_kept(spearmen_unit: Unit) -> None:
+    """A width given at fielding is the contingent's frontage."""
+    assert _fielded(spearmen_unit, 10, frontage=5).frontage == 5
+
+
+def test_frontage_must_be_a_positive_width(spearmen_unit: Unit) -> None:
+    """A frontage below one model wide is a programming error, not a zero."""
+    with pytest.raises(ValueError, match="at least 1 model wide"):
+        _fielded(spearmen_unit, 10, frontage=0)
