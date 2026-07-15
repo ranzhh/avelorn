@@ -233,14 +233,20 @@ def shoot_unit(
     context: EngagementContext | None = None,
     hit_modifier: int = 0,
     force_short_range: bool = False,
+    stand_and_shoot: bool = False,
 ) -> ShootingResult:
     """Resolve ``attacker`` shooting a volley of ``weapon`` at ``defender``.
 
-    One shot per fielded model (``attacker.models``), using each side's
-    first (rank-and-file) profile and the weapon's missile profile;
-    casualties cap at the defender's fielded ``models``. To resolve a
-    partial volley (only some models in range or sight), field the
-    shooting subset as its own contingent. ``weapon`` is the per-action
+    One shot per model in the unit's front rank (``attacker.formation.files``),
+    using each side's first (rank-and-file) profile and the weapon's
+    missile profile; casualties cap at the defender's fielded ``models``.
+    Only the front rank fires on flat ground; a hill would add a rank
+    (not modelled). A weapon with Volley Fire adds half of each rank
+    behind the front (rounding up) while the unit is stationary
+    (``context.moved`` False) and not making a Stand & Shoot reaction.
+    To resolve a partial volley (only some models in range
+    or sight), field the shooting subset as its own contingent. ``weapon``
+    is the per-action
     choice and must be carried — resolve a text boundary's printed name
     through ``attacker.loadout.weapon(...)``; the weapon's rules compile
     from the loadout's resolved index, and the defender's save folds
@@ -255,9 +261,12 @@ def shoot_unit(
     conditioned on facts it leaves unknown stay unfactored and noted.
     Rules whose category is the shooting phase chapter apply to every
     volley, gated by their conditions. ``force_short_range`` treats the
-    shot as within half range whatever the distance — a Stand & Shoot
-    reaction, exempt from Firing at Long Range, sets it so that rule is
-    honoured as a no-op rather than left unknown and noted.
+    shot as within half range whatever the distance, so Firing at Long
+    Range is honoured as a no-op rather than left unknown and noted — a
+    mechanic a Stand & Shoot uses, but not only it. ``stand_and_shoot``
+    marks the shot as a Stand & Shoot charge reaction, which forbids
+    Volley Fire; it is kept separate from ``force_short_range`` so a
+    future ability that forces short range does not disable Volley Fire.
 
     Returns:
         The shooting outcome.
@@ -269,7 +278,10 @@ def shoot_unit(
             the wielder's Strength and
             the attacker profile has none.
     """
-    shooters, defenders = attacker.models, defender.models
+    # Only the unit's front rank fires (shooting-with-more-than-one-rank);
+    # a unit on a hill fires with one rank more, not modelled — flat ground
+    # is assumed. Casualties still cap at the whole target unit's size.
+    shooters, defenders = attacker.formation.files, defender.models
     shooter, target = attacker.unit, defender.unit
     # TODO: profile selection is naive. A unit that bought a champion
     # shoots with the champion too (possibly at higher BS, e.g. an
@@ -294,6 +306,21 @@ def shoot_unit(
             f"{chosen.name} shoots at the wielder's Strength, but {shooter.name} has none"
         )
     strength = profile.strength.resolve(wielder_strength or 0)
+
+    # Volley Fire: half of each rank behind the front (rounding up) also
+    # fires, but only while the unit is stationary and never on a Stand &
+    # Shoot reaction (special-rules/volley-fire) — which is its own fact,
+    # not the short-range one (a future ability could force short range
+    # without being a reaction). It is a rank rule, not a dice modifier,
+    # so it lands here on the shot count, not in the walk. Its use is
+    # settled — factored, then claimed out of the notes below — once the
+    # unit is known to have moved or not, or the shot is a Stand & Shoot;
+    # only an unknown movement leaves it reported.
+    moved = None if context is None else context.moved
+    volley_fire = "Volley Fire" in profile.special_rules
+    volley_fire_settled = volley_fire and (stand_and_shoot or moved is not None)
+    if volley_fire and not stand_and_shoot and moved is False:
+        shooters += sum((rank + 1) // 2 for rank in attacker.formation.rear_rank_sizes)
     logger.debug(
         "resolving %d %s (BS %d) shooting %s at %s (T %d), S %d AP %d",
         shooters,
@@ -320,6 +347,8 @@ def shoot_unit(
     modifiers, unfactored = compile_rules(
         profile.special_rules, attacker.loadout.weapon_rules, conditions
     )
+    if volley_fire_settled:
+        unfactored = [rule for rule in unfactored if rule != "Volley Fire"]
     notes.extend(f"weapon rule not factored: {rule} ({chosen.name})" for rule in unfactored)
     phase_modifiers, phase_unfactored = compile_rules(sorted(phase_rules), phase_rules, conditions)
     modifiers.extend(phase_modifiers)

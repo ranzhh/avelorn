@@ -231,13 +231,14 @@ def test_both_penalties_stack() -> None:
     assert result.hit_target == 5
 
 
-def test_move_in_or_stay_out_is_a_wash() -> None:
-    """Warbows at 15": staying (long range -1) equals closing (moved -1).
+def test_staying_still_volley_fires_while_the_to_hit_is_a_wash() -> None:
+    """Warbows at 15": staying and closing hit alike, but staying volley fires.
 
     Warbow range is 24", so 15" is beyond half range; closing inside 12"
     removes that penalty but "moved for any reason during this turn"
-    imposes its own -1. Both plans hit on 4+ with identical
-    distributions — computed from the printed rules, not judgement.
+    imposes its own -1 — so both plans hit on 4+ with the same per-shot
+    chance. Staying still is not a wash, though: it lets the rear rank
+    volley fire, so it looses more shots and fells more.
     """
     sea_guard = REPO.units["lothern-sea-guard"]
     spearmen = REPO.units["elven-spearmen"]
@@ -256,9 +257,10 @@ def test_move_in_or_stay_out_is_a_wash() -> None:
         phase_rules=IN_FORCE,
         context=EngagementContext(moved=True, distance=12),
     )
-    assert stay.hit_target == move_in.hit_target == 4
-    assert stay.p_unsaved == pytest.approx(move_in.p_unsaved)
-    assert stay.casualties == pytest.approx(move_in.casualties)
+    assert stay.hit_target == move_in.hit_target == 4  # the To Hit is a wash
+    assert stay.p_unsaved == pytest.approx(move_in.p_unsaved)  # per shot, identical
+    assert stay.shots > move_in.shots  # but staying volley fires
+    assert stay.expected_casualties > move_in.expected_casualties
 
 
 def test_every_condition_is_consulted() -> None:
