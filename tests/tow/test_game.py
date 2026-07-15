@@ -6,7 +6,7 @@ import pytest
 
 from avelorn.tow.combat.charge import StandAndShoot
 from avelorn.tow.combat.charge import charge as charge_verb
-from avelorn.tow.combat.context import CombatContext, EngagementContext
+from avelorn.tow.combat.context import CombatContext
 from avelorn.tow.combat.contingent import Charge, ChargeArc, Contingent
 from avelorn.tow.combat.melee import combat_result, fight
 from avelorn.tow.combat.morale import break_test, make_panic_tests
@@ -102,10 +102,9 @@ def test_volley_delegates_to_shoot_unit() -> None:
     archers = _fielded(REPO.units["elven-archers"], 3)
     spearmen = _fielded(REPO.units["elven-spearmen"], 10)
     longbow = REPO.weapons["longbow"]
-    context = EngagementContext(moved=False, distance=20)
-    bound = GAME.shooting.volley(archers, spearmen, longbow, context=context)
+    bound = GAME.shooting.volley(archers, spearmen, longbow, distance=20)
     direct = shoot_unit(
-        archers, spearmen, longbow, phase_rules=GAME.in_play[Phase.SHOOTING], context=context
+        archers, spearmen, longbow, phase_rules=GAME.in_play[Phase.SHOOTING], distance=20
     )
     assert bound == direct
 

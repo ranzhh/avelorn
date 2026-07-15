@@ -197,9 +197,11 @@ class Contingent:
 
     The datasheet (:class:`~avelorn.tow.schema.unit.Unit`) is a template —
     it carries the *allowed* size, not how many models stand on the table —
-    so ``models`` supplies the fielded count. Nothing about the turn rides
-    here: a charge is an action's event data
-    (:class:`~avelorn.tow.combat.context.CombatContext`), not unit state.
+    so ``models`` supplies the fielded count. A unit's own turn actions
+    ride here, each with a definite default: ``moved`` records whether it
+    moved this turn (a freshly fielded body is stationary). The relational
+    facts of an engagement — the range to a target, the round of a combat —
+    are not one unit's state and stay parameters of the resolving action.
 
     Two constructors resolve a loadout at the muster boundary.
     :meth:`deploy` fields a mustered list entry — a
@@ -234,6 +236,11 @@ class Contingent:
     # the fielding boundary. (Skirmishers, who form no ranks, are not
     # modelled yet.)
     frontage: int
+    # Whether the unit moved this turn ("moved for any reason during this
+    # turn"). A freshly fielded body is stationary; a caller that advanced
+    # it sets this. Read by the rules gated on movement (Moving and
+    # Shooting; Volley Fire's stationary condition).
+    moved: bool = False
 
     def __post_init__(self) -> None:
         """Reject a frontage that is not a positive width.

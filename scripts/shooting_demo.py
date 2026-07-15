@@ -12,9 +12,9 @@ Pass -v/--verbose to also emit the DEBUG math trace to stderr.
 
 import argparse
 import logging
+from dataclasses import replace
 
 from avelorn.core.logging import configure_logging
-from avelorn.tow.combat.context import EngagementContext
 from avelorn.tow.combat.query import Comparator, Predicate, query_result
 from avelorn.tow.game import TOWGame
 
@@ -41,8 +41,8 @@ def main() -> None:
     parser.add_argument(
         "--moved",
         action=argparse.BooleanOptionalAction,
-        default=None,
-        help="whether the shooters moved this turn (omit = unknown)",
+        default=False,
+        help="whether the shooters moved this turn (default: stationary)",
     )
     parser.add_argument(
         "--battle-strength",
@@ -58,11 +58,10 @@ def main() -> None:
         configure_logging(logging.DEBUG)
 
     game = TOWGame.load_data()
-    attacker = game.field(game.units[args.attacker], args.shooters)
+    attacker = replace(game.field(game.units[args.attacker], args.shooters), moved=args.moved)
     defender = game.field(game.units[args.defender], args.defenders)
     weapon = game.weapons[args.weapon]
-    context = EngagementContext(moved=args.moved, distance=args.distance)
-    result = game.shooting.volley(attacker, defender, weapon, context=context)
+    result = game.shooting.volley(attacker, defender, weapon, distance=args.distance)
 
     def fmt_target(target: int | None) -> str:
         return f"{target}+" if target is not None else "-"

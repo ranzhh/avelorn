@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from typing import assert_never
 
 from avelorn.core.errors import UnmodelledRuleError
-from avelorn.tow.combat.context import CombatContext, EngagementContext
+from avelorn.tow.combat.context import CombatContext
 from avelorn.tow.combat.contingent import Charge, Contingent
 from avelorn.tow.combat.melee import FightResult, fight
 from avelorn.tow.combat.shooting import ShootingResult, shoot_unit
@@ -69,7 +69,6 @@ def stand_and_shoot(
         target,
         weapon,
         phase_rules=phase_rules,
-        context=EngagementContext(moved=False),
         hit_modifier=_STAND_AND_SHOOT_TO_HIT,
         force_short_range=True,
         stand_and_shoot=True,

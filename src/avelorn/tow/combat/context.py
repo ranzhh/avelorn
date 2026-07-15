@@ -1,26 +1,17 @@
-"""The engagement contexts: the situation an action is resolved in.
+"""The engagement context: the relational situation a combat is resolved in.
 
-One per phase. :class:`EngagementContext` is the shooting side — its
-printed home is the sequence's first sub-phase, "Choose Unit & Declare
-Target", where range and line of sight are checked.
 :class:`CombatContext` is the close-combat side, minimal today: who
 charged, and the charge each made. Unknown facts stay unknown (None): a
 conditional rule that needs an unknown answer stays unfactored and
 reported, exactly like any other thing the math cannot honour — it is
-never guessed.
+never guessed. (Per-unit turn state — whether a unit moved, its charge —
+lives on the :class:`~avelorn.tow.combat.contingent.Contingent`, not
+here.)
 """
 
 from dataclasses import dataclass
 
 from avelorn.tow.combat.contingent import Charge
-
-
-@dataclass(frozen=True)
-class EngagementContext:
-    """What is known about the situation of the shooting unit."""
-
-    moved: bool | None = None  # "moved for any reason during this turn"
-    distance: int | None = None  # inches to the target
 
 
 @dataclass(frozen=True)
