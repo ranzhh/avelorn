@@ -1,7 +1,5 @@
 """The charge sequence: the verb, its reactions, and the composed fight."""
 
-from dataclasses import replace
-
 import pytest
 
 from avelorn.core.errors import UnmodelledRuleError
@@ -98,7 +96,7 @@ def test_charge_sequence_matches_mixing_the_survivor_fights_by_hand() -> None:
     spear, hand = REPO.weapons["thrusting-spear"], REPO.weapons["hand-weapon"]
     move = Charge(6, ChargeArc.FRONT)
     models = 3
-    charger = replace(_fielded(spearmen, models), charge=move)
+    charger = _fielded(spearmen, models).charging(move)
     defender = _fielded(archers, 3)
     reaction = stand_and_shoot(defender, charger, REPO.weapons["longbow"], phase_rules=IN_FORCE)
 
@@ -113,7 +111,7 @@ def test_charge_sequence_matches_mixing_the_survivor_fights_by_hand() -> None:
     manual = [[0.0] * (defender.models + 1) for _ in range(models + 1)]
     for felled, p_felled in enumerate(reaction.casualties):
         survivors = fight(
-            replace(charger, models=models - felled),
+            charger.remnant(models - felled),
             defender,
             a_weapon=spear,
             b_weapon=hand,
@@ -136,7 +134,7 @@ def test_stand_and_shoot_erodes_the_chargers_combat_result() -> None:
     """
     archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
     spear, hand = REPO.weapons["thrusting-spear"], REPO.weapons["hand-weapon"]
-    charger = replace(_fielded(spearmen, 10), charge=Charge(8, ChargeArc.FRONT))
+    charger = _fielded(spearmen, 10).charging(Charge(8, ChargeArc.FRONT))
     defender = _fielded(archers, 10)
     reaction = stand_and_shoot(defender, charger, REPO.weapons["longbow"], phase_rules=IN_FORCE)
 
@@ -196,7 +194,7 @@ def test_charge_composes_the_reaction_into_the_fight() -> None:
 
     volley = stand_and_shoot(target, charger, longbow, phase_rules=IN_FORCE)
     manual = fight(
-        replace(charger, charge=move),
+        charger.charging(move),
         target,
         a_weapon=spear,
         b_weapon=hand,
@@ -205,7 +203,7 @@ def test_charge_composes_the_reaction_into_the_fight() -> None:
     assert outcome.reaction == volley
     assert outcome.melee.losses == manual.losses
     assert outcome.melee.first_striker is not None
-    assert outcome.melee.first_striker.charge == move  # the charger struck first
+    assert outcome.melee.first_striker.movement.charge == move  # the charger struck first
 
 
 def test_charge_against_a_holding_target_has_no_volley() -> None:
@@ -225,7 +223,7 @@ def test_charge_against_a_holding_target_has_no_volley() -> None:
     )
 
     manual = fight(
-        replace(charger, charge=move),
+        charger.charging(move),
         target,
         a_weapon=spear,
         b_weapon=hand,

@@ -1,13 +1,12 @@
 """Rule compilation tests: printed names to transforms, from real data."""
 
-from dataclasses import replace
 from fractions import Fraction
 from typing import Literal
 
 import pytest
 
 from avelorn.tow.combat.attack import AttackProfile, RollState, resolve_attack
-from avelorn.tow.combat.contingent import Contingent
+from avelorn.tow.combat.contingent import Contingent, Movement
 from avelorn.tow.combat.rules import (
     _condition_applies,
     compile_rules,
@@ -36,11 +35,11 @@ IN_FORCE = {r.name: r for r in REPO.rules.values() if r.category == Phase.SHOOTI
 
 def _fielded(unit: Unit, models: int, *, moved: bool = False) -> Contingent:
     # Field at the printed, optionless loadout, with the real registries;
-    # ``moved`` sets the unit's turn action (stationary by default).
+    # ``moved`` sets the unit's movement (stationary by default).
     base = Contingent.field(
         unit, models, weapons=REPO.weapons, armoury=REPO.armoury, rules=REPO.rules
     )
-    return replace(base, moved=moved) if moved else base
+    return base.after(Movement.march()) if moved else base
 
 
 def _one_rule(effect: RuleEffect) -> dict[str, Rule]:

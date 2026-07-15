@@ -9,7 +9,7 @@ resolves equipment and special rules into a :class:`Loadout`.
 """
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 
 from avelorn.core.registry import Registry
@@ -140,6 +140,97 @@ class Charge:
         return min(self.full_inches, self.arc.initiative_cap)
 
 
+class MovementKind(StrEnum):
+    """The kind of move a contingent made in its Movement phase.
+
+    The closed set of movements the engine distinguishes today. Flee is a
+    real charge reaction (:class:`~avelorn.tow.combat.charge.Flee`) but is
+    not modelled yet, so it has no member here until a resolver needs to
+    tell a fled unit apart from one that merely moved.
+    """
+
+    STATIONARY = "stationary"
+    MARCHED = "marched"
+    CHARGED = "charged"
+
+
+@dataclass(frozen=True)
+class Movement:
+    """What a contingent did in its Movement phase, as one tagged value.
+
+    A contingent's movement is a single fact with a definite default — a
+    freshly fielded body is :meth:`stationary` — that the shooting and
+    combat resolvers read through its derived :attr:`moved` (did it move
+    at all, a charge counting as a move) and its :attr:`charge` (the charge
+    it made, if any). Folding what were two independent ``Contingent``
+    fields (a ``moved`` flag beside an optional ``charge``) into one value
+    means the pair can never disagree: a charge is a move, so here it is one
+    by construction.
+
+    Build through the case factories (:meth:`stationary`, :meth:`march`,
+    :meth:`charged`) rather than the raw constructor — they are the
+    movements the engine allows, and they keep :attr:`charge` present
+    exactly when the move is a charge.
+    """
+
+    kind: MovementKind
+    # The charge this move was, when the kind is CHARGED; None otherwise, so
+    # a charger's Movement is self-contained — how far it came and into
+    # which arc travel with the fact that it charged, one value to thread.
+    charge: Charge | None = None
+
+    def __post_init__(self) -> None:
+        """Reject a charge that disagrees with its kind.
+
+        Raises:
+            ValueError: a charge is carried without the kind being a charge,
+                or a charge kind carries none — a programming error the
+                factories cannot produce.
+        """
+        if (self.kind is MovementKind.CHARGED) != (self.charge is not None):
+            raise ValueError(
+                f"a {self.kind} movement carries "
+                f"{'no charge' if self.charge is None else 'a charge'}"
+            )
+
+    @classmethod
+    def stationary(cls) -> "Movement":
+        """The default: a body that did not move this turn.
+
+        Returns:
+            The stationary movement.
+        """
+        return cls(MovementKind.STATIONARY)
+
+    @classmethod
+    def march(cls) -> "Movement":
+        """A move that was not a charge — "moved for any reason" short of one.
+
+        Returns:
+            The marched (moved, not charged) movement.
+        """
+        return cls(MovementKind.MARCHED)
+
+    @classmethod
+    def charged(cls, charge: Charge) -> "Movement":
+        """A charge move, carrying the :class:`Charge` it was.
+
+        Returns:
+            The charged movement, carrying ``charge``.
+        """
+        return cls(MovementKind.CHARGED, charge)
+
+    @property
+    def moved(self) -> bool:
+        """Whether the contingent moved at all this turn — a charge included.
+
+        The fact the movement-gated rules read (Moving and Shooting; Volley
+        Fire's stationary condition): true for every move, a charge among
+        them, false only for a standing start.
+        """
+        return self.kind is not MovementKind.STATIONARY
+
+
 @dataclass(frozen=True)
 class Formation:
     """A body of models arrayed a fixed number wide, in ranks and files.
@@ -195,11 +286,12 @@ class Contingent:
     The datasheet (:class:`~avelorn.tow.schema.unit.Unit`) is a template —
     it carries the *allowed* size, not how many models stand on the table —
     so ``models`` supplies the fielded count. A unit's own turn actions
-    ride here, each with a definite default: ``moved`` records whether it
-    moved this turn (a freshly fielded body is stationary), and ``charge``
-    its charge, if any. The relational facts of an engagement — the range
-    to a target, the round of a combat — are not one unit's state and stay
-    parameters of the resolving action.
+    ride here: its ``movement`` this turn — one :class:`Movement` value,
+    defaulting to stationary for a freshly fielded body — records both
+    whether it moved and the charge it made, if any (a charge is a move, so
+    the two can never disagree). The relational facts of an engagement — the
+    range to a target, the round of a combat — are not one unit's state and
+    stay parameters of the resolving action.
 
     Two constructors resolve a loadout at the muster boundary.
     :meth:`deploy` fields a mustered list entry — a
@@ -207,9 +299,9 @@ class Contingent:
     options), its loadout baked into the datasheet the engine reads.
     :meth:`field` fields a bare datasheet at its printed, optionless
     default — any model count, so a remnant or an isolated what-if needs
-    no legal list size. The raw constructor is for bodies whose loadout
-    already exists: a post-casualty remnant is
-    ``dataclasses.replace(contingent, models=survivors)``.
+    no legal list size. Bodies whose loadout already exists are derived
+    from one that does, through the fluent copies: a post-casualty remnant
+    is :meth:`remnant`, a mover is :meth:`after`, a charger :meth:`charging`.
 
     The weapon in use is *not* carried here: it is a per-action choice, so
     the same contingent shoots with its bow one moment and fights the
@@ -234,16 +326,14 @@ class Contingent:
     # the fielding boundary. (Skirmishers, who form no ranks, are not
     # modelled yet.)
     frontage: int
-    # Whether the unit moved this turn ("moved for any reason during this
-    # turn"). A freshly fielded body is stationary; a caller that advanced
-    # it sets this. Read by the rules gated on movement (Moving and
-    # Shooting; Volley Fire's stationary condition).
-    moved: bool = False
-    # The charge this unit made this turn, if any — how far, into which arc
-    # (a charge is a kind of move). None for a unit that did not charge.
-    # Read by :func:`~avelorn.tow.combat.melee.fight` for the striking
-    # order's charge Initiative bonus.
-    charge: Charge | None = None
+    # What the unit did in its Movement phase, as one tagged value: whether
+    # it moved and the charge it made, if any (a charge is a move, folded
+    # here so the two never disagree). A freshly fielded body is stationary;
+    # a caller that moved it sets this through :meth:`after` / :meth:`charging`.
+    # Read by the movement-gated rules (Moving and Shooting; Volley Fire's
+    # stationary condition) and by :func:`~avelorn.tow.combat.melee.fight`
+    # for the striking order's charge Initiative bonus.
+    movement: Movement = field(default_factory=Movement.stationary)
 
     def __post_init__(self) -> None:
         """Reject a frontage that is not a positive width.
@@ -284,6 +374,43 @@ class Contingent:
         rear = 1 if formation.remainder >= per_rank else 0
         ranks_behind_first = formation.full_ranks + rear - 1
         return min(max(ranks_behind_first, 0), profile.max_rank_bonus)
+
+    def after(self, movement: Movement) -> "Contingent":
+        """This contingent with its Movement-phase ``movement`` set.
+
+        The one place a fielded body records what it did this turn, hiding
+        the frozen-dataclass copy: ``contingent.after(Movement.march())``
+        reads as the move it was, not a field assignment.
+
+        Returns:
+            A copy with the given movement; the original is unchanged.
+        """
+        return replace(self, movement=movement)
+
+    def charging(self, move: Charge) -> "Contingent":
+        """This contingent as the charger of ``move``: its movement a charge.
+
+        The charge path's :meth:`after`, spelt for its one case — the fight
+        assembler and the charge verb both hand a :class:`Charge` and want
+        the charger it belongs to.
+
+        Returns:
+            A copy whose movement is that charge; the original is unchanged.
+        """
+        return self.after(Movement.charged(move))
+
+    def remnant(self, survivors: int) -> "Contingent":
+        """This contingent thinned to ``survivors`` models after casualties.
+
+        The same body, fewer models: loadout, datasheet, frontage and
+        movement all ride along, only the count changes. The post-casualty
+        copy, everywhere a round's losses are applied to a side.
+
+        Returns:
+            A copy with ``models`` set to ``survivors``; the original is
+            unchanged.
+        """
+        return replace(self, models=survivors)
 
     def wields(self, weapon: Weapon) -> Weapon:
         """The weapon, confirmed carried: a unit fights with what it has.

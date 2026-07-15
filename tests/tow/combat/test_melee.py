@@ -1,7 +1,5 @@
 """Close-combat strike tests, golden values hand-computed from the charts."""
 
-from dataclasses import replace
-
 import pytest
 
 from avelorn.core.dice import binomial_distribution, expected_value
@@ -308,7 +306,7 @@ def test_fight_charge_makes_the_charger_strike_first() -> None:
     """
     spearmen = REPO.units["elven-spearmen"]
     spear = REPO.weapons["thrusting-spear"]
-    charger = replace(_fielded(spearmen, 1), charge=Charge(3, ChargeArc.FRONT))
+    charger = _fielded(spearmen, 1).charging(Charge(3, ChargeArc.FRONT))
     defender = _fielded(spearmen, 1)
     result = fight(
         charger,
@@ -329,7 +327,7 @@ def test_fight_charge_capped_below_the_foe_stays_simultaneous() -> None:
     """
     spearmen = REPO.units["elven-spearmen"]
     spear = REPO.weapons["thrusting-spear"]
-    charger = replace(_fielded(spearmen, 1), charge=Charge(0, ChargeArc.FRONT))
+    charger = _fielded(spearmen, 1).charging(Charge(0, ChargeArc.FRONT))
     result = fight(
         charger,
         _fielded(spearmen, 1),

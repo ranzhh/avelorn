@@ -428,9 +428,9 @@ def _combat_conditions(first_round: bool | None, side: Contingent) -> dict[Condi
     def fact(condition: Condition) -> bool | None:
         match condition:
             case Condition.MOVED:
-                # A charge is a move; and the unit's own moved flag covers
-                # a repositioning that was not a charge.
-                return side.moved or side.charge is not None
+                # A charge is a move, and the Movement folds it in: moved is
+                # true for a charge as for any other move this turn.
+                return side.movement.moved
             case Condition.AT_LONG_RANGE:
                 return False  # no shot is taken in close combat
             case Condition.FIRST_ROUND_OF_COMBAT:
@@ -513,8 +513,8 @@ def fight(
     (the-combat-phase: who-strikes-first, fight-on). Equal Initiative
     strikes simultaneously, with no such reduction (simultaneous-combat).
 
-    Each side's own charge (``a.charge`` / ``b.charge``) adds its
-    Initiative bonus before the comparison (the-combat-phase/charging-units),
+    Each side's own charge (``a.movement.charge`` / ``b.movement.charge``)
+    adds its Initiative bonus before the comparison (the-combat-phase/charging-units),
     the modified Initiative capped at 10. ``first_round`` — whether this is
     the combat's first round — is the round's own relational fact, not
     either unit's, so it is a parameter here. The two sides are otherwise
@@ -574,8 +574,8 @@ def fight(
     b_strikes = _engage(
         b, a, b_weapon, hit_modifier=0, conditions=b_conditions, phase_rules=phase_rules
     )
-    a_bonus = 0 if a.charge is None else a.charge.initiative_bonus
-    b_bonus = 0 if b.charge is None else b.charge.initiative_bonus
+    a_bonus = 0 if a.movement.charge is None else a.movement.charge.initiative_bonus
+    b_bonus = 0 if b.movement.charge is None else b.movement.charge.initiative_bonus
     a_initiative = effective_initiative(a, a_bonus, a_conditions)
     b_initiative = effective_initiative(b, b_bonus, b_conditions)
     a_first = _strikes_first(a_initiative.value, b_initiative.value)
