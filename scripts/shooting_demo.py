@@ -14,9 +14,9 @@ import argparse
 import logging
 
 from avelorn.core.logging import configure_logging
-from avelorn.tow.combat.query import Comparator, Predicate, query_result
 from avelorn.tow.contingent import Movement
 from avelorn.tow.game import TOWGame
+from avelorn.tow.query import Comparator, Predicate, query_result
 
 
 def main() -> None:

@@ -17,8 +17,8 @@ import logging
 
 from avelorn.core.dice import expected_value
 from avelorn.core.logging import configure_logging
-from avelorn.tow.combat.query import Comparator, Predicate, evaluate, fight_distributions
 from avelorn.tow.game import TOWGame
+from avelorn.tow.query import Comparator, Predicate, evaluate, fight_distributions
 
 
 def _print_casualties(label: str, casualties: list[float], fighters: int) -> None:

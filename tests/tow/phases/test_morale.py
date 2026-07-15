@@ -4,11 +4,10 @@ from fractions import Fraction
 
 import pytest
 
-from avelorn.tow.combat.melee import CombatResult
-from avelorn.tow.combat.morale import SideBreak, break_test, make_panic_tests
-from avelorn.tow.combat.shooting import ShootingResult
 from avelorn.tow.contingent import Contingent, Loadout
 from avelorn.tow.data import TOWRepository
+from avelorn.tow.phases.combat import CombatResult, SideBreak, break_test
+from avelorn.tow.phases.shooting import ShootingResult, make_panic_tests
 from avelorn.tow.schema.psychology import PanicCause
 from avelorn.tow.schema.rule import RerollEffect, Rule
 from avelorn.tow.schema.stage import Stage

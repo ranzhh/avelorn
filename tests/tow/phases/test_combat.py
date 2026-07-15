@@ -3,7 +3,9 @@
 import pytest
 
 from avelorn.core.dice import binomial_distribution, expected_value
-from avelorn.tow.combat.melee import (
+from avelorn.tow.contingent import Charge, ChargeArc, Contingent, Loadout
+from avelorn.tow.data import TOWRepository
+from avelorn.tow.phases.combat import (
     FightResult,
     combat_result,
     effective_initiative,
@@ -11,8 +13,6 @@ from avelorn.tow.combat.melee import (
     strike,
     strike_unit,
 )
-from avelorn.tow.contingent import Charge, ChargeArc, Contingent, Loadout
-from avelorn.tow.data import TOWRepository
 from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.rule import Condition, ModifierEffect, Rule
 from avelorn.tow.schema.unit import Characteristic, Unit
@@ -529,7 +529,7 @@ def test_charge_factors_elven_reflexes_structurally() -> None:
     cancels in the order (charge bonus still decides it), and neither
     side's Elven Reflexes is left in the notes — the rule is in the math.
     """
-    from avelorn.tow.combat.charge import charge
+    from avelorn.tow.phases.movement import charge
 
     result = charge(
         _deployed("elven-spearmen", 5),

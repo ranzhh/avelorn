@@ -2,8 +2,9 @@
 
 import pytest
 
-from avelorn.tow.combat.melee import FightResult
-from avelorn.tow.combat.query import (
+from avelorn.tow.phases.combat import FightResult
+from avelorn.tow.phases.shooting import shoot
+from avelorn.tow.query import (
     Comparator,
     Distribution,
     Predicate,
@@ -12,7 +13,6 @@ from avelorn.tow.combat.query import (
     query_result,
     result_distributions,
 )
-from avelorn.tow.combat.shooting import shoot
 
 # A small hand-checkable PMF: P(0)=0.1, P(1)=0.4, P(2)=0.3, P(3)=0.2.
 _PMF = (0.1, 0.4, 0.3, 0.2)
