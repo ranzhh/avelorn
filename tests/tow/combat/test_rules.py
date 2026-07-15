@@ -36,9 +36,7 @@ IN_FORCE = {r.name: r for r in REPO.rules.values() if r.category == Phase.SHOOTI
 def _fielded(unit: Unit, models: int, *, moved: bool = False) -> Contingent:
     # Field at the printed, optionless loadout, with the real registries;
     # ``moved`` sets the unit's movement (stationary by default).
-    base = Contingent.field(
-        unit, models, weapons=REPO.weapons, armoury=REPO.armoury, rules=REPO.rules
-    )
+    base = Contingent.field(unit, models, data=REPO)
     return base.after(Movement.march()) if moved else base
 
 

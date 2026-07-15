@@ -23,9 +23,7 @@ def _fielded(
     base = Contingent.field(
         unit,
         models,
-        weapons=REPO.weapons,
-        armoury=REPO.armoury,
-        rules=REPO.rules,
+        data=REPO,
         frontage=frontage,
     )
     return base.after(Movement.march()) if moved else base

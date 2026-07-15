@@ -4,15 +4,16 @@ The gameplay-side counterpart of the army-list layer
 (:mod:`avelorn.tow.muster`): a :class:`Contingent` is the body the combat
 resolvers take — a datasheet plus the models actually standing, and the
 turn actions it took (whether it moved, its :class:`Charge`). Fielding is
-also where printed names stop being strings: :meth:`Contingent.deploy`
+also where printed names stop being strings: :meth:`Contingent.field`
 resolves equipment and special rules into a :class:`Loadout`.
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 
 from avelorn.core.registry import Registry
+from avelorn.tow.data import TOWRepository, default_repository
 from avelorn.tow.muster import Complement
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
@@ -24,7 +25,7 @@ from avelorn.tow.schema.weapon import Weapon
 class Loadout:
     """A contingent's gear and rules resolved to entries, at fielding time.
 
-    Built at :meth:`Contingent.deploy` — the muster boundary is where a
+    Built at :meth:`Contingent.field` — the muster boundary is where a
     printed name stops being a string. The armour is what save resolution
     will read; the weapons are what a per-action choice will pick from;
     ``rules`` are the unit's special rules that resolve against the rule
@@ -292,16 +293,19 @@ class Contingent:
     range to a target, the round of a combat — are not one unit's state and
     stay parameters of the resolving action.
 
-    Two constructors resolve a loadout at the muster boundary.
-    :meth:`deploy` fields a mustered list entry — a
-    :class:`~avelorn.tow.muster.Complement` (list-legal size, chosen
-    options), its loadout baked into the datasheet the engine reads.
-    :meth:`field` fields a bare datasheet at its printed, optionless
-    default — any model count, so a remnant or an isolated what-if needs
-    no legal list size. Bodies whose loadout already exists are derived
-    from one that does, through the fluent copies: a post-casualty remnant
-    is :meth:`remove_casualties`, a mover is :meth:`after`, a charger
-    :meth:`charging`.
+    Two constructors resolve a loadout at the muster boundary, split by what
+    you hold. :meth:`deploy` starts from a *name*: a datasheet slug (plus any
+    options), mustered and fielded against the game data. :meth:`field` starts
+    from an *object* in hand — a :class:`~avelorn.tow.muster.Complement` you
+    mustered (list-legal size, chosen options, loadout baked into the datasheet
+    the engine reads), or a bare :class:`~avelorn.tow.schema.unit.Unit` at any
+    model count, so a remnant or an isolated what-if needs no legal list size.
+    Neither threads registries: both resolve against a
+    :class:`~avelorn.tow.data.TOWRepository` — the process-wide default, or one
+    injected as ``data`` (which is how tests field against doctored data).
+    Bodies whose loadout already exists are derived from one that does, through
+    the fluent copies: a post-casualty remnant is :meth:`remove_casualties`, a
+    mover is :meth:`after`, a charger :meth:`charging`.
 
     The weapon in use is *not* carried here: it is a per-action choice, so
     the same contingent shoots with its bow one moment and fights the
@@ -435,82 +439,76 @@ class Contingent:
     @classmethod
     def deploy(
         cls,
-        complement: Complement,
+        slug: str,
+        models: int,
+        options: Sequence[str] = (),
         *,
-        weapons: Registry[Weapon],
-        armoury: Registry[Armour],
-        rules: Registry[Rule],
+        data: TOWRepository | None = None,
         frontage: int | None = None,
     ) -> "Contingent":
-        """Field a :class:`~avelorn.tow.muster.Complement`, resolving its equipment.
+        """Deploy a unit by name — the quick way onto the table.
 
-        The complement's chosen loadout — its equipment and special rules
-        after its options' adds and removes — is baked into the datasheet the
-        engine reads, so the contingent fights with what was bought, not the
-        printed profile; the chosen ``size`` becomes ``models``. The printed
-        names also resolve into a :class:`Loadout`, each kind on its own
-        terms: an equipment name matching no weapon or armour entry is an
-        error — coverage is complete (a test pins it), so a miss here is a
-        typo in the list, and the human building the list is the one to
-        tell — while a special rule without an entry is expected (entries
-        exist only for what the engine can honour) and rides along printed.
+        You have a name: this looks up the datasheet ``slug`` in ``data`` — the
+        process-wide :func:`~avelorn.tow.data.default_repository` when omitted —
+        musters it at ``models`` with the chosen ``options`` (through a
+        :class:`~avelorn.tow.muster.Complement`, so the size must be list-legal
+        and each option offered by the datasheet), and fields it. Inject ``data``
+        to deploy against alternate or doctored data (tests do).
+
+        When you already hold the object, :meth:`field` it instead — a
+        :class:`~avelorn.tow.muster.Complement` you mustered, or a bare
+        :class:`~avelorn.tow.schema.unit.Unit` at any model count (a remnant or
+        a what-if, which a legal muster would reject).
 
         Args:
-            complement: The list entry to field.
-            weapons: Weapon entries, resolving printed equipment names.
-            armoury: Armour entries, resolving printed equipment names.
-            rules: Rule entries, resolving printed special-rule names.
+            slug: The datasheet's slug, resolved against ``data.units``.
+            models: The fielded size; must fall in the datasheet's allowed range.
+            options: Option names to buy, each offered by the datasheet.
+            data: The corpus to resolve against; the process-wide default when omitted.
             frontage: The formation width in files; the troop type's default
                 width when omitted.
 
         Returns:
             The fielded contingent, loadout resolved.
-
-        Raises:
-            ValueError: a piece of equipment matches no weapon or armour
-                entry, or the datasheet's troop-type profile is unresolved.
         """
-        fielded = complement.unit.model_copy(
-            update={
-                "equipment": complement.equipment,
-                "special_rules": complement.special_rules,
-            }
-        )
-        loadout, unknown = _resolve_loadout(fielded, weapons=weapons, armoury=armoury, rules=rules)
-        if unknown:
-            raise ValueError(f"{fielded.name}: equipment matches no weapon or armour: {unknown}")
-        width = (
-            frontage
-            if frontage is not None
-            else fielded.rank_and_file.default_frontage(complement.size)
-        )
-        return cls(fielded, complement.size, loadout, width)
+        repository = data if data is not None else default_repository()
+        complement = Complement(unit=repository.units[slug], size=models, options=list(options))
+        return cls.field(complement, data=repository, frontage=frontage)
 
     @classmethod
     def field(
         cls,
-        unit: Unit,
-        models: int,
+        source: "Unit | Complement",
+        models: int | None = None,
         *,
-        weapons: Registry[Weapon],
-        armoury: Registry[Armour],
-        rules: Registry[Rule],
+        data: TOWRepository | None = None,
         frontage: int | None = None,
     ) -> "Contingent":
-        """Field a bare datasheet at its printed, optionless loadout.
+        """Field an object in hand: a mustered Complement, or a bare datasheet.
 
-        The default per unit: no options chosen, the printed equipment
-        and special rules resolved exactly as :meth:`deploy` resolves a
-        list entry's. ``models`` is any count — a remnant or an isolated
-        what-if needs no legal list size, which is why this does not
-        route through a :class:`~avelorn.tow.muster.Complement`.
+        The precise counterpart to :meth:`deploy` (which starts from a name).
+        ``source`` is one of two things:
+
+        * a :class:`~avelorn.tow.muster.Complement` — its chosen loadout
+          (equipment and special rules after its options' adds and removes)
+          baked into the datasheet the engine reads, and its ``size`` the
+          fielded count; the ``models`` argument is ignored.
+        * a bare :class:`~avelorn.tow.schema.unit.Unit` — its printed,
+          optionless loadout at ``models`` models, any count, so a remnant or
+          an isolated what-if needs no legal list size (it does not route
+          through a Complement).
+
+        Names resolve against ``data`` — the process-wide
+        :func:`~avelorn.tow.data.default_repository` when omitted; inject it to
+        field against alternate or doctored data. Equipment coverage is complete,
+        so a name matching no weapon or armour entry is an error; a special rule
+        without an entry rides along printed (:class:`Loadout`).
 
         Args:
-            unit: The datasheet to field.
-            models: The models on the table.
-            weapons: Weapon entries, resolving printed equipment names.
-            armoury: Armour entries, resolving printed equipment names.
-            rules: Rule entries, resolving printed special-rule names.
+            source: A mustered Complement, or a bare datasheet to field.
+            models: The fielded size, required for a bare datasheet; ignored for
+                a Complement (whose own ``size`` is used).
+            data: The corpus to resolve against; the process-wide default when omitted.
             frontage: The formation width in files; the troop type's default
                 width when omitted.
 
@@ -518,14 +516,33 @@ class Contingent:
             The fielded contingent, loadout resolved.
 
         Raises:
-            ValueError: a piece of equipment matches no weapon or armour
-                entry, or the datasheet's troop-type profile is unresolved.
+            ValueError: a bare datasheet is given without ``models``, a piece of
+                equipment matches no weapon or armour entry, or the datasheet's
+                troop-type profile is unresolved.
         """
-        loadout, unknown = _resolve_loadout(unit, weapons=weapons, armoury=armoury, rules=rules)
+        repository = data if data is not None else default_repository()
+        if isinstance(source, Complement):
+            size = source.size
+            datasheet = source.unit.model_copy(
+                update={"equipment": source.equipment, "special_rules": source.special_rules}
+            )
+        else:
+            if models is None:
+                raise ValueError("field(unit, models) needs a model count for a bare datasheet")
+            size = models
+            datasheet = source
+        loadout, unknown = _resolve_loadout(
+            datasheet,
+            weapons=repository.weapons,
+            armoury=repository.armoury,
+            rules=repository.rules,
+        )
         if unknown:
-            raise ValueError(f"{unit.name}: equipment matches no weapon or armour: {unknown}")
-        width = frontage if frontage is not None else unit.rank_and_file.default_frontage(models)
-        return cls(unit, models, loadout, width)
+            raise ValueError(f"{datasheet.name}: equipment matches no weapon or armour: {unknown}")
+        width = (
+            frontage if frontage is not None else datasheet.rank_and_file.default_frontage(size)
+        )
+        return cls(datasheet, size, loadout, width)
 
 
 def _resolve_loadout(

@@ -27,9 +27,7 @@ def _fielded(unit: Unit, models: int) -> Contingent:
 def test_field_delegates_to_the_muster_boundary() -> None:
     """game.field is Contingent.field with the game's registries injected."""
     spearmen = REPO.units["elven-spearmen"]
-    assert GAME.field(spearmen, 5) == Contingent.field(
-        spearmen, 5, weapons=REPO.weapons, armoury=REPO.armoury, rules=REPO.rules
-    )
+    assert GAME.field(spearmen, 5) == Contingent.field(spearmen, 5, data=REPO)
 
 
 def test_deploy_delegates_to_the_muster_boundary() -> None:
@@ -37,9 +35,7 @@ def test_deploy_delegates_to_the_muster_boundary() -> None:
     from avelorn.tow.muster import Complement
 
     entry = Complement(unit=REPO.units["elven-spearmen"], size=10)
-    assert GAME.deploy(entry) == Contingent.deploy(
-        entry, weapons=REPO.weapons, armoury=REPO.armoury, rules=REPO.rules
-    )
+    assert GAME.deploy(entry) == Contingent.field(entry, data=REPO)
 
 
 def test_every_phase_category_in_data_names_a_phase() -> None:
