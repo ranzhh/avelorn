@@ -23,7 +23,7 @@ from typing import ClassVar
 
 from avelorn.core.game import Game
 from avelorn.core.registry import Registry
-from avelorn.tow.combat.contingent import Contingent
+from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.muster import Complement
 from avelorn.tow.phases import CombatPhase, MovementPhase, ShootingPhase, StrategyPhase

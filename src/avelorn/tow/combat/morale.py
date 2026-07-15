@@ -31,9 +31,9 @@ from typing import ClassVar
 
 from avelorn.tow.combat.attack import Roll
 from avelorn.tow.combat.characteristic_tests import pass_probability
-from avelorn.tow.combat.contingent import Contingent, Loadout
 from avelorn.tow.combat.melee import CombatResult
 from avelorn.tow.combat.shooting import ShootingResult
+from avelorn.tow.contingent import Contingent, Loadout
 from avelorn.tow.schema.psychology import PanicCause
 from avelorn.tow.schema.rule import RerollEffect
 from avelorn.tow.schema.stage import Stage

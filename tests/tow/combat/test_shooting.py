@@ -5,8 +5,8 @@ from dataclasses import replace
 import pytest
 
 from avelorn.tow.combat.attack import AttackProfile, Outcome, RollState, Transform
-from avelorn.tow.combat.contingent import Contingent, Movement
 from avelorn.tow.combat.shooting import _engagement_conditions, shoot, shoot_unit
+from avelorn.tow.contingent import Contingent, Movement
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.schema.rule import Condition
 from avelorn.tow.schema.stage import Stage

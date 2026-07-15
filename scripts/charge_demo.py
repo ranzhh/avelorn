@@ -25,8 +25,8 @@ import logging
 from avelorn.core.dice import expected_value
 from avelorn.core.logging import configure_logging
 from avelorn.tow.combat.charge import StandAndShoot
-from avelorn.tow.combat.contingent import Charge, ChargeArc
 from avelorn.tow.combat.query import Comparator, Predicate, evaluate, fight_distributions
+from avelorn.tow.contingent import Charge, ChargeArc
 from avelorn.tow.game import TOWGame
 from avelorn.tow.schema.unit import Characteristic
 

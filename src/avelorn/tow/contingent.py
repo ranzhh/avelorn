@@ -13,7 +13,6 @@ from dataclasses import dataclass, field, replace
 from enum import StrEnum
 
 from avelorn.core.registry import Registry
-from avelorn.tow.combat.rules import printed_rule
 from avelorn.tow.muster import Complement
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
@@ -536,6 +535,12 @@ def _resolve_loadout(
     armoury: Registry[Armour],
     rules: Registry[Rule],
 ) -> tuple[Loadout, list[str]]:
+    # Imported inside the function to break an import cycle: this on-field
+    # module sits below the combat package, whose __init__ eagerly pulls in
+    # modules that import back here. (PR reorganising combat/ into engine/
+    # will make this a normal top-level import.)
+    from avelorn.tow.combat.rules import printed_rule
+
     # The muster-boundary resolution both constructors share: equipment
     # partitions into weapons and armour, special rules resolve where
     # entries exist and ride along printed where they do not. Unknown

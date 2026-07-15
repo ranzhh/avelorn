@@ -3,7 +3,6 @@
 import pytest
 
 from avelorn.core.dice import binomial_distribution, expected_value
-from avelorn.tow.combat.contingent import Charge, ChargeArc, Contingent, Loadout
 from avelorn.tow.combat.melee import (
     FightResult,
     combat_result,
@@ -12,6 +11,7 @@ from avelorn.tow.combat.melee import (
     strike,
     strike_unit,
 )
+from avelorn.tow.contingent import Charge, ChargeArc, Contingent, Loadout
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.rule import Condition, ModifierEffect, Rule

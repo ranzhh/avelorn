@@ -33,8 +33,8 @@ from avelorn.tow.combat.charts import (
     wound_probability,
     wound_target,
 )
-from avelorn.tow.combat.contingent import Contingent
 from avelorn.tow.combat.rules import compile_rules
+from avelorn.tow.contingent import Contingent
 from avelorn.tow.schema.rule import Condition, Rule
 from avelorn.tow.schema.unit import Characteristic
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile

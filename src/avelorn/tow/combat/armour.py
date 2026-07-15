@@ -9,13 +9,13 @@ save roll after the weapon's Armour Piercing. Phase-neutral: both
 shooting and close combat resolve the defender's save this way.
 
 The armour comes off the defender's resolved
-:class:`~avelorn.tow.combat.contingent.Loadout`: name resolution
+:class:`~avelorn.tow.contingent.Loadout`: name resolution
 happened at the muster boundary, so there is nothing left to miss here
 — no registry threaded in, no "equipment not factored" note out.
 """
 
 from avelorn.tow.combat.charts import BEST_ARMOUR_VALUE, UNARMOURED
-from avelorn.tow.combat.contingent import Loadout
+from avelorn.tow.contingent import Loadout
 
 
 def defender_armour(loadout: Loadout) -> int | None:
