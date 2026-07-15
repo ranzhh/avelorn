@@ -4,9 +4,9 @@ import pytest
 
 from avelorn.core.errors import UnmodelledRuleError
 from avelorn.tow.combat.charge import Flee, StandAndShoot, charge, stand_and_shoot
-from avelorn.tow.combat.contingent import Charge, ChargeArc, Contingent
 from avelorn.tow.combat.melee import combat_result, fight
 from avelorn.tow.combat.shooting import shoot_unit
+from avelorn.tow.contingent import Charge, ChargeArc, Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.unit import Unit

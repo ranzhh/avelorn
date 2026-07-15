@@ -2,7 +2,7 @@
 
 import pytest
 
-from avelorn.tow.combat.contingent import (
+from avelorn.tow.contingent import (
     Charge,
     ChargeArc,
     Contingent,

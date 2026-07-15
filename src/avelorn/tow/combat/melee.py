@@ -39,12 +39,12 @@ from avelorn.tow.combat.charts import (
     wound_probability,
     wound_target,
 )
-from avelorn.tow.combat.contingent import Contingent
 from avelorn.tow.combat.rules import (
     EffectiveCharacteristic,
     compile_rules,
     effective_characteristic,
 )
+from avelorn.tow.contingent import Contingent
 from avelorn.tow.schema.rule import Condition, Rule
 from avelorn.tow.schema.unit import Characteristic, Unit
 from avelorn.tow.schema.weapon import Weapon
@@ -452,7 +452,7 @@ def effective_initiative(
     ceiling: the rank-and-file Initiative, modified by the loadout's
     rule-granted characteristic modifiers under the evaluated
     ``conditions``, plus the ``charge_bonus`` the charge already
-    arc-capped (:attr:`~avelorn.tow.combat.contingent.Charge.initiative_bonus`),
+    arc-capped (:attr:`~avelorn.tow.contingent.Charge.initiative_bonus`),
     the total capped at 10 (the-combat-phase/charging-units). A profile
     with no printed Initiative counts as 0.
 

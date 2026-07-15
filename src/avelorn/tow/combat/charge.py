@@ -14,9 +14,9 @@ from dataclasses import dataclass
 from typing import assert_never
 
 from avelorn.core.errors import UnmodelledRuleError
-from avelorn.tow.combat.contingent import Charge, Contingent
 from avelorn.tow.combat.melee import FightResult, fight
 from avelorn.tow.combat.shooting import ShootingResult, shoot_unit
+from avelorn.tow.contingent import Charge, Contingent
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.weapon import Weapon
 

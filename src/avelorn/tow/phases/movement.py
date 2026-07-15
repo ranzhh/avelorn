@@ -5,8 +5,8 @@ from dataclasses import dataclass
 
 from avelorn.core.game import Phase
 from avelorn.tow.combat.charge import HOLD, ChargeReaction, ChargeResult, charge, stand_and_shoot
-from avelorn.tow.combat.contingent import Charge, Contingent
 from avelorn.tow.combat.shooting import ShootingResult
+from avelorn.tow.contingent import Charge, Contingent
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.weapon import Weapon
 

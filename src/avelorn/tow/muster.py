@@ -4,7 +4,7 @@ The datasheet (:class:`~avelorn.tow.schema.unit.Unit`) prints what a unit
 *may* be; a :class:`Complement` is the unit as entered in an army list —
 a chosen size and options, with the points and effective loadout that
 follow. List validation will take complements; to put one on the table,
-:meth:`~avelorn.tow.combat.contingent.Contingent.deploy` fields it as
+:meth:`~avelorn.tow.contingent.Contingent.deploy` fields it as
 the gameplay-side body.
 """
 
@@ -44,7 +44,7 @@ class Complement(BaseModel):
     The middle of three representations. :class:`~avelorn.tow.schema.unit.Unit`
     is the datasheet — it prints the *allowed* size and the *available*
     options, but not what was taken. A
-    :class:`~avelorn.tow.combat.contingent.Contingent` is the body on
+    :class:`~avelorn.tow.contingent.Contingent` is the body on
     the table. A ``Complement`` is the list entry between them: the chosen
     ``size`` (within the datasheet's allowed range) and the ``options``
     bought, from which its ``points`` and effective loadout follow. It says
