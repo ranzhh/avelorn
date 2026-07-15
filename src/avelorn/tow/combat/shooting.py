@@ -33,7 +33,6 @@ from avelorn.tow.combat.charts import (
     wound_probability,
     wound_target,
 )
-from avelorn.tow.combat.context import EngagementContext
 from avelorn.tow.combat.contingent import Contingent
 from avelorn.tow.combat.rules import compile_rules
 from avelorn.tow.schema.rule import Condition, Rule
@@ -192,17 +191,17 @@ def shoot(
     )
 
 
-def _at_long_range(profile: WeaponProfile, context: EngagementContext | None) -> bool | None:
+def _at_long_range(profile: WeaponProfile, distance: int | None) -> bool | None:
     # Whether the shot is at long range, "further away than half the
     # weapon's maximum range". Needs both a known distance and a numeric
     # weapon range; without them the band is unknown (None).
-    if context is None or context.distance is None or not isinstance(profile.range, int):
+    if distance is None or not isinstance(profile.range, int):
         return None
-    return context.distance > profile.range / 2
+    return distance > profile.range / 2
 
 
 def _engagement_conditions(
-    profile: WeaponProfile, context: EngagementContext | None, force_short_range: bool
+    profile: WeaponProfile, moved: bool, distance: int | None, force_short_range: bool
 ) -> dict[Condition, bool | None]:
     # One fact per Condition member; None = unknown. The match is
     # exhaustive (assert_never), so a new member fails the type check —
@@ -211,9 +210,9 @@ def _engagement_conditions(
     def fact(condition: Condition) -> bool | None:
         match condition:
             case Condition.MOVED:
-                return context.moved if context is not None else None
+                return moved
             case Condition.AT_LONG_RANGE:
-                return False if force_short_range else _at_long_range(profile, context)
+                return False if force_short_range else _at_long_range(profile, distance)
             case Condition.FIRST_ROUND_OF_COMBAT:
                 # A volley is not struck in a round of close combat (a
                 # unit in combat cannot shoot), so the fact never arises.
@@ -230,7 +229,7 @@ def shoot_unit(
     weapon: Weapon,
     *,
     phase_rules: Mapping[str, Rule] = _NONE_IN_PLAY,
-    context: EngagementContext | None = None,
+    distance: int | None = None,
     hit_modifier: int = 0,
     force_short_range: bool = False,
     stand_and_shoot: bool = False,
@@ -243,7 +242,7 @@ def shoot_unit(
     Only the front rank fires on flat ground; a hill would add a rank
     (not modelled). A weapon with Volley Fire adds half of each rank
     behind the front (rounding up) while the unit is stationary
-    (``context.moved`` False) and not making a Stand & Shoot reaction.
+    (``attacker.moved`` False) and not making a Stand & Shoot reaction.
     To resolve a partial volley (only some models in range
     or sight), field the shooting subset as its own contingent. ``weapon``
     is the per-action
@@ -257,10 +256,12 @@ def shoot_unit(
     unit's names at fielding. Unit special rules are not factored into
     the math yet — every one is listed in the result's notes.
 
-    ``context`` is the engagement's situation (moved, distance); rules
-    conditioned on facts it leaves unknown stay unfactored and noted.
-    Rules whose category is the shooting phase chapter apply to every
-    volley, gated by their conditions. ``force_short_range`` treats the
+    Whether the shooter moved is the shooter's own state
+    (``attacker.moved``). ``distance`` is the range to the target — the
+    one relational fact of the shot; a rule conditioned on a range left
+    unknown (``distance`` None) stays unfactored and noted. Rules whose
+    category is the shooting phase chapter apply to every volley, gated by
+    their conditions. ``force_short_range`` treats the
     shot as within half range whatever the distance, so Firing at Long
     Range is honoured as a no-op rather than left unknown and noted — a
     mechanic a Stand & Shoot uses, but not only it. ``stand_and_shoot``
@@ -309,17 +310,14 @@ def shoot_unit(
 
     # Volley Fire: half of each rank behind the front (rounding up) also
     # fires, but only while the unit is stationary and never on a Stand &
-    # Shoot reaction (special-rules/volley-fire) — which is its own fact,
-    # not the short-range one (a future ability could force short range
-    # without being a reaction). It is a rank rule, not a dice modifier,
-    # so it lands here on the shot count, not in the walk. Its use is
-    # settled — factored, then claimed out of the notes below — once the
-    # unit is known to have moved or not, or the shot is a Stand & Shoot;
-    # only an unknown movement leaves it reported.
-    moved = None if context is None else context.moved
+    # Shoot reaction (special-rules/volley-fire) — its own fact, not the
+    # short-range one (a future ability could force short range without
+    # being a reaction). It is a rank rule, not a dice modifier, so it
+    # lands here on the shot count, not in the walk. The unit's movement
+    # is always known, so its use is always settled: it fires, or is
+    # honoured with no extra shots, and is claimed out of the notes below.
     volley_fire = "Volley Fire" in profile.special_rules
-    volley_fire_settled = volley_fire and (stand_and_shoot or moved is not None)
-    if volley_fire and not stand_and_shoot and moved is False:
+    if volley_fire and not stand_and_shoot and not attacker.moved:
         shooters += sum((rank + 1) // 2 for rank in attacker.formation.rear_rank_sizes)
     logger.debug(
         "resolving %d %s (BS %d) shooting %s at %s (T %d), S %d AP %d",
@@ -339,7 +337,7 @@ def shoot_unit(
         notes.extend(
             f"special rule not factored: {rule} ({side.name})" for rule in side.special_rules
         )
-    conditions = _engagement_conditions(profile, context, force_short_range)
+    conditions = _engagement_conditions(profile, attacker.moved, distance, force_short_range)
 
     # Weapon rules with compiled effects join the dice walk; the rest are
     # reported, exactly as before. Shooting-phase chapter rules (Firing
@@ -347,7 +345,7 @@ def shoot_unit(
     modifiers, unfactored = compile_rules(
         profile.special_rules, attacker.loadout.weapon_rules, conditions
     )
-    if volley_fire_settled:
+    if volley_fire:
         unfactored = [rule for rule in unfactored if rule != "Volley Fire"]
     notes.extend(f"weapon rule not factored: {rule} ({chosen.name})" for rule in unfactored)
     phase_modifiers, phase_unfactored = compile_rules(sorted(phase_rules), phase_rules, conditions)

@@ -5,7 +5,6 @@ from dataclasses import replace
 import pytest
 
 from avelorn.tow.combat.attack import AttackProfile, Outcome, RollState, Transform
-from avelorn.tow.combat.context import EngagementContext
 from avelorn.tow.combat.contingent import Contingent
 from avelorn.tow.combat.shooting import _engagement_conditions, shoot, shoot_unit
 from avelorn.tow.data import TOWRepository
@@ -16,9 +15,12 @@ from avelorn.tow.schema.unit import Characteristic, Unit
 REPO = TOWRepository()
 
 
-def _fielded(unit: Unit, models: int, frontage: int | None = None) -> Contingent:
-    # Field at the printed, optionless loadout, with the real registries.
-    return Contingent.field(
+def _fielded(
+    unit: Unit, models: int, frontage: int | None = None, *, moved: bool = False
+) -> Contingent:
+    # Field at the printed, optionless loadout, with the real registries;
+    # ``moved`` sets the unit's turn action (stationary by default).
+    base = Contingent.field(
         unit,
         models,
         weapons=REPO.weapons,
@@ -26,6 +28,7 @@ def _fielded(unit: Unit, models: int, frontage: int | None = None) -> Contingent
         rules=REPO.rules,
         frontage=frontage,
     )
+    return replace(base, moved=moved) if moved else base
 
 
 def test_shoot_golden_chain() -> None:
@@ -129,12 +132,13 @@ def test_only_the_front_rank_fires() -> None:
     """A unit fires with its front rank, not every model.
 
     Ten archers ranked five wide stand in two ranks; only the front five
-    fire on flat ground.
+    fire on flat ground. They moved, so the longbow's Volley Fire does not
+    add the rear rank — isolating the front-rank count.
     """
     archers = REPO.units["elven-archers"]
     spearmen = REPO.units["elven-spearmen"]
     result = shoot_unit(
-        _fielded(archers, 10, frontage=5),
+        _fielded(archers, 10, frontage=5, moved=True),
         _fielded(spearmen, 20),
         REPO.weapons["longbow"],
     )
@@ -144,9 +148,9 @@ def test_only_the_front_rank_fires() -> None:
 def test_volley_fire_adds_half_of_each_rear_rank_when_stationary() -> None:
     """A stationary Volley Fire weapon adds half of each rear rank (rounding up).
 
-    Ten archers five wide with longbows: the front five fire, plus
-    ceil(5/2) = 3 from the second rank — eight shots. Factored into the
-    count, the rule leaves no note.
+    Ten archers five wide with longbows, stationary (the default): the
+    front five fire, plus ceil(5/2) = 3 from the second rank — eight
+    shots. Factored into the count, the rule leaves no note.
     """
     archers = REPO.units["elven-archers"]
     spearmen = REPO.units["elven-spearmen"]
@@ -154,23 +158,9 @@ def test_volley_fire_adds_half_of_each_rear_rank_when_stationary() -> None:
         _fielded(archers, 10, frontage=5),
         _fielded(spearmen, 20),
         REPO.weapons["longbow"],
-        context=EngagementContext(moved=False),
     )
     assert result.shots == 8
     assert not any("Volley Fire" in note for note in result.notes)
-
-
-def test_volley_fire_needs_the_movement_fact() -> None:
-    """Without knowing the unit stayed put, Volley Fire is unclaimed: front rank, noted."""
-    archers = REPO.units["elven-archers"]
-    spearmen = REPO.units["elven-spearmen"]
-    result = shoot_unit(
-        _fielded(archers, 10, frontage=5),
-        _fielded(spearmen, 20),
-        REPO.weapons["longbow"],
-    )
-    assert result.shots == 5
-    assert any("Volley Fire" in note for note in result.notes)
 
 
 def test_volley_fire_does_not_apply_to_a_unit_that_moved() -> None:
@@ -178,10 +168,9 @@ def test_volley_fire_does_not_apply_to_a_unit_that_moved() -> None:
     archers = REPO.units["elven-archers"]
     spearmen = REPO.units["elven-spearmen"]
     result = shoot_unit(
-        _fielded(archers, 10, frontage=5),
+        _fielded(archers, 10, frontage=5, moved=True),
         _fielded(spearmen, 20),
         REPO.weapons["longbow"],
-        context=EngagementContext(moved=True),
     )
     assert result.shots == 5
     assert not any("Volley Fire" in note for note in result.notes)
@@ -195,7 +184,6 @@ def test_volley_fire_never_on_a_stand_and_shoot() -> None:
         _fielded(archers, 10, frontage=5),
         _fielded(spearmen, 20),
         REPO.weapons["longbow"],
-        context=EngagementContext(moved=False),
         stand_and_shoot=True,
     )
     assert result.shots == 5
@@ -214,7 +202,6 @@ def test_forcing_short_range_alone_does_not_forbid_volley_fire() -> None:
         _fielded(archers, 10, frontage=5),
         _fielded(spearmen, 20),
         REPO.weapons["longbow"],
-        context=EngagementContext(moved=False),
         force_short_range=True,
     )
     assert result.shots == 8  # front five plus three from the second rank
@@ -400,5 +387,7 @@ def test_engagement_conditions_cover_every_condition() -> None:
     """
     profile = REPO.weapons["longbow"].missile_profile
     assert profile is not None
-    conditions = _engagement_conditions(profile, None, False)
+    conditions = _engagement_conditions(
+        profile, moved=False, distance=None, force_short_range=False
+    )
     assert set(conditions) == set(Condition)

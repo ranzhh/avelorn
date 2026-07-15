@@ -6,7 +6,6 @@ from typing import ClassVar
 
 from avelorn.core.game import Phase
 from avelorn.tow.combat.attack import ArmourSave, Roll, RollToHitShooting, RollToWound, WardSave
-from avelorn.tow.combat.context import EngagementContext
 from avelorn.tow.combat.contingent import Contingent
 from avelorn.tow.combat.morale import PanicResult, PanicTest, make_panic_tests
 from avelorn.tow.combat.shooting import ShootingResult, shoot_unit
@@ -42,7 +41,7 @@ class ShootingPhase(Phase):
         defender: Contingent,
         weapon: Weapon,
         *,
-        context: EngagementContext | None = None,
+        distance: int | None = None,
         hit_modifier: int = 0,
     ) -> ShootingResult:
         """One unit shoots another, under the phase's rules in force.
@@ -55,7 +54,7 @@ class ShootingPhase(Phase):
             defender,
             weapon,
             phase_rules=self.in_play,
-            context=context,
+            distance=distance,
             hit_modifier=hit_modifier,
         )
 

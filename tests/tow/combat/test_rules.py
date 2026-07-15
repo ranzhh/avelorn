@@ -1,12 +1,12 @@
 """Rule compilation tests: printed names to transforms, from real data."""
 
+from dataclasses import replace
 from fractions import Fraction
 from typing import Literal
 
 import pytest
 
 from avelorn.tow.combat.attack import AttackProfile, RollState, resolve_attack
-from avelorn.tow.combat.context import EngagementContext
 from avelorn.tow.combat.contingent import Contingent
 from avelorn.tow.combat.rules import (
     _condition_applies,
@@ -34,11 +34,13 @@ REPO = TOWRepository()
 IN_FORCE = {r.name: r for r in REPO.rules.values() if r.category == Phase.SHOOTING and r.effects}
 
 
-def _fielded(unit: Unit, models: int) -> Contingent:
-    # Field at the printed, optionless loadout, with the real registries.
-    return Contingent.field(
+def _fielded(unit: Unit, models: int, *, moved: bool = False) -> Contingent:
+    # Field at the printed, optionless loadout, with the real registries;
+    # ``moved`` sets the unit's turn action (stationary by default).
+    base = Contingent.field(
         unit, models, weapons=REPO.weapons, armoury=REPO.armoury, rules=REPO.rules
     )
+    return replace(base, moved=moved) if moved else base
 
 
 def _one_rule(effect: RuleEffect) -> dict[str, Rule]:
@@ -142,7 +144,8 @@ def test_shoot_unit_factors_armour_bane_from_data() -> None:
     """End to end: the Longbow's Armour Bane (1) changes the math.
 
     Archers vs spearmen (5+ save): per-shot unsaved moves from 2/9 to
-    13/54, the Armour Bane note disappears, and Volley Fire stays noted.
+    13/54, the Armour Bane note disappears, and Volley Fire is factored
+    into the shot count (stationary, one rank), so it too leaves no note.
     """
     result = shoot_unit(
         _fielded(REPO.units["elven-archers"], 3),
@@ -152,7 +155,7 @@ def test_shoot_unit_factors_armour_bane_from_data() -> None:
     )
     assert result.p_unsaved == pytest.approx(13 / 54)
     assert not any("Armour Bane" in note for note in result.notes)
-    assert any("Volley Fire" in note for note in result.notes)
+    assert not any("Volley Fire" in note for note in result.notes)
 
 
 def test_weapon_rules_factor_from_the_loadout_alone() -> None:
@@ -160,7 +163,7 @@ def test_weapon_rules_factor_from_the_loadout_alone() -> None:
 
     Fielding resolved the Longbow's Armour Bane (1), so the volley
     factors it (2/9 -> 13/54 per shot) with no ``rules=`` passed at all;
-    Volley Fire has no entry and stays noted. Only the shooting phase's
+    Volley Fire is factored into the shot count. Only the shooting phase's
     own chapter rules still come from the registry.
     """
     result = shoot_unit(
@@ -170,7 +173,7 @@ def test_weapon_rules_factor_from_the_loadout_alone() -> None:
     )
     assert result.p_unsaved == pytest.approx(13 / 54)
     assert not any("Armour Bane" in note for note in result.notes)
-    assert any("Volley Fire" in note for note in result.notes)
+    assert not any("Volley Fire" in note for note in result.notes)
 
 
 def test_long_range_penalty_applies_from_data() -> None:
@@ -184,7 +187,7 @@ def test_long_range_penalty_applies_from_data() -> None:
         _fielded(REPO.units["elven-spearmen"], 10),
         weapon=REPO.weapons["longbow"],
         phase_rules=IN_FORCE,
-        context=EngagementContext(moved=False, distance=20),
+        distance=20,
     )
     assert result.p_unsaved == pytest.approx(13 / 72)
     assert not any("core rule" in note for note in result.notes)
@@ -200,14 +203,18 @@ def test_condition_false_applies_no_penalty_and_no_note() -> None:
         _fielded(REPO.units["elven-spearmen"], 10),
         weapon=REPO.weapons["longbow"],
         phase_rules=IN_FORCE,
-        context=EngagementContext(moved=False, distance=10),
+        distance=10,
     )
     assert result.p_unsaved == pytest.approx(13 / 54)
     assert not any("core rule" in note for note in result.notes)
 
 
-def test_unknown_context_leaves_core_rules_unfactored() -> None:
-    """Without an engagement context the phase rules cannot be evaluated."""
+def test_unknown_distance_leaves_only_the_range_rule_unfactored() -> None:
+    """An unknown range leaves only Firing at Long Range unfactored.
+
+    A stationary shooter settles Moving and Shooting — honoured, no
+    penalty, no note — so only the range rule is left reported.
+    """
     result = shoot_unit(
         _fielded(REPO.units["elven-archers"], 3),
         _fielded(REPO.units["elven-spearmen"], 10),
@@ -216,17 +223,17 @@ def test_unknown_context_leaves_core_rules_unfactored() -> None:
     )
     assert result.p_unsaved == pytest.approx(13 / 54)
     assert any("core rule not factored: Firing at Long Range" in n for n in result.notes)
-    assert any("core rule not factored: Moving and Shooting" in n for n in result.notes)
+    assert not any("Moving and Shooting" in n for n in result.notes)
 
 
 def test_both_penalties_stack() -> None:
     """Moved and at long range: -1 and -1, hit 5+."""
     result = shoot_unit(
-        _fielded(REPO.units["elven-archers"], 3),
+        _fielded(REPO.units["elven-archers"], 3, moved=True),
         _fielded(REPO.units["elven-spearmen"], 10),
         weapon=REPO.weapons["longbow"],
         phase_rules=IN_FORCE,
-        context=EngagementContext(moved=True, distance=20),
+        distance=20,
     )
     assert result.hit_target == 5
 
@@ -248,14 +255,14 @@ def test_staying_still_volley_fires_while_the_to_hit_is_a_wash() -> None:
         _fielded(spearmen, 10),
         warbow,
         phase_rules=IN_FORCE,
-        context=EngagementContext(moved=False, distance=15),
+        distance=15,
     )
     move_in = shoot_unit(
-        _fielded(sea_guard, 10),
+        _fielded(sea_guard, 10, moved=True),
         _fielded(spearmen, 10),
         warbow,
         phase_rules=IN_FORCE,
-        context=EngagementContext(moved=True, distance=12),
+        distance=12,
     )
     assert stay.hit_target == move_in.hit_target == 4  # the To Hit is a wash
     assert stay.p_unsaved == pytest.approx(move_in.p_unsaved)  # per shot, identical

@@ -10,11 +10,10 @@ volley itself and stays callable on its own.
 
 import logging
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import assert_never
 
 from avelorn.core.errors import UnmodelledRuleError
-from avelorn.tow.combat.context import CombatContext, EngagementContext
 from avelorn.tow.combat.contingent import Charge, Contingent
 from avelorn.tow.combat.melee import FightResult, fight
 from avelorn.tow.combat.shooting import ShootingResult, shoot_unit
@@ -69,7 +68,6 @@ def stand_and_shoot(
         target,
         weapon,
         phase_rules=phase_rules,
-        context=EngagementContext(moved=False),
         hit_modifier=_STAND_AND_SHOOT_TO_HIT,
         force_short_range=True,
         stand_and_shoot=True,
@@ -157,13 +155,13 @@ def charge(
             # a charge whose target silently did nothing is the wrong game.
             assert_never(unanswered)
     melee = fight(
-        charger,
+        replace(charger, charge=move),
         target,
         a_weapon=charger_weapon,
         b_weapon=target_weapon,
         a_prior_losses=None if volley is None else volley.casualties,
         # A charge sets up a new combat, so the round it feeds is that
-        # combat's first — known structurally, not a parameter.
-        context=CombatContext(a_charge=move, first_round=True),
+        # combat's first — known structurally, not a parameter to guess.
+        first_round=True,
     )
     return ChargeResult(reaction=volley, melee=melee)

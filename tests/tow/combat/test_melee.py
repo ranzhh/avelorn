@@ -1,9 +1,10 @@
 """Close-combat strike tests, golden values hand-computed from the charts."""
 
+from dataclasses import replace
+
 import pytest
 
 from avelorn.core.dice import binomial_distribution, expected_value
-from avelorn.tow.combat.context import CombatContext
 from avelorn.tow.combat.contingent import Charge, ChargeArc, Contingent, Loadout
 from avelorn.tow.combat.melee import (
     FightResult,
@@ -307,14 +308,13 @@ def test_fight_charge_makes_the_charger_strike_first() -> None:
     """
     spearmen = REPO.units["elven-spearmen"]
     spear = REPO.weapons["thrusting-spear"]
-    charger = _fielded(spearmen, 1)
+    charger = replace(_fielded(spearmen, 1), charge=Charge(3, ChargeArc.FRONT))
     defender = _fielded(spearmen, 1)
     result = fight(
         charger,
         defender,
         a_weapon=spear,
         b_weapon=spear,
-        context=CombatContext(a_charge=Charge(3, ChargeArc.FRONT)),
     )
     assert result.first_striker is charger
     assert result.b_casualties[1] == pytest.approx(1 / 6)  # charger struck full-strength
@@ -329,13 +329,12 @@ def test_fight_charge_capped_below_the_foe_stays_simultaneous() -> None:
     """
     spearmen = REPO.units["elven-spearmen"]
     spear = REPO.weapons["thrusting-spear"]
-    charger = _fielded(spearmen, 1)
+    charger = replace(_fielded(spearmen, 1), charge=Charge(0, ChargeArc.FRONT))
     result = fight(
         charger,
         _fielded(spearmen, 1),
         a_weapon=spear,
         b_weapon=spear,
-        context=CombatContext(a_charge=Charge(0, ChargeArc.FRONT)),
     )
     assert result.first_striker is None
 
@@ -435,7 +434,7 @@ def test_fight_first_round_initiative_rule_flips_the_order() -> None:
         _fielded(spearmen.model_copy(update={"special_rules": []}), 1),
         a_weapon=spear,
         b_weapon=spear,
-        context=CombatContext(first_round=True),
+        first_round=True,
     )
     assert result.first_striker is quick
     assert not any("Doctored Reflexes" in note for note in result.notes)
@@ -450,7 +449,7 @@ def test_fight_later_round_initiative_rule_is_honoured_by_not_applying() -> None
         _fielded(spearmen, 1),
         a_weapon=spear,
         b_weapon=spear,
-        context=CombatContext(first_round=False),
+        first_round=False,
     )
     assert result.first_striker is None
     assert not any("Doctored Reflexes" in note for note in result.notes)
@@ -495,14 +494,14 @@ def test_elven_reflexes_strikes_first_in_the_first_round() -> None:
         foe,
         a_weapon=spear,
         b_weapon=spear,
-        context=CombatContext(first_round=True),
+        first_round=True,
     )
     later = fight(
         elves,
         foe,
         a_weapon=spear,
         b_weapon=spear,
-        context=CombatContext(first_round=False),
+        first_round=False,
     )
     assert base is not None
     assert first.a_initiative.value == base + 1
