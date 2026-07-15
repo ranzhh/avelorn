@@ -5,10 +5,10 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 from avelorn.core.game import Phase
-from avelorn.tow.combat.attack import ArmourSave, Roll, RollToHitShooting, RollToWound, WardSave
 from avelorn.tow.combat.morale import PanicResult, PanicTest, make_panic_tests
 from avelorn.tow.combat.shooting import ShootingResult, shoot_unit
 from avelorn.tow.contingent import Contingent
+from avelorn.tow.engine.attack import ArmourSave, Roll, RollToHitShooting, RollToWound, WardSave
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.weapon import Weapon
 

@@ -5,16 +5,16 @@ from typing import Literal
 
 import pytest
 
-from avelorn.tow.combat.attack import AttackProfile, RollState, resolve_attack
-from avelorn.tow.combat.rules import (
+from avelorn.tow.combat.shooting import shoot_unit
+from avelorn.tow.contingent import Contingent, Movement
+from avelorn.tow.data import TOWRepository
+from avelorn.tow.engine.attack import AttackProfile, RollState, resolve_attack
+from avelorn.tow.engine.rules import (
     _condition_applies,
     compile_rules,
     effective_characteristic,
     printed_rule,
 )
-from avelorn.tow.combat.shooting import shoot_unit
-from avelorn.tow.contingent import Contingent, Movement
-from avelorn.tow.data import TOWRepository
 from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.rule import (
     Condition,
@@ -309,7 +309,7 @@ def test_every_modifier_kind_declares_its_roll() -> None:
     """
     from typing import get_args
 
-    from avelorn.tow.combat.rules import _ROLLS
+    from avelorn.tow.engine.rules import _ROLLS
     from avelorn.tow.schema.rule import ModifierKind
 
     profile = AttackProfile.shooting(hit_target=4, wound_target=4, save_target=4, ward_target=4)

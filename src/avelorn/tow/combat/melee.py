@@ -21,8 +21,9 @@ from math import isclose
 from typing import assert_never
 
 from avelorn.core.dice import expected_value
-from avelorn.tow.combat.armour import defender_armour
-from avelorn.tow.combat.attack import (
+from avelorn.tow.contingent import Contingent
+from avelorn.tow.engine.armour import defender_armour
+from avelorn.tow.engine.attack import (
     AttackProfile,
     Modifier,
     Outcome,
@@ -30,8 +31,8 @@ from avelorn.tow.combat.attack import (
     resolve_attack,
     roll_target,
 )
-from avelorn.tow.combat.casualties import wound_and_casualties
-from avelorn.tow.combat.charts import (
+from avelorn.tow.engine.casualties import wound_and_casualties
+from avelorn.tow.engine.charts import (
     armour_save_target,
     melee_hit_probability,
     melee_hit_target,
@@ -39,12 +40,11 @@ from avelorn.tow.combat.charts import (
     wound_probability,
     wound_target,
 )
-from avelorn.tow.combat.rules import (
+from avelorn.tow.engine.rules import (
     EffectiveCharacteristic,
     compile_rules,
     effective_characteristic,
 )
-from avelorn.tow.contingent import Contingent
 from avelorn.tow.schema.rule import Condition, Rule
 from avelorn.tow.schema.unit import Characteristic, Unit
 from avelorn.tow.schema.weapon import Weapon
@@ -263,7 +263,7 @@ def _engage(
         )
     strength = profile.strength.resolve(wielder_strength or 0)
 
-    armour_value = defender_armour(defender.loadout)
+    armour_value = defender_armour(defender.loadout.armour)
     notes: list[str] = []
     # This striker's engagement conditions gate its rules, exactly as a
     # volley's do: a weapon rule whose condition the facts answer is

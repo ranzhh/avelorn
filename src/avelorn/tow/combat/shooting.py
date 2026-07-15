@@ -15,8 +15,9 @@ from dataclasses import dataclass
 from typing import assert_never
 
 from avelorn.core.dice import expected_value
-from avelorn.tow.combat.armour import defender_armour
-from avelorn.tow.combat.attack import (
+from avelorn.tow.contingent import Contingent
+from avelorn.tow.engine.armour import defender_armour
+from avelorn.tow.engine.attack import (
     AttackProfile,
     Modifier,
     Outcome,
@@ -24,8 +25,8 @@ from avelorn.tow.combat.attack import (
     resolve_attack,
     roll_target,
 )
-from avelorn.tow.combat.casualties import wound_and_casualties
-from avelorn.tow.combat.charts import (
+from avelorn.tow.engine.casualties import wound_and_casualties
+from avelorn.tow.engine.charts import (
     armour_save_target,
     hit_probability,
     save_probability,
@@ -33,8 +34,7 @@ from avelorn.tow.combat.charts import (
     wound_probability,
     wound_target,
 )
-from avelorn.tow.combat.rules import compile_rules
-from avelorn.tow.contingent import Contingent
+from avelorn.tow.engine.rules import compile_rules
 from avelorn.tow.schema.rule import Condition, Rule
 from avelorn.tow.schema.unit import Characteristic
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile
@@ -331,7 +331,7 @@ def shoot_unit(
         profile.armour_piercing,
     )
 
-    armour_value = defender_armour(defender.loadout)
+    armour_value = defender_armour(defender.loadout.armour)
     notes: list[str] = []
     for side in (shooter, target):
         notes.extend(

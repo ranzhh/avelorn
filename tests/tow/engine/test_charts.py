@@ -2,7 +2,7 @@
 
 import pytest
 
-from avelorn.tow.combat.charts import (
+from avelorn.tow.engine.charts import (
     armour_save_target,
     hit_probability,
     melee_hit_probability,

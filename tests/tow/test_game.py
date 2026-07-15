@@ -167,7 +167,7 @@ def test_each_phase_declares_the_dice_the_engine_rolls() -> None:
     attack roll (the panic test's unit-wide 2D6) sit in the same tuple,
     each knowing what it rolls.
     """
-    from avelorn.tow.combat.attack import AttackProfile, AttackRoll
+    from avelorn.tow.engine.attack import AttackProfile, AttackRoll
 
     shot = AttackProfile.shooting(hit_target=4, wound_target=4, save_target=4, ward_target=4)
     blow = AttackProfile.melee(hit_target=4, wound_target=4, save_target=4, ward_target=4)
