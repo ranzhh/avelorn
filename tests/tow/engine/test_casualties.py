@@ -3,7 +3,7 @@
 import pytest
 
 from avelorn.core.dice import binomial_distribution, cap_distribution, group_distribution
-from avelorn.tow.combat.casualties import _remove_casualties, wound_and_casualties
+from avelorn.tow.engine.casualties import _remove_casualties, wound_and_casualties
 
 
 def test_remove_casualties_with_no_kill_mass_matches_binomial_path() -> None:

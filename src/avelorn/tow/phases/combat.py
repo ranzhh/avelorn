@@ -5,10 +5,10 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 from avelorn.core.game import Phase
-from avelorn.tow.combat.attack import ArmourSave, Roll, RollToHitCombat, RollToWound, WardSave
 from avelorn.tow.combat.melee import CombatResult, FightResult, combat_result, fight
 from avelorn.tow.combat.morale import BreakResult, break_test
 from avelorn.tow.contingent import Contingent
+from avelorn.tow.engine.attack import ArmourSave, Roll, RollToHitCombat, RollToWound, WardSave
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.unit import Unit
 from avelorn.tow.schema.weapon import Weapon

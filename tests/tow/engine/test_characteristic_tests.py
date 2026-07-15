@@ -4,8 +4,8 @@ from fractions import Fraction
 
 import pytest
 
-from avelorn.tow.combat.characteristic_tests import pass_probability, unit_pass_probability
 from avelorn.tow.data import TOWRepository
+from avelorn.tow.engine.characteristic_tests import pass_probability, unit_pass_probability
 from avelorn.tow.schema.unit import Characteristic
 
 REPO = TOWRepository()

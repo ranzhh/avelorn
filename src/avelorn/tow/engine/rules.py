@@ -2,7 +2,7 @@
 
 Printed rule names on units and weapons resolve against the rule
 entries under ``data/tow/rules/``; a resolved rule's effects compile
-into :class:`~avelorn.tow.combat.attack.Modifier` records the dice walk
+into :class:`~avelorn.tow.engine.attack.Modifier` records the dice walk
 interprets. Resolution honours the convention the rules themselves print:
 a bracketed number after the name ("Armour Bane (1)") is the parameter
 of the rule filed under the "(X)" placeholder ("the amount shown in
@@ -30,7 +30,7 @@ from contextlib import suppress
 from dataclasses import dataclass
 
 from avelorn.core.registry import Registry, UnknownNameError
-from avelorn.tow.combat.attack import Modifier
+from avelorn.tow.engine.attack import Modifier
 from avelorn.tow.schema.rule import (
     PARAMETER_SUFFIX,
     Condition,

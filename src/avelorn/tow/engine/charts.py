@@ -9,7 +9,7 @@ the-combat-phase/roll-to-hit-combat.
 
 import logging
 
-from avelorn.tow.combat.attack import (
+from avelorn.tow.engine.attack import (
     ArmourSave,
     RollToHitCombat,
     RollToHitShooting,

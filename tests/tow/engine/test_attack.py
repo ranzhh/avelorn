@@ -9,7 +9,7 @@ from fractions import Fraction
 
 import pytest
 
-from avelorn.tow.combat.attack import (
+from avelorn.tow.engine.attack import (
     AttackProfile,
     Modifier,
     Outcome,
@@ -19,7 +19,7 @@ from avelorn.tow.combat.attack import (
     resolve_attack,
     walk,
 )
-from avelorn.tow.combat.charts import hit_probability, save_probability, wound_probability
+from avelorn.tow.engine.charts import hit_probability, save_probability, wound_probability
 from avelorn.tow.schema.rule import NaturalRoll
 from avelorn.tow.schema.stage import Stage
 

@@ -14,6 +14,7 @@ from enum import StrEnum
 
 from avelorn.core.registry import Registry
 from avelorn.tow.data import TOWRepository, default_repository
+from avelorn.tow.engine.rules import printed_rule
 from avelorn.tow.muster import Complement
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
@@ -31,7 +32,7 @@ class Loadout:
     ``rules`` are the unit's special rules that resolve against the rule
     data — each the rule exactly as printed, parameters substituted, by
     the engine's one resolution convention
-    (:func:`~avelorn.tow.combat.rules.printed_rule`).
+    (:func:`~avelorn.tow.engine.rules.printed_rule`).
 
     The two halves miss differently, by design. Equipment coverage is
     complete, so an unresolvable equipment name fails the deploy. Rule
@@ -552,12 +553,6 @@ def _resolve_loadout(
     armoury: Registry[Armour],
     rules: Registry[Rule],
 ) -> tuple[Loadout, list[str]]:
-    # Imported inside the function to break an import cycle: this on-field
-    # module sits below the combat package, whose __init__ eagerly pulls in
-    # modules that import back here. (PR reorganising combat/ into engine/
-    # will make this a normal top-level import.)
-    from avelorn.tow.combat.rules import printed_rule
-
     # The muster-boundary resolution both constructors share: equipment
     # partitions into weapons and armour, special rules resolve where
     # entries exist and ride along printed where they do not. Unknown
