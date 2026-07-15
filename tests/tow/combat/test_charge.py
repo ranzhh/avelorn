@@ -6,7 +6,6 @@ import pytest
 
 from avelorn.core.errors import UnmodelledRuleError
 from avelorn.tow.combat.charge import Flee, StandAndShoot, charge, stand_and_shoot
-from avelorn.tow.combat.context import CombatContext
 from avelorn.tow.combat.contingent import Charge, ChargeArc, Contingent
 from avelorn.tow.combat.melee import combat_result, fight
 from avelorn.tow.combat.shooting import shoot_unit
@@ -99,7 +98,7 @@ def test_charge_sequence_matches_mixing_the_survivor_fights_by_hand() -> None:
     spear, hand = REPO.weapons["thrusting-spear"], REPO.weapons["hand-weapon"]
     move = Charge(6, ChargeArc.FRONT)
     models = 3
-    charger = _fielded(spearmen, models)
+    charger = replace(_fielded(spearmen, models), charge=move)
     defender = _fielded(archers, 3)
     reaction = stand_and_shoot(defender, charger, REPO.weapons["longbow"], phase_rules=IN_FORCE)
 
@@ -109,7 +108,6 @@ def test_charge_sequence_matches_mixing_the_survivor_fights_by_hand() -> None:
         a_weapon=spear,
         b_weapon=hand,
         a_prior_losses=reaction.casualties,
-        context=CombatContext(a_charge=move),
     )
 
     manual = [[0.0] * (defender.models + 1) for _ in range(models + 1)]
@@ -119,7 +117,6 @@ def test_charge_sequence_matches_mixing_the_survivor_fights_by_hand() -> None:
             defender,
             a_weapon=spear,
             b_weapon=hand,
-            context=CombatContext(a_charge=move),
         )
         for a_lost, row in enumerate(survivors.losses):
             for b_lost, mass in enumerate(row):
@@ -139,9 +136,8 @@ def test_stand_and_shoot_erodes_the_chargers_combat_result() -> None:
     """
     archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
     spear, hand = REPO.weapons["thrusting-spear"], REPO.weapons["hand-weapon"]
-    charger = _fielded(spearmen, 10)
+    charger = replace(_fielded(spearmen, 10), charge=Charge(8, ChargeArc.FRONT))
     defender = _fielded(archers, 10)
-    situation = CombatContext(a_charge=Charge(8, ChargeArc.FRONT))
     reaction = stand_and_shoot(defender, charger, REPO.weapons["longbow"], phase_rules=IN_FORCE)
 
     unshot = combat_result(
@@ -150,7 +146,6 @@ def test_stand_and_shoot_erodes_the_chargers_combat_result() -> None:
             defender,
             a_weapon=spear,
             b_weapon=hand,
-            context=situation,
         )
     )
     shot = combat_result(
@@ -160,7 +155,6 @@ def test_stand_and_shoot_erodes_the_chargers_combat_result() -> None:
             a_weapon=spear,
             b_weapon=hand,
             a_prior_losses=reaction.casualties,
-            context=situation,
         )
     )
     assert shot.p_a_wins < unshot.p_a_wins
@@ -202,16 +196,16 @@ def test_charge_composes_the_reaction_into_the_fight() -> None:
 
     volley = stand_and_shoot(target, charger, longbow, phase_rules=IN_FORCE)
     manual = fight(
-        charger,
+        replace(charger, charge=move),
         target,
         a_weapon=spear,
         b_weapon=hand,
         a_prior_losses=volley.casualties,
-        context=CombatContext(a_charge=move),
     )
     assert outcome.reaction == volley
     assert outcome.melee.losses == manual.losses
-    assert outcome.melee.first_striker is charger  # the move raised the charger's Initiative
+    assert outcome.melee.first_striker is not None
+    assert outcome.melee.first_striker.charge == move  # the charger struck first
 
 
 def test_charge_against_a_holding_target_has_no_volley() -> None:
@@ -231,11 +225,10 @@ def test_charge_against_a_holding_target_has_no_volley() -> None:
     )
 
     manual = fight(
-        charger,
+        replace(charger, charge=move),
         target,
         a_weapon=spear,
         b_weapon=hand,
-        context=CombatContext(a_charge=move),
     )
     assert outcome.reaction is None
     assert outcome.melee.losses == manual.losses

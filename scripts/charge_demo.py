@@ -99,7 +99,7 @@ def main() -> None:
     _print_casualties("Spearmen", reaction.casualties, args.spearmen)
     print()
 
-    if melee.first_striker is spearmen:
+    if melee.first_striker is not None and melee.first_striker.unit is spearmen_unit:
         order = f"Spearmen first (effective I{charged_init} vs Archers I{archers_init})"
     else:
         order = f"simultaneous (both at effective I{charged_init})"

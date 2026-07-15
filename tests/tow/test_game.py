@@ -6,7 +6,6 @@ import pytest
 
 from avelorn.tow.combat.charge import StandAndShoot
 from avelorn.tow.combat.charge import charge as charge_verb
-from avelorn.tow.combat.context import CombatContext
 from avelorn.tow.combat.contingent import Charge, ChargeArc, Contingent
 from avelorn.tow.combat.melee import combat_result, fight
 from avelorn.tow.combat.morale import break_test, make_panic_tests
@@ -122,14 +121,13 @@ def test_fight_result_and_break_test_delegate() -> None:
     spearmen = REPO.units["elven-spearmen"]
     a, b = _fielded(spearmen, 5), _fielded(spearmen, 5)
     spear = REPO.weapons["thrusting-spear"]
-    context = CombatContext(first_round=True)
-    bound = GAME.combat.fight(a, b, a_weapon=spear, b_weapon=spear, context=context)
+    bound = GAME.combat.fight(a, b, a_weapon=spear, b_weapon=spear, first_round=True)
     direct = fight(
         a,
         b,
         a_weapon=spear,
         b_weapon=spear,
-        context=context,
+        first_round=True,
         phase_rules=GAME.in_play[Phase.COMBAT],
     )
     assert bound == direct

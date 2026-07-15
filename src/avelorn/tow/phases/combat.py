@@ -6,7 +6,6 @@ from typing import ClassVar
 
 from avelorn.core.game import Phase
 from avelorn.tow.combat.attack import ArmourSave, Roll, RollToHitCombat, RollToWound, WardSave
-from avelorn.tow.combat.context import CombatContext
 from avelorn.tow.combat.contingent import Contingent
 from avelorn.tow.combat.melee import CombatResult, FightResult, combat_result, fight
 from avelorn.tow.combat.morale import BreakResult, break_test
@@ -49,7 +48,7 @@ class CombatPhase(Phase):
         b_weapon: Weapon,
         a_prior_losses: Sequence[float] | None = None,
         b_prior_losses: Sequence[float] | None = None,
-        context: CombatContext | None = None,
+        first_round: bool | None = None,
     ) -> FightResult:
         """One round of close combat between two units.
 
@@ -63,7 +62,7 @@ class CombatPhase(Phase):
             b_weapon=b_weapon,
             a_prior_losses=a_prior_losses,
             b_prior_losses=b_prior_losses,
-            context=context,
+            first_round=first_round,
             phase_rules=self.in_play,
         )
 

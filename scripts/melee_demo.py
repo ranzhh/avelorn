@@ -17,7 +17,6 @@ import logging
 
 from avelorn.core.dice import expected_value
 from avelorn.core.logging import configure_logging
-from avelorn.tow.combat.context import CombatContext
 from avelorn.tow.combat.query import Comparator, Predicate, evaluate, fight_distributions
 from avelorn.tow.game import TOWGame
 
@@ -70,7 +69,7 @@ def main() -> None:
         b,
         a_weapon=weapon_a,
         b_weapon=weapon_b,
-        context=CombatContext(first_round=args.first_round),
+        first_round=args.first_round,
     )
     scored = game.combat.result(result)
     breaks = game.combat.break_test(scored, unit_a, unit_b)

@@ -2,13 +2,10 @@
 
 The gameplay-side counterpart of the army-list layer
 (:mod:`avelorn.tow.muster`): a :class:`Contingent` is the body the combat
-resolvers take — a datasheet plus the models actually standing.
-:class:`Charge` records a charge move — event data, carried by the
-action that resolves it (:func:`~avelorn.tow.combat.charge.charge`, via
-the :class:`~avelorn.tow.combat.context.CombatContext`), never by the
-unit. Fielding is also where printed names stop being strings:
-:meth:`Contingent.deploy` resolves equipment and special rules into a
-:class:`Loadout`.
+resolvers take — a datasheet plus the models actually standing, and the
+turn actions it took (whether it moved, its :class:`Charge`). Fielding is
+also where printed names stop being strings: :meth:`Contingent.deploy`
+resolves equipment and special rules into a :class:`Loadout`.
 """
 
 from collections.abc import Mapping
@@ -199,9 +196,10 @@ class Contingent:
     it carries the *allowed* size, not how many models stand on the table —
     so ``models`` supplies the fielded count. A unit's own turn actions
     ride here, each with a definite default: ``moved`` records whether it
-    moved this turn (a freshly fielded body is stationary). The relational
-    facts of an engagement — the range to a target, the round of a combat —
-    are not one unit's state and stay parameters of the resolving action.
+    moved this turn (a freshly fielded body is stationary), and ``charge``
+    its charge, if any. The relational facts of an engagement — the range
+    to a target, the round of a combat — are not one unit's state and stay
+    parameters of the resolving action.
 
     Two constructors resolve a loadout at the muster boundary.
     :meth:`deploy` fields a mustered list entry — a
@@ -241,6 +239,11 @@ class Contingent:
     # it sets this. Read by the rules gated on movement (Moving and
     # Shooting; Volley Fire's stationary condition).
     moved: bool = False
+    # The charge this unit made this turn, if any — how far, into which arc
+    # (a charge is a kind of move). None for a unit that did not charge.
+    # Read by :func:`~avelorn.tow.combat.melee.fight` for the striking
+    # order's charge Initiative bonus.
+    charge: Charge | None = None
 
     def __post_init__(self) -> None:
         """Reject a frontage that is not a positive width.

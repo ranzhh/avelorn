@@ -39,8 +39,7 @@ from avelorn.tow.combat.charts import (
     wound_probability,
     wound_target,
 )
-from avelorn.tow.combat.context import CombatContext
-from avelorn.tow.combat.contingent import Charge, Contingent
+from avelorn.tow.combat.contingent import Contingent
 from avelorn.tow.combat.rules import (
     EffectiveCharacteristic,
     compile_rules,
@@ -421,22 +420,21 @@ def _unit_rule_notes(unit: Unit, claimed: Collection[str] = ()) -> list[str]:
     ]
 
 
-def _combat_conditions(
-    context: CombatContext | None, charge: Charge | None
-) -> dict[Condition, bool | None]:
+def _combat_conditions(first_round: bool | None, side: Contingent) -> dict[Condition, bool | None]:
     # One fact per Condition member for one side of the combat; None =
     # unknown. Exhaustive like the shooting producer: a new member fails
-    # the type check until it is answered here.
+    # the type check until it is answered here. ``first_round`` is the
+    # combat's, a relational fact; the rest read the side's own state.
     def fact(condition: Condition) -> bool | None:
         match condition:
             case Condition.MOVED:
-                # A charge is a move; a side that did not charge may
-                # still have moved earlier in the turn — unknown.
-                return True if charge is not None else None
+                # A charge is a move; and the unit's own moved flag covers
+                # a repositioning that was not a charge.
+                return side.moved or side.charge is not None
             case Condition.AT_LONG_RANGE:
                 return False  # no shot is taken in close combat
             case Condition.FIRST_ROUND_OF_COMBAT:
-                return context.first_round if context is not None else None
+                return first_round
             case unanswered:
                 assert_never(unanswered)
 
@@ -499,7 +497,7 @@ def fight(
     b_weapon: Weapon,
     a_prior_losses: Sequence[float] | None = None,
     b_prior_losses: Sequence[float] | None = None,
-    context: CombatContext | None = None,
+    first_round: bool | None = None,
     phase_rules: Mapping[str, Rule] = _NONE_IN_PLAY,
 ) -> FightResult:
     """Resolve one round of close combat between two single-profile units.
@@ -515,12 +513,14 @@ def fight(
     (the-combat-phase: who-strikes-first, fight-on). Equal Initiative
     strikes simultaneously, with no such reduction (simultaneous-combat).
 
-    ``context`` carries the round's situation — who charged, and how: a
-    side's charge adds its Initiative bonus before the comparison
-    (the-combat-phase/charging-units), the modified Initiative capped at
-    10. The two sides are otherwise symmetric; only Initiative orders
-    them. Resolution happens in strike order and the joint is
-    oriented back to the ``(a, b)`` axes the caller passed.
+    Each side's own charge (``a.charge`` / ``b.charge``) adds its
+    Initiative bonus before the comparison (the-combat-phase/charging-units),
+    the modified Initiative capped at 10. ``first_round`` — whether this is
+    the combat's first round — is the round's own relational fact, not
+    either unit's, so it is a parameter here. The two sides are otherwise
+    symmetric; only Initiative orders them. Resolution happens in strike
+    order and the joint is oriented back to the ``(a, b)`` axes the caller
+    passed.
 
     ``phase_rules`` are the combat chapter's rules in force — resolved by
     printed name, they apply to every strike this round, gated by each
@@ -539,7 +539,7 @@ def fight(
 
     Rule-granted characteristic modifiers on the unit (Elven Reflexes)
     apply to the striking order through the loadout of a contingent
-    fielded with deploy(), gated on the context's facts; one left
+    fielded with deploy(), gated on the side's facts; one left
     unevaluated stays noted. Deferred and noted, not modelled here:
     Always Strikes First/Last and the Initiative modifiers granted by
     weapons (a Thrusting Spear's bonus when charged) — surfaced in the
@@ -562,21 +562,20 @@ def fight(
         raise ValueError("model counts must be >= 0")
     a_lost_before = _prior_loss_pmf(a_prior_losses, a.models, "a_prior_losses")
     b_lost_before = _prior_loss_pmf(b_prior_losses, b.models, "b_prior_losses")
-    situation = context or CombatContext()
     # Each side's engagement conditions, evaluated once: the same facts
     # gate its strike's dice walk (weapon and chapter rules) and its
     # striking-order Initiative — no fact is computed for one and denied
     # the other.
-    a_conditions = _combat_conditions(situation, situation.a_charge)
-    b_conditions = _combat_conditions(situation, situation.b_charge)
+    a_conditions = _combat_conditions(first_round, a)
+    b_conditions = _combat_conditions(first_round, b)
     a_strikes = _engage(
         a, b, a_weapon, hit_modifier=0, conditions=a_conditions, phase_rules=phase_rules
     )
     b_strikes = _engage(
         b, a, b_weapon, hit_modifier=0, conditions=b_conditions, phase_rules=phase_rules
     )
-    a_bonus = 0 if situation.a_charge is None else situation.a_charge.initiative_bonus
-    b_bonus = 0 if situation.b_charge is None else situation.b_charge.initiative_bonus
+    a_bonus = 0 if a.charge is None else a.charge.initiative_bonus
+    b_bonus = 0 if b.charge is None else b.charge.initiative_bonus
     a_initiative = effective_initiative(a, a_bonus, a_conditions)
     b_initiative = effective_initiative(b, b_bonus, b_conditions)
     a_first = _strikes_first(a_initiative.value, b_initiative.value)
