@@ -111,7 +111,7 @@ def test_charge_sequence_matches_mixing_the_survivor_fights_by_hand() -> None:
     manual = [[0.0] * (defender.models + 1) for _ in range(models + 1)]
     for felled, p_felled in enumerate(reaction.casualties):
         survivors = fight(
-            charger.remnant(models - felled),
+            charger.remove_casualties(felled),
             defender,
             a_weapon=spear,
             b_weapon=hand,

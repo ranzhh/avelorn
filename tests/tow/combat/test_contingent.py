@@ -216,7 +216,7 @@ def test_a_remnant_keeps_its_loadout(spearmen_unit: Unit) -> None:
     fielded = Contingent.field(
         spearmen_unit, 10, weapons=REPO.weapons, armoury=REPO.armoury, rules=REPO.rules
     )
-    remnant = fielded.remnant(7)
+    remnant = fielded.remove_casualties(3)
     assert remnant.models == 7
     assert remnant.loadout is fielded.loadout
     assert remnant.unit is fielded.unit

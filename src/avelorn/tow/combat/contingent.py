@@ -301,7 +301,8 @@ class Contingent:
     default — any model count, so a remnant or an isolated what-if needs
     no legal list size. Bodies whose loadout already exists are derived
     from one that does, through the fluent copies: a post-casualty remnant
-    is :meth:`remnant`, a mover is :meth:`after`, a charger :meth:`charging`.
+    is :meth:`remove_casualties`, a mover is :meth:`after`, a charger
+    :meth:`charging`.
 
     The weapon in use is *not* carried here: it is a per-action choice, so
     the same contingent shoots with its bow one moment and fights the
@@ -399,18 +400,19 @@ class Contingent:
         """
         return self.after(Movement.charged(move))
 
-    def remnant(self, survivors: int) -> "Contingent":
-        """This contingent thinned to ``survivors`` models after casualties.
+    def remove_casualties(self, casualties: int) -> "Contingent":
+        """This contingent with ``casualties`` models removed after a round.
 
         The same body, fewer models: loadout, datasheet, frontage and
-        movement all ride along, only the count changes. The post-casualty
-        copy, everywhere a round's losses are applied to a side.
+        movement all ride along, only the count drops. The Remove Casualties
+        step, everywhere a round's losses are applied to a side — spelt by
+        what was felled, not by the residual.
 
         Returns:
-            A copy with ``models`` set to ``survivors``; the original is
-            unchanged.
+            A copy with ``models`` reduced by ``casualties``; the original
+            is unchanged.
         """
-        return replace(self, models=survivors)
+        return replace(self, models=self.models - casualties)
 
     def wields(self, weapon: Weapon) -> Weapon:
         """The weapon, confirmed carried: a unit fights with what it has.
