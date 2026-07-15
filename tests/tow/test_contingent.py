@@ -1,4 +1,4 @@
-"""The fielded unit: Contingent.deploy and the Charge bonus."""
+"""The fielded unit: Contingent.deploy / field, and the Charge bonus."""
 
 import pytest
 
@@ -34,20 +34,16 @@ def _fielded(unit: Unit, models: int, frontage: int | None = None) -> Contingent
     return Contingent.field(
         unit,
         models,
-        weapons=REPO.weapons,
-        armoury=REPO.armoury,
-        rules=REPO.rules,
+        data=REPO,
         frontage=frontage,
     )
 
 
-def test_deploy_fields_complement_size_and_loadout(spearmen_unit: Unit) -> None:
-    """Contingent.deploy carries the complement's size and chosen loadout."""
+def test_field_a_complement_carries_size_and_loadout(spearmen_unit: Unit) -> None:
+    """Contingent.field carries a complement's size and chosen loadout."""
     mustered = Complement(unit=spearmen_unit, size=18, options=["Shieldwall"])
 
-    contingent = Contingent.deploy(
-        mustered, weapons=REPO.weapons, armoury=REPO.armoury, rules=REPO.rules
-    )
+    contingent = Contingent.field(mustered, data=REPO)
 
     assert contingent.models == 18
     # The chosen option's rule is what the engine reads, not the printed profile.
@@ -55,13 +51,11 @@ def test_deploy_fields_complement_size_and_loadout(spearmen_unit: Unit) -> None:
     assert "Shieldwall" not in spearmen_unit.special_rules
 
 
-def test_deploy_without_options_matches_the_datasheet(spearmen_unit: Unit) -> None:
+def test_field_a_complement_without_options_matches_the_datasheet(spearmen_unit: Unit) -> None:
     """With no options, the fielded loadout equals the printed datasheet."""
-    contingent = Contingent.deploy(
+    contingent = Contingent.field(
         Complement(unit=spearmen_unit, size=10),
-        weapons=REPO.weapons,
-        armoury=REPO.armoury,
-        rules=REPO.rules,
+        data=REPO,
     )
 
     assert contingent.unit.equipment == spearmen_unit.equipment
@@ -139,18 +133,16 @@ def test_charging_makes_the_contingent_a_charger(spearmen_unit: Unit) -> None:
     assert charger.movement.moved
 
 
-def test_deploy_resolves_equipment_into_the_loadout(spearmen_unit: Unit) -> None:
+def test_field_resolves_equipment_into_the_loadout(spearmen_unit: Unit) -> None:
     """Fielding resolves printed equipment names to weapon and armour entries.
 
     Spearmen carry Hand Weapon and Thrusting Spear (weapons) plus Light
     Armour and Shield (armour); the loadout partitions them resolved, in
     equipment order.
     """
-    contingent = Contingent.deploy(
+    contingent = Contingent.field(
         Complement(unit=spearmen_unit, size=10),
-        weapons=REPO.weapons,
-        armoury=REPO.armoury,
-        rules=REPO.rules,
+        data=REPO,
     )
     assert contingent.loadout == Loadout(
         weapons=(REPO.weapons["hand-weapon"], REPO.weapons["thrusting-spear"]),
@@ -164,30 +156,26 @@ def test_deploy_resolves_equipment_into_the_loadout(spearmen_unit: Unit) -> None
     )
 
 
-def test_deploy_resolves_option_granted_equipment() -> None:
+def test_field_resolves_option_granted_equipment() -> None:
     """Equipment added by a chosen option reaches the resolved loadout."""
     archers = REPO.units["elven-archers"]
     mustered = Complement(unit=archers, size=10, options=["Light Armour"])
-    contingent = Contingent.deploy(
-        mustered, weapons=REPO.weapons, armoury=REPO.armoury, rules=REPO.rules
-    )
+    contingent = Contingent.field(mustered, data=REPO)
     assert contingent.loadout is not None
     assert REPO.armoury["light-armour"] in contingent.loadout.armour
 
 
-def test_deploy_rejects_unresolvable_equipment(spearmen_unit: Unit) -> None:
-    """A typo'd equipment name fails the deploy, naming the miss.
+def test_field_rejects_unresolvable_equipment(spearmen_unit: Unit) -> None:
+    """A typo'd equipment name fails the fielding, naming the miss.
 
     The data covers every unit-referenced item, so at this seam a miss is
     an error to the list-builder, not a per-volley note.
     """
     typo = spearmen_unit.model_copy(update={"equipment": ["Hand Weapon", "Shjeld"]})
     with pytest.raises(ValueError, match=r"matches no weapon or armour: \['Shjeld'\]"):
-        Contingent.deploy(
+        Contingent.field(
             Complement(unit=typo, size=10),
-            weapons=REPO.weapons,
-            armoury=REPO.armoury,
-            rules=REPO.rules,
+            data=REPO,
         )
 
 
@@ -195,79 +183,70 @@ def test_field_gives_the_printed_optionless_loadout(spearmen_unit: Unit) -> None
     """field() is the per-unit default: the printed lists resolved, no options.
 
     Any model count is allowed — a what-if body needs no legal list
-    size — and the loadout equals what deploying an optionless
+    size — and the loadout equals what fielding an optionless
     complement resolves.
     """
-    fielded = Contingent.field(
-        spearmen_unit, 1, weapons=REPO.weapons, armoury=REPO.armoury, rules=REPO.rules
-    )
-    deployed = Contingent.deploy(
+    fielded = Contingent.field(spearmen_unit, 1, data=REPO)
+    from_complement = Contingent.field(
         Complement(unit=spearmen_unit, size=10),
-        weapons=REPO.weapons,
-        armoury=REPO.armoury,
-        rules=REPO.rules,
+        data=REPO,
     )
     assert fielded.models == 1
-    assert fielded.loadout == deployed.loadout
+    assert fielded.loadout == from_complement.loadout
+
+
+def test_field_a_bare_datasheet_needs_a_model_count(spearmen_unit: Unit) -> None:
+    """A bare datasheet has no size of its own, so ``models`` is required."""
+    with pytest.raises(ValueError, match="needs a model count"):
+        Contingent.field(spearmen_unit, data=REPO)
 
 
 def test_a_remnant_keeps_its_loadout(spearmen_unit: Unit) -> None:
     """A post-casualty remnant is the same body, thinned: only the count changes."""
-    fielded = Contingent.field(
-        spearmen_unit, 10, weapons=REPO.weapons, armoury=REPO.armoury, rules=REPO.rules
-    )
+    fielded = Contingent.field(spearmen_unit, 10, data=REPO)
     remnant = fielded.remove_casualties(3)
     assert remnant.models == 7
     assert remnant.loadout is fielded.loadout
     assert remnant.unit is fielded.unit
 
 
-# --- of(): the ergonomic slug-based entry ---
+# --- deploy(): the quick, by-name entry ---
 
 
-def test_of_by_slug_matches_the_explicit_field(spearmen_unit: Unit) -> None:
-    """Fielding by slug matches field() with the registries threaded by hand.
+def test_deploy_by_slug_matches_fielding_the_datasheet(spearmen_unit: Unit) -> None:
+    """Deploying a slug matches fielding the same datasheet by hand.
 
-    The ergonomic entry resolves the slug and threads the registries itself;
-    the result equals the explicit optionless fielding of the same datasheet.
+    deploy resolves the name and musters it; with no options it fields the
+    same body as field() given the datasheet directly.
     """
-    ergonomic = Contingent.of("elven-spearmen", 10, data=REPO)
-    explicit = Contingent.field(
-        spearmen_unit, 10, weapons=REPO.weapons, armoury=REPO.armoury, rules=REPO.rules
-    )
-    assert ergonomic == explicit
+    by_name = Contingent.deploy("elven-spearmen", 10, data=REPO)
+    by_hand = Contingent.field(spearmen_unit, 10, data=REPO)
+    assert by_name == by_hand
 
 
-def test_of_accepts_a_datasheet_in_hand(spearmen_unit: Unit) -> None:
-    """A datasheet in hand may be passed instead of a slug."""
-    from_slug = Contingent.of("elven-spearmen", 10, data=REPO)
-    from_unit = Contingent.of(spearmen_unit, 10, data=REPO)
-    assert from_unit == from_slug
-
-
-def test_of_folds_options_through_the_complement() -> None:
+def test_deploy_folds_options_through_the_complement() -> None:
     """Options thread through the Complement: Shieldwall rides on unresolved.
 
-    Shieldwall has no rule entry, so — as with deploy — it joins the
-    loadout's printed remainder rather than resolving.
+    Shieldwall has no rule entry, so it joins the loadout's printed
+    remainder rather than resolving.
     """
-    contingent = Contingent.of("elven-spearmen", 10, ["Shieldwall"], data=REPO)
+    contingent = Contingent.deploy("elven-spearmen", 10, ["Shieldwall"], data=REPO)
     assert "Shieldwall" in contingent.loadout.unresolved_rules
 
 
-def test_of_musters_a_list_legal_size() -> None:
-    """The size must be list-legal: of goes through the Complement's validation."""
+def test_deploy_musters_a_list_legal_size() -> None:
+    """The size must be list-legal: deploy goes through the Complement's validation."""
     with pytest.raises(ValueError, match="below the unit's minimum"):
-        Contingent.of("elven-spearmen", 4, data=REPO)  # minimum is 5
+        Contingent.deploy("elven-spearmen", 4, data=REPO)  # minimum is 5
 
 
-def test_of_uses_the_default_repository_when_no_data_is_given() -> None:
-    """Omitting data resolves against the process-wide default corpus."""
+def test_deploy_uses_the_default_repository_when_no_data_is_given() -> None:
+    """Omitting data resolves the slug against the process-wide default corpus."""
     from avelorn.tow.data import default_repository
 
-    ergonomic = Contingent.of("elven-spearmen", 10)
-    assert ergonomic.unit.name == "Elven Spearmen"
-    assert ergonomic == Contingent.of("elven-spearmen", 10, data=default_repository())
+    by_name = Contingent.deploy("elven-spearmen", 10)
+    assert by_name.unit.name == "Elven Spearmen"
+    assert by_name == Contingent.deploy("elven-spearmen", 10, data=default_repository())
 
 
 def test_default_repository_is_a_cached_singleton() -> None:
@@ -277,7 +256,7 @@ def test_default_repository_is_a_cached_singleton() -> None:
     assert default_repository() is default_repository()
 
 
-def test_deploy_tolerates_rules_without_entries(spearmen_unit: Unit) -> None:
+def test_field_tolerates_rules_without_entries(spearmen_unit: Unit) -> None:
     """A special rule with no entry is the norm: carried printed, not lost.
 
     Option-granted rules resolve on the same terms — Shieldwall has no
@@ -285,15 +264,13 @@ def test_deploy_tolerates_rules_without_entries(spearmen_unit: Unit) -> None:
     keeps feeding the "not factored" notes.
     """
     mustered = Complement(unit=spearmen_unit, size=10, options=["Shieldwall"])
-    contingent = Contingent.deploy(
-        mustered, weapons=REPO.weapons, armoury=REPO.armoury, rules=REPO.rules
-    )
+    contingent = Contingent.field(mustered, data=REPO)
     assert contingent.loadout is not None
     assert [rule.id for rule in contingent.loadout.rules] == ["elven-reflexes", "valour-of-ages"]
     assert "Shieldwall" in contingent.loadout.unresolved_rules
 
 
-def test_deploy_substitutes_rule_parameters_as_printed(spearmen_unit: Unit) -> None:
+def test_field_substitutes_rule_parameters_as_printed(spearmen_unit: Unit) -> None:
     """A parameterised unit rule arrives as the rule printed on the unit.
 
     No unit in data/ prints one yet, so a doctored datasheet exercises
@@ -302,11 +279,9 @@ def test_deploy_substitutes_rule_parameters_as_printed(spearmen_unit: Unit) -> N
     beside it.
     """
     doctored = spearmen_unit.model_copy(update={"special_rules": ["Armour Bane (2)"]})
-    contingent = Contingent.deploy(
+    contingent = Contingent.field(
         Complement(unit=doctored, size=10),
-        weapons=REPO.weapons,
-        armoury=REPO.armoury,
-        rules=REPO.rules,
+        data=REPO,
     )
     assert contingent.loadout is not None
     (rule,) = contingent.loadout.rules
@@ -318,9 +293,7 @@ def test_deploy_substitutes_rule_parameters_as_printed(spearmen_unit: Unit) -> N
 
 def test_loadout_answers_the_weapon_choice_by_printed_name(spearmen_unit: Unit) -> None:
     """The per-action choice picks a carried weapon by its printed name."""
-    fielded = Contingent.field(
-        spearmen_unit, 10, weapons=REPO.weapons, armoury=REPO.armoury, rules=REPO.rules
-    )
+    fielded = Contingent.field(spearmen_unit, 10, data=REPO)
     assert fielded.loadout.weapon("Thrusting Spear") is REPO.weapons["thrusting-spear"]
     with pytest.raises(ValueError, match="no 'Longbow' in this loadout; carried: Hand Weapon"):
         fielded.loadout.weapon("Longbow")
@@ -336,9 +309,7 @@ def test_loadout_resolves_the_carried_weapons_rules(spearmen_unit: Unit) -> None
     archers = Contingent.field(
         REPO.units["elven-archers"],
         10,
-        weapons=REPO.weapons,
-        armoury=REPO.armoury,
-        rules=REPO.rules,
+        data=REPO,
     )
     index = archers.loadout.weapon_rules
     assert set(index) == {"Armour Bane (1)"}
@@ -347,9 +318,7 @@ def test_loadout_resolves_the_carried_weapons_rules(spearmen_unit: Unit) -> None
 
 def test_an_uncarried_weapon_cannot_be_fought_with(spearmen_unit: Unit) -> None:
     """Every action's weapon choice is confirmed against the loadout."""
-    fielded = Contingent.field(
-        spearmen_unit, 10, weapons=REPO.weapons, armoury=REPO.armoury, rules=REPO.rules
-    )
+    fielded = Contingent.field(spearmen_unit, 10, data=REPO)
     assert fielded.wields(REPO.weapons["thrusting-spear"]) is REPO.weapons["thrusting-spear"]
     with pytest.raises(ValueError, match="does not carry 'Longbow'"):
         fielded.wields(REPO.weapons["longbow"])

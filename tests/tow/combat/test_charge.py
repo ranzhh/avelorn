@@ -20,9 +20,7 @@ IN_FORCE = {r.name: r for r in REPO.rules.values() if r.category == Phase.SHOOTI
 
 def _fielded(unit: Unit, models: int) -> Contingent:
     # Field at the printed, optionless loadout, with the real registries.
-    return Contingent.field(
-        unit, models, weapons=REPO.weapons, armoury=REPO.armoury, rules=REPO.rules
-    )
+    return Contingent.field(unit, models, data=REPO)
 
 
 def test_stand_and_shoot_applies_the_minus_one_to_hit() -> None:

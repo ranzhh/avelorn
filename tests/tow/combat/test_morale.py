@@ -162,9 +162,7 @@ def test_valour_of_ages_applies_from_the_data_file() -> None:
     fielded = Contingent.field(
         REPO.units["elven-spearmen"],
         8,
-        weapons=REPO.weapons,
-        armoury=REPO.armoury,
-        rules=REPO.rules,
+        data=REPO,
     )
     result = _result([0.0, 0.0, 0.0, 1.0], size=8)
     panic = make_panic_tests(result, fielded)
