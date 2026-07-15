@@ -10,7 +10,7 @@ volley itself and stays callable on its own.
 
 import logging
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import assert_never
 
 from avelorn.core.errors import UnmodelledRuleError
@@ -155,7 +155,7 @@ def charge(
             # a charge whose target silently did nothing is the wrong game.
             assert_never(unanswered)
     melee = fight(
-        replace(charger, charge=move),
+        charger.charging(move),
         target,
         a_weapon=charger_weapon,
         b_weapon=target_weapon,

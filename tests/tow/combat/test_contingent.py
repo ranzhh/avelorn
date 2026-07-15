@@ -1,10 +1,16 @@
 """The fielded unit: Contingent.deploy and the Charge bonus."""
 
-from dataclasses import replace
-
 import pytest
 
-from avelorn.tow.combat.contingent import Charge, ChargeArc, Contingent, Formation, Loadout
+from avelorn.tow.combat.contingent import (
+    Charge,
+    ChargeArc,
+    Contingent,
+    Formation,
+    Loadout,
+    Movement,
+    MovementKind,
+)
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.muster import Complement
 from avelorn.tow.schema.rule import ModifierEffect
@@ -73,6 +79,64 @@ def test_charge_rejects_a_negative_distance() -> None:
     """A negative charge distance is a programming error, not a zero bonus."""
     with pytest.raises(ValueError, match="negative distance"):
         Charge(-1, ChargeArc.FRONT)
+
+
+# --- Movement: what a contingent did in its Movement phase ---
+
+
+def test_the_movement_factories_carry_their_kind_and_charge() -> None:
+    """Each case factory builds its kind, and only a charge carries a Charge."""
+    move = Charge(6, ChargeArc.FRONT)
+    assert Movement.stationary().kind is MovementKind.STATIONARY
+    assert Movement.march().kind is MovementKind.MARCHED
+    assert Movement.charged(move).kind is MovementKind.CHARGED
+    assert Movement.stationary().charge is None
+    assert Movement.march().charge is None
+    assert Movement.charged(move).charge == move
+
+
+def test_a_charge_counts_as_a_move() -> None:
+    """`moved` is true for a march and a charge alike; false only when standing."""
+    assert not Movement.stationary().moved
+    assert Movement.march().moved
+    assert Movement.charged(Charge(3, ChargeArc.FRONT)).moved
+
+
+def test_movement_rejects_a_charge_that_disagrees_with_its_kind() -> None:
+    """The raw constructor cannot pair a charge with the wrong kind — the invariant.
+
+    The factories cannot produce these; the guard catches a direct
+    construction that would let the charge and the kind fall out of step.
+    """
+    with pytest.raises(ValueError, match="charged movement carries no charge"):
+        Movement(MovementKind.CHARGED)
+    with pytest.raises(ValueError, match="marched movement carries a charge"):
+        Movement(MovementKind.MARCHED, Charge(3, ChargeArc.FRONT))
+
+
+def test_a_freshly_fielded_body_is_stationary(spearmen_unit: Unit) -> None:
+    """A contingent defaults to the stationary movement, no charge."""
+    fielded = _fielded(spearmen_unit, 10)
+    assert fielded.movement == Movement.stationary()
+    assert not fielded.movement.moved
+    assert fielded.movement.charge is None
+
+
+def test_after_records_the_movement(spearmen_unit: Unit) -> None:
+    """`after` returns the same body with its movement set; the original stands."""
+    fielded = _fielded(spearmen_unit, 10)
+    moved = fielded.after(Movement.march())
+    assert moved.movement == Movement.march()
+    assert not fielded.movement.moved  # the original is unchanged
+    assert moved.models == fielded.models  # only the movement changed
+
+
+def test_charging_makes_the_contingent_a_charger(spearmen_unit: Unit) -> None:
+    """`charging` sets the movement to that charge, carrying it for the fight."""
+    move = Charge(8, ChargeArc.FRONT)
+    charger = _fielded(spearmen_unit, 10).charging(move)
+    assert charger.movement.charge == move
+    assert charger.movement.moved
 
 
 def test_deploy_resolves_equipment_into_the_loadout(spearmen_unit: Unit) -> None:
@@ -148,11 +212,11 @@ def test_field_gives_the_printed_optionless_loadout(spearmen_unit: Unit) -> None
 
 
 def test_a_remnant_keeps_its_loadout(spearmen_unit: Unit) -> None:
-    """A post-casualty remnant is the same body, thinned: replace the count."""
+    """A post-casualty remnant is the same body, thinned: only the count changes."""
     fielded = Contingent.field(
         spearmen_unit, 10, weapons=REPO.weapons, armoury=REPO.armoury, rules=REPO.rules
     )
-    remnant = replace(fielded, models=7)
+    remnant = fielded.remove_casualties(3)
     assert remnant.models == 7
     assert remnant.loadout is fielded.loadout
     assert remnant.unit is fielded.unit

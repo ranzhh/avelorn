@@ -12,9 +12,9 @@ Pass -v/--verbose to also emit the DEBUG math trace to stderr.
 
 import argparse
 import logging
-from dataclasses import replace
 
 from avelorn.core.logging import configure_logging
+from avelorn.tow.combat.contingent import Movement
 from avelorn.tow.combat.query import Comparator, Predicate, query_result
 from avelorn.tow.game import TOWGame
 
@@ -58,7 +58,9 @@ def main() -> None:
         configure_logging(logging.DEBUG)
 
     game = TOWGame.load_data()
-    attacker = replace(game.field(game.units[args.attacker], args.shooters), moved=args.moved)
+    attacker = game.field(game.units[args.attacker], args.shooters)
+    if args.moved:
+        attacker = attacker.after(Movement.march())
     defender = game.field(game.units[args.defender], args.defenders)
     weapon = game.weapons[args.weapon]
     result = game.shooting.volley(attacker, defender, weapon, distance=args.distance)

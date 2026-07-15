@@ -242,7 +242,7 @@ def shoot_unit(
     Only the front rank fires on flat ground; a hill would add a rank
     (not modelled). A weapon with Volley Fire adds half of each rank
     behind the front (rounding up) while the unit is stationary
-    (``attacker.moved`` False) and not making a Stand & Shoot reaction.
+    (``attacker.movement.moved`` False) and not making a Stand & Shoot reaction.
     To resolve a partial volley (only some models in range
     or sight), field the shooting subset as its own contingent. ``weapon``
     is the per-action
@@ -257,7 +257,7 @@ def shoot_unit(
     the math yet — every one is listed in the result's notes.
 
     Whether the shooter moved is the shooter's own state
-    (``attacker.moved``). ``distance`` is the range to the target — the
+    (``attacker.movement.moved``). ``distance`` is the range to the target — the
     one relational fact of the shot; a rule conditioned on a range left
     unknown (``distance`` None) stays unfactored and noted. Rules whose
     category is the shooting phase chapter apply to every volley, gated by
@@ -317,7 +317,7 @@ def shoot_unit(
     # is always known, so its use is always settled: it fires, or is
     # honoured with no extra shots, and is claimed out of the notes below.
     volley_fire = "Volley Fire" in profile.special_rules
-    if volley_fire and not stand_and_shoot and not attacker.moved:
+    if volley_fire and not stand_and_shoot and not attacker.movement.moved:
         shooters += sum((rank + 1) // 2 for rank in attacker.formation.rear_rank_sizes)
     logger.debug(
         "resolving %d %s (BS %d) shooting %s at %s (T %d), S %d AP %d",
@@ -337,7 +337,9 @@ def shoot_unit(
         notes.extend(
             f"special rule not factored: {rule} ({side.name})" for rule in side.special_rules
         )
-    conditions = _engagement_conditions(profile, attacker.moved, distance, force_short_range)
+    conditions = _engagement_conditions(
+        profile, attacker.movement.moved, distance, force_short_range
+    )
 
     # Weapon rules with compiled effects join the dice walk; the rest are
     # reported, exactly as before. Shooting-phase chapter rules (Firing

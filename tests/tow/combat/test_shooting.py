@@ -5,7 +5,7 @@ from dataclasses import replace
 import pytest
 
 from avelorn.tow.combat.attack import AttackProfile, Outcome, RollState, Transform
-from avelorn.tow.combat.contingent import Contingent
+from avelorn.tow.combat.contingent import Contingent, Movement
 from avelorn.tow.combat.shooting import _engagement_conditions, shoot, shoot_unit
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.schema.rule import Condition
@@ -19,7 +19,7 @@ def _fielded(
     unit: Unit, models: int, frontage: int | None = None, *, moved: bool = False
 ) -> Contingent:
     # Field at the printed, optionless loadout, with the real registries;
-    # ``moved`` sets the unit's turn action (stationary by default).
+    # ``moved`` sets the unit's movement (stationary by default).
     base = Contingent.field(
         unit,
         models,
@@ -28,7 +28,7 @@ def _fielded(
         rules=REPO.rules,
         frontage=frontage,
     )
-    return replace(base, moved=moved) if moved else base
+    return base.after(Movement.march()) if moved else base
 
 
 def test_shoot_golden_chain() -> None:
