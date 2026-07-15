@@ -222,6 +222,61 @@ def test_a_remnant_keeps_its_loadout(spearmen_unit: Unit) -> None:
     assert remnant.unit is fielded.unit
 
 
+# --- of(): the ergonomic slug-based entry ---
+
+
+def test_of_by_slug_matches_the_explicit_field(spearmen_unit: Unit) -> None:
+    """Fielding by slug matches field() with the registries threaded by hand.
+
+    The ergonomic entry resolves the slug and threads the registries itself;
+    the result equals the explicit optionless fielding of the same datasheet.
+    """
+    ergonomic = Contingent.of("elven-spearmen", 10, data=REPO)
+    explicit = Contingent.field(
+        spearmen_unit, 10, weapons=REPO.weapons, armoury=REPO.armoury, rules=REPO.rules
+    )
+    assert ergonomic == explicit
+
+
+def test_of_accepts_a_datasheet_in_hand(spearmen_unit: Unit) -> None:
+    """A datasheet in hand may be passed instead of a slug."""
+    from_slug = Contingent.of("elven-spearmen", 10, data=REPO)
+    from_unit = Contingent.of(spearmen_unit, 10, data=REPO)
+    assert from_unit == from_slug
+
+
+def test_of_folds_options_through_the_complement() -> None:
+    """Options thread through the Complement: Shieldwall rides on unresolved.
+
+    Shieldwall has no rule entry, so — as with deploy — it joins the
+    loadout's printed remainder rather than resolving.
+    """
+    contingent = Contingent.of("elven-spearmen", 10, ["Shieldwall"], data=REPO)
+    assert "Shieldwall" in contingent.loadout.unresolved_rules
+
+
+def test_of_musters_a_list_legal_size() -> None:
+    """The size must be list-legal: of goes through the Complement's validation."""
+    with pytest.raises(ValueError, match="below the unit's minimum"):
+        Contingent.of("elven-spearmen", 4, data=REPO)  # minimum is 5
+
+
+def test_of_uses_the_default_repository_when_no_data_is_given() -> None:
+    """Omitting data resolves against the process-wide default corpus."""
+    from avelorn.tow.data import default_repository
+
+    ergonomic = Contingent.of("elven-spearmen", 10)
+    assert ergonomic.unit.name == "Elven Spearmen"
+    assert ergonomic == Contingent.of("elven-spearmen", 10, data=default_repository())
+
+
+def test_default_repository_is_a_cached_singleton() -> None:
+    """default_repository() returns one shared instance, built once."""
+    from avelorn.tow.data import default_repository
+
+    assert default_repository() is default_repository()
+
+
 def test_deploy_tolerates_rules_without_entries(spearmen_unit: Unit) -> None:
     """A special rule with no entry is the norm: carried printed, not lost.
 

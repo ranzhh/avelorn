@@ -68,3 +68,25 @@ class TOWRepository:
         """The troop-type table: each troop type's rank-and-file data."""
         loaded = load_yaml_dir(self._data_dir / "tow/troop-types", TroopTypeProfile)
         return Registry(loaded, kind="troop type")
+
+
+_default_repository: "TOWRepository | None" = None
+
+
+def default_repository() -> TOWRepository:
+    """The process-wide default game data (the repo's ``data/`` tree).
+
+    The ambient corpus for callers that do not thread their own — the
+    ergonomic fielding entry point (:meth:`~avelorn.tow.contingent.Contingent.of`)
+    resolves a slug against this when no ``data`` is injected. Built once and
+    reused (each registry still loads lazily on first access); tests and
+    alternate/doctored data pass their own :class:`TOWRepository` instead of
+    touching this.
+
+    Returns:
+        The shared default repository.
+    """
+    global _default_repository  # the one process-wide default, built once
+    if _default_repository is None:
+        _default_repository = TOWRepository()
+    return _default_repository

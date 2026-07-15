@@ -8,11 +8,12 @@ also where printed names stop being strings: :meth:`Contingent.deploy`
 resolves equipment and special rules into a :class:`Loadout`.
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 
 from avelorn.core.registry import Registry
+from avelorn.tow.data import TOWRepository, default_repository
 from avelorn.tow.muster import Complement
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
@@ -292,16 +293,19 @@ class Contingent:
     range to a target, the round of a combat — are not one unit's state and
     stay parameters of the resolving action.
 
-    Two constructors resolve a loadout at the muster boundary.
-    :meth:`deploy` fields a mustered list entry — a
+    Constructors resolve a loadout at the muster boundary. :meth:`of` is the
+    ergonomic front door — a unit slug (plus any options), mustered and
+    fielded against the default game data, no registries threaded by hand.
+    Beneath it: :meth:`deploy` fields a mustered list entry — a
     :class:`~avelorn.tow.muster.Complement` (list-legal size, chosen
-    options), its loadout baked into the datasheet the engine reads.
+    options), its loadout baked into the datasheet the engine reads — and
     :meth:`field` fields a bare datasheet at its printed, optionless
     default — any model count, so a remnant or an isolated what-if needs
-    no legal list size. Bodies whose loadout already exists are derived
-    from one that does, through the fluent copies: a post-casualty remnant
-    is :meth:`remove_casualties`, a mover is :meth:`after`, a charger
-    :meth:`charging`.
+    no legal list size. Both take their registries explicitly, which is how
+    tests field against doctored data. Bodies whose loadout already exists
+    are derived from one that does, through the fluent copies: a
+    post-casualty remnant is :meth:`remove_casualties`, a mover is
+    :meth:`after`, a charger :meth:`charging`.
 
     The weapon in use is *not* carried here: it is a per-action choice, so
     the same contingent shoots with its bow one moment and fights the
@@ -431,6 +435,56 @@ class Contingent:
                 f"{self.unit.name} does not carry {weapon.name!r}; carried: {carried}"
             )
         return weapon
+
+    @classmethod
+    def of(
+        cls,
+        unit: Unit | str,
+        models: int,
+        options: Sequence[str] = (),
+        *,
+        frontage: int | None = None,
+        data: TOWRepository | None = None,
+    ) -> "Contingent":
+        """Field a unit by slug against the default game data — the ergonomic entry.
+
+        Resolves ``unit`` (a datasheet slug, or a :class:`~avelorn.tow.schema.unit.Unit`
+        already in hand) against ``data`` — the process-wide
+        :func:`~avelorn.tow.data.default_repository` when omitted — musters it
+        at ``models`` with the chosen ``options`` (through a
+        :class:`~avelorn.tow.muster.Complement`, so the size must be list-legal
+        and each option offered by the datasheet), and deploys it
+        (:meth:`deploy`). Inject ``data`` to field against alternate or doctored
+        data (tests do).
+
+        For a bare datasheet at any model count with no muster — a remnant, an
+        isolated what-if — use :meth:`field`; for a :class:`Complement` already
+        built, :meth:`deploy`. The failures propagate from those steps: an
+        unknown slug raises ``KeyError`` at the registry lookup, and a size out
+        of the datasheet's range, an unoffered option, or unresolvable equipment
+        raise ``ValueError`` from the :class:`Complement` and :meth:`deploy`.
+
+        Args:
+            unit: The datasheet slug (resolved against ``data.units``), or a Unit.
+            models: The fielded size; must fall in the datasheet's allowed range.
+            options: Option names to buy, each offered by the datasheet.
+            frontage: The formation width in files; the troop type's default
+                width when omitted.
+            data: The corpus to resolve against; the process-wide default when omitted.
+
+        Returns:
+            The fielded contingent, loadout resolved.
+        """
+        repository = data if data is not None else default_repository()
+        datasheet = repository.units[unit] if isinstance(unit, str) else unit
+        complement = Complement(unit=datasheet, size=models, options=list(options))
+        return cls.deploy(
+            complement,
+            weapons=repository.weapons,
+            armoury=repository.armoury,
+            rules=repository.rules,
+            frontage=frontage,
+        )
 
     @classmethod
     def deploy(
