@@ -1,21 +1,20 @@
-"""Walking a turn: its phases in order, and the combats it forms.
+"""Walking a turn: its phases, entered in the printed order.
 
 A :class:`Turn` is a scaffold over the game's phase values, not new resolution
 logic. It walks the printed phase sequence — each phase entered through a
 context manager that yields the phase to act through and enforces the order (a
-phase may be skipped, but never revisited or taken out of sequence) — and
-tracks the engagements its charges form, so the Combat phase fights the combats
-that exist. It holds no sides: the units act in the calls, at whatever number
-the question needs.
+phase may be skipped, but never revisited or taken out of sequence). It holds
+no sides and no state beyond how far the walk has reached: the units act in the
+phase calls, and a charge's :class:`~avelorn.tow.phases.movement.Engagement` is
+returned to the caller to carry into the Combat phase.
 """
 
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
-from avelorn.tow.contingent import Charge, Contingent
 from avelorn.tow.phases.combat import CombatPhase
-from avelorn.tow.phases.movement import Engagement, MovementPhase
+from avelorn.tow.phases.movement import MovementPhase
 from avelorn.tow.phases.shooting import ShootingPhase
 from avelorn.tow.phases.strategy import StrategyPhase
 from avelorn.tow.schema.phase import Phase
@@ -24,47 +23,21 @@ _ORDER: dict[Phase, int] = {phase: order for order, phase in enumerate(Phase)}
 
 
 @dataclass
-class _Movement:
-    """The Movement phase within a turn: a charge's engagement joins the turn.
-
-    Thin over :class:`~avelorn.tow.phases.movement.MovementPhase` — only
-    :meth:`charge` differs, registering the engagement it forms on the turn so
-    the Combat phase can fight it.
-    """
-
-    _phase: MovementPhase
-    _turn: "Turn"
-
-    def charge(self, charger: Contingent, target: Contingent, move: Charge) -> Engagement:
-        """Declare a charge; its engagement joins the turn's combats.
-
-        Returns:
-            The engagement the charge formed — react on it, and the Combat
-            phase fights it.
-        """
-        engagement = self._phase.charge(charger, target, move)
-        self._turn.engagements.append(engagement)
-        return engagement
-
-
-@dataclass
 class Turn:
-    """A turn in progress: its phases walked in order, its combats tracked.
+    """A turn in progress: its phases entered in the printed order.
 
     Made by :meth:`~avelorn.tow.game.TOWGame.turn`. Enter each phase through
     its context manager (:meth:`strategy`, :meth:`movement`, :meth:`shooting`,
-    :meth:`combat`) to act through it; the order is enforced — a phase may be
-    skipped, but never revisited or taken out of sequence. Charges made in the
-    Movement phase leave their engagements in :attr:`engagements`, which the
-    Combat phase fights.
+    :meth:`combat`) to act through the phase it yields; the order is enforced —
+    a phase may be skipped, but never revisited or taken out of sequence. A
+    charge in the Movement phase returns its engagement; hold it and fight it
+    in the Combat phase.
     """
 
     _strategy: StrategyPhase
     _movement: MovementPhase
     _shooting: ShootingPhase
     _combat: CombatPhase
-    # The combats formed this turn (by charges), in the order declared.
-    engagements: list[Engagement] = field(default_factory=list)
     # The order of the furthest phase entered; phases only move forward.
     _reached: int = -1
 
@@ -87,15 +60,14 @@ class Turn:
         yield self._strategy
 
     @contextmanager
-    def movement(self) -> Iterator[_Movement]:
-        """Enter the Movement phase: declare charges, which form engagements.
+    def movement(self) -> Iterator[MovementPhase]:
+        """Enter the Movement phase: declare charges, each forming an engagement.
 
         Yields:
-            The Movement phase, whose ``charge`` registers each engagement on
-            the turn.
+            The Movement phase; its ``charge`` returns the engagement to fight.
         """
         self._enter(Phase.MOVEMENT)
-        yield _Movement(self._movement, self)
+        yield self._movement
 
     @contextmanager
     def shooting(self) -> Iterator[ShootingPhase]:
@@ -109,10 +81,10 @@ class Turn:
 
     @contextmanager
     def combat(self) -> Iterator[CombatPhase]:
-        """Enter the Combat phase: fight the turn's engagements.
+        """Enter the Combat phase: fight the engagements the charges formed.
 
         Yields:
-            The Combat phase; fight each of the turn's :attr:`engagements`.
+            The Combat phase.
         """
         self._enter(Phase.COMBAT)
         yield self._combat

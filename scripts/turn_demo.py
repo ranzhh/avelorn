@@ -61,14 +61,13 @@ def main() -> None:
         print("Shooting phase: both units are locked in combat — no shots.\n")
 
     with turn.combat() as cb:
-        print("Combat phase: fighting the engagements the charges formed.")
-        for engaged in turn.engagements:
-            result = cb.result(cb.fight(engaged, a_weapon=spear, b_weapon=hand))
-            print(
-                f"  P(Spearmen win) {result.p_a_wins:.3f}   "
-                f"P(draw) {result.p_draw:.3f}   "
-                f"P(Archers win) {result.p_b_wins:.3f}"
-            )
+        result = cb.result(cb.fight(engagement, a_weapon=spear, b_weapon=hand))
+        print("Combat phase: fighting the engagement the charge formed.")
+        print(
+            f"  P(Spearmen win) {result.p_a_wins:.3f}   "
+            f"P(draw) {result.p_draw:.3f}   "
+            f"P(Archers win) {result.p_b_wins:.3f}"
+        )
 
 
 if __name__ == "__main__":
