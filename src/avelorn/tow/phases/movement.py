@@ -105,21 +105,33 @@ HOLD = Hold()
 
 @dataclass
 class Engagement:
-    """Two units locked in combat by a charge — the live, turn-scoped record.
+    """Units locked in combat — the live, mutable combat state.
 
-    Not a resolved outcome but a piece of ongoing game state, so it is
-    mutable (unlike the frozen data and result values). It holds the
-    ``charger`` (already carrying its :class:`~avelorn.tow.contingent.Charge`
-    via :meth:`~avelorn.tow.contingent.Contingent.charging`), the ``target``
-    it struck, and — once declared — the charge ``reaction``. The Movement
-    phase produces it (:func:`charge`) and the inactive player answers on it
-    (:meth:`react`); the Combat phase fights it
-    (:func:`~avelorn.tow.phases.combat.fight`), the reaction's casualties
-    thinning the chargers as they enter the melee.
+    Not loaded data or a resolved outcome (those stay frozen) but ongoing game
+    state, so it is mutable. An engagement is set up by a charge — the only
+    opening modelled today; units already in base contact are the "or something
+    else" for later — and is fought each Combat phase for as long as the combat
+    lasts. It holds the ``charger`` (carrying its
+    :class:`~avelorn.tow.contingent.Charge` via
+    :meth:`~avelorn.tow.contingent.Contingent.charging`), the ``target`` it
+    struck, the charge ``reaction`` once declared, and ``first_round``.
+
+    ``first_round`` is true for the round the charge sets up this turn — when
+    the charge Initiative bonus and the first-round rules apply. :meth:`end_turn`
+    flips it false, so the combat's later rounds (next turn on) fight as
+    subsequent rounds. The Combat phase fights the engagement
+    (:func:`~avelorn.tow.phases.combat.fight_engagement`); the reaction's
+    casualties thin the chargers as they enter the melee.
+
+    (One pair for now; a real combat can lock two or more units — the
+    single-pair case until that is modelled.)
     """
 
     charger: Contingent
     target: Contingent
+    # True for the round a charge sets up this turn (the combat's first round);
+    # end_turn() flips it false so later rounds are not the first.
+    first_round: bool = False
     # The shooting chapter's rules in force, captured for a Stand & Shoot
     # reaction volley; a bare charge (outside a game) carries none.
     shooting_rules: Mapping[str, Rule] = field(default_factory=dict)
@@ -156,6 +168,15 @@ class Engagement:
                 assert_never(unanswered)
         return self.reaction
 
+    def end_turn(self) -> None:
+        """Age the engagement out of its first round as the turn ends.
+
+        A combat fought this turn is no longer in its first round next turn,
+        so its charge Initiative bonus and first-round rules lapse. The turn
+        calls this on each open engagement as it ends.
+        """
+        self.first_round = False
+
 
 def charge(
     charger: Contingent,
@@ -175,7 +196,12 @@ def charge(
     Returns:
         The engagement the charge formed, awaiting its reaction and its fight.
     """
-    return Engagement(charger=charger.charging(move), target=target, shooting_rules=shooting_rules)
+    return Engagement(
+        charger=charger.charging(move),
+        target=target,
+        first_round=True,
+        shooting_rules=shooting_rules,
+    )
 
 
 @dataclass(frozen=True)

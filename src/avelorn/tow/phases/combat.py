@@ -743,13 +743,15 @@ def fight_engagement(
     b_weapon: Weapon,
     phase_rules: Mapping[str, Rule] = _NONE_IN_PLAY,
 ) -> FightResult:
-    """Fight the round a charge set up — the Combat phase resolving an engagement.
+    """Fight a round of an engagement — the Combat phase resolving a locked combat.
 
-    The charger struck this turn, so this is the combat's first round: its
-    charge Initiative bonus and the first-round rules apply, and any Stand &
-    Shoot casualties (the engagement's reaction) thin the chargers before they
-    strike. The charger already carries its charge (``engagement.charger`` was
-    fielded through :meth:`~avelorn.tow.contingent.Contingent.charging`).
+    Whether this is the combat's first round is the engagement's own state
+    (``engagement.first_round``): true for the round a charge sets up this
+    turn — when the charge Initiative bonus and the first-round rules apply —
+    and false for the later rounds it is fought in subsequent turns. Any Stand
+    & Shoot casualties (the engagement's reaction) thin the chargers before
+    they strike. The charger already carries its charge (``engagement.charger``
+    was fielded through :meth:`~avelorn.tow.contingent.Contingent.charging`).
 
     Returns:
         The round's joint casualty distribution.
@@ -760,7 +762,7 @@ def fight_engagement(
         a_weapon=a_weapon,
         b_weapon=b_weapon,
         a_prior_losses=None if engagement.reaction is None else engagement.reaction.casualties,
-        first_round=True,
+        first_round=engagement.first_round,
         phase_rules=phase_rules,
     )
 

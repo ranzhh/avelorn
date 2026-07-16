@@ -255,3 +255,17 @@ def test_the_reaction_vocabulary_is_the_printed_three() -> None:
     assert held.react() is None  # Hold: the default, no volley
     with pytest.raises(UnmodelledRuleError, match="Flee"):
         charge(charger, target, move, shooting_rules=IN_FORCE).react(Flee())
+
+
+def test_end_turn_ages_the_engagement_out_of_its_first_round() -> None:
+    """A charge forms a first-round engagement; end_turn clears the flag.
+
+    The combat persists, so next turn it is no longer the charge's first
+    round — the charge bonus and first-round rules lapse.
+    """
+    charger = _fielded(REPO.units["elven-spearmen"], 5)
+    target = _fielded(REPO.units["elven-archers"], 5)
+    engagement = charge(charger, target, Charge(3, ChargeArc.FRONT), shooting_rules=IN_FORCE)
+    assert engagement.first_round is True
+    engagement.end_turn()
+    assert engagement.first_round is False

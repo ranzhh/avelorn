@@ -547,6 +547,39 @@ def test_charge_factors_elven_reflexes_structurally() -> None:
     assert not any("Elven Reflexes" in note for note in melee.notes)
 
 
+def test_first_round_flag_governs_the_first_round_rules() -> None:
+    """fight_engagement reads first_round off the engagement.
+
+    Elven Reflexes grants +1 Initiative only in the first round of combat, so
+    the charger's Initiative is one higher for the charge's first round than
+    for a later round of the same engagement (after end_turn) — the charge
+    bonus, which comes from the move, applies in both.
+    """
+    from avelorn.tow.phases.movement import charge
+
+    spear, hand = REPO.weapons["thrusting-spear"], REPO.weapons["hand-weapon"]
+    move = Charge(3, ChargeArc.FRONT)
+
+    fresh_engagement = charge(
+        _deployed("elven-spearmen", 5),
+        _deployed("elven-archers", 5),
+        move,
+        shooting_rules=IN_FORCE,
+    )
+    fresh = fight_engagement(fresh_engagement, a_weapon=spear, b_weapon=hand)
+
+    later_engagement = charge(
+        _deployed("elven-spearmen", 5),
+        _deployed("elven-archers", 5),
+        move,
+        shooting_rules=IN_FORCE,
+    )
+    later_engagement.end_turn()
+    later = fight_engagement(later_engagement, a_weapon=spear, b_weapon=hand)
+
+    assert fresh.a_initiative.value == later.a_initiative.value + 1
+
+
 # --- combat chapter rules in force, factored into the strike ---
 
 
