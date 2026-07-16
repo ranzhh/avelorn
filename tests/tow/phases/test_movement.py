@@ -191,8 +191,8 @@ def test_charge_forms_an_engagement_and_its_reaction() -> None:
     engagement = charge(charger, target, move, shooting_rules=IN_FORCE)
     volley = engagement.react(StandAndShoot(longbow))
 
-    assert engagement.charger.movement.charge == move  # entered carrying the charge
-    assert engagement.target is target
+    assert engagement.a.movement.charge == move  # the charger entered carrying the charge
+    assert engagement.b is target
     assert volley == stand_and_shoot(target, charger, longbow, phase_rules=IN_FORCE)
     assert engagement.reaction is volley
 

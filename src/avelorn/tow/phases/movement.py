@@ -108,44 +108,46 @@ class Engagement:
     """Units locked in combat — the live, mutable combat state.
 
     Not loaded data or a resolved outcome (those stay frozen) but ongoing game
-    state, so it is mutable. An engagement is set up by a charge — the only
-    opening modelled today; units already in base contact are the "or something
-    else" for later — and is fought each Combat phase for as long as the combat
-    lasts. It holds the ``charger`` (carrying its
+    state, so it is mutable. An engagement is strictly two units — ``a`` and
+    ``b`` — in base contact: the atom the Combat phase resolves. (A combat of
+    more than two units, one unit fighting several, is a collection of
+    engagements — a graph of who is touching whom — resolved by fighting each
+    pairing and combining the results; that is a later ``Combat`` type, once
+    the engine fights more than 1v1.)
+
+    An engagement is set up by a charge — the only opening modelled today;
+    units already in base contact are the "or something else" for later. When a
+    charge forms it, ``a`` is the charger (carrying its
     :class:`~avelorn.tow.contingent.Charge` via
-    :meth:`~avelorn.tow.contingent.Contingent.charging`), the ``target`` it
-    struck, the charge ``reaction`` once declared, and ``first_round``.
-
-    ``first_round`` is true for the round the charge sets up this turn — when
-    the charge Initiative bonus and the first-round rules apply. :meth:`end_turn`
-    flips it false, so the combat's later rounds (next turn on) fight as
-    subsequent rounds. The Combat phase fights the engagement
-    (:meth:`~avelorn.tow.phases.combat.CombatPhase.fight`); the reaction's
-    casualties thin the chargers as they enter the melee.
-
-    (One pair for now; a real combat can lock two or more units — the
-    single-pair case until that is modelled.)
+    :meth:`~avelorn.tow.contingent.Contingent.charging`), ``b`` the target it
+    struck, and ``reaction`` the target's Stand & Shoot volley once declared,
+    thinning ``a``. ``first_round`` is true for the round a charge sets up this
+    turn — when the charge Initiative bonus and the first-round rules apply;
+    :meth:`end_turn` flips it false so the combat's later rounds (next turn on)
+    fight as subsequent rounds. The Combat phase fights the engagement
+    (:meth:`~avelorn.tow.phases.combat.CombatPhase.fight`).
     """
 
-    charger: Contingent
-    target: Contingent
+    a: Contingent
+    b: Contingent
     # True for the round a charge sets up this turn (the combat's first round);
     # end_turn() flips it false so later rounds are not the first.
     first_round: bool = False
     # The shooting chapter's rules in force, captured for a Stand & Shoot
     # reaction volley; a bare charge (outside a game) carries none.
     shooting_rules: Mapping[str, Rule] = field(default_factory=dict)
-    # The Stand & Shoot outcome once reacted, None while unanswered or on Hold.
+    # A Stand & Shoot volley that thinned ``a`` (the charger), once reacted;
+    # None while unanswered or on Hold.
     reaction: ShootingResult | None = None
 
     def react(self, reaction: ChargeReaction = HOLD) -> ShootingResult | None:
         """Answer the charge — the inactive player's declared reaction.
 
         One of the printed three: :class:`Hold` (brace, no volley),
-        :class:`StandAndShoot` (one volley at the closing chargers, under the
-        shooting rules in force — the "free" shot), or :class:`Flee` (a loud
-        error until modelled). Records the volley on the engagement so the
-        Combat phase can enter the chargers already thinned.
+        :class:`StandAndShoot` (``b`` looses one volley at the closing charger
+        ``a``, under the shooting rules in force — the "free" shot), or
+        :class:`Flee` (a loud error until modelled). Records the volley on the
+        engagement so the Combat phase can enter the charger already thinned.
 
         Returns:
             The reaction volley, or None for a Hold.
@@ -156,7 +158,7 @@ class Engagement:
         match reaction:
             case StandAndShoot(weapon=weapon):
                 self.reaction = stand_and_shoot(
-                    self.target, self.charger, weapon, phase_rules=self.shooting_rules
+                    self.b, self.a, weapon, phase_rules=self.shooting_rules
                 )
             case Flee():
                 raise UnmodelledRuleError("the Flee charge reaction is not modelled yet")
@@ -197,8 +199,8 @@ def charge(
         The engagement the charge formed, awaiting its reaction and its fight.
     """
     return Engagement(
-        charger=charger.charging(move),
-        target=target,
+        a=charger.charging(move),
+        b=target,
         first_round=True,
         shooting_rules=shooting_rules,
     )

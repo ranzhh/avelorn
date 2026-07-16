@@ -901,16 +901,20 @@ class CombatPhase(Phase):
     )
 
     @overload
-    def fight(self, combat: Engagement, *, a_weapon: Weapon, b_weapon: Weapon) -> FightResult: ...
+    def fight(
+        self, combat: Engagement, /, *, a_weapon: Weapon, b_weapon: Weapon
+    ) -> FightResult: ...
 
     @overload
     def fight(
-        self, combat: Sequence[Contingent], *, a_weapon: Weapon, b_weapon: Weapon
+        self, combat: Contingent, opponent: Contingent, /, *, a_weapon: Weapon, b_weapon: Weapon
     ) -> FightResult: ...
 
     def fight(
         self,
-        combat: Engagement | Sequence[Contingent],
+        combat: Engagement | Contingent,
+        opponent: Contingent | None = None,
+        /,
         *,
         a_weapon: Weapon,
         b_weapon: Weapon,
@@ -919,28 +923,24 @@ class CombatPhase(Phase):
 
         ``combat`` is either an :class:`~avelorn.tow.phases.movement.Engagement`
         — a charge-formed combat carrying the charge Initiative bonus, its
-        first-round status, and any Stand & Shoot casualties — or the units in
-        base contact given as a sequence, taken as a plain frontal standing
-        combat: no charge, not a first round (the "or something else" opening).
-
-        Two units for now; multi-unit combats are not modelled.
+        first-round status, and any Stand & Shoot casualties — or two
+        contingents in base contact, taken as a plain frontal standing combat:
+        no charge, not a first round (the "or something else" opening).
 
         Returns:
             The round's joint casualty distribution.
 
         Raises:
-            ValueError: a unit sequence that is not exactly two units.
+            ValueError: a lone contingent with no opponent and no engagement.
         """
         if isinstance(combat, Engagement):
-            a, b = combat.charger, combat.target
+            a, b = combat.a, combat.b
             a_prior_losses = None if combat.reaction is None else combat.reaction.casualties
             first_round = combat.first_round
+        elif opponent is None:
+            raise ValueError("fighting two contingents needs both; pass an Engagement otherwise")
         else:
-            if len(combat) != 2:
-                raise ValueError(
-                    "a standing combat is two units; multi-unit combats are not modelled"
-                )
-            a, b = combat[0], combat[1]
+            a, b = combat, opponent
             a_prior_losses = None
             first_round = None
         return fight(
