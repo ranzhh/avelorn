@@ -8,7 +8,6 @@ from avelorn.tow.contingent import Charge, ChargeArc, Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.game import TOWGame
 from avelorn.tow.phases.combat import break_test, combat_result, fight
-from avelorn.tow.phases.movement import StandAndShoot
 from avelorn.tow.phases.movement import charge as charge_verb
 from avelorn.tow.phases.shooting import make_panic_tests, shoot_unit
 from avelorn.tow.schema.phase import Phase
@@ -116,13 +115,12 @@ def test_fight_result_and_break_test_delegate() -> None:
     spearmen = REPO.units["elven-spearmen"]
     a, b = _fielded(spearmen, 5), _fielded(spearmen, 5)
     spear = REPO.weapons["thrusting-spear"]
-    bound = GAME.combat.fight(a, b, a_weapon=spear, b_weapon=spear, first_round=True)
+    bound = GAME.combat.fight(a, b, a_weapon=spear, b_weapon=spear)
     direct = fight(
         a,
         b,
         a_weapon=spear,
         b_weapon=spear,
-        first_round=True,
         phase_rules=GAME.in_play[Phase.COMBAT],
     )
     assert bound == direct
@@ -134,27 +132,12 @@ def test_fight_result_and_break_test_delegate() -> None:
 
 
 def test_the_charge_is_a_movement_action() -> None:
-    """game.movement.charge is the charge sequence, rules in force injected."""
+    """game.movement.charge forms the engagement, the shooting rules injected."""
     spearmen = _fielded(REPO.units["elven-spearmen"], 5)
     archers = _fielded(REPO.units["elven-archers"], 5)
     move = Charge(3, ChargeArc.FRONT)
-    bound = GAME.movement.charge(
-        spearmen,
-        archers,
-        move=move,
-        charger_weapon=REPO.weapons["thrusting-spear"],
-        target_weapon=REPO.weapons["hand-weapon"],
-        reaction=StandAndShoot(REPO.weapons["longbow"]),
-    )
-    direct = charge_verb(
-        spearmen,
-        archers,
-        move=move,
-        charger_weapon=REPO.weapons["thrusting-spear"],
-        target_weapon=REPO.weapons["hand-weapon"],
-        reaction=StandAndShoot(REPO.weapons["longbow"]),
-        phase_rules=GAME.in_play[Phase.SHOOTING],
-    )
+    bound = GAME.movement.charge(spearmen, archers, move)
+    direct = charge_verb(spearmen, archers, move, shooting_rules=GAME.in_play[Phase.SHOOTING])
     assert bound == direct
 
 

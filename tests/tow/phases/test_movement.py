@@ -1,11 +1,11 @@
-"""The charge sequence: the verb, its reactions, and the composed fight."""
+"""The Movement phase: the charge, its reactions, and the engagement it forms."""
 
 import pytest
 
 from avelorn.core.errors import UnmodelledRuleError
 from avelorn.tow.contingent import Charge, ChargeArc, Contingent
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.phases.combat import combat_result, fight
+from avelorn.tow.phases.combat import CombatPhase, combat_result, fight
 from avelorn.tow.phases.movement import Flee, StandAndShoot, charge, stand_and_shoot
 from avelorn.tow.phases.shooting import shoot_unit
 from avelorn.tow.schema.phase import Phase
@@ -16,6 +16,10 @@ REPO = TOWRepository()
 # The shooting chapter's rules in force, built directly: these tests
 # exercise the combat layer, which must not depend on game assembly.
 IN_FORCE = {r.name: r for r in REPO.rules.values() if r.category == Phase.SHOOTING and r.effects}
+
+# The Combat phase with no chapter rules in force, for fighting an engagement
+# these Movement-phase tests have formed.
+COMBAT = CombatPhase(in_play={})
 
 
 def _fielded(unit: Unit, models: int) -> Contingent:
@@ -169,65 +173,74 @@ def test_force_short_range_honours_long_range_as_a_no_op() -> None:
     assert not any("Firing at Long Range" in note for note in forced.notes)
 
 
-# --- charge(): the verb composing reaction and fight ---
+# --- charge(): the Movement-phase charge, its reaction, and the engagement ---
 
 
-def test_charge_composes_the_reaction_into_the_fight() -> None:
-    """charge() equals stand_and_shoot and fight composed by hand."""
+def test_charge_forms_an_engagement_and_its_reaction() -> None:
+    """charge() forms an engagement; react() resolves the Stand & Shoot volley.
+
+    The charge is a Movement-phase event only: it locks the units in combat
+    (the charger entering carrying its charge) and the target's reaction
+    volley matches resolving stand_and_shoot by hand. No melee is fought here.
+    """
+    archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
+    longbow = REPO.weapons["longbow"]
+    charger, target = _fielded(spearmen, 10), _fielded(archers, 10)
+    move = Charge(8, ChargeArc.FRONT)
+
+    engagement = charge(charger, target, move, shooting_rules=IN_FORCE)
+    volley = engagement.react(StandAndShoot(longbow))
+
+    assert engagement.a.movement.charge == move  # the charger entered carrying the charge
+    assert engagement.b is target
+    assert volley == stand_and_shoot(target, charger, longbow, phase_rules=IN_FORCE)
+    assert engagement.reaction is volley
+
+
+def test_fighting_the_engagement_is_the_charges_first_round() -> None:
+    """The Combat-phase fight of an engagement equals fight() composed by hand.
+
+    The combat-phase fight enters the chargers thinned by the reaction and
+    marks the combat's first round; the charger struck first.
+    """
     archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
     spear, hand = REPO.weapons["thrusting-spear"], REPO.weapons["hand-weapon"]
     longbow = REPO.weapons["longbow"]
     charger, target = _fielded(spearmen, 10), _fielded(archers, 10)
     move = Charge(8, ChargeArc.FRONT)
 
-    outcome = charge(
-        charger,
-        target,
-        move=move,
-        charger_weapon=spear,
-        target_weapon=hand,
-        reaction=StandAndShoot(longbow),
-        phase_rules=IN_FORCE,
-    )
+    engagement = charge(charger, target, move, shooting_rules=IN_FORCE)
+    volley = engagement.react(StandAndShoot(longbow))
+    assert volley is not None  # a Stand & Shoot reaction always looses a volley
+    outcome = COMBAT.fight(engagement, a_weapon=spear, b_weapon=hand)
 
-    volley = stand_and_shoot(target, charger, longbow, phase_rules=IN_FORCE)
     manual = fight(
         charger.charging(move),
         target,
         a_weapon=spear,
         b_weapon=hand,
         a_prior_losses=volley.casualties,
+        first_round=True,
     )
-    assert outcome.reaction == volley
-    assert outcome.melee.losses == manual.losses
-    assert outcome.melee.first_striker is not None
-    assert outcome.melee.first_striker.movement.charge == move  # the charger struck first
+    assert outcome.losses == manual.losses
+    assert outcome.first_striker is not None
+    assert outcome.first_striker.movement.charge == move  # the charger struck first
 
 
-def test_charge_against_a_holding_target_has_no_volley() -> None:
-    """Hold: no reaction volley, and the melee is the plain charged fight."""
+def test_a_held_charge_fights_with_no_prior_losses() -> None:
+    """Hold: no reaction volley, and the engagement's fight is the plain charge."""
     archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
     spear, hand = REPO.weapons["thrusting-spear"], REPO.weapons["hand-weapon"]
     charger, target = _fielded(spearmen, 10), _fielded(archers, 10)
     move = Charge(8, ChargeArc.FRONT)
 
-    outcome = charge(
-        charger,
-        target,
-        move=move,
-        charger_weapon=spear,
-        target_weapon=hand,
-        phase_rules=IN_FORCE,
-    )
+    engagement = charge(charger, target, move, shooting_rules=IN_FORCE)
+    engagement.react()  # default: Hold
+    outcome = COMBAT.fight(engagement, a_weapon=spear, b_weapon=hand)
 
-    manual = fight(
-        charger.charging(move),
-        target,
-        a_weapon=spear,
-        b_weapon=hand,
-    )
-    assert outcome.reaction is None
-    assert outcome.melee.losses == manual.losses
+    manual = fight(charger.charging(move), target, a_weapon=spear, b_weapon=hand, first_round=True)
+    assert engagement.reaction is None
+    assert outcome.losses == manual.losses
 
 
 def test_the_reaction_vocabulary_is_the_printed_three() -> None:
@@ -240,25 +253,23 @@ def test_the_reaction_vocabulary_is_the_printed_three() -> None:
     """
     charger = _fielded(REPO.units["elven-spearmen"], 5)
     target = _fielded(REPO.units["elven-archers"], 5)
-    spear = REPO.weapons["thrusting-spear"]
-    hand = REPO.weapons["hand-weapon"]
     move = Charge(3, ChargeArc.FRONT)
-    held = charge(
-        charger,
-        target,
-        move=move,
-        charger_weapon=spear,
-        target_weapon=hand,
-        phase_rules=IN_FORCE,
-    )
-    assert held.reaction is None  # Hold: no volley precedes the fight
+
+    held = charge(charger, target, move, shooting_rules=IN_FORCE)
+    assert held.react() is None  # Hold: the default, no volley
     with pytest.raises(UnmodelledRuleError, match="Flee"):
-        charge(
-            charger,
-            target,
-            move=move,
-            charger_weapon=spear,
-            target_weapon=hand,
-            reaction=Flee(),
-            phase_rules=IN_FORCE,
-        )
+        charge(charger, target, move, shooting_rules=IN_FORCE).react(Flee())
+
+
+def test_end_turn_ages_the_engagement_out_of_its_first_round() -> None:
+    """A charge forms a first-round engagement; end_turn clears the flag.
+
+    The combat persists, so next turn it is no longer the charge's first
+    round — the charge bonus and first-round rules lapse.
+    """
+    charger = _fielded(REPO.units["elven-spearmen"], 5)
+    target = _fielded(REPO.units["elven-archers"], 5)
+    engagement = charge(charger, target, Charge(3, ChargeArc.FRONT), shooting_rules=IN_FORCE)
+    assert engagement.first_round is True
+    engagement.end_turn()
+    assert engagement.first_round is False

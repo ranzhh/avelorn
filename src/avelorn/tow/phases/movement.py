@@ -1,22 +1,24 @@
-"""The charge sequence: a unit charges another, and the situation unfolds.
+"""The Movement phase: charges are declared, reacted to, and moved.
 
-:func:`charge` is the verb — ``charger`` charges ``target``, the target
-answers with a reaction (the-movement-phase/charge-reactions), and the
-survivors fight the round the charge set up, the chargers' Initiative
-raised by the move. The reactions modelled: :class:`StandAndShoot` and
-Hold (Flee is not, yet). :func:`stand_and_shoot` resolves the reaction
-volley itself and stays callable on its own.
+A charge is a Movement-phase event, and only that: :func:`charge` moves the
+charger into contact and returns the :class:`Engagement` it forms (the two
+units locked in combat). The target answers with a reaction on that
+engagement (:meth:`Engagement.react`, the-movement-phase/charge-reactions) —
+:class:`StandAndShoot` looses the one "free" volley as the chargers close
+(:func:`stand_and_shoot`, callable on its own), :class:`Hold` braces, Flee is
+not modelled yet. The melee the charge sets up is **not** fought here: that is
+the Combat phase (:func:`~avelorn.tow.phases.combat.fight`), which takes the
+engagement and enters the chargers thinned by any Stand & Shoot casualties.
 """
 
 import logging
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import assert_never
 
 from avelorn.core.errors import UnmodelledRuleError
 from avelorn.core.game import Phase
 from avelorn.tow.contingent import Charge, Contingent
-from avelorn.tow.phases.combat import FightResult, fight
 from avelorn.tow.phases.shooting import ShootingResult, shoot_unit
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.weapon import Weapon
@@ -101,76 +103,112 @@ ChargeReaction = Hold | StandAndShoot | Flee
 HOLD = Hold()
 
 
-@dataclass(frozen=True)
-class ChargeResult:
-    """A charge sequence resolved: the reaction volley and the fight it fed.
+@dataclass
+class Engagement:
+    """Units locked in combat — the live, mutable combat state.
 
-    ``reaction`` is the Stand & Shoot outcome, or None when the target
-    Held; its casualties entered the melee as the chargers' prior
-    losses. ``melee`` is the round the survivors fought.
+    Not loaded data or a resolved outcome (those stay frozen) but ongoing game
+    state, so it is mutable. An engagement is strictly two units — ``a`` and
+    ``b`` — in base contact: the atom the Combat phase resolves. (A combat of
+    more than two units, one unit fighting several, is a collection of
+    engagements — a graph of who is touching whom — resolved by fighting each
+    pairing and combining the results; that is a later ``Combat`` type, once
+    the engine fights more than 1v1.)
+
+    An engagement is set up by a charge — the only opening modelled today;
+    units already in base contact are the "or something else" for later. When a
+    charge forms it, ``a`` is the charger (carrying its
+    :class:`~avelorn.tow.contingent.Charge` via
+    :meth:`~avelorn.tow.contingent.Contingent.charging`), ``b`` the target it
+    struck, and ``reaction`` the target's Stand & Shoot volley once declared,
+    thinning ``a``. ``first_round`` is true for the round a charge sets up this
+    turn — when the charge Initiative bonus and the first-round rules apply;
+    :meth:`end_turn` flips it false so the combat's later rounds (next turn on)
+    fight as subsequent rounds. The Combat phase fights the engagement
+    (:meth:`~avelorn.tow.phases.combat.CombatPhase.fight`).
     """
 
-    reaction: ShootingResult | None
-    melee: FightResult
+    a: Contingent
+    b: Contingent
+    # True for the round a charge sets up this turn (the combat's first round);
+    # end_turn() flips it false so later rounds are not the first.
+    first_round: bool = False
+    # The shooting chapter's rules in force, captured for a Stand & Shoot
+    # reaction volley; a bare charge (outside a game) carries none.
+    shooting_rules: Mapping[str, Rule] = field(default_factory=dict)
+    # A Stand & Shoot volley that thinned ``a`` (the charger), once reacted;
+    # None while unanswered or on Hold.
+    reaction: ShootingResult | None = None
+
+    def react(self, reaction: ChargeReaction = HOLD) -> ShootingResult | None:
+        """Answer the charge — the inactive player's declared reaction.
+
+        One of the printed three: :class:`Hold` (brace, no volley),
+        :class:`StandAndShoot` (``b`` looses one volley at the closing charger
+        ``a``, under the shooting rules in force — the "free" shot), or
+        :class:`Flee` (a loud error until modelled). Records the volley on the
+        engagement so the Combat phase can enter the charger already thinned.
+
+        Returns:
+            The reaction volley, or None for a Hold.
+
+        Raises:
+            UnmodelledRuleError: the declared reaction is Flee.
+        """
+        match reaction:
+            case StandAndShoot(weapon=weapon):
+                self.reaction = stand_and_shoot(
+                    self.b, self.a, weapon, phase_rules=self.shooting_rules
+                )
+            case Flee():
+                raise UnmodelledRuleError("the Flee charge reaction is not modelled yet")
+            case Hold():
+                self.reaction = None
+            case unanswered:
+                # A reaction joining the vocabulary must be answered here —
+                # a charge whose target silently did nothing is the wrong game.
+                assert_never(unanswered)
+        return self.reaction
+
+    def end_turn(self) -> None:
+        """Age the engagement out of its first round as the turn ends.
+
+        A combat fought this turn is no longer in its first round next turn,
+        so its charge Initiative bonus and first-round rules lapse. The turn
+        calls this on each open engagement as it ends.
+        """
+        self.first_round = False
 
 
 def charge(
     charger: Contingent,
     target: Contingent,
-    *,
     move: Charge,
-    charger_weapon: Weapon,
-    target_weapon: Weapon,
-    reaction: ChargeReaction = HOLD,
-    phase_rules: Mapping[str, Rule] = _NONE_IN_PLAY,
-) -> ChargeResult:
-    """Resolve ``charger`` charging ``target``: the reaction, then the fight.
+    *,
+    shooting_rules: Mapping[str, Rule] = _NONE_IN_PLAY,
+) -> Engagement:
+    """Declare and move ``charger``'s charge on ``target`` — a Movement-phase event.
 
-    The sequence as the rulebook plays it. The target answers with its
-    declared ``reaction`` — one of the printed three: :class:`Hold`,
-    :class:`StandAndShoot` (one volley at the closing chargers), or
-    :class:`Flee` (a loud error until it is modelled) — and the
-    survivors fight one round of close combat, the chargers'
-    Initiative raised by the ``move`` (the-combat-phase/charging-units).
-    Each side fights with its chosen Combat weapon. The reaction's
-    casualties enter the melee as the chargers' prior losses, so the
-    combat result counts only the melee's own wounds.
+    The charger moves into contact (its movement becomes the charge); the two
+    units are now locked in combat. This resolves **no melee** — that is the
+    Combat phase (:func:`~avelorn.tow.phases.combat.fight`). The target answers
+    on the returned :class:`Engagement` (:meth:`Engagement.react`); a Stand &
+    Shoot volley there resolves under ``shooting_rules``.
 
     Returns:
-        The composed outcome: the reaction volley, if any, and the fight.
-
-    Raises:
-        UnmodelledRuleError: the declared reaction is Flee, which is
-            not modelled yet.
+        The engagement the charge formed, awaiting its reaction and its fight.
     """
-    volley = None
-    match reaction:
-        case StandAndShoot(weapon=weapon):
-            volley = stand_and_shoot(target, charger, weapon, phase_rules=phase_rules)
-        case Flee():
-            raise UnmodelledRuleError("the Flee charge reaction is not modelled yet")
-        case Hold():
-            pass
-        case unanswered:
-            # A reaction joining the vocabulary must be answered here —
-            # a charge whose target silently did nothing is the wrong game.
-            assert_never(unanswered)
-    melee = fight(
-        charger.charging(move),
-        target,
-        a_weapon=charger_weapon,
-        b_weapon=target_weapon,
-        a_prior_losses=None if volley is None else volley.casualties,
-        # A charge sets up a new combat, so the round it feeds is that
-        # combat's first — known structurally, not a parameter to guess.
+    return Engagement(
+        a=charger.charging(move),
+        b=target,
         first_round=True,
+        shooting_rules=shooting_rules,
     )
-    return ChargeResult(reaction=volley, melee=melee)
 
 
 @dataclass(frozen=True)
 class MovementPhase(Phase):
-    """The Movement phase: the charge, and the reactions that answer it.
+    """The Movement phase: charges are declared, reacted to, and moved here.
 
     ``shooting_in_play`` are the *shooting* chapter's rules in force —
     a Stand & Shoot reaction volley resolves under them. The movement
@@ -180,46 +218,14 @@ class MovementPhase(Phase):
 
     shooting_in_play: Mapping[str, Rule]
 
-    def charge(
-        self,
-        charger: Contingent,
-        target: Contingent,
-        *,
-        move: Charge,
-        charger_weapon: Weapon,
-        target_weapon: Weapon,
-        reaction: ChargeReaction = HOLD,
-    ) -> ChargeResult:
-        """A charge is declared, answered, and driven home.
+    def charge(self, charger: Contingent, target: Contingent, move: Charge) -> Engagement:
+        """Declare a charge and move it into contact, forming an engagement.
 
-        The Stand & Shoot reaction volley resolves under the shooting
-        chapter's rules. The fight the charge feeds does not yet see the
-        combat chapter's rules: the charge threads only the shooting rules
-        it holds, and wiring the combat rules through waits until a combat
-        chapter rule has effects to honour.
+        The target's reaction is declared on the returned engagement
+        (:meth:`Engagement.react`), which resolves any Stand & Shoot volley
+        under this phase's shooting rules; the Combat phase fights it.
 
         Returns:
-            The composed outcome: the reaction volley, if any, and the fight.
+            The engagement the charge formed.
         """
-        return charge(
-            charger,
-            target,
-            move=move,
-            charger_weapon=charger_weapon,
-            target_weapon=target_weapon,
-            reaction=reaction,
-            phase_rules=self.shooting_in_play,
-        )
-
-    def stand_and_shoot(
-        self,
-        shooter: Contingent,
-        target: Contingent,
-        weapon: Weapon,
-    ) -> ShootingResult:
-        """The Stand & Shoot charge reaction: one volley at the closing chargers.
-
-        Returns:
-            The volley's outcome — chargers felled before they strike.
-        """
-        return stand_and_shoot(shooter, target, weapon, phase_rules=self.shooting_in_play)
+        return charge(charger, target, move, shooting_rules=self.shooting_in_play)

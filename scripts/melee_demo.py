@@ -18,7 +18,9 @@ import logging
 from avelorn.core.dice import expected_value
 from avelorn.core.logging import configure_logging
 from avelorn.tow.game import TOWGame
+from avelorn.tow.phases.combat import fight
 from avelorn.tow.query import Comparator, Predicate, evaluate, fight_distributions
+from avelorn.tow.schema.phase import Phase
 
 
 def _print_casualties(label: str, casualties: list[float], fighters: int) -> None:
@@ -64,12 +66,13 @@ def main() -> None:
 
     a = game.field(unit_a, args.a_fighters)
     b = game.field(unit_b, args.b_fighters)
-    result = game.combat.fight(
+    result = fight(
         a,
         b,
         a_weapon=weapon_a,
         b_weapon=weapon_b,
         first_round=args.first_round,
+        phase_rules=game.in_play[Phase.COMBAT],
     )
     scored = game.combat.result(result)
     breaks = game.combat.break_test(scored, unit_a, unit_b)

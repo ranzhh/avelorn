@@ -19,7 +19,7 @@ from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, replace
 from itertools import product
 from math import isclose
-from typing import ClassVar, assert_never
+from typing import ClassVar, assert_never, overload
 
 from avelorn.core.dice import expected_value
 from avelorn.core.game import Phase
@@ -52,6 +52,7 @@ from avelorn.tow.engine.rules import (
     compile_rules,
     effective_characteristic,
 )
+from avelorn.tow.phases.movement import Engagement
 from avelorn.tow.schema.rule import Condition, Rule
 from avelorn.tow.schema.unit import Characteristic, Unit
 from avelorn.tow.schema.weapon import Weapon
@@ -899,29 +900,55 @@ class CombatPhase(Phase):
         WardSave,
     )
 
+    @overload
+    def fight(
+        self, combat: Engagement, /, *, a_weapon: Weapon, b_weapon: Weapon
+    ) -> FightResult: ...
+
+    @overload
+    def fight(
+        self, combat: Contingent, opponent: Contingent, /, *, a_weapon: Weapon, b_weapon: Weapon
+    ) -> FightResult: ...
+
     def fight(
         self,
-        a: Contingent,
-        b: Contingent,
+        combat: Engagement | Contingent,
+        opponent: Contingent | None = None,
+        /,
         *,
         a_weapon: Weapon,
         b_weapon: Weapon,
-        a_prior_losses: Sequence[float] | None = None,
-        b_prior_losses: Sequence[float] | None = None,
-        first_round: bool | None = None,
     ) -> FightResult:
-        """One round of close combat between two units.
+        """One round of a combat, under the chapter's rules in force.
+
+        ``combat`` is either an :class:`~avelorn.tow.phases.movement.Engagement`
+        — a charge-formed combat carrying the charge Initiative bonus, its
+        first-round status, and any Stand & Shoot casualties — or two
+        contingents in base contact, taken as a plain frontal standing combat:
+        no charge, not a first round (the "or something else" opening).
 
         Returns:
             The round's joint casualty distribution.
+
+        Raises:
+            ValueError: a lone contingent with no opponent and no engagement.
         """
+        if isinstance(combat, Engagement):
+            a, b = combat.a, combat.b
+            a_prior_losses = None if combat.reaction is None else combat.reaction.casualties
+            first_round = combat.first_round
+        elif opponent is None:
+            raise ValueError("fighting two contingents needs both; pass an Engagement otherwise")
+        else:
+            a, b = combat, opponent
+            a_prior_losses = None
+            first_round = None
         return fight(
             a,
             b,
             a_weapon=a_weapon,
             b_weapon=b_weapon,
             a_prior_losses=a_prior_losses,
-            b_prior_losses=b_prior_losses,
             first_round=first_round,
             phase_rules=self.in_play,
         )
