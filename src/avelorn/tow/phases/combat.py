@@ -736,37 +736,6 @@ class CombatResult:
     notes: tuple[str, ...] = ()
 
 
-def fight_engagement(
-    engagement: Engagement,
-    *,
-    a_weapon: Weapon,
-    b_weapon: Weapon,
-    phase_rules: Mapping[str, Rule] = _NONE_IN_PLAY,
-) -> FightResult:
-    """Fight a round of an engagement — the Combat phase resolving a locked combat.
-
-    Whether this is the combat's first round is the engagement's own state
-    (``engagement.first_round``): true for the round a charge sets up this
-    turn — when the charge Initiative bonus and the first-round rules apply —
-    and false for the later rounds it is fought in subsequent turns. Any Stand
-    & Shoot casualties (the engagement's reaction) thin the chargers before
-    they strike. The charger already carries its charge (``engagement.charger``
-    was fielded through :meth:`~avelorn.tow.contingent.Contingent.charging`).
-
-    Returns:
-        The round's joint casualty distribution.
-    """
-    return fight(
-        engagement.charger,
-        engagement.target,
-        a_weapon=a_weapon,
-        b_weapon=b_weapon,
-        a_prior_losses=None if engagement.reaction is None else engagement.reaction.casualties,
-        first_round=engagement.first_round,
-        phase_rules=phase_rules,
-    )
-
-
 def combat_result(result: FightResult) -> CombatResult:
     """Score a fought round by unsaved wounds inflicted and name the winner.
 
@@ -957,8 +926,14 @@ class CombatPhase(Phase):
             ValueError: two contingents are fought but only one is given.
         """
         if isinstance(a, Engagement):
-            return fight_engagement(
-                a, a_weapon=a_weapon, b_weapon=b_weapon, phase_rules=self.in_play
+            return fight(
+                a.charger,
+                a.target,
+                a_weapon=a_weapon,
+                b_weapon=b_weapon,
+                a_prior_losses=None if a.reaction is None else a.reaction.casualties,
+                first_round=a.first_round,
+                phase_rules=self.in_play,
             )
         if b is None:
             raise ValueError("fight(a, b) needs both contingents, or pass an Engagement")

@@ -120,7 +120,7 @@ class Engagement:
     the charge Initiative bonus and the first-round rules apply. :meth:`end_turn`
     flips it false, so the combat's later rounds (next turn on) fight as
     subsequent rounds. The Combat phase fights the engagement
-    (:func:`~avelorn.tow.phases.combat.fight_engagement`); the reaction's
+    (:meth:`~avelorn.tow.phases.combat.CombatPhase.fight`); the reaction's
     casualties thin the chargers as they enter the melee.
 
     (One pair for now; a real combat can lock two or more units — the

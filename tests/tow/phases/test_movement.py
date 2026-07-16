@@ -5,7 +5,7 @@ import pytest
 from avelorn.core.errors import UnmodelledRuleError
 from avelorn.tow.contingent import Charge, ChargeArc, Contingent
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.phases.combat import combat_result, fight, fight_engagement
+from avelorn.tow.phases.combat import CombatPhase, combat_result, fight
 from avelorn.tow.phases.movement import Flee, StandAndShoot, charge, stand_and_shoot
 from avelorn.tow.phases.shooting import shoot_unit
 from avelorn.tow.schema.phase import Phase
@@ -16,6 +16,10 @@ REPO = TOWRepository()
 # The shooting chapter's rules in force, built directly: these tests
 # exercise the combat layer, which must not depend on game assembly.
 IN_FORCE = {r.name: r for r in REPO.rules.values() if r.category == Phase.SHOOTING and r.effects}
+
+# The Combat phase with no chapter rules in force, for fighting an engagement
+# these Movement-phase tests have formed.
+COMBAT = CombatPhase(in_play={})
 
 
 def _fielded(unit: Unit, models: int) -> Contingent:
@@ -196,8 +200,8 @@ def test_charge_forms_an_engagement_and_its_reaction() -> None:
 def test_fighting_the_engagement_is_the_charges_first_round() -> None:
     """The Combat-phase fight of an engagement equals fight() composed by hand.
 
-    fight_engagement enters the chargers thinned by the reaction and marks the
-    combat's first round; the charger struck first.
+    The combat-phase fight enters the chargers thinned by the reaction and
+    marks the combat's first round; the charger struck first.
     """
     archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
     spear, hand = REPO.weapons["thrusting-spear"], REPO.weapons["hand-weapon"]
@@ -208,7 +212,7 @@ def test_fighting_the_engagement_is_the_charges_first_round() -> None:
     engagement = charge(charger, target, move, shooting_rules=IN_FORCE)
     volley = engagement.react(StandAndShoot(longbow))
     assert volley is not None  # a Stand & Shoot reaction always looses a volley
-    outcome = fight_engagement(engagement, a_weapon=spear, b_weapon=hand)
+    outcome = COMBAT.fight(engagement, a_weapon=spear, b_weapon=hand)
 
     manual = fight(
         charger.charging(move),
@@ -232,7 +236,7 @@ def test_a_held_charge_fights_with_no_prior_losses() -> None:
 
     engagement = charge(charger, target, move, shooting_rules=IN_FORCE)
     engagement.react()  # default: Hold
-    outcome = fight_engagement(engagement, a_weapon=spear, b_weapon=hand)
+    outcome = COMBAT.fight(engagement, a_weapon=spear, b_weapon=hand)
 
     manual = fight(charger.charging(move), target, a_weapon=spear, b_weapon=hand, first_round=True)
     assert engagement.reaction is None
