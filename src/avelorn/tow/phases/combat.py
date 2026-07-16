@@ -52,6 +52,7 @@ from avelorn.tow.engine.rules import (
     compile_rules,
     effective_characteristic,
 )
+from avelorn.tow.phases.movement import Engagement
 from avelorn.tow.schema.rule import Condition, Rule
 from avelorn.tow.schema.unit import Characteristic, Unit
 from avelorn.tow.schema.weapon import Weapon
@@ -735,6 +736,35 @@ class CombatResult:
     notes: tuple[str, ...] = ()
 
 
+def fight_engagement(
+    engagement: Engagement,
+    *,
+    a_weapon: Weapon,
+    b_weapon: Weapon,
+    phase_rules: Mapping[str, Rule] = _NONE_IN_PLAY,
+) -> FightResult:
+    """Fight the round a charge set up — the Combat phase resolving an engagement.
+
+    The charger struck this turn, so this is the combat's first round: its
+    charge Initiative bonus and the first-round rules apply, and any Stand &
+    Shoot casualties (the engagement's reaction) thin the chargers before they
+    strike. The charger already carries its charge (``engagement.charger`` was
+    fielded through :meth:`~avelorn.tow.contingent.Contingent.charging`).
+
+    Returns:
+        The round's joint casualty distribution.
+    """
+    return fight(
+        engagement.charger,
+        engagement.target,
+        a_weapon=a_weapon,
+        b_weapon=b_weapon,
+        a_prior_losses=None if engagement.reaction is None else engagement.reaction.casualties,
+        first_round=True,
+        phase_rules=phase_rules,
+    )
+
+
 def combat_result(result: FightResult) -> CombatResult:
     """Score a fought round by unsaved wounds inflicted and name the winner.
 
@@ -901,8 +931,8 @@ class CombatPhase(Phase):
 
     def fight(
         self,
-        a: Contingent,
-        b: Contingent,
+        a: "Engagement | Contingent",
+        b: Contingent | None = None,
         *,
         a_weapon: Weapon,
         b_weapon: Weapon,
@@ -910,11 +940,26 @@ class CombatPhase(Phase):
         b_prior_losses: Sequence[float] | None = None,
         first_round: bool | None = None,
     ) -> FightResult:
-        """One round of close combat between two units.
+        """One round of close combat, under the chapter's rules in force.
+
+        Pass an :class:`~avelorn.tow.phases.movement.Engagement` (from a
+        Movement-phase charge) to fight the round it set up — the combat's
+        first, with the charge Initiative bonus and the Stand & Shoot
+        casualties applied. Or pass two contingents ``a`` and ``b`` for a
+        standing combat (a later round of an ongoing fight).
 
         Returns:
             The round's joint casualty distribution.
+
+        Raises:
+            ValueError: two contingents are fought but only one is given.
         """
+        if isinstance(a, Engagement):
+            return fight_engagement(
+                a, a_weapon=a_weapon, b_weapon=b_weapon, phase_rules=self.in_play
+            )
+        if b is None:
+            raise ValueError("fight(a, b) needs both contingents, or pass an Engagement")
         return fight(
             a,
             b,

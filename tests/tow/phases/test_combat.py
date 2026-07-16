@@ -10,6 +10,7 @@ from avelorn.tow.phases.combat import (
     combat_result,
     effective_initiative,
     fight,
+    fight_engagement,
     strike,
     strike_unit,
 )
@@ -531,15 +532,17 @@ def test_charge_factors_elven_reflexes_structurally() -> None:
     """
     from avelorn.tow.phases.movement import charge
 
-    result = charge(
+    engagement = charge(
         _deployed("elven-spearmen", 5),
         _deployed("elven-archers", 5),
-        move=Charge(3, ChargeArc.FRONT),
-        charger_weapon=REPO.weapons["thrusting-spear"],
-        target_weapon=REPO.weapons["hand-weapon"],
-        phase_rules=IN_FORCE,
+        Charge(3, ChargeArc.FRONT),
+        shooting_rules=IN_FORCE,
     )
-    melee = result.melee
+    melee = fight_engagement(
+        engagement,
+        a_weapon=REPO.weapons["thrusting-spear"],
+        b_weapon=REPO.weapons["hand-weapon"],
+    )
     assert melee.a_initiative.value == melee.b_initiative.value + 3  # charge bonus only
     assert not any("Elven Reflexes" in note for note in melee.notes)
 

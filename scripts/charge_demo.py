@@ -69,17 +69,10 @@ def main() -> None:
     archers = game.field(archers_unit, args.archers)
     move = Charge(args.charge_inches, ChargeArc.FRONT)
 
-    outcome = game.movement.charge(
-        spearmen,
-        archers,
-        move=move,
-        charger_weapon=spear,
-        target_weapon=hand_weapon,
-        reaction=StandAndShoot(longbow),
-    )
-    reaction = outcome.reaction
+    engagement = game.movement.charge(spearmen, archers, move)
+    reaction = engagement.react(StandAndShoot(longbow))
     assert reaction is not None  # a StandAndShoot reaction was declared
-    melee = outcome.melee
+    melee = game.combat.fight(engagement, a_weapon=spear, b_weapon=hand_weapon)
     scored = game.combat.result(melee)
     breaks = game.combat.break_test(scored, spearmen_unit, archers_unit)
 
