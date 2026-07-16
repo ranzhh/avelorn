@@ -18,14 +18,14 @@ class _Checkers(Game):
     black = _Move()
 
 
-def test_turn_walks_the_declared_phase_sequence() -> None:
-    """turn() yields the declared phase values, in declared order."""
+def test_phases_walk_the_declared_phase_sequence() -> None:
+    """phases() yields the declared phase values, in declared order."""
     game = _Checkers()
-    assert game.turn() == (game.red, game.black)
-    assert game.turn()[0].steps == ("move", "capture")
+    assert game.phases() == (game.red, game.black)
+    assert game.phases()[0].steps == ("move", "capture")
 
 
 def test_a_game_declares_no_phases_by_default() -> None:
-    """The skeleton itself has no turn; a concrete game must declare one."""
-    assert Game().turn() == ()
+    """The skeleton itself has no phases; a concrete game must declare them."""
+    assert Game().phases() == ()
     assert Phase().steps == ()
