@@ -31,12 +31,12 @@ class Game:
 
     A subclass declares ``phase_sequence`` — the attribute names of its
     :class:`Phase` values, in the order its rulebook prints them — and
-    :meth:`turn` walks it.
+    :meth:`phases` returns them in that order.
     """
 
     phase_sequence: ClassVar[tuple[str, ...]] = ()
 
-    def turn(self) -> tuple[Phase, ...]:
+    def phases(self) -> tuple[Phase, ...]:
         """The game's phases in printed order, each bound to this game.
 
         Returns:

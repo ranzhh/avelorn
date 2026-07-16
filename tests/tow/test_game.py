@@ -68,13 +68,13 @@ def test_the_game_is_a_frozen_value() -> None:
         setattr(GAME, "in_play", {})  # noqa: B010 — the point is the freeze
 
 
-def test_turn_is_the_printed_sequence() -> None:
-    """The turn walks the four phases in printed order.
+def test_phases_are_the_printed_sequence() -> None:
+    """game.phases() lists the four phases in printed order.
 
     The sequence is derived from the Phase vocabulary, so a phase
     joining the enum without a matching field fails here.
     """
-    assert GAME.turn() == (GAME.strategy, GAME.movement, GAME.shooting, GAME.combat)
+    assert GAME.phases() == (GAME.strategy, GAME.movement, GAME.shooting, GAME.combat)
 
 
 @pytest.mark.parametrize("binding", ["strategy", "movement", "shooting", "combat"])

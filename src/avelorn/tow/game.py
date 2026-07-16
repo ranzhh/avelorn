@@ -32,6 +32,7 @@ from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.unit import Unit
 from avelorn.tow.schema.weapon import Weapon
+from avelorn.tow.turn import Turn
 
 
 @dataclass(frozen=True)
@@ -148,3 +149,17 @@ class TOWGame(Game):
             The fielded contingent, loadout resolved against the game's corpus.
         """
         return Contingent.field(complement, data=self.repository)
+
+    def turn(self) -> Turn:
+        """Begin a turn, to walk phase by phase with its rules in force.
+
+        The turn takes no sides — units act in the phase calls at whatever
+        number the question needs. Enter each phase through its context
+        manager (``with turn.movement() as mv: ...``); the printed order is
+        enforced, and the engagements charges form are fought in the Combat
+        phase.
+
+        Returns:
+            A fresh turn over this game's phases.
+        """
+        return Turn(self.strategy, self.movement, self.shooting, self.combat)
