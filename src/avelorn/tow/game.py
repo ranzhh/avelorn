@@ -7,7 +7,7 @@ phase in its own module under :mod:`avelorn.tow.phases`.
 
 The game owns the rules in force and the turn's structure — **never
 the math**. Every action method is a one-line delegation into the
-combat modules, injecting the game's rules; the underlying functions
+phase modules, injecting the game's rules; the underlying functions
 stay importable directly, nothing is moved, only bound. The moment a
 game method grows a second line of logic, the god object has begun:
 move the logic into a module and delegate.

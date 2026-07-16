@@ -28,8 +28,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from avelorn.core.dice import expected_value
-from avelorn.tow.combat.melee import FightResult
-from avelorn.tow.combat.shooting import ShootingResult
+from avelorn.tow.phases.combat import FightResult
+from avelorn.tow.phases.shooting import ShootingResult
 
 logger = logging.getLogger(__name__)
 

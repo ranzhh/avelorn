@@ -4,14 +4,13 @@ import dataclasses
 
 import pytest
 
-from avelorn.tow.combat.charge import StandAndShoot
-from avelorn.tow.combat.charge import charge as charge_verb
-from avelorn.tow.combat.melee import combat_result, fight
-from avelorn.tow.combat.morale import break_test, make_panic_tests
-from avelorn.tow.combat.shooting import shoot_unit
 from avelorn.tow.contingent import Charge, ChargeArc, Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.game import TOWGame
+from avelorn.tow.phases.combat import break_test, combat_result, fight
+from avelorn.tow.phases.movement import StandAndShoot
+from avelorn.tow.phases.movement import charge as charge_verb
+from avelorn.tow.phases.shooting import make_panic_tests, shoot_unit
 from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.stage import Stage
 from avelorn.tow.schema.unit import Unit

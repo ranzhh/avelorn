@@ -105,7 +105,7 @@ class Charge:
 
     Both facts are read by the rules the charge feeds — the Combat-phase
     Initiative bonus computes in
-    :func:`~avelorn.tow.combat.melee.effective_initiative`, and the
+    :func:`~avelorn.tow.phases.combat.effective_initiative`, and the
     flank/rear combat-result bonuses are a still-deferred concern (#28).
     The arc has no default: which arc a charge struck is a fact of the
     move, not a parameter to assume.
@@ -132,7 +132,7 @@ class Charge:
         front, +4 into the flank or rear; the-combat-phase/charging-units).
         A charge knows only its own contribution: the rulebook's total
         Initiative ceiling of 10 is the striking-order assembler's to
-        apply (:func:`~avelorn.tow.combat.melee.effective_initiative`),
+        apply (:func:`~avelorn.tow.phases.combat.effective_initiative`),
         not the charge's.
 
         Returns:
@@ -145,7 +145,7 @@ class MovementKind(StrEnum):
     """The kind of move a contingent made in its Movement phase.
 
     The closed set of movements the engine distinguishes today. Flee is a
-    real charge reaction (:class:`~avelorn.tow.combat.charge.Flee`) but is
+    real charge reaction (:class:`~avelorn.tow.phases.movement.Flee`) but is
     not modelled yet, so it has no member here until a resolver needs to
     tell a fled unit apart from one that merely moved.
     """
@@ -311,8 +311,8 @@ class Contingent:
     The weapon in use is *not* carried here: it is a per-action choice, so
     the same contingent shoots with its bow one moment and fights the
     ensuing melee with a hand weapon the next. Each action takes the chosen
-    weapon (:func:`~avelorn.tow.combat.melee.fight`,
-    :func:`~avelorn.tow.combat.charge.stand_and_shoot`).
+    weapon (:func:`~avelorn.tow.phases.combat.fight`,
+    :func:`~avelorn.tow.phases.movement.stand_and_shoot`).
 
     Today a contingent is a single homogeneous body — one profile (the
     rank-and-file, ``unit.profiles[0]``). A real contingent can be
@@ -336,7 +336,7 @@ class Contingent:
     # here so the two never disagree). A freshly fielded body is stationary;
     # a caller that moved it sets this through :meth:`after` / :meth:`charging`.
     # Read by the movement-gated rules (Moving and Shooting; Volley Fire's
-    # stationary condition) and by :func:`~avelorn.tow.combat.melee.fight`
+    # stationary condition) and by :func:`~avelorn.tow.phases.combat.fight`
     # for the striking order's charge Initiative bonus.
     movement: Movement = field(default_factory=Movement.stationary)
 

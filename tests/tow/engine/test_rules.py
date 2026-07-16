@@ -5,7 +5,6 @@ from typing import Literal
 
 import pytest
 
-from avelorn.tow.combat.shooting import shoot_unit
 from avelorn.tow.contingent import Contingent, Movement
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.engine.attack import AttackProfile, RollState, resolve_attack
@@ -15,6 +14,7 @@ from avelorn.tow.engine.rules import (
     effective_characteristic,
     printed_rule,
 )
+from avelorn.tow.phases.shooting import shoot_unit
 from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.rule import (
     Condition,
