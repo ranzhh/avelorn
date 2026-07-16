@@ -115,13 +115,12 @@ def test_fight_result_and_break_test_delegate() -> None:
     spearmen = REPO.units["elven-spearmen"]
     a, b = _fielded(spearmen, 5), _fielded(spearmen, 5)
     spear = REPO.weapons["thrusting-spear"]
-    bound = GAME.combat.fight(a, b, a_weapon=spear, b_weapon=spear, first_round=True)
+    bound = GAME.combat.fight([a, b], a_weapon=spear, b_weapon=spear)
     direct = fight(
         a,
         b,
         a_weapon=spear,
         b_weapon=spear,
-        first_round=True,
         phase_rules=GAME.in_play[Phase.COMBAT],
     )
     assert bound == direct

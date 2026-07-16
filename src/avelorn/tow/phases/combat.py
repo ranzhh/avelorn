@@ -19,7 +19,7 @@ from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, replace
 from itertools import product
 from math import isclose
-from typing import ClassVar, assert_never
+from typing import ClassVar, assert_never, overload
 
 from avelorn.core.dice import expected_value
 from avelorn.core.game import Phase
@@ -900,50 +900,55 @@ class CombatPhase(Phase):
         WardSave,
     )
 
+    @overload
+    def fight(self, combat: Engagement, *, a_weapon: Weapon, b_weapon: Weapon) -> FightResult: ...
+
+    @overload
+    def fight(
+        self, combat: Sequence[Contingent], *, a_weapon: Weapon, b_weapon: Weapon
+    ) -> FightResult: ...
+
     def fight(
         self,
-        a: "Engagement | Contingent",
-        b: Contingent | None = None,
+        combat: Engagement | Sequence[Contingent],
         *,
         a_weapon: Weapon,
         b_weapon: Weapon,
-        a_prior_losses: Sequence[float] | None = None,
-        b_prior_losses: Sequence[float] | None = None,
-        first_round: bool | None = None,
     ) -> FightResult:
-        """One round of close combat, under the chapter's rules in force.
+        """One round of a combat, under the chapter's rules in force.
 
-        Pass an :class:`~avelorn.tow.phases.movement.Engagement` (from a
-        Movement-phase charge) to fight the round it set up — the combat's
-        first, with the charge Initiative bonus and the Stand & Shoot
-        casualties applied. Or pass two contingents ``a`` and ``b`` for a
-        standing combat (a later round of an ongoing fight).
+        ``combat`` is either an :class:`~avelorn.tow.phases.movement.Engagement`
+        — a charge-formed combat carrying the charge Initiative bonus, its
+        first-round status, and any Stand & Shoot casualties — or the units in
+        base contact given as a sequence, taken as a plain frontal standing
+        combat: no charge, not a first round (the "or something else" opening).
+
+        Two units for now; multi-unit combats are not modelled.
 
         Returns:
             The round's joint casualty distribution.
 
         Raises:
-            ValueError: two contingents are fought but only one is given.
+            ValueError: a unit sequence that is not exactly two units.
         """
-        if isinstance(a, Engagement):
-            return fight(
-                a.charger,
-                a.target,
-                a_weapon=a_weapon,
-                b_weapon=b_weapon,
-                a_prior_losses=None if a.reaction is None else a.reaction.casualties,
-                first_round=a.first_round,
-                phase_rules=self.in_play,
-            )
-        if b is None:
-            raise ValueError("fight(a, b) needs both contingents, or pass an Engagement")
+        if isinstance(combat, Engagement):
+            a, b = combat.charger, combat.target
+            a_prior_losses = None if combat.reaction is None else combat.reaction.casualties
+            first_round = combat.first_round
+        else:
+            if len(combat) != 2:
+                raise ValueError(
+                    "a standing combat is two units; multi-unit combats are not modelled"
+                )
+            a, b = combat[0], combat[1]
+            a_prior_losses = None
+            first_round = None
         return fight(
             a,
             b,
             a_weapon=a_weapon,
             b_weapon=b_weapon,
             a_prior_losses=a_prior_losses,
-            b_prior_losses=b_prior_losses,
             first_round=first_round,
             phase_rules=self.in_play,
         )
