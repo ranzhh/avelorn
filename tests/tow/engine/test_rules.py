@@ -145,9 +145,8 @@ def test_shoot_unit_factors_armour_bane_from_data() -> None:
     into the shot count (stationary, one rank), so it too leaves no note.
     """
     result = shoot_unit(
-        _fielded(REPO.units["elven-archers"], 3),
+        _fielded(REPO.units["elven-archers"], 3).wielding("Longbow"),
         _fielded(REPO.units["elven-spearmen"], 10),
-        weapon=REPO.weapons["longbow"],
         phase_rules=IN_FORCE,
     )
     assert result.p_unsaved == pytest.approx(13 / 54)
@@ -164,9 +163,8 @@ def test_weapon_rules_factor_from_the_loadout_alone() -> None:
     own chapter rules still come from the registry.
     """
     result = shoot_unit(
-        _fielded(REPO.units["elven-archers"], 3),
+        _fielded(REPO.units["elven-archers"], 3).wielding("Longbow"),
         _fielded(REPO.units["elven-spearmen"], 10),
-        weapon=REPO.weapons["longbow"],
     )
     assert result.p_unsaved == pytest.approx(13 / 54)
     assert not any("Armour Bane" in note for note in result.notes)
@@ -180,9 +178,8 @@ def test_long_range_penalty_applies_from_data() -> None:
     with Armour Bane live, p = 1/2 * (2/6 * 2/3 + 1/6 * 5/6) = 13/72.
     """
     result = shoot_unit(
-        _fielded(REPO.units["elven-archers"], 3),
+        _fielded(REPO.units["elven-archers"], 3).wielding("Longbow"),
         _fielded(REPO.units["elven-spearmen"], 10),
-        weapon=REPO.weapons["longbow"],
         phase_rules=IN_FORCE,
         distance=20,
     )
@@ -196,9 +193,8 @@ def test_condition_false_applies_no_penalty_and_no_note() -> None:
     A rule whose condition evaluates False is honoured by not applying.
     """
     result = shoot_unit(
-        _fielded(REPO.units["elven-archers"], 3),
+        _fielded(REPO.units["elven-archers"], 3).wielding("Longbow"),
         _fielded(REPO.units["elven-spearmen"], 10),
-        weapon=REPO.weapons["longbow"],
         phase_rules=IN_FORCE,
         distance=10,
     )
@@ -213,9 +209,8 @@ def test_unknown_distance_leaves_only_the_range_rule_unfactored() -> None:
     penalty, no note — so only the range rule is left reported.
     """
     result = shoot_unit(
-        _fielded(REPO.units["elven-archers"], 3),
+        _fielded(REPO.units["elven-archers"], 3).wielding("Longbow"),
         _fielded(REPO.units["elven-spearmen"], 10),
-        weapon=REPO.weapons["longbow"],
         phase_rules=IN_FORCE,
     )
     assert result.p_unsaved == pytest.approx(13 / 54)
@@ -226,9 +221,8 @@ def test_unknown_distance_leaves_only_the_range_rule_unfactored() -> None:
 def test_both_penalties_stack() -> None:
     """Moved and at long range: -1 and -1, hit 5+."""
     result = shoot_unit(
-        _fielded(REPO.units["elven-archers"], 3, moved=True),
+        _fielded(REPO.units["elven-archers"], 3, moved=True).wielding("Longbow"),
         _fielded(REPO.units["elven-spearmen"], 10),
-        weapon=REPO.weapons["longbow"],
         phase_rules=IN_FORCE,
         distance=20,
     )
@@ -246,18 +240,15 @@ def test_staying_still_volley_fires_while_the_to_hit_is_a_wash() -> None:
     """
     sea_guard = REPO.units["lothern-sea-guard"]
     spearmen = REPO.units["elven-spearmen"]
-    warbow = REPO.weapons["warbow"]
     stay = shoot_unit(
-        _fielded(sea_guard, 10),
+        _fielded(sea_guard, 10).wielding("Warbow"),
         _fielded(spearmen, 10),
-        warbow,
         phase_rules=IN_FORCE,
         distance=15,
     )
     move_in = shoot_unit(
-        _fielded(sea_guard, 10, moved=True),
+        _fielded(sea_guard, 10, moved=True).wielding("Warbow"),
         _fielded(spearmen, 10),
-        warbow,
         phase_rules=IN_FORCE,
         distance=12,
     )

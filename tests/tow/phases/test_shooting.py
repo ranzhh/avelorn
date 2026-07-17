@@ -65,9 +65,8 @@ def test_shoot_unit_archers_vs_spearmen() -> None:
     archers = REPO.units["elven-archers"]
     spearmen = REPO.units["elven-spearmen"]
     result = shoot_unit(
-        _fielded(archers, 3),
+        _fielded(archers, 3).wielding("Longbow"),
         _fielded(spearmen, 10),
-        REPO.weapons["longbow"],
     )
     assert result.hit_target == 3  # BS 4
     assert result.save_target == 5  # 7 - light armour - shield (the chart value)
@@ -87,10 +86,9 @@ def test_defender_size_does_not_affect_wounds() -> None:
     """
     archers = _fielded(REPO.units["elven-archers"], 3)
     spearmen = REPO.units["elven-spearmen"]
-    longbow = REPO.weapons["longbow"]
 
-    vs_twenty = shoot_unit(archers, _fielded(spearmen, 20), longbow)
-    vs_thirty = shoot_unit(archers, _fielded(spearmen, 30), longbow)
+    vs_twenty = shoot_unit(archers.wielding("Longbow"), _fielded(spearmen, 20))
+    vs_thirty = shoot_unit(archers.wielding("Longbow"), _fielded(spearmen, 30))
 
     assert vs_twenty.p_unsaved == vs_thirty.p_unsaved
     assert vs_twenty.distribution == vs_thirty.distribution
@@ -136,9 +134,8 @@ def test_only_the_front_rank_fires() -> None:
     archers = REPO.units["elven-archers"]
     spearmen = REPO.units["elven-spearmen"]
     result = shoot_unit(
-        _fielded(archers, 10, frontage=5, moved=True),
+        _fielded(archers, 10, frontage=5, moved=True).wielding("Longbow"),
         _fielded(spearmen, 20),
-        REPO.weapons["longbow"],
     )
     assert result.shots == 5
 
@@ -153,9 +150,8 @@ def test_volley_fire_adds_half_of_each_rear_rank_when_stationary() -> None:
     archers = REPO.units["elven-archers"]
     spearmen = REPO.units["elven-spearmen"]
     result = shoot_unit(
-        _fielded(archers, 10, frontage=5),
+        _fielded(archers, 10, frontage=5).wielding("Longbow"),
         _fielded(spearmen, 20),
-        REPO.weapons["longbow"],
     )
     assert result.shots == 8
     assert not any("Volley Fire" in note for note in result.notes)
@@ -166,9 +162,8 @@ def test_volley_fire_does_not_apply_to_a_unit_that_moved() -> None:
     archers = REPO.units["elven-archers"]
     spearmen = REPO.units["elven-spearmen"]
     result = shoot_unit(
-        _fielded(archers, 10, frontage=5, moved=True),
+        _fielded(archers, 10, frontage=5, moved=True).wielding("Longbow"),
         _fielded(spearmen, 20),
-        REPO.weapons["longbow"],
     )
     assert result.shots == 5
     assert not any("Volley Fire" in note for note in result.notes)
@@ -179,9 +174,8 @@ def test_volley_fire_never_on_a_stand_and_shoot() -> None:
     archers = REPO.units["elven-archers"]
     spearmen = REPO.units["elven-spearmen"]
     result = shoot_unit(
-        _fielded(archers, 10, frontage=5),
+        _fielded(archers, 10, frontage=5).wielding("Longbow"),
         _fielded(spearmen, 20),
-        REPO.weapons["longbow"],
         stand_and_shoot=True,
     )
     assert result.shots == 5
@@ -197,9 +191,8 @@ def test_forcing_short_range_alone_does_not_forbid_volley_fire() -> None:
     archers = REPO.units["elven-archers"]
     spearmen = REPO.units["elven-spearmen"]
     result = shoot_unit(
-        _fielded(archers, 10, frontage=5),
+        _fielded(archers, 10, frontage=5).wielding("Longbow"),
         _fielded(spearmen, 20),
-        REPO.weapons["longbow"],
         force_short_range=True,
     )
     assert result.shots == 8  # front five plus three from the second rank
@@ -215,9 +208,8 @@ def test_shoot_unit_caps_casualties_but_not_wounds() -> None:
     archers = REPO.units["elven-archers"]
     spearmen = REPO.units["elven-spearmen"]
     result = shoot_unit(
-        _fielded(archers, 30, frontage=30),
+        _fielded(archers, 30, frontage=30).wielding("Longbow"),
         _fielded(spearmen, 5),
-        REPO.weapons["longbow"],
     )
     assert result.target_models == 5
     assert len(result.distribution) == 31
@@ -261,9 +253,8 @@ def test_shoot_unit_folds_multi_wound_casualties_and_caps() -> None:
     multi_wound = spearmen.model_copy(deep=True)
     multi_wound.profiles[0].characteristics[Characteristic.WOUNDS] = 3
     result = shoot_unit(
-        _fielded(archers, 30, frontage=30),
+        _fielded(archers, 30, frontage=30).wielding("Longbow"),
         _fielded(multi_wound, 5),
-        REPO.weapons["longbow"],
     )
     assert result.target_models == 5  # cap now applied
     assert len(result.casualties) == 6  # 0..5 models
@@ -282,9 +273,8 @@ def test_shoot_unit_warbow_uses_wielders_strength() -> None:
     sea_guard = REPO.units["lothern-sea-guard"]
     spearmen = REPO.units["elven-spearmen"]
     result = shoot_unit(
-        _fielded(sea_guard, 3),
+        _fielded(sea_guard, 3).wielding("Warbow"),
         _fielded(spearmen, 10),
-        REPO.weapons["warbow"],
     )
     assert result.hit_target == 3  # BS 4
     assert result.wound_target == 4  # wielder's S3 vs T3
@@ -298,14 +288,14 @@ def test_shoot_unit_rejects_wielder_strength_weapon_without_strength() -> None:
     strengthless.profiles[0].characteristics[Characteristic.STRENGTH] = None
     strengthless.equipment.append("Warbow")  # carried, so the choice is legal
     with pytest.raises(ValueError, match="wielder's Strength"):
-        shoot_unit(_fielded(strengthless, 1), _fielded(spearmen, 10), REPO.weapons["warbow"])
+        shoot_unit(_fielded(strengthless, 1).wielding("Warbow"), _fielded(spearmen, 10))
 
 
 def test_shoot_unit_rejects_pure_melee_weapon() -> None:
     """A weapon with no missile profile cannot shoot."""
     spearmen = REPO.units["elven-spearmen"]
     with pytest.raises(ValueError, match="missile profile"):
-        shoot_unit(_fielded(spearmen, 1), _fielded(spearmen, 10), REPO.weapons["hand-weapon"])
+        shoot_unit(_fielded(spearmen, 1).wielding("Hand Weapon"), _fielded(spearmen, 10))
 
 
 def test_shoot_unit_rejects_missing_ballistic_skill() -> None:
@@ -315,7 +305,7 @@ def test_shoot_unit_rejects_missing_ballistic_skill() -> None:
     crewless.profiles[0].characteristics[Characteristic.BALLISTIC_SKILL] = None
     crewless.equipment.append("Longbow")  # carried, so the choice is legal
     with pytest.raises(ValueError, match="Ballistic Skill"):
-        shoot_unit(_fielded(crewless, 1), _fielded(spearmen, 10), REPO.weapons["longbow"])
+        shoot_unit(_fielded(crewless, 1).wielding("Longbow"), _fielded(spearmen, 10))
 
 
 def _killing_blow_double() -> Transform:

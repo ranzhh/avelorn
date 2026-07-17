@@ -31,15 +31,13 @@ def test_stand_and_shoot_applies_the_minus_one_to_hit() -> None:
     """Archers standing and shooting hit at -1: BS4 (3+) becomes 4+."""
     archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
     plain = shoot_unit(
-        _fielded(archers, 10),
+        _fielded(archers, 10).wielding("Longbow"),
         _fielded(spearmen, 10),
-        REPO.weapons["longbow"],
         phase_rules=IN_FORCE,
     )
     reaction = stand_and_shoot(
-        _fielded(archers, 10),
+        _fielded(archers, 10).wielding("Longbow"),
         _fielded(spearmen, 10),
-        REPO.weapons["longbow"],
         phase_rules=IN_FORCE,
     )
     assert plain.hit_target == 3
@@ -55,15 +53,13 @@ def test_stand_and_shoot_is_exempt_from_firing_at_long_range() -> None:
     """
     archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
     plain = shoot_unit(
-        _fielded(archers, 10),
+        _fielded(archers, 10).wielding("Longbow"),
         _fielded(spearmen, 10),
-        REPO.weapons["longbow"],
         phase_rules=IN_FORCE,
     )
     reaction = stand_and_shoot(
-        _fielded(archers, 10),
+        _fielded(archers, 10).wielding("Longbow"),
         _fielded(spearmen, 10),
-        REPO.weapons["longbow"],
         phase_rules=IN_FORCE,
     )
     assert any("Firing at Long Range" in note for note in plain.notes)
@@ -74,9 +70,8 @@ def test_stand_and_shoot_caps_casualties_at_the_charging_unit_size() -> None:
     """A volley cannot fell more chargers than the charging unit contains."""
     archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
     reaction = stand_and_shoot(
-        _fielded(archers, 20),
+        _fielded(archers, 20).wielding("Longbow"),
         _fielded(spearmen, 5),
-        REPO.weapons["longbow"],
         phase_rules=IN_FORCE,
     )
     assert reaction.target_models == 5
@@ -95,18 +90,15 @@ def test_charge_sequence_matches_mixing_the_survivor_fights_by_hand() -> None:
     mixture over each number ``k`` of Spearmen felled before contact.
     """
     archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
-    spear, hand = REPO.weapons["thrusting-spear"], REPO.weapons["hand-weapon"]
     move = Charge(6, ChargeArc.FRONT)
     models = 3
-    charger = _fielded(spearmen, models).charging(move)
-    defender = _fielded(archers, 3)
-    reaction = stand_and_shoot(defender, charger, REPO.weapons["longbow"], phase_rules=IN_FORCE)
+    charger = _fielded(spearmen, models).wielding("Thrusting Spear").charging(move)
+    defender = _fielded(archers, 3).wielding("Hand Weapon")
+    reaction = stand_and_shoot(defender.wielding("Longbow"), charger, phase_rules=IN_FORCE)
 
     composed = fight(
         charger,
         defender,
-        a_weapon=spear,
-        b_weapon=hand,
         a_prior_losses=reaction.casualties,
     )
 
@@ -115,8 +107,6 @@ def test_charge_sequence_matches_mixing_the_survivor_fights_by_hand() -> None:
         survivors = fight(
             charger.remove_casualties(felled),
             defender,
-            a_weapon=spear,
-            b_weapon=hand,
         )
         for a_lost, row in enumerate(survivors.losses):
             for b_lost, mass in enumerate(row):
@@ -135,25 +125,22 @@ def test_stand_and_shoot_erodes_the_chargers_combat_result() -> None:
     charge of the same size would.
     """
     archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
-    spear, hand = REPO.weapons["thrusting-spear"], REPO.weapons["hand-weapon"]
-    charger = _fielded(spearmen, 10).charging(Charge(8, ChargeArc.FRONT))
-    defender = _fielded(archers, 10)
-    reaction = stand_and_shoot(defender, charger, REPO.weapons["longbow"], phase_rules=IN_FORCE)
+    charger = (
+        _fielded(spearmen, 10).wielding("Thrusting Spear").charging(Charge(8, ChargeArc.FRONT))
+    )
+    defender = _fielded(archers, 10).wielding("Hand Weapon")
+    reaction = stand_and_shoot(defender.wielding("Longbow"), charger, phase_rules=IN_FORCE)
 
     unshot = combat_result(
         fight(
             charger,
             defender,
-            a_weapon=spear,
-            b_weapon=hand,
         )
     )
     shot = combat_result(
         fight(
             charger,
             defender,
-            a_weapon=spear,
-            b_weapon=hand,
             a_prior_losses=reaction.casualties,
         )
     )
@@ -164,9 +151,8 @@ def test_force_short_range_honours_long_range_as_a_no_op() -> None:
     """shoot_unit's force_short_range treats the shot as within half range."""
     archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
     forced = shoot_unit(
-        _fielded(archers, 10),
+        _fielded(archers, 10).wielding("Longbow"),
         _fielded(spearmen, 10),
-        REPO.weapons["longbow"],
         phase_rules=IN_FORCE,
         force_short_range=True,
     )
@@ -184,16 +170,15 @@ def test_charge_forms_an_engagement_and_its_reaction() -> None:
     volley matches resolving stand_and_shoot by hand. No melee is fought here.
     """
     archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
-    longbow = REPO.weapons["longbow"]
     charger, target = _fielded(spearmen, 10), _fielded(archers, 10)
     move = Charge(8, ChargeArc.FRONT)
 
     engagement = charge(charger, target, move, shooting_rules=IN_FORCE)
-    volley = engagement.react(StandAndShoot(longbow))
+    volley = engagement.react(StandAndShoot("Longbow"))
 
     assert engagement.a.movement.charge == move  # the charger entered carrying the charge
     assert engagement.b is target
-    assert volley == stand_and_shoot(target, charger, longbow, phase_rules=IN_FORCE)
+    assert volley == stand_and_shoot(target.wielding("Longbow"), charger, phase_rules=IN_FORCE)
     assert engagement.reaction is volley
 
 
@@ -204,21 +189,18 @@ def test_fighting_the_engagement_is_the_charges_first_round() -> None:
     marks the combat's first round; the charger struck first.
     """
     archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
-    spear, hand = REPO.weapons["thrusting-spear"], REPO.weapons["hand-weapon"]
-    longbow = REPO.weapons["longbow"]
-    charger, target = _fielded(spearmen, 10), _fielded(archers, 10)
+    charger = _fielded(spearmen, 10).wielding("Thrusting Spear")
+    target = _fielded(archers, 10).wielding("Hand Weapon")
     move = Charge(8, ChargeArc.FRONT)
 
     engagement = charge(charger, target, move, shooting_rules=IN_FORCE)
-    volley = engagement.react(StandAndShoot(longbow))
+    volley = engagement.react(StandAndShoot("Longbow"))
     assert volley is not None  # a Stand & Shoot reaction always looses a volley
-    outcome = COMBAT.fight(engagement, a_weapon=spear, b_weapon=hand)
+    outcome = COMBAT.fight(engagement)
 
     manual = fight(
         charger.charging(move),
         target,
-        a_weapon=spear,
-        b_weapon=hand,
         a_prior_losses=volley.casualties,
         first_round=True,
     )
@@ -230,15 +212,15 @@ def test_fighting_the_engagement_is_the_charges_first_round() -> None:
 def test_a_held_charge_fights_with_no_prior_losses() -> None:
     """Hold: no reaction volley, and the engagement's fight is the plain charge."""
     archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
-    spear, hand = REPO.weapons["thrusting-spear"], REPO.weapons["hand-weapon"]
-    charger, target = _fielded(spearmen, 10), _fielded(archers, 10)
+    charger = _fielded(spearmen, 10).wielding("Thrusting Spear")
+    target = _fielded(archers, 10).wielding("Hand Weapon")
     move = Charge(8, ChargeArc.FRONT)
 
     engagement = charge(charger, target, move, shooting_rules=IN_FORCE)
     engagement.react()  # default: Hold
-    outcome = COMBAT.fight(engagement, a_weapon=spear, b_weapon=hand)
+    outcome = COMBAT.fight(engagement)
 
-    manual = fight(charger.charging(move), target, a_weapon=spear, b_weapon=hand, first_round=True)
+    manual = fight(charger.charging(move), target, first_round=True)
     assert engagement.reaction is None
     assert outcome.losses == manual.losses
 

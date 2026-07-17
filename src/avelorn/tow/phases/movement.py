@@ -21,7 +21,6 @@ from avelorn.core.game import Phase
 from avelorn.tow.contingent import Charge, Contingent
 from avelorn.tow.phases.shooting import ShootingResult, shoot_unit
 from avelorn.tow.schema.rule import Rule
-from avelorn.tow.schema.weapon import Weapon
 
 logger = logging.getLogger(__name__)
 
@@ -37,13 +36,13 @@ _STAND_AND_SHOOT_TO_HIT = -1
 def stand_and_shoot(
     shooter: Contingent,
     target: Contingent,
-    weapon: Weapon,
     *,
     phase_rules: Mapping[str, Rule] = _NONE_IN_PLAY,
 ) -> ShootingResult:
     """Resolve a Stand & Shoot charge reaction: ``shooter`` shoots the ``target``.
 
-    The charged unit (``shooter``) looses one volley from ``weapon`` at the
+    The charged unit (``shooter``) looses one volley from the weapon it has
+    in hand (``shooter.in_hand()``) at the
     charging unit (``target``) as it closes, then Holds
     (the-movement-phase/stand-and-shoot). Two printed modifiers set this
     apart from an ordinary volley (the-shooting-phase/standing-and-shooting):
@@ -69,7 +68,6 @@ def stand_and_shoot(
     return shoot_unit(
         shooter,
         target,
-        weapon,
         phase_rules=phase_rules,
         hit_modifier=_STAND_AND_SHOOT_TO_HIT,
         force_short_range=True,
@@ -86,7 +84,11 @@ class Hold:
 class StandAndShoot:
     """The Stand & Shoot charge reaction: the target fires as the chargers close."""
 
-    weapon: Weapon  # the missile weapon; must be carried by the reacting unit
+    # The printed name of the missile weapon to fire; the reacting unit is
+    # armed with it (:meth:`~avelorn.tow.contingent.Contingent.wielding`) for
+    # the volley, since it is a different weapon from the one it fights the
+    # ensuing melee with.
+    weapon: str
 
 
 @dataclass(frozen=True)
@@ -156,9 +158,9 @@ class Engagement:
             UnmodelledRuleError: the declared reaction is Flee.
         """
         match reaction:
-            case StandAndShoot(weapon=weapon):
+            case StandAndShoot(weapon=name):
                 self.reaction = stand_and_shoot(
-                    self.b, self.a, weapon, phase_rules=self.shooting_rules
+                    self.b.wielding(name), self.a, phase_rules=self.shooting_rules
                 )
             case Flee():
                 raise UnmodelledRuleError("the Flee charge reaction is not modelled yet")

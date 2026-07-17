@@ -62,15 +62,16 @@ def main() -> None:
     if args.moved:
         attacker = attacker.after(Movement.march())
     defender = game.field(game.units[args.defender], args.defenders)
-    weapon = game.weapons[args.weapon]
-    result = game.shooting.volley(attacker, defender, weapon, distance=args.distance)
+    weapon_name = game.weapons[args.weapon].name
+    attacker = attacker.wielding(weapon_name)
+    result = game.shooting.volley(attacker, defender, distance=args.distance)
 
     def fmt_target(target: int | None) -> str:
         return f"{target}+" if target is not None else "-"
 
     print(
         f"{attacker.models} {attacker.unit.name} shoot "
-        f"{defender.models} {defender.unit.name} with {weapon.name}s\n"
+        f"{defender.models} {defender.unit.name} with {weapon_name}s\n"
         f"  to hit:  {fmt_target(result.hit_target)}   (p = {result.p_hit:.3f})\n"
         f"  to wound: {fmt_target(result.wound_target)}  (p = {result.p_wound:.3f})\n"
         f"  armour:  {fmt_target(result.save_target)}\n"

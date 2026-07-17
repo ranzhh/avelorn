@@ -316,12 +316,20 @@ def test_loadout_resolves_the_carried_weapons_rules(spearmen_unit: Unit) -> None
     assert index["Armour Bane (1)"].name == "Armour Bane (1)"
 
 
-def test_an_uncarried_weapon_cannot_be_fought_with(spearmen_unit: Unit) -> None:
-    """Every action's weapon choice is confirmed against the loadout."""
+def test_an_uncarried_weapon_cannot_be_wielded(spearmen_unit: Unit) -> None:
+    """A contingent is armed only with a weapon its loadout carries."""
     fielded = Contingent.field(spearmen_unit, 10, data=REPO)
-    assert fielded.wields(REPO.weapons["thrusting-spear"]) is REPO.weapons["thrusting-spear"]
-    with pytest.raises(ValueError, match="does not carry 'Longbow'"):
-        fielded.wields(REPO.weapons["longbow"])
+    assert fielded.wielding("Thrusting Spear").in_hand() is REPO.weapons["thrusting-spear"]
+    with pytest.raises(ValueError, match="no 'Longbow' in this loadout"):
+        fielded.wielding("Longbow")
+
+
+def test_an_unarmed_contingent_has_no_weapon_in_hand(spearmen_unit: Unit) -> None:
+    """A freshly fielded body carries weapons but has none in hand until armed."""
+    fielded = Contingent.field(spearmen_unit, 10, data=REPO)
+    assert fielded.weapon is None
+    with pytest.raises(ValueError, match="no weapon in hand"):
+        fielded.in_hand()
 
 
 # --- Formation: the geometry of ranks and files ---

@@ -92,35 +92,30 @@ def test_steps_follow_the_stage_declaration_order(binding: str) -> None:
 
 def test_volley_delegates_to_shoot_unit() -> None:
     """game.shooting.volley is shoot_unit with the game's rules injected."""
-    archers = _fielded(REPO.units["elven-archers"], 3)
+    archers = _fielded(REPO.units["elven-archers"], 3).wielding("Longbow")
     spearmen = _fielded(REPO.units["elven-spearmen"], 10)
-    longbow = REPO.weapons["longbow"]
-    bound = GAME.shooting.volley(archers, spearmen, longbow, distance=20)
-    direct = shoot_unit(
-        archers, spearmen, longbow, phase_rules=GAME.in_play[Phase.SHOOTING], distance=20
-    )
+    bound = GAME.shooting.volley(archers, spearmen, distance=20)
+    direct = shoot_unit(archers, spearmen, phase_rules=GAME.in_play[Phase.SHOOTING], distance=20)
     assert bound == direct
 
 
 def test_make_panic_tests_delegates() -> None:
     """game.shooting.make_panic_tests is the morale seam, bound."""
-    archers = _fielded(REPO.units["elven-archers"], 3)
+    archers = _fielded(REPO.units["elven-archers"], 3).wielding("Longbow")
     spearmen = _fielded(REPO.units["elven-spearmen"], 10)
-    volley = GAME.shooting.volley(archers, spearmen, REPO.weapons["longbow"])
+    volley = GAME.shooting.volley(archers, spearmen)
     assert GAME.shooting.make_panic_tests(volley, spearmen) == make_panic_tests(volley, spearmen)
 
 
 def test_fight_result_and_break_test_delegate() -> None:
     """The combat binding's three actions match the module functions."""
     spearmen = REPO.units["elven-spearmen"]
-    a, b = _fielded(spearmen, 5), _fielded(spearmen, 5)
-    spear = REPO.weapons["thrusting-spear"]
-    bound = GAME.combat.fight(a, b, a_weapon=spear, b_weapon=spear)
+    a = _fielded(spearmen, 5).wielding("Thrusting Spear")
+    b = _fielded(spearmen, 5).wielding("Thrusting Spear")
+    bound = GAME.combat.fight(a, b)
     direct = fight(
         a,
         b,
-        a_weapon=spear,
-        b_weapon=spear,
         phase_rules=GAME.in_play[Phase.COMBAT],
     )
     assert bound == direct
