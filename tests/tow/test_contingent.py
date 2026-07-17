@@ -16,7 +16,7 @@ from avelorn.tow.contingent import (
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.muster import Complement
 from avelorn.tow.schema.rule import ModifierEffect
-from avelorn.tow.schema.unit import TroopType, Unit
+from avelorn.tow.schema.unit import Characteristic, TroopType, Unit
 
 REPO = TOWRepository()
 
@@ -436,6 +436,27 @@ def test_rank_bonus_counts_ranks_behind_the_first(spearmen_unit: Unit) -> None:
 def test_rank_bonus_is_capped_by_troop_type(spearmen_unit: Unit) -> None:
     """Regular Infantry cap the bonus at +2, however deep the unit ranks."""
     assert _fielded(spearmen_unit, 25).rank_bonus == 2  # five ranks, capped
+
+
+def test_melee_attacks_are_the_fighting_rank_alone(spearmen_unit: Unit) -> None:
+    """Only the front rank fights; deeper ranks add nothing, a wider front does.
+
+    Regular Infantry are A1, five wide by default. A single rank of five
+    throws five; ten or fifteen throw the same five (the ranks behind press
+    forward but do not fight); ranked wider, the whole body is one fighting
+    rank and every model throws.
+    """
+    assert _fielded(spearmen_unit, 5).melee_attacks() == 5  # one rank of five
+    assert _fielded(spearmen_unit, 10).melee_attacks() == 5  # front rank of a two-rank body
+    assert _fielded(spearmen_unit, 15).melee_attacks() == 5  # deeper still, front rank only
+    assert _fielded(spearmen_unit, 15, frontage=15).melee_attacks() == 15  # all in one rank
+
+
+def test_melee_attacks_scale_with_the_attacks_characteristic(spearmen_unit: Unit) -> None:
+    """Each fighting-rank model throws its full Attacks."""
+    two_attacks = spearmen_unit.model_copy(deep=True)
+    two_attacks.profiles[0].characteristics[Characteristic.ATTACKS] = 2
+    assert _fielded(two_attacks, 10).melee_attacks() == 10  # a front rank of five, A2
 
 
 def test_a_rear_rank_counts_only_when_wide_enough(spearmen_unit: Unit) -> None:

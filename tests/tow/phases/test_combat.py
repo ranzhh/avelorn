@@ -28,9 +28,9 @@ IN_FORCE = {r.name: r for r in REPO.rules.values() if r.category == Phase.SHOOTI
 COMBAT = CombatPhase(in_play={})
 
 
-def _fielded(unit: Unit, models: int) -> Contingent:
+def _fielded(unit: Unit, models: int, *, frontage: int | None = None) -> Contingent:
     # Field at the printed, optionless loadout, with the real registries.
-    return Contingent.field(unit, models, data=REPO)
+    return Contingent.field(unit, models, data=REPO, frontage=frontage)
 
 
 def test_strike_golden_no_save() -> None:
@@ -99,7 +99,7 @@ def test_strike_unit_spearmen_vs_spearmen() -> None:
         _fielded(spearmen, 5).wielding("Thrusting Spear"),
         _fielded(spearmen, 10),
     )
-    assert result.attacks == 5  # 5 fighters * A1
+    assert result.attacks == 5  # a single fighting rank of five, A1
     assert result.hit_target == 4
     assert result.wound_target == 4
     assert result.save_target == 5
@@ -110,7 +110,7 @@ def test_strike_unit_spearmen_vs_spearmen() -> None:
 
 
 def test_strike_unit_attacks_scale_with_the_attacks_characteristic() -> None:
-    """Each fighter makes its full Attacks: A2 over 5 fighters is 10 attacks."""
+    """The fighting rank makes its full Attacks: A2 over a rank of 5 is 10 attacks."""
     spearmen = REPO.units["elven-spearmen"]
     two_attacks = spearmen.model_copy(deep=True)
     two_attacks.profiles[0].characteristics[Characteristic.ATTACKS] = 2
@@ -119,6 +119,47 @@ def test_strike_unit_attacks_scale_with_the_attacks_characteristic() -> None:
         _fielded(spearmen, 10),
     )
     assert result.attacks == 10
+
+
+def test_strike_unit_fights_with_the_fighting_rank_only() -> None:
+    """Only the front rank fights; the ranks behind it do not.
+
+    In The Old World a unit fights with its fighting rank alone unless a rule
+    grants supporting attacks (the-combat-phase/who-can-fight), and the
+    thrusting spear's Fight in Extra Rank is not factored yet. So ten A1
+    spearmen at the five-wide default throw five attacks — their front rank —
+    and fifteen throw the same: the deeper ranks press forward but do not
+    strike.
+    """
+    spearmen = REPO.units["elven-spearmen"]  # A1, Regular Infantry (5 wide)
+    two_ranks = strike_unit(
+        _fielded(spearmen, 10).wielding("Thrusting Spear"), _fielded(spearmen, 40)
+    )
+    assert two_ranks.attacks == 5  # the front rank of five only
+
+    three_ranks = strike_unit(
+        _fielded(spearmen, 15).wielding("Thrusting Spear"), _fielded(spearmen, 40)
+    )
+    assert three_ranks.attacks == 5  # the ranks behind still do not fight
+    assert any("Fight In Extra Rank" in note for note in three_ranks.notes)  # its rule, unfactored
+
+
+def test_strike_unit_widening_the_front_brings_more_models_to_fight() -> None:
+    """A wider fighting rank fights with more models; a deeper one does not.
+
+    Fifteen A1 spearmen ranked five wide fight with five (one rank); ranked
+    fifteen wide they fight with all fifteen — every model is in the front,
+    fighting rank.
+    """
+    spearmen = REPO.units["elven-spearmen"]
+    narrow = strike_unit(
+        _fielded(spearmen, 15).wielding("Thrusting Spear"), _fielded(spearmen, 40)
+    )
+    wide = strike_unit(
+        _fielded(spearmen, 15, frontage=15).wielding("Thrusting Spear"), _fielded(spearmen, 40)
+    )
+    assert narrow.attacks == 5
+    assert wide.attacks == 15
 
 
 def test_strike_unit_rejects_a_missile_only_weapon() -> None:
@@ -201,6 +242,32 @@ def test_fight_coupling_reduces_the_return_strike() -> None:
     )
     assert expected_value(result.a_casualties) < expected_value(full_strength.casualties)
     assert any("Fight In Extra Rank" in note for note in result.notes)
+
+
+def test_fight_caps_a_deep_unit_at_its_fighting_rank() -> None:
+    """In a fight, ranks of depth add no blows, but a wider front does.
+
+    Two I4 spearmen bodies strike simultaneously, so each side's blows land
+    at its entering strength (no coupling reduction). Against a defender too
+    large to wipe out, fifteen attackers three ranks deep fell exactly as
+    many as ten attackers two ranks deep — both fight with only their front
+    rank of five. The same fifteen ranked one rank wide fell strictly more:
+    every one of them is in the fighting rank.
+    """
+    spearmen = REPO.units["elven-spearmen"]
+    big = _fielded(spearmen, 40)
+    deep = fight(
+        _fielded(spearmen, 15).wielding("Thrusting Spear"), big.wielding("Thrusting Spear")
+    )
+    shallow = fight(
+        _fielded(spearmen, 10).wielding("Thrusting Spear"), big.wielding("Thrusting Spear")
+    )
+    wide = fight(
+        _fielded(spearmen, 15, frontage=15).wielding("Thrusting Spear"),
+        big.wielding("Thrusting Spear"),
+    )
+    assert expected_value(deep.b_casualties) == pytest.approx(expected_value(shallow.b_casualties))
+    assert expected_value(wide.b_casualties) > expected_value(deep.b_casualties)
 
 
 def test_fight_rejects_negative_models() -> None:

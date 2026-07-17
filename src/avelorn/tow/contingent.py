@@ -18,7 +18,7 @@ from avelorn.tow.engine.rules import printed_rule
 from avelorn.tow.muster import Complement
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
-from avelorn.tow.schema.unit import Unit
+from avelorn.tow.schema.unit import Characteristic, Unit
 from avelorn.tow.schema.weapon import Weapon
 
 
@@ -389,6 +389,23 @@ class Contingent:
         rear = 1 if formation.remainder >= per_rank else 0
         ranks_behind_first = formation.full_ranks + rear - 1
         return min(max(ranks_behind_first, 0), profile.max_rank_bonus)
+
+    def melee_attacks(self) -> int:
+        """The attacks this body throws striking a frontal melee.
+
+        Only the fighting rank fights — the front rank, in base contact with
+        the foe (the-combat-phase/who-can-fight: "usually, only models in a
+        fighting rank can fight, whilst the models behind them press forward")
+        — each model making its full Attacks; the whole front rank is taken to
+        be engaged, an equally wide foe. The supporting attacks that some
+        weapons grant the rank behind (Fight in Extra Rank) are a separate
+        rule, not modelled here. A profile with no printed Attacks throws none.
+
+        Returns:
+            The number of attacks thrown this round.
+        """
+        attacks_per_model = self.unit.profiles[0][Characteristic.ATTACKS] or 0
+        return self.formation.files * attacks_per_model
 
     def after(self, movement: Movement) -> "Contingent":
         """This contingent with its Movement-phase ``movement`` set.
