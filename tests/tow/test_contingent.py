@@ -1,5 +1,7 @@
 """The fielded unit: Contingent.deploy / field, and the Charge bonus."""
 
+import dataclasses
+
 import pytest
 
 from avelorn.tow.contingent import (
@@ -316,12 +318,51 @@ def test_loadout_resolves_the_carried_weapons_rules(spearmen_unit: Unit) -> None
     assert index["Armour Bane (1)"].name == "Armour Bane (1)"
 
 
-def test_an_uncarried_weapon_cannot_be_fought_with(spearmen_unit: Unit) -> None:
-    """Every action's weapon choice is confirmed against the loadout."""
+def test_an_uncarried_weapon_cannot_be_wielded(spearmen_unit: Unit) -> None:
+    """A contingent is armed only with a weapon its loadout carries."""
     fielded = Contingent.field(spearmen_unit, 10, data=REPO)
-    assert fielded.wields(REPO.weapons["thrusting-spear"]) is REPO.weapons["thrusting-spear"]
-    with pytest.raises(ValueError, match="does not carry 'Longbow'"):
-        fielded.wields(REPO.weapons["longbow"])
+    assert fielded.wielding("Thrusting Spear").in_hand() is REPO.weapons["thrusting-spear"]
+    with pytest.raises(ValueError, match="no 'Longbow' in this loadout"):
+        fielded.wielding("Longbow")
+
+
+def test_an_unarmed_contingent_has_no_weapon_in_hand(spearmen_unit: Unit) -> None:
+    """A freshly fielded body carries weapons but has none in hand until armed."""
+    fielded = Contingent.field(spearmen_unit, 10, data=REPO)
+    assert fielded.weapon is None
+    with pytest.raises(ValueError, match="no weapon in hand"):
+        fielded.in_hand()
+
+
+def test_shooting_defaults_to_the_sole_missile_weapon() -> None:
+    """An unarmed unit that carries one missile weapon shoots it without arming."""
+    archers = Contingent.field(REPO.units["elven-archers"], 10, data=REPO)
+    assert archers.weapon is None
+    assert archers.shooting_weapon() is REPO.weapons["longbow"]
+
+
+def test_shooting_still_honours_an_armed_weapon() -> None:
+    """Arming overrides the default: the weapon in hand is what shoots."""
+    guard = Contingent.field(REPO.units["lothern-sea-guard"], 10, data=REPO)
+    assert guard.wielding("Warbow").shooting_weapon() is REPO.weapons["warbow"]
+
+
+def test_a_contingent_with_no_missile_weapon_cannot_default_a_shot(spearmen_unit: Unit) -> None:
+    """Spearmen carry no bow, so there is nothing to default a volley to."""
+    fielded = Contingent.field(spearmen_unit, 10, data=REPO)
+    with pytest.raises(ValueError, match="no missile weapon to shoot with"):
+        fielded.shooting_weapon()
+
+
+def test_several_missile_weapons_need_an_explicit_choice() -> None:
+    """A unit carrying more than one bow must name which — no default is safe."""
+    archers = Contingent.field(REPO.units["elven-archers"], 10, data=REPO)
+    two_bows = dataclasses.replace(
+        archers.loadout, weapons=(REPO.weapons["longbow"], REPO.weapons["warbow"])
+    )
+    ambiguous = dataclasses.replace(archers, loadout=two_bows)
+    with pytest.raises(ValueError, match="several missile weapons"):
+        ambiguous.shooting_weapon()
 
 
 # --- Formation: the geometry of ranks and files ---

@@ -47,7 +47,7 @@ from avelorn.tow.schema.psychology import PanicCause
 from avelorn.tow.schema.rule import Condition, RerollEffect, Rule
 from avelorn.tow.schema.stage import Stage
 from avelorn.tow.schema.unit import Characteristic
-from avelorn.tow.schema.weapon import Weapon, WeaponProfile
+from avelorn.tow.schema.weapon import WeaponProfile
 
 logger = logging.getLogger(__name__)
 
@@ -236,7 +236,6 @@ def _engagement_conditions(
 def shoot_unit(
     attacker: Contingent,
     defender: Contingent,
-    weapon: Weapon,
     *,
     phase_rules: Mapping[str, Rule] = _NONE_IN_PLAY,
     distance: int | None = None,
@@ -244,22 +243,23 @@ def shoot_unit(
     force_short_range: bool = False,
     stand_and_shoot: bool = False,
 ) -> ShootingResult:
-    """Resolve ``attacker`` shooting a volley of ``weapon`` at ``defender``.
+    """Resolve ``attacker`` shooting a volley at ``defender``.
 
     One shot per model in the unit's front rank (``attacker.formation.files``),
-    using each side's first (rank-and-file) profile and the weapon's
-    missile profile; casualties cap at the defender's fielded ``models``.
+    using each side's first (rank-and-file) profile and the missile profile
+    of the weapon the attacker shoots with (``attacker.shooting_weapon()`` —
+    the weapon armed through
+    :meth:`~avelorn.tow.contingent.Contingent.wielding`, or the sole carried
+    missile weapon when none is armed); casualties cap at the defender's
+    fielded ``models``.
     Only the front rank fires on flat ground; a hill would add a rank
     (not modelled). A weapon with Volley Fire adds half of each rank
     behind the front (rounding up) while the unit is stationary
     (``attacker.movement.moved`` False) and not making a Stand & Shoot reaction.
     To resolve a partial volley (only some models in range
-    or sight), field the shooting subset as its own contingent. ``weapon``
-    is the per-action
-    choice and must be carried — resolve a text boundary's printed name
-    through ``attacker.loadout.weapon(...)``; the weapon's rules compile
-    from the loadout's resolved index, and the defender's save folds
-    from its loadout. ``phase_rules`` are the phase's rules in force —
+    or sight), field the shooting subset as its own contingent. The weapon's
+    rules compile from the loadout's resolved index, and the defender's save
+    folds from its loadout. ``phase_rules`` are the phase's rules in force —
     the chapter rules that apply to every volley (Firing at Long Range,
     Moving and Shooting), resolved by printed name; the Game assembles
     the mapping once (game.in_play), the way a loadout resolves a
@@ -283,11 +283,11 @@ def shoot_unit(
         The shooting outcome.
 
     Raises:
-        ValueError: if the weapon is not carried or has no missile
-            profile, the attacker profile has no Ballistic Skill, the
-            defender profile has no Toughness, or the weapon shoots at
-            the wielder's Strength and
-            the attacker profile has none.
+        ValueError: if the attacker has no missile weapon to shoot with (none
+            carried, or several unarmed), the weapon has no missile profile,
+            the attacker profile has no Ballistic Skill, the defender profile
+            has no Toughness, or the weapon shoots at the wielder's Strength
+            and the attacker profile has none.
     """
     # Only the unit's front rank fires (shooting-with-more-than-one-rank);
     # a unit on a hill fires with one rank more, not modelled — flat ground
@@ -300,7 +300,7 @@ def shoot_unit(
     # per-profile resolution with the volley combined. Requires a notion
     # of unit composition (which models are actually fielded), which the
     # schema does not have yet.
-    chosen = attacker.wields(weapon)
+    chosen = attacker.shooting_weapon()
     profile = chosen.missile_profile
     if profile is None:
         raise ValueError(f"{chosen.name} has no missile profile; it cannot shoot")
@@ -531,12 +531,11 @@ class ShootingPhase(Phase):
         self,
         attacker: Contingent,
         defender: Contingent,
-        weapon: Weapon,
         *,
         distance: int | None = None,
         hit_modifier: int = 0,
     ) -> ShootingResult:
-        """One unit shoots another, under the phase's rules in force.
+        """One unit shoots another with the weapon in hand, under the rules in force.
 
         Returns:
             The shooting outcome.
@@ -544,7 +543,6 @@ class ShootingPhase(Phase):
         return shoot_unit(
             attacker,
             defender,
-            weapon,
             phase_rules=self.in_play,
             distance=distance,
             hit_modifier=hit_modifier,

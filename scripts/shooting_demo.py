@@ -4,8 +4,8 @@ Loads units, weapons, and armour from the data/ YAML tree, resolves the
 shooting chain, and prints the kill distribution.
 
 Usage: uv run python scripts/shooting_demo.py [shooters] [attacker] [defender] [defenders]
-       (unit slugs default to elven-archers and elven-spearmen; the weapon
-       defaults to the longbow, overridable with --weapon)
+       (unit slugs default to elven-archers and elven-spearmen; with no
+       --weapon the attacker fires its sole missile weapon)
 
 Pass -v/--verbose to also emit the DEBUG math trace to stderr.
 """
@@ -34,7 +34,11 @@ def main() -> None:
         default=10,
         help="models in the target unit; caps casualties",
     )
-    parser.add_argument("--weapon", default="longbow", help="weapon slug the attacker shoots with")
+    parser.add_argument(
+        "--weapon",
+        default=None,
+        help="weapon slug to shoot with; defaults to the unit's sole missile weapon",
+    )
     parser.add_argument(
         "--distance", type=int, default=None, help="inches to the target (enables range rules)"
     )
@@ -62,15 +66,19 @@ def main() -> None:
     if args.moved:
         attacker = attacker.after(Movement.march())
     defender = game.field(game.units[args.defender], args.defenders)
-    weapon = game.weapons[args.weapon]
-    result = game.shooting.volley(attacker, defender, weapon, distance=args.distance)
+    # With no --weapon the unit fires its sole missile weapon (shooting's
+    # default); a slug arms it explicitly, as a unit carrying several must.
+    if args.weapon is not None:
+        attacker = attacker.wielding(game.weapons[args.weapon].name)
+    result = game.shooting.volley(attacker, defender, distance=args.distance)
+    weapon_name = attacker.shooting_weapon().name
 
     def fmt_target(target: int | None) -> str:
         return f"{target}+" if target is not None else "-"
 
     print(
         f"{attacker.models} {attacker.unit.name} shoot "
-        f"{defender.models} {defender.unit.name} with {weapon.name}s\n"
+        f"{defender.models} {defender.unit.name} with {weapon_name}s\n"
         f"  to hit:  {fmt_target(result.hit_target)}   (p = {result.p_hit:.3f})\n"
         f"  to wound: {fmt_target(result.wound_target)}  (p = {result.p_wound:.3f})\n"
         f"  armour:  {fmt_target(result.save_target)}\n"

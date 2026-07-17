@@ -58,21 +58,18 @@ def main() -> None:
     game = TOWGame.load_data()
     spearmen_unit = game.units["elven-spearmen"]
     archers_unit = game.units["elven-archers"]
-    # The scene fixes each unit's weapon for the phase it acts in: the
-    # Archers shoot the Longbow, then defend with a Hand Weapon; the Spearmen
-    # charge home with the Thrusting Spear.
-    spear = game.weapons["thrusting-spear"]
-    hand_weapon = game.weapons["hand-weapon"]
-    longbow = game.weapons["longbow"]
-
-    spearmen = game.field(spearmen_unit, args.spearmen)
-    archers = game.field(archers_unit, args.archers)
+    # The scene arms each unit for the melee it heads into: the Spearmen
+    # charge home with the Thrusting Spear, the Archers defend with a Hand
+    # Weapon. The Stand & Shoot fires the Archers' sole missile weapon (their
+    # Longbow) without naming it.
+    spearmen = game.field(spearmen_unit, args.spearmen).wielding("Thrusting Spear")
+    archers = game.field(archers_unit, args.archers).wielding("Hand Weapon")
     move = Charge(args.charge_inches, ChargeArc.FRONT)
 
     engagement = game.movement.charge(spearmen, archers, move)
-    reaction = engagement.react(StandAndShoot(longbow))
+    reaction = engagement.react(StandAndShoot())
     assert reaction is not None  # a StandAndShoot reaction was declared
-    melee = game.combat.fight(engagement, a_weapon=spear, b_weapon=hand_weapon)
+    melee = game.combat.fight(engagement)
     scored = game.combat.result(melee)
     breaks = game.combat.break_test(scored, spearmen_unit, archers_unit)
 

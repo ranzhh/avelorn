@@ -34,11 +34,12 @@ def main() -> None:
         configure_logging(logging.DEBUG)
 
     game = TOWGame.load_data()
-    spearmen = Contingent.deploy("elven-spearmen", args.spearmen, data=game.repository)
-    archers = Contingent.deploy("elven-archers", args.archers, data=game.repository)
-    spear = game.weapons["thrusting-spear"]
-    hand = game.weapons["hand-weapon"]
-    longbow = game.weapons["longbow"]
+    spearmen = Contingent.deploy("elven-spearmen", args.spearmen, data=game.repository).wielding(
+        "Thrusting Spear"
+    )
+    archers = Contingent.deploy("elven-archers", args.archers, data=game.repository).wielding(
+        "Hand Weapon"
+    )
 
     turn = game.turn()
 
@@ -48,7 +49,7 @@ def main() -> None:
     with turn.movement() as mv:
         move = Charge(args.charge_inches, ChargeArc.FRONT)
         engagement = mv.charge(spearmen, archers, move)
-        reaction = engagement.react(StandAndShoot(longbow))
+        reaction = engagement.react(StandAndShoot())  # fires the Archers' sole missile weapon
         inches = args.charge_inches
         print(
             f'Movement phase: {args.spearmen} Spearmen charge {args.archers} Archers ({inches}").'
@@ -61,7 +62,7 @@ def main() -> None:
         print("Shooting phase: both units are locked in combat — no shots.\n")
 
     with turn.combat() as cb:
-        result = cb.result(cb.fight(engagement, a_weapon=spear, b_weapon=hand))
+        result = cb.result(cb.fight(engagement))
         print("Combat phase: fighting the engagement the charge formed.")
         print(
             f"  P(Spearmen win) {result.p_a_wins:.3f}   "

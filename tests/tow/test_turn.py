@@ -12,29 +12,28 @@ GAME = TOWGame.assemble(REPO)
 
 
 def _spearmen(models: int) -> Contingent:
-    return Contingent.field(REPO.units["elven-spearmen"], models, data=REPO)
+    return Contingent.field(REPO.units["elven-spearmen"], models, data=REPO).wielding(
+        "Thrusting Spear"
+    )
 
 
 def _archers(models: int) -> Contingent:
-    return Contingent.field(REPO.units["elven-archers"], models, data=REPO)
+    return Contingent.field(REPO.units["elven-archers"], models, data=REPO).wielding("Hand Weapon")
 
 
 def test_a_charge_in_movement_is_fought_in_combat() -> None:
     """The engagement a charge forms is carried to the Combat phase and fought.
 
     The charger strikes first, and its Stand & Shoot reaction thinned it before
-    the melee.
+    the melee. Each side entered the engagement already armed for the melee, so
+    the Combat phase fights it without naming a weapon.
     """
     turn = GAME.turn()
     with turn.movement() as mv:
         engagement = mv.charge(_spearmen(10), _archers(10), Charge(8, ChargeArc.FRONT))
-        engagement.react(StandAndShoot(REPO.weapons["longbow"]))
+        engagement.react(StandAndShoot("Longbow"))
     with turn.combat() as cb:
-        fought = cb.fight(
-            engagement,
-            a_weapon=REPO.weapons["thrusting-spear"],
-            b_weapon=REPO.weapons["hand-weapon"],
-        )
+        fought = cb.fight(engagement)
     assert fought.first_striker is engagement.a  # the charger struck first
     assert engagement.reaction is not None  # the Stand & Shoot volley was resolved
 

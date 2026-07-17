@@ -55,7 +55,6 @@ from avelorn.tow.engine.rules import (
 from avelorn.tow.phases.movement import Engagement
 from avelorn.tow.schema.rule import Condition, Rule
 from avelorn.tow.schema.unit import Characteristic, Unit
-from avelorn.tow.schema.weapon import Weapon
 
 logger = logging.getLogger(__name__)
 
@@ -235,7 +234,6 @@ class _Engagement:
 def _engage(
     attacker: Contingent,
     defender: Contingent,
-    weapon: Weapon,
     *,
     hit_modifier: int,
     conditions: Mapping[Condition, bool | None] | None = None,
@@ -246,7 +244,7 @@ def _engage(
     # the defender's armour, compile the weapon's rules, and walk one
     # attack. TODO(#46): rank-and-file profile only — a champion fighting
     # at a different WS is a separate attack batch needing unit composition.
-    weapon = attacker.wields(weapon)
+    weapon = attacker.in_hand()
     profile = weapon.combat_profile
     if profile is None:
         raise ValueError(f"{weapon.name} has no Combat profile; it cannot fight")
@@ -322,14 +320,14 @@ def _engage(
 def strike_unit(
     attacker: Contingent,
     defender: Contingent,
-    weapon: Weapon,
     *,
     hit_modifier: int = 0,
 ) -> StrikeResult:
-    """Resolve ``attacker`` striking ``weapon`` blows against ``defender``.
+    """Resolve ``attacker`` striking against ``defender`` with the weapon in hand.
 
     Each fielded model (``attacker.models``) makes its full Attacks with
-    the weapon's Combat profile, using each side's first (rank-and-file)
+    the Combat profile of the weapon the attacker is wielding
+    (``attacker.in_hand()``), using each side's first (rank-and-file)
     profile; casualties cap at the defender's fielded ``models``. The
     defender's save folds from its resolved loadout, and the weapon's
     rules compile into the dice walk from the attacker's resolved loadout
@@ -341,15 +339,16 @@ def strike_unit(
         The close-combat outcome for this side's blows.
 
     Raises:
-        ValueError: the weapon has no Combat profile, either profile lacks
-            Weapon Skill, the attacker profile has no Attacks, the defender
-            profile has no Toughness, or the weapon strikes at the
-            wielder's Strength and the attacker profile has none.
+        ValueError: the attacker has no weapon in hand, the weapon has no
+            Combat profile, either profile lacks Weapon Skill, the attacker
+            profile has no Attacks, the defender profile has no Toughness, or
+            the weapon strikes at the wielder's Strength and the attacker
+            profile has none.
     """
     fighters, defenders = attacker.models, defender.models
     if fighters < 0:
         raise ValueError("fighters must be >= 0")
-    engagement = _engage(attacker, defender, weapon, hit_modifier=hit_modifier)
+    engagement = _engage(attacker, defender, hit_modifier=hit_modifier)
     attacks = fighters * engagement.attacks_per_model
     distribution, casualties = wound_and_casualties(
         attacks,
@@ -501,8 +500,6 @@ def fight(
     a: Contingent,
     b: Contingent,
     *,
-    a_weapon: Weapon,
-    b_weapon: Weapon,
     a_prior_losses: Sequence[float] | None = None,
     b_prior_losses: Sequence[float] | None = None,
     first_round: bool | None = None,
@@ -510,9 +507,11 @@ def fight(
 ) -> FightResult:
     """Resolve one round of close combat between two single-profile units.
 
-    ``a_weapon`` and ``b_weapon`` are the Combat weapons each side fights
-    with — a per-side choice, since a unit may carry several (a hand weapon
-    and a great weapon) and picks one to swing.
+    Each side fights with the weapon it has in hand (``a.in_hand()`` /
+    ``b.in_hand()``), the one it was armed with through
+    :meth:`~avelorn.tow.contingent.Contingent.wielding` — a per-side choice,
+    since a unit may carry several (a hand weapon and a great weapon) and
+    picks one to swing.
 
     Striking order is by rank-and-file Initiative (highest first): the
     higher-Initiative side strikes at full strength, its casualties are
@@ -576,12 +575,8 @@ def fight(
     # the other.
     a_conditions = _combat_conditions(first_round, a)
     b_conditions = _combat_conditions(first_round, b)
-    a_strikes = _engage(
-        a, b, a_weapon, hit_modifier=0, conditions=a_conditions, phase_rules=phase_rules
-    )
-    b_strikes = _engage(
-        b, a, b_weapon, hit_modifier=0, conditions=b_conditions, phase_rules=phase_rules
-    )
+    a_strikes = _engage(a, b, hit_modifier=0, conditions=a_conditions, phase_rules=phase_rules)
+    b_strikes = _engage(b, a, hit_modifier=0, conditions=b_conditions, phase_rules=phase_rules)
     a_bonus = 0 if a.movement.charge is None else a.movement.charge.initiative_bonus
     b_bonus = 0 if b.movement.charge is None else b.movement.charge.initiative_bonus
     a_initiative = effective_initiative(a, a_bonus, a_conditions)
@@ -901,23 +896,16 @@ class CombatPhase(Phase):
     )
 
     @overload
-    def fight(
-        self, combat: Engagement, /, *, a_weapon: Weapon, b_weapon: Weapon
-    ) -> FightResult: ...
+    def fight(self, combat: Engagement, /) -> FightResult: ...
 
     @overload
-    def fight(
-        self, combat: Contingent, opponent: Contingent, /, *, a_weapon: Weapon, b_weapon: Weapon
-    ) -> FightResult: ...
+    def fight(self, combat: Contingent, opponent: Contingent, /) -> FightResult: ...
 
     def fight(
         self,
         combat: Engagement | Contingent,
         opponent: Contingent | None = None,
         /,
-        *,
-        a_weapon: Weapon,
-        b_weapon: Weapon,
     ) -> FightResult:
         """One round of a combat, under the chapter's rules in force.
 
@@ -925,7 +913,9 @@ class CombatPhase(Phase):
         — a charge-formed combat carrying the charge Initiative bonus, its
         first-round status, and any Stand & Shoot casualties — or two
         contingents in base contact, taken as a plain frontal standing combat:
-        no charge, not a first round (the "or something else" opening).
+        no charge, not a first round (the "or something else" opening). Each
+        side swings the weapon it has in hand, armed through
+        :meth:`~avelorn.tow.contingent.Contingent.wielding`.
 
         Returns:
             The round's joint casualty distribution.
@@ -946,8 +936,6 @@ class CombatPhase(Phase):
         return fight(
             a,
             b,
-            a_weapon=a_weapon,
-            b_weapon=b_weapon,
             a_prior_losses=a_prior_losses,
             first_round=first_round,
             phase_rules=self.in_play,

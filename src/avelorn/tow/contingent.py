@@ -59,7 +59,7 @@ class Loadout:
         The text boundary's resolver: a CLI argument or an API request
         names the weapon, this turns it into the entry once, and the
         engine works with the object from there
-        (:meth:`Contingent.wields` confirms it is carried).
+        (:meth:`Contingent.wielding` arms a contingent through it).
 
         Returns:
             The carried weapon entry.
@@ -308,11 +308,15 @@ class Contingent:
     the fluent copies: a post-casualty remnant is :meth:`remove_casualties`, a
     mover is :meth:`after`, a charger :meth:`charging`.
 
-    The weapon in use is *not* carried here: it is a per-action choice, so
-    the same contingent shoots with its bow one moment and fights the
-    ensuing melee with a hand weapon the next. Each action takes the chosen
-    weapon (:func:`~avelorn.tow.phases.combat.fight`,
-    :func:`~avelorn.tow.phases.movement.stand_and_shoot`).
+    The weapon in use is a per-action choice — the same contingent shoots
+    with its bow one moment and fights the ensuing melee with a hand weapon
+    the next — so it rides here as a *selected* weapon, set for the action
+    through :meth:`wielding` (which picks one from the loadout by name) and
+    read back through :meth:`in_hand`. A freshly fielded body has none in
+    hand; every verb reads the wielded weapon off the side that acts
+    (:func:`~avelorn.tow.phases.combat.fight`,
+    :func:`~avelorn.tow.phases.movement.stand_and_shoot`), so a contingent
+    is armed before it fights or shoots.
 
     Today a contingent is a single homogeneous body — one profile (the
     rank-and-file, ``unit.profiles[0]``). A real contingent can be
@@ -339,6 +343,12 @@ class Contingent:
     # stationary condition) and by :func:`~avelorn.tow.phases.combat.fight`
     # for the striking order's charge Initiative bonus.
     movement: Movement = field(default_factory=Movement.stationary)
+    # The weapon selected for the current action, picked from the loadout by
+    # name through :meth:`wielding`. A per-action choice (a unit shoots its
+    # bow, then fights the ensuing melee with a hand weapon), so it is not
+    # fixed at fielding: None until the contingent is armed, read back
+    # through :meth:`in_hand`.
+    weapon: Weapon | None = None
 
     def __post_init__(self) -> None:
         """Reject a frontage that is not a positive width.
@@ -418,24 +428,75 @@ class Contingent:
         """
         return replace(self, models=self.models - casualties)
 
-    def wields(self, weapon: Weapon) -> Weapon:
-        """The weapon, confirmed carried: a unit fights with what it has.
+    def wielding(self, name: str) -> "Contingent":
+        """This contingent armed with the carried weapon named ``name``.
 
-        Every action's weapon choice passes through here, so an
-        arbitrary entry cannot be fought with — only what was fielded.
+        The one place a fielded body picks the weapon it acts with — from
+        its own loadout, by printed name (:meth:`Loadout.weapon`, which
+        rejects a name the loadout does not carry), so only what was fielded
+        can be fought or fired with. A per-action choice, spelt as the arming
+        it is: ``spearmen.wielding("Thrusting Spear")`` reads as the weapon
+        taken in hand, not a field assignment. Read it back with
+        :meth:`in_hand`.
 
         Returns:
-            The same weapon, when the loadout carries it.
+            A copy wielding that weapon; the original is unchanged.
+        """
+        return replace(self, weapon=self.loadout.weapon(name))
+
+    def in_hand(self) -> Weapon:
+        """The weapon this contingent was armed to act with.
+
+        The strict reader, used by melee: the choice is made once — through
+        :meth:`wielding` — and read off the side that acts, never threaded
+        through the call. A fight names its weapon; there is no default,
+        because a unit that carries a special weapon (a thrusting spear, a
+        great weapon) almost always means to swing it, and a silent fallback
+        would quietly fight with the wrong one. Shooting relaxes this through
+        :meth:`shooting_weapon`, where the sole missile weapon is unambiguous.
+
+        Returns:
+            The selected weapon.
 
         Raises:
-            ValueError: the loadout does not carry it.
+            ValueError: nothing is in hand — the contingent was never armed.
         """
-        if weapon not in self.loadout.weapons:
-            carried = ", ".join(w.name for w in self.loadout.weapons) or "nothing"
+        if self.weapon is None:
             raise ValueError(
-                f"{self.unit.name} does not carry {weapon.name!r}; carried: {carried}"
+                f"{self.unit.name} has no weapon in hand; arm it with .wielding(name)"
             )
-        return weapon
+        return self.weapon
+
+    def shooting_weapon(self) -> Weapon:
+        """The missile weapon this contingent fires.
+
+        Shooting keeps arming optional where the choice cannot be mistaken:
+        a contingent armed through :meth:`wielding` fires that weapon, but an
+        unarmed one that carries exactly one missile weapon fires it without
+        ceremony — the common case, a unit of archers with only its bow.
+        Melee has no such default (see :meth:`in_hand`); shooting does,
+        because a lone bow is the only thing it could mean.
+
+        Returns:
+            The weapon in hand, or — when none is — the sole carried missile
+            weapon.
+
+        Raises:
+            ValueError: unarmed and the loadout carries no missile weapon, or
+                more than one, so the choice cannot be made for the caller.
+        """
+        if self.weapon is not None:
+            return self.weapon
+        missile = [weapon for weapon in self.loadout.weapons if weapon.missile_profile is not None]
+        if len(missile) == 1:
+            return missile[0]
+        if not missile:
+            raise ValueError(f"{self.unit.name} carries no missile weapon to shoot with")
+        carried = ", ".join(weapon.name for weapon in missile)
+        raise ValueError(
+            f"{self.unit.name} carries several missile weapons ({carried}); "
+            "arm it with .wielding(name)"
+        )
 
     @classmethod
     def deploy(

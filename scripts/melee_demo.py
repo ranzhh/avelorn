@@ -62,15 +62,13 @@ def main() -> None:
     game = TOWGame.load_data()
     unit_a = game.units[args.unit_a]
     unit_b = game.units[args.unit_b]
-    weapon_a = weapon_b = game.weapons[args.weapon]
+    weapon_name = game.weapons[args.weapon].name  # both sides fight with it
 
-    a = game.field(unit_a, args.a_fighters)
-    b = game.field(unit_b, args.b_fighters)
+    a = game.field(unit_a, args.a_fighters).wielding(weapon_name)
+    b = game.field(unit_b, args.b_fighters).wielding(weapon_name)
     result = fight(
         a,
         b,
-        a_weapon=weapon_a,
-        b_weapon=weapon_b,
         first_round=args.first_round,
         phase_rules=game.in_play[Phase.COMBAT],
     )
@@ -81,7 +79,7 @@ def main() -> None:
     init_b = result.b_initiative.value
     print(
         f"{args.a_fighters} {unit_a.name} fight {args.b_fighters} {unit_b.name} "
-        f"({weapon_a.name} vs {weapon_b.name})"
+        f"(both with {weapon_name})"
     )
     if result.first_striker is None:
         print(f"  striking order: simultaneous (both Initiative {init_a})\n")
