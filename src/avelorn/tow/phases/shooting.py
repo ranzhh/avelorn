@@ -247,9 +247,11 @@ def shoot_unit(
 
     One shot per model in the unit's front rank (``attacker.formation.files``),
     using each side's first (rank-and-file) profile and the missile profile
-    of the weapon the attacker has in hand (``attacker.in_hand()``, armed
-    through :meth:`~avelorn.tow.contingent.Contingent.wielding`); casualties
-    cap at the defender's fielded ``models``.
+    of the weapon the attacker shoots with (``attacker.shooting_weapon()`` —
+    the weapon armed through
+    :meth:`~avelorn.tow.contingent.Contingent.wielding`, or the sole carried
+    missile weapon when none is armed); casualties cap at the defender's
+    fielded ``models``.
     Only the front rank fires on flat ground; a hill would add a rank
     (not modelled). A weapon with Volley Fire adds half of each rank
     behind the front (rounding up) while the unit is stationary
@@ -281,11 +283,11 @@ def shoot_unit(
         The shooting outcome.
 
     Raises:
-        ValueError: if the attacker has no weapon in hand, the weapon has no
-            missile profile, the attacker profile has no Ballistic Skill, the
-            defender profile has no Toughness, or the weapon shoots at
-            the wielder's Strength and
-            the attacker profile has none.
+        ValueError: if the attacker has no missile weapon to shoot with (none
+            carried, or several unarmed), the weapon has no missile profile,
+            the attacker profile has no Ballistic Skill, the defender profile
+            has no Toughness, or the weapon shoots at the wielder's Strength
+            and the attacker profile has none.
     """
     # Only the unit's front rank fires (shooting-with-more-than-one-rank);
     # a unit on a hill fires with one rank more, not modelled — flat ground
@@ -298,7 +300,7 @@ def shoot_unit(
     # per-profile resolution with the volley combined. Requires a notion
     # of unit composition (which models are actually fielded), which the
     # schema does not have yet.
-    chosen = attacker.in_hand()
+    chosen = attacker.shooting_weapon()
     profile = chosen.missile_profile
     if profile is None:
         raise ValueError(f"{chosen.name} has no missile profile; it cannot shoot")

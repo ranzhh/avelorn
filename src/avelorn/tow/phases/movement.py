@@ -41,8 +41,9 @@ def stand_and_shoot(
 ) -> ShootingResult:
     """Resolve a Stand & Shoot charge reaction: ``shooter`` shoots the ``target``.
 
-    The charged unit (``shooter``) looses one volley from the weapon it has
-    in hand (``shooter.in_hand()``) at the
+    The charged unit (``shooter``) looses one volley from the weapon it
+    shoots with (``shooter.shooting_weapon()`` — armed for the reaction, or
+    its sole missile weapon) at the
     charging unit (``target``) as it closes, then Holds
     (the-movement-phase/stand-and-shoot). Two printed modifiers set this
     apart from an ordinary volley (the-shooting-phase/standing-and-shooting):

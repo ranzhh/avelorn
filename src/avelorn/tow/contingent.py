@@ -447,9 +447,13 @@ class Contingent:
     def in_hand(self) -> Weapon:
         """The weapon this contingent was armed to act with.
 
-        Every verb reads the weapon off the side that acts, so the choice
-        is made once — through :meth:`wielding` — and never threaded through
-        the call.
+        The strict reader, used by melee: the choice is made once — through
+        :meth:`wielding` — and read off the side that acts, never threaded
+        through the call. A fight names its weapon; there is no default,
+        because a unit that carries a special weapon (a thrusting spear, a
+        great weapon) almost always means to swing it, and a silent fallback
+        would quietly fight with the wrong one. Shooting relaxes this through
+        :meth:`shooting_weapon`, where the sole missile weapon is unambiguous.
 
         Returns:
             The selected weapon.
@@ -462,6 +466,37 @@ class Contingent:
                 f"{self.unit.name} has no weapon in hand; arm it with .wielding(name)"
             )
         return self.weapon
+
+    def shooting_weapon(self) -> Weapon:
+        """The missile weapon this contingent fires.
+
+        Shooting keeps arming optional where the choice cannot be mistaken:
+        a contingent armed through :meth:`wielding` fires that weapon, but an
+        unarmed one that carries exactly one missile weapon fires it without
+        ceremony — the common case, a unit of archers with only its bow.
+        Melee has no such default (see :meth:`in_hand`); shooting does,
+        because a lone bow is the only thing it could mean.
+
+        Returns:
+            The weapon in hand, or — when none is — the sole carried missile
+            weapon.
+
+        Raises:
+            ValueError: unarmed and the loadout carries no missile weapon, or
+                more than one, so the choice cannot be made for the caller.
+        """
+        if self.weapon is not None:
+            return self.weapon
+        missile = [weapon for weapon in self.loadout.weapons if weapon.missile_profile is not None]
+        if len(missile) == 1:
+            return missile[0]
+        if not missile:
+            raise ValueError(f"{self.unit.name} carries no missile weapon to shoot with")
+        carried = ", ".join(weapon.name for weapon in missile)
+        raise ValueError(
+            f"{self.unit.name} carries several missile weapons ({carried}); "
+            "arm it with .wielding(name)"
+        )
 
     @classmethod
     def deploy(
