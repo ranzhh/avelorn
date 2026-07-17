@@ -13,7 +13,7 @@ engagement and enters the chargers thinned by any Stand & Shoot casualties.
 
 import logging
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import assert_never
 
 from avelorn.core.errors import UnmodelledRuleError
@@ -85,11 +85,12 @@ class Hold:
 class StandAndShoot:
     """The Stand & Shoot charge reaction: the target fires as the chargers close."""
 
-    # The printed name of the missile weapon to fire; the reacting unit is
-    # armed with it (:meth:`~avelorn.tow.contingent.Contingent.wielding`) for
-    # the volley, since it is a different weapon from the one it fights the
-    # ensuing melee with.
-    weapon: str
+    # The printed name of the missile weapon to fire, or None to fire the
+    # reacting unit's sole missile weapon. Named because the reaction fires a
+    # different weapon from the one the unit swings in the ensuing melee, so
+    # the weapon it holds for the fight does not decide the volley; None is
+    # the shortcut when there is only one missile weapon it could be.
+    weapon: str | None = None
 
 
 @dataclass(frozen=True)
@@ -148,9 +149,10 @@ class Engagement:
 
         One of the printed three: :class:`Hold` (brace, no volley),
         :class:`StandAndShoot` (``b`` looses one volley at the closing charger
-        ``a``, under the shooting rules in force — the "free" shot), or
-        :class:`Flee` (a loud error until modelled). Records the volley on the
-        engagement so the Combat phase can enter the charger already thinned.
+        ``a``, under the shooting rules in force — the "free" shot; its weapon
+        is named, or its sole missile weapon by default), or :class:`Flee` (a
+        loud error until modelled). Records the volley on the engagement so
+        the Combat phase can enter the charger already thinned.
 
         Returns:
             The reaction volley, or None for a Hold.
@@ -160,9 +162,13 @@ class Engagement:
         """
         match reaction:
             case StandAndShoot(weapon=name):
-                self.reaction = stand_and_shoot(
-                    self.b.wielding(name), self.a, phase_rules=self.shooting_rules
+                # Fire the named weapon, or — with none named — b's sole
+                # missile weapon: clear the melee weapon it holds for the
+                # fight so the shooting default resolves the bow.
+                shooter = (
+                    self.b.wielding(name) if name is not None else replace(self.b, weapon=None)
                 )
+                self.reaction = stand_and_shoot(shooter, self.a, phase_rules=self.shooting_rules)
             case Flee():
                 raise UnmodelledRuleError("the Flee charge reaction is not modelled yet")
             case Hold():

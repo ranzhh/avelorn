@@ -49,7 +49,7 @@ def main() -> None:
     with turn.movement() as mv:
         move = Charge(args.charge_inches, ChargeArc.FRONT)
         engagement = mv.charge(spearmen, archers, move)
-        reaction = engagement.react(StandAndShoot("Longbow"))
+        reaction = engagement.react(StandAndShoot())  # fires the Archers' sole missile weapon
         inches = args.charge_inches
         print(
             f'Movement phase: {args.spearmen} Spearmen charge {args.archers} Archers ({inches}").'

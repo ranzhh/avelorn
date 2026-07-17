@@ -182,6 +182,22 @@ def test_charge_forms_an_engagement_and_its_reaction() -> None:
     assert engagement.reaction is volley
 
 
+def test_stand_and_shoot_defaults_to_the_sole_missile_weapon() -> None:
+    """StandAndShoot() with no weapon fires the reacting unit's only missile weapon.
+
+    The target holds a Hand Weapon for the ensuing melee, but the reaction
+    ignores that arm and fires its sole bow — the same volley as naming it.
+    """
+    archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
+    charger = _fielded(spearmen, 10).wielding("Thrusting Spear")
+    target = _fielded(archers, 10).wielding("Hand Weapon")
+    move = Charge(8, ChargeArc.FRONT)
+
+    named = charge(charger, target, move, shooting_rules=IN_FORCE).react(StandAndShoot("Longbow"))
+    default = charge(charger, target, move, shooting_rules=IN_FORCE).react(StandAndShoot())
+    assert default == named
+
+
 def test_fighting_the_engagement_is_the_charges_first_round() -> None:
     """The Combat-phase fight of an engagement equals fight() composed by hand.
 

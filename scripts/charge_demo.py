@@ -58,15 +58,16 @@ def main() -> None:
     game = TOWGame.load_data()
     spearmen_unit = game.units["elven-spearmen"]
     archers_unit = game.units["elven-archers"]
-    # The scene arms each unit for the phase it acts in: the Archers shoot the
-    # Longbow (named on the reaction), then defend with a Hand Weapon; the
-    # Spearmen charge home with the Thrusting Spear.
+    # The scene arms each unit for the melee it heads into: the Spearmen
+    # charge home with the Thrusting Spear, the Archers defend with a Hand
+    # Weapon. The Stand & Shoot fires the Archers' sole missile weapon (their
+    # Longbow) without naming it.
     spearmen = game.field(spearmen_unit, args.spearmen).wielding("Thrusting Spear")
     archers = game.field(archers_unit, args.archers).wielding("Hand Weapon")
     move = Charge(args.charge_inches, ChargeArc.FRONT)
 
     engagement = game.movement.charge(spearmen, archers, move)
-    reaction = engagement.react(StandAndShoot("Longbow"))
+    reaction = engagement.react(StandAndShoot())
     assert reaction is not None  # a StandAndShoot reaction was declared
     melee = game.combat.fight(engagement)
     scored = game.combat.result(melee)
