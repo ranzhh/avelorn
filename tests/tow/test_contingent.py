@@ -458,6 +458,18 @@ def test_rank_bonus_is_capped_by_troop_type(spearmen_unit: Unit) -> None:
     assert _fielded(spearmen_unit, 25).rank_bonus == 2  # five ranks, capped
 
 
+def test_fighting_rank_is_the_front_rank(spearmen_unit: Unit) -> None:
+    """The fighting rank is the front rank's models — one rank deep for now.
+
+    Regular Infantry are five wide by default: a full rank is five, a deeper
+    body still fights with its front five, and a partial single rank fights
+    with all it has.
+    """
+    assert _fielded(spearmen_unit, 5).fighting_rank() == 5  # one full rank
+    assert _fielded(spearmen_unit, 12).fighting_rank() == 5  # the front of a deeper body
+    assert _fielded(spearmen_unit, 3).fighting_rank() == 3  # a partial single rank
+
+
 def test_melee_attacks_are_the_fighting_rank_alone(spearmen_unit: Unit) -> None:
     """Only the front rank fights; deeper ranks add nothing, a wider front does.
 
