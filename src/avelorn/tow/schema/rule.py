@@ -71,7 +71,10 @@ class Condition(StrEnum):
 # characteristic is the third seam. A ``then`` speaks to exactly one of the
 # three (see :meth:`ModifierEffect._then_speaks_to_one_seam`).
 ModifierKind = Literal["to-hit", "armour-piercing"]  # roll quantities — the dice walk
-RankKind = Literal["fighting-ranks"]  # formation quantities — the fighting-rank query
+# Formation quantities — the fighting-rank query. ``fighting-ranks`` deepens
+# the rank fighting at full Attacks (Press of Battle); ``supporting-ranks``
+# adds ranks that support at one attack each (Fight in Extra Rank).
+RankKind = Literal["fighting-ranks", "supporting-ranks"]
 
 _ROLL_KINDS = frozenset(get_args(ModifierKind))
 _RANK_KINDS = frozenset(get_args(RankKind))

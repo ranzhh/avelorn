@@ -13,6 +13,7 @@ from avelorn.tow.engine.rules import (
     compile_rules,
     effective_characteristic,
     effective_fighting_ranks,
+    effective_supporting_ranks,
     printed_rule,
 )
 from avelorn.tow.phases.shooting import shoot_unit
@@ -431,3 +432,21 @@ def test_effective_fighting_ranks_folds_a_rank_modifier() -> None:
     unknown = effective_fighting_ranks(1, [_press_of_battle()], {})
     assert unknown.value == 1
     assert unknown.unfactored == ("Doctored",)
+
+
+def test_effective_supporting_ranks_folds_over_a_base_of_none() -> None:
+    """The supporting-ranks twin: base zero, a +1 rank rule gated on the charge.
+
+    Stationary: the +1 lands (one supporting rank), factored. Charged:
+    honoured by not applying (none), still factored.
+    """
+    effect = ModifierEffect(when={Condition.CHARGED: False}, then={"supporting-ranks": 1})
+    rule = Rule(id="doctored", name="Doctored", paragraphs=["…"], effects=[effect])
+
+    stationary = effective_supporting_ranks(0, [rule], {Condition.CHARGED: False})
+    assert stationary.value == 1
+    assert stationary.factored == ("Doctored",)
+
+    charged = effective_supporting_ranks(0, [rule], {Condition.CHARGED: True})
+    assert charged.value == 0
+    assert charged.factored == ("Doctored",)
