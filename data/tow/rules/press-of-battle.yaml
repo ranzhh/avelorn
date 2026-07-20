@@ -1,0 +1,16 @@
+# Source: https://tow.whfb.app/troop-types-in-detail/press-of-battle
+id: press-of-battle
+name: Press of Battle
+category: Troop Types
+paragraphs:
+  - Except during a turn in which it charged, the fighting rank of a unit that has this rule and is
+    arrayed in combat order is not one, but two ranks deep. In other words, models that are directly
+    behind and in base contact with models in the unit's actual fighting rank are also considered to
+    be within its fighting rank.
+# Hand-authored, diffable against the paragraph above: a stationary unit fights
+# one extra rank deep (base 1 -> 2); a charge this turn lapses it.
+effects:
+  - when:
+      charged: false
+    then:
+      fighting-ranks: 1

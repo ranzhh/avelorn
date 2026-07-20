@@ -390,7 +390,10 @@ def strike_unit(
         distribution=distribution,
         casualties=casualties,
         notes=(
-            *_unit_rule_notes(striker.unit),
+            # Only the striker throws blows here, so only its fighting-rank
+            # rules (Press of Battle) are in the math and claimed; the
+            # target's stay noted until it strikes in its turn.
+            *_unit_rule_notes(striker.unit, claimed=striker.fighting_ranks().factored),
             *_unit_rule_notes(target.unit),
             *engagement.notes,
         ),
@@ -440,10 +443,16 @@ class FightResult:
 def _unit_rule_notes(unit: Unit, claimed: Collection[str] = ()) -> list[str]:
     # The one owner of a unit rule's disposition: noted unless a consumer
     # claimed it (the initiative read claims what it factored, honoured
-    # no-ops included). Notes are built once, never parsed or matched.
+    # no-ops included). Notes are built once, never parsed or matched. A
+    # rule printed on the datasheet is owned by the unit; a rule the troop
+    # type confers (Press of Battle, ...) is owned by the troop type.
+    troop_type = unit.troop_type_profile
+    owned = [(printed, unit.name) for printed in unit.special_rules]
+    if troop_type is not None:
+        owned += [(printed, troop_type.name) for printed in troop_type.special_rules]
     return [
-        f"special rule not factored: {printed} ({unit.name})"
-        for printed in unit.special_rules
+        f"special rule not factored: {printed} ({owner})"
+        for printed, owner in owned
         if printed not in claimed
     ]
 
@@ -459,6 +468,8 @@ def _combat_conditions(first_round: bool | None, side: Contingent) -> dict[Condi
                 # A charge is a move, and the Movement folds it in: moved is
                 # true for a charge as for any other move this turn.
                 return side.movement.moved
+            case Condition.CHARGED:
+                return side.movement.charge is not None
             case Condition.AT_LONG_RANGE:
                 return False  # no shot is taken in close combat
             case Condition.FIRST_ROUND_OF_COMBAT:
@@ -621,13 +632,18 @@ def fight(
                     losses[a_lost][b_lost] += weight * mass
 
     first_striker = None if a_first is None else (a if a_first else b)
-    # A rule factored into the striking order is in the math — claimed,
-    # so never noted; a mirror match dedups the identical remainder.
+    # A rule factored into the striking order or the fighting-rank depth is
+    # in the math — claimed, so never noted; both sides strike, so each
+    # claims its own. A mirror match dedups the identical remainder.
     notes = tuple(
         dict.fromkeys(
             [
-                *_unit_rule_notes(a.unit, claimed=a_initiative.factored),
-                *_unit_rule_notes(b.unit, claimed=b_initiative.factored),
+                *_unit_rule_notes(
+                    a.unit, claimed={*a_initiative.factored, *a.fighting_ranks().factored}
+                ),
+                *_unit_rule_notes(
+                    b.unit, claimed={*b_initiative.factored, *b.fighting_ranks().factored}
+                ),
                 *a_strikes.notes,
                 *b_strikes.notes,
             ]

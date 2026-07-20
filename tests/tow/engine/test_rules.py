@@ -12,6 +12,7 @@ from avelorn.tow.engine.rules import (
     _condition_applies,
     compile_rules,
     effective_characteristic,
+    effective_fighting_ranks,
     printed_rule,
 )
 from avelorn.tow.phases.shooting import shoot_unit
@@ -97,6 +98,19 @@ def test_compile_effectless_rule_stays_unfactored() -> None:
     transforms, unfactored = compile_rules(["Killing Blow"], REPO.rules)
     assert transforms == []
     assert unfactored == ["Killing Blow"]
+
+
+def test_compile_rank_quantity_stays_unfactored_in_the_dice_walk() -> None:
+    """A rank quantity is not a dice-walk modifier — the walk leaves it unfactored.
+
+    fighting-ranks is read by the fighting-rank query, not the walk; as a
+    rule compiled for the walk it produces no modifier and is reported, the
+    way a characteristic change is.
+    """
+    rules = _one_rule(ModifierEffect(then={"fighting-ranks": 1}))
+    transforms, unfactored = compile_rules(["Doctored"], rules)
+    assert transforms == []
+    assert unfactored == ["Doctored"]
 
 
 def test_compile_parameter_placeholder_without_value_stays_unfactored() -> None:
@@ -390,3 +404,30 @@ def test_effective_characteristic_ignores_other_characteristics() -> None:
     assert result.value == 4
     assert result.factored == ()
     assert result.unfactored == ()
+
+
+def _press_of_battle() -> Rule:
+    # A rank modifier in the Press of Battle shape: +1 fighting rank, off on a charge.
+    effect = ModifierEffect(when={Condition.CHARGED: False}, then={"fighting-ranks": 1})
+    return Rule(id="doctored", name="Doctored", paragraphs=["…"], effects=[effect])
+
+
+def test_effective_fighting_ranks_folds_a_rank_modifier() -> None:
+    """A rank modifier deepens the base of one, gated on the charge fact.
+
+    Not charged: the +1 lands (two ranks), factored. Charged: honoured by
+    not applying (one rank), still factored — the fact was answered.
+    Unknown charge: the rule cannot be evaluated, so it is unfactored and the
+    base stands.
+    """
+    stationary = effective_fighting_ranks(1, [_press_of_battle()], {Condition.CHARGED: False})
+    assert stationary.value == 2
+    assert stationary.factored == ("Doctored",)
+
+    charged = effective_fighting_ranks(1, [_press_of_battle()], {Condition.CHARGED: True})
+    assert charged.value == 1
+    assert charged.factored == ("Doctored",)
+
+    unknown = effective_fighting_ranks(1, [_press_of_battle()], {})
+    assert unknown.value == 1
+    assert unknown.unfactored == ("Doctored",)

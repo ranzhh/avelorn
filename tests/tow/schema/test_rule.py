@@ -205,13 +205,25 @@ def test_reroll_effect_rejects_unknown_cause() -> None:
 
 
 def test_then_speaks_to_one_seam() -> None:
-    """One effect may not move a roll quantity and a characteristic together.
+    """One effect may not move quantities from two seams together.
 
-    The dice walk consumes roll quantities and the characteristic read
-    consumes characteristics; all-or-nothing reporting holds per
-    consumer, so a mixed then could be half-consumed while its rule's
-    note is dropped whole. A rule whose sentence does both writes two
-    effects.
+    Roll quantities are consumed by the dice walk, characteristics by the
+    characteristic read, rank quantities by the fighting-rank query; all-
+    or-nothing reporting holds per consumer, so a mixed then could be
+    half-consumed while its rule's note is dropped whole. A rule whose
+    sentence spans seams writes one effect per seam.
     """
     with pytest.raises(ValidationError, match="may not mix"):
-        _EFFECT.validate_python({"then": {"to-hit": -1, "I": 1}})
+        _EFFECT.validate_python({"then": {"to-hit": -1, "I": 1}})  # roll + characteristic
+    with pytest.raises(ValidationError, match="may not mix"):
+        _EFFECT.validate_python({"then": {"fighting-ranks": 1, "I": 1}})  # rank + characteristic
+    with pytest.raises(ValidationError, match="may not mix"):
+        _EFFECT.validate_python({"then": {"fighting-ranks": 1, "to-hit": -1}})  # rank + roll
+
+
+def test_a_rank_quantity_is_its_own_seam() -> None:
+    """A formation quantity is a valid, single-seam then (Press of Battle's shape)."""
+    effect = _EFFECT.validate_python({"when": {"charged": False}, "then": {"fighting-ranks": 1}})
+    assert isinstance(effect, ModifierEffect)
+    assert effect.then == {"fighting-ranks": 1}
+    assert effect.conditions == {Condition.CHARGED: False}

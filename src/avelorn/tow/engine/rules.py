@@ -36,6 +36,7 @@ from avelorn.tow.schema.rule import (
     Condition,
     ModifierEffect,
     ModifierKind,
+    RankKind,
     Rule,
     RuleEffect,
 )
@@ -190,10 +191,11 @@ def _compile_effect(
         if amount == "X":
             # Unsubstituted placeholder: the printed name carried no parameter.
             return None
-        if isinstance(quantity, Characteristic):
-            # Characteristic changes are consumed by the
-            # effective-characteristic query, not the walk; as a weapon
-            # or phase rule they are honestly unfactored.
+        if quantity not in _ROLLS:
+            # The walk handles only roll quantities (the _ROLLS vocabulary).
+            # A characteristic is the effective-characteristic query's, a rank
+            # quantity the fighting-rank query's; as a weapon or phase rule
+            # here they are honestly unfactored.
             return None
         roll = _ROLLS[quantity]
         if natural is not None and _SEQUENCE[natural.roll] >= _SEQUENCE[roll.stage]:
@@ -243,15 +245,48 @@ def effective_characteristic(
     Returns:
         The effective value with the factored and unfactored rule names.
     """
+    return _effective_quantity(base, characteristic, rules, conditions)
+
+
+def effective_fighting_ranks(
+    base: int,
+    rules: Sequence[Rule],
+    conditions: Mapping[Condition, bool | None] | None = None,
+) -> EffectiveCharacteristic:
+    """Apply the rules' modifiers to the number of fighting ranks.
+
+    The fighting-rank query: the sibling of the characteristic query for
+    the ``fighting-ranks`` formation quantity. Folds the rank modifiers a
+    contingent's rules carry (Press of Battle's +1) over ``base`` — one
+    rank by default — under the evaluated ``conditions``, reporting which
+    rules were factored and which the facts could not answer.
+
+    Returns:
+        The effective depth with the factored and unfactored rule names.
+    """
+    return _effective_quantity(base, "fighting-ranks", rules, conditions)
+
+
+def _effective_quantity(
+    base: int,
+    key: Characteristic | RankKind,
+    rules: Sequence[Rule],
+    conditions: Mapping[Condition, bool | None] | None = None,
+) -> EffectiveCharacteristic:
+    # One base value folded over the ``key`` modifiers a contingent's rules
+    # carry — shared by the characteristic and fighting-rank queries, which
+    # differ only in the ``then`` key they read. All-or-nothing per rule; a
+    # rule needing an unknown fact, an unbound parameter, or an event face
+    # (no die is rolled at a query) is reported unfactored.
     conditions = conditions or {}
     value = base
     factored: list[str] = []
     unfactored: list[str] = []
     for rule in rules:
         matching = [
-            (effect, effect.then[characteristic])
+            (effect, effect.then[key])
             for effect in rule.effects
-            if isinstance(effect, ModifierEffect) and characteristic in effect.then
+            if isinstance(effect, ModifierEffect) and key in effect.then
         ]
         if not matching:
             continue
@@ -263,9 +298,6 @@ def effective_characteristic(
             amount == "X" or answer is None or effect.natural is not None
             for effect, amount, answer in answers
         ):
-            # An unbound parameter, an unanswerable state, or an event
-            # trigger — a characteristic read rolls no die, so a natural
-            # face can never be honoured here.
             unfactored.append(rule.name)
             continue
         for effect, amount, answer in answers:
@@ -275,7 +307,7 @@ def effective_characteristic(
             if effect.maximum is not None:
                 value = min(value, effect.maximum)
         factored.append(rule.name)
-        logger.debug("%s modifier factored: %s -> %d", characteristic.name, rule.name, value)
+        logger.debug("%s modifier factored: %s -> %d", key, rule.name, value)
     return EffectiveCharacteristic(value, tuple(factored), tuple(unfactored))
 
 

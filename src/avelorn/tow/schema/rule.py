@@ -27,7 +27,7 @@ approximated.
 
 from collections.abc import Mapping
 from enum import StrEnum
-from typing import Annotated, Literal
+from typing import Annotated, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -54,15 +54,39 @@ class Condition(StrEnum):
     it and the engagement context can carry the fact.
     """
 
-    MOVED = "moved"  # "moved for any reason during this turn"
-    AT_LONG_RANGE = "at_long_range"  # "further away than half the weapon's maximum range"
-    FIRST_ROUND_OF_COMBAT = "first_round_of_combat"  # "during the first round of any combat"
+    # "moved for any reason during this turn"
+    MOVED = "moved"
+    # "further away than half the weapon's maximum range"
+    AT_LONG_RANGE = "at_long_range"
+    # "during the first round of any combat"
+    FIRST_ROUND_OF_COMBAT = "first_round_of_combat"
+    # "a turn in which it charged" — narrower than MOVED (a march is not a charge)
+    CHARGED = "charged"
 
 
 # The quantities a modifier can change, in the rulebook's own modifier
-# vocabulary. Each member implies the stage its change lands on — the
-# compiler owns that mapping, exhaustively.
-ModifierKind = Literal["to-hit", "armour-piercing"]
+# vocabulary, grouped by the seam that consumes them. Roll quantities land
+# on a stage of the dice walk (the compiler owns that mapping, exhaustively);
+# rank quantities are read by the fighting-rank query. A profile
+# characteristic is the third seam. A ``then`` speaks to exactly one of the
+# three (see :meth:`ModifierEffect._then_speaks_to_one_seam`).
+ModifierKind = Literal["to-hit", "armour-piercing"]  # roll quantities — the dice walk
+RankKind = Literal["fighting-ranks"]  # formation quantities — the fighting-rank query
+
+_ROLL_KINDS = frozenset(get_args(ModifierKind))
+_RANK_KINDS = frozenset(get_args(RankKind))
+
+
+def _seam_of(quantity: "ModifierKind | RankKind | Characteristic") -> str:
+    """The seam that consumes a ``then`` quantity.
+
+    Returns:
+        ``"characteristic"``, ``"rank"``, or ``"roll"`` — the query or walk
+        that reads the quantity.
+    """
+    if isinstance(quantity, Characteristic):
+        return "characteristic"
+    return "rank" if quantity in _RANK_KINDS else "roll"
 
 
 class NaturalRoll(BaseModel):
@@ -120,12 +144,14 @@ class ModifierEffect(BaseModel):
     quantity's own printed sign convention: To Hit penalties negative
     ("-1 To Hit modifier" is ``to-hit: -1``), Armour Piercing
     improvements positive ("improved by 1" is ``armour-piercing: 1``).
-    A quantity is a roll of the attack sequence by its kind, or a
-    profile characteristic by its printed abbreviation ("+1 modifier to
-    its Initiative characteristic" is ``I: 1``) — the former consumed
-    by the dice walk, the latter by the effective-characteristic query.
-    The literal ``"X"`` means the rule's bracketed parameter ("the
-    amount shown in brackets after the name of this special rule").
+    A quantity is a roll of the attack sequence by its kind (consumed by
+    the dice walk), a profile characteristic by its printed abbreviation
+    ("+1 modifier to its Initiative characteristic" is ``I: 1``, consumed
+    by the effective-characteristic query), or a formation quantity like
+    the number of fighting ranks ("fighting-ranks: 1", consumed by the
+    fighting-rank query). The literal ``"X"`` means the rule's bracketed
+    parameter ("the amount shown in brackets after the name of this
+    special rule").
     Where a change lands follows from its quantity, so no stage is
     spelled out. ``maximum`` is a printed ceiling on the modified value
     ("to a maximum of 10"); only a characteristic prints one.
@@ -136,7 +162,9 @@ class ModifierEffect(BaseModel):
     when: Annotated[dict[Condition | Literal["natural"], TriggerFact], Field(min_length=1)] | (
         None
     ) = None
-    then: Annotated[dict[ModifierKind | Characteristic, int | Literal["X"]], Field(min_length=1)]
+    then: Annotated[
+        dict[ModifierKind | RankKind | Characteristic, int | Literal["X"]], Field(min_length=1)
+    ]
     maximum: int | None = None
 
     @model_validator(mode="after")
@@ -156,14 +184,18 @@ class ModifierEffect(BaseModel):
 
     @model_validator(mode="after")
     def _then_speaks_to_one_seam(self) -> "ModifierEffect":
-        # Roll quantities are consumed by the dice walk, characteristics
-        # by the effective-characteristic query. All-or-nothing
-        # reporting holds per consumer, so one effect may not straddle
-        # them: a mixed then could be half-consumed while its rule's
-        # note is dropped whole. Split the sentence into two effects.
-        seams = {isinstance(quantity, Characteristic) for quantity in self.then}
-        if len(seams) == 2:
-            raise ValueError("a then may not mix roll quantities with characteristics")
+        # Roll quantities are consumed by the dice walk, characteristics by
+        # the effective-characteristic query, rank quantities by the
+        # fighting-rank query. All-or-nothing reporting holds per consumer,
+        # so one effect may not straddle them: a mixed then could be
+        # half-consumed while its rule's note is dropped whole. Split the
+        # sentence into one effect per seam.
+        seams = {_seam_of(quantity) for quantity in self.then}
+        if len(seams) > 1:
+            raise ValueError(
+                f"a then may not mix quantities across seams (roll / characteristic / rank): "
+                f"{sorted(seams)}"
+            )
         return self
 
     @property

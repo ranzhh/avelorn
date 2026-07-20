@@ -221,6 +221,10 @@ def _engagement_conditions(
         match condition:
             case Condition.MOVED:
                 return moved
+            case Condition.CHARGED:
+                # A unit that charged is locked in combat and takes no shot,
+                # so a shooter never charged this turn.
+                return False
             case Condition.AT_LONG_RANGE:
                 return False if force_short_range else _at_long_range(profile, distance)
             case Condition.FIRST_ROUND_OF_COMBAT:
