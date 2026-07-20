@@ -5,8 +5,8 @@ One entry per troop type from the rulebook's troop-type table
 ``data/tow/troop-types/`` and loaded into a registry keyed by troop type.
 The :class:`~avelorn.tow.schema.unit.TroopType` enum is the closed
 vocabulary a datasheet is validated against; this is the data hanging off
-each member — how it ranks up today, its own special rules and base size
-in time.
+each member — how it ranks up, the special rules it confers, and its base
+size in time.
 """
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -19,7 +19,11 @@ class TroopTypeProfile(BaseModel):
     toward the Rank Bonus, or None for a troop type that does not rank up
     (Swarm, Heavy Chariot, the monsters and war machines that fight as
     single models); ``max_rank_bonus`` is the most extra ranks it may
-    claim.
+    claim. ``special_rules`` are the rules the troop type confers on every
+    unit of it (Regular Infantry's Press of Battle, say), as printed
+    display-name strings — the type's own rules, held apart from the
+    datasheet's ``special_rules`` because their owner is the troop type,
+    not the unit.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -28,6 +32,7 @@ class TroopTypeProfile(BaseModel):
     name: str  # display name, matching the TroopType value ("Regular Infantry")
     models_per_rank: int | None = Field(default=None, ge=1)
     max_rank_bonus: int = Field(default=0, ge=0)
+    special_rules: tuple[str, ...] = ()
 
     def default_frontage(self, models: int) -> int:
         """The width this troop type ranks up at when none is chosen.

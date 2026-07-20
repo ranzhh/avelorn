@@ -1,5 +1,11 @@
 # Source: https://tow.whfb.app/troop-types-at-a-glance/troop-type-table
+# Rules: https://tow.whfb.app/troop-types-in-detail/heavy-infantry
 id: heavy-infantry
 name: Heavy Infantry
 models_per_rank: 4
 max_rank_bonus: 2
+special_rules:
+  - Steady in the Ranks
+  - Press of Battle
+  - Massed Infantry
+  - Parry

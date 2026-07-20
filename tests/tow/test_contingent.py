@@ -417,6 +417,26 @@ def test_every_troop_type_has_a_profile() -> None:
     assert {p.name for p in REPO.troop_types.values()} == {t.value for t in TroopType}
 
 
+def test_infantry_troop_types_confer_their_special_rules() -> None:
+    """Regular and Heavy Infantry carry the rules their type confers.
+
+    Heavy Infantry are Regular Infantry's rules plus Steady in the Ranks
+    (troop-types-in-detail); they are conferred by the type, not printed on
+    any one datasheet.
+    """
+    assert REPO.troop_types["regular-infantry"].special_rules == (
+        "Press of Battle",
+        "Massed Infantry",
+        "Parry",
+    )
+    assert REPO.troop_types["heavy-infantry"].special_rules == (
+        "Steady in the Ranks",
+        "Press of Battle",
+        "Massed Infantry",
+        "Parry",
+    )
+
+
 def test_frontage_must_be_a_positive_width(spearmen_unit: Unit) -> None:
     """A frontage below one model wide is a programming error, not a zero."""
     with pytest.raises(ValueError, match="at least 1 model wide"):

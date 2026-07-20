@@ -1,5 +1,10 @@
 # Source: https://tow.whfb.app/troop-types-at-a-glance/troop-type-table
+# Rules: https://tow.whfb.app/troop-types-in-detail/regular-infantry
 id: regular-infantry
 name: Regular Infantry
 models_per_rank: 5
 max_rank_bonus: 2
+special_rules:
+  - Press of Battle
+  - Massed Infantry
+  - Parry
