@@ -15,7 +15,7 @@ from enum import StrEnum
 from avelorn.core.registry import Registry
 from avelorn.tow.data import TOWRepository, default_repository
 from avelorn.tow.engine.rules import (
-    EffectiveCharacteristic,
+    EffectiveValue,
     effective_fighting_ranks,
     effective_supporting_ranks,
     printed_rule,
@@ -407,7 +407,7 @@ class Contingent:
         ranks_behind_first = formation.full_ranks + rear - 1
         return min(max(ranks_behind_first, 0), profile.max_rank_bonus)
 
-    def fighting_ranks(self) -> EffectiveCharacteristic:
+    def fighting_ranks(self) -> EffectiveValue:
         """How many ranks fight at full Attacks, and the rules behind the count.
 
         One rank by default — only the front rank fights
@@ -439,7 +439,7 @@ class Contingent:
         """
         return self.formation.front_ranks(self.fighting_ranks().value)
 
-    def supporting_ranks(self) -> EffectiveCharacteristic:
+    def supporting_ranks(self) -> EffectiveValue:
         """How many ranks support at one attack each, and the rules behind it.
 
         None by default — only the fighting rank fights. A weapon in hand that

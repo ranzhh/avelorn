@@ -207,8 +207,14 @@ def _compile_effect(
 
 
 @dataclass(frozen=True)
-class EffectiveCharacteristic:
-    """A characteristic read with rule-granted modifiers applied.
+class EffectiveValue:
+    """A base quantity read with rule-granted modifiers applied.
+
+    The result of folding a contingent's rules over one base value —
+    whatever the quantity: a profile characteristic (Weapon Skill,
+    Initiative), a formation depth (the fighting or supporting ranks). The
+    fold is the same shape for all of them, so the result is one neutral
+    type, not one per quantity.
 
     ``factored`` names the rules whose matching modifiers were evaluated
     into the value — including those honoured by not applying (condition
@@ -227,7 +233,7 @@ def effective_characteristic(
     characteristic: Characteristic,
     rules: Sequence[Rule],
     conditions: Mapping[Condition, bool | None] | None = None,
-) -> EffectiveCharacteristic:
+) -> EffectiveValue:
     """Apply the rules' modifiers to one characteristic read.
 
     The effective-characteristic query: every read of a characteristic a
@@ -252,7 +258,7 @@ def effective_fighting_ranks(
     base: int,
     rules: Sequence[Rule],
     conditions: Mapping[Condition, bool | None] | None = None,
-) -> EffectiveCharacteristic:
+) -> EffectiveValue:
     """Apply the rules' modifiers to the number of fighting ranks.
 
     The fighting-rank query: the sibling of the characteristic query for
@@ -271,7 +277,7 @@ def effective_supporting_ranks(
     base: int,
     rules: Sequence[Rule],
     conditions: Mapping[Condition, bool | None] | None = None,
-) -> EffectiveCharacteristic:
+) -> EffectiveValue:
     """Apply the rules' modifiers to the number of supporting ranks.
 
     The fighting-rank query's twin for the ``supporting-ranks`` formation
@@ -291,7 +297,7 @@ def _effective_quantity(
     key: Characteristic | RankKind,
     rules: Sequence[Rule],
     conditions: Mapping[Condition, bool | None] | None = None,
-) -> EffectiveCharacteristic:
+) -> EffectiveValue:
     # One base value folded over the ``key`` modifiers a contingent's rules
     # carry — shared by the characteristic and fighting-rank queries, which
     # differ only in the ``then`` key they read. All-or-nothing per rule; a
@@ -327,7 +333,7 @@ def _effective_quantity(
                 value = min(value, effect.maximum)
         factored.append(rule.name)
         logger.debug("%s modifier factored: %s -> %d", key, rule.name, value)
-    return EffectiveCharacteristic(value, tuple(factored), tuple(unfactored))
+    return EffectiveValue(value, tuple(factored), tuple(unfactored))
 
 
 def _condition_applies(
