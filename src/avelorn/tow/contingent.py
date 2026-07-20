@@ -651,7 +651,13 @@ def _resolve_loadout(
     worn, unknown = armoury.resolve(rest)
     resolved: list[Rule] = []
     unresolved: list[str] = []
-    for printed in unit.special_rules:
+    # The unit's own printed rules, then the rules its troop type confers
+    # (Press of Battle, ...): both resolve the same way — an entry with
+    # effects joins the loadout, a name without one rides along printed and
+    # feeds the "not factored" notes.
+    troop_type = unit.troop_type_profile
+    conferred = troop_type.special_rules if troop_type is not None else ()
+    for printed in (*unit.special_rules, *conferred):
         entry = printed_rule(printed, rules)
         if entry is None:
             unresolved.append(printed)

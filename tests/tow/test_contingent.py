@@ -140,7 +140,9 @@ def test_field_resolves_equipment_into_the_loadout(spearmen_unit: Unit) -> None:
 
     Spearmen carry Hand Weapon and Thrusting Spear (weapons) plus Light
     Armour and Shield (armour); the loadout partitions them resolved, in
-    equipment order.
+    equipment order. The unit's own rules come first, then the ones its
+    troop type (Regular Infantry) confers — Press of Battle resolves,
+    Massed Infantry and Parry ride along printed.
     """
     contingent = Contingent.field(
         Complement(unit=spearmen_unit, size=10),
@@ -149,11 +151,17 @@ def test_field_resolves_equipment_into_the_loadout(spearmen_unit: Unit) -> None:
     assert contingent.loadout == Loadout(
         weapons=(REPO.weapons["hand-weapon"], REPO.weapons["thrusting-spear"]),
         armour=(REPO.armoury["light-armour"], REPO.armoury["shield"]),
-        rules=(REPO.rules["elven-reflexes"], REPO.rules["valour-of-ages"]),
+        rules=(
+            REPO.rules["elven-reflexes"],
+            REPO.rules["valour-of-ages"],
+            REPO.rules["press-of-battle"],
+        ),
         unresolved_rules=(
             "Close Order",
             "Martial Prowess",
             "Regimental Unit",
+            "Massed Infantry",
+            "Parry",
         ),
     )
 
@@ -268,7 +276,11 @@ def test_field_tolerates_rules_without_entries(spearmen_unit: Unit) -> None:
     mustered = Complement(unit=spearmen_unit, size=10, options=["Shieldwall"])
     contingent = Contingent.field(mustered, data=REPO)
     assert contingent.loadout is not None
-    assert [rule.id for rule in contingent.loadout.rules] == ["elven-reflexes", "valour-of-ages"]
+    assert [rule.id for rule in contingent.loadout.rules] == [
+        "elven-reflexes",
+        "valour-of-ages",
+        "press-of-battle",  # conferred by the Regular Infantry troop type
+    ]
     assert "Shieldwall" in contingent.loadout.unresolved_rules
 
 
@@ -286,8 +298,8 @@ def test_field_substitutes_rule_parameters_as_printed(spearmen_unit: Unit) -> No
         data=REPO,
     )
     assert contingent.loadout is not None
-    (rule,) = contingent.loadout.rules
-    assert rule.name == "Armour Bane (2)"
+    # Regular Infantry also confers Press of Battle; pick out the unit's own rule.
+    rule = next(r for r in contingent.loadout.rules if r.name == "Armour Bane (2)")
     effect = rule.effects[0]
     assert isinstance(effect, ModifierEffect)
     assert effect.then == {"armour-piercing": 2}
