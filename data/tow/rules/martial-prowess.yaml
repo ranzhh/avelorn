@@ -1,0 +1,24 @@
+# Source: https://tow.whfb.app/special-rules/martial-prowess
+# Sources: Dark Elves (p. 25), Forces of Fantasy (pp. 129 & 185),
+# Arcane Journal: Wood Elf Realms (p. 39). Page set to the Forces of Fantasy
+# High Elf grouping (185), matching Valour of Ages.
+id: martial-prowess
+name: Martial Prowess
+page: 185
+category: Special Rules
+flavour: Elven warriors spend many hours mastering the art of war, wielding their weapons with a skill and grace absent from
+  the ranks of their enemies.
+paragraphs:
+  - During the first round of combat, a unit with this special rule gains a +1 modifier to its Weapon Skill characteristic. In
+    addition, a unit with this special rule can make supporting attacks to its flank or rear, as well as to its front.
+# Hand-authored, diffable against the paragraph above. Only the first clause is
+# modelled: the +1 Weapon Skill in the first round of combat, read by the
+# effective-characteristic query. The flank/rear supporting-attacks clause has
+# no effect on the frontal, whole-front-rank combat the engine models today; it
+# waits on a flank/rear combat model (#28) and is deliberately left unexpressed
+# rather than approximated with a kind bespoke to one rule.
+effects:
+  - when:
+      first_round_of_combat: true
+    then:
+      WS: 1

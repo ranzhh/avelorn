@@ -153,12 +153,12 @@ def test_field_resolves_equipment_into_the_loadout(spearmen_unit: Unit) -> None:
         armour=(REPO.armoury["light-armour"], REPO.armoury["shield"]),
         rules=(
             REPO.rules["elven-reflexes"],
+            REPO.rules["martial-prowess"],
             REPO.rules["valour-of-ages"],
             REPO.rules["press-of-battle"],
         ),
         unresolved_rules=(
             "Close Order",
-            "Martial Prowess",
             "Regimental Unit",
             "Massed Infantry",
             "Parry",
@@ -279,6 +279,7 @@ def test_field_tolerates_rules_without_entries(spearmen_unit: Unit) -> None:
     assert contingent.loadout is not None
     assert [rule.id for rule in contingent.loadout.rules] == [
         "elven-reflexes",
+        "martial-prowess",
         "valour-of-ages",
         "press-of-battle",  # conferred by the Regular Infantry troop type
     ]

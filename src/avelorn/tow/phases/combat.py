@@ -221,6 +221,7 @@ class _Engagement:
     """
 
     striker: Contingent
+    weapon_skill: EffectiveCharacteristic
     p_unsaved: float
     p_kill: float
     target_wounds: int
@@ -253,6 +254,7 @@ def _engage(
     *,
     hit_modifier: int,
     conditions: Mapping[Condition, bool | None] | None = None,
+    target_conditions: Mapping[Condition, bool | None] | None = None,
     phase_rules: Mapping[str, Rule] = _NONE_IN_PLAY,
 ) -> _Engagement:
     # The matchup half of a strike, shared by strike_unit and fight:
@@ -307,7 +309,13 @@ def _engage(
     if weapon.notes is not None:
         notes.append(f"weapon notes not factored ({weapon.name}): {weapon.notes}")
 
-    hit = melee_hit_target(weapon_skill, target_weapon_skill, hit_modifier)
+    # Each side's Weapon Skill is read effective, not raw: a rule that
+    # modifies it (Martial Prowess's +1 in the first round) shapes both the
+    # striker's To Hit and, as the target's WS, the roll against it — each
+    # gated on that side's own engagement conditions.
+    striker_ws = effective_weapon_skill(striker, conditions)
+    target_ws = effective_weapon_skill(target, target_conditions)
+    hit = melee_hit_target(striker_ws.value, target_ws.value, hit_modifier)
     wound = wound_target(strength, toughness)
     save = armour_save_target(armour_value, profile.armour_piercing)
     p_unsaved, p_kill, hit = _per_attack(hit, wound, save, None, modifiers)
@@ -317,15 +325,16 @@ def _engage(
     logger.debug(
         "%s (WS %d, A %d) vs %s (WS %d, T %d): per-attack unsaved p=%.3f",
         striker_unit.name,
-        weapon_skill,
+        striker_ws.value,
         attacks_per_model,
         target_unit.name,
-        target_weapon_skill,
+        target_ws.value,
         toughness,
         p_unsaved,
     )
     return _Engagement(
         striker=striker,
+        weapon_skill=striker_ws,
         p_unsaved=p_unsaved,
         p_kill=p_kill,
         target_wounds=target_wounds,
@@ -396,9 +405,14 @@ def strike_unit(
         casualties=casualties,
         notes=(
             # Only the striker throws blows here, so only its fighting-rank
-            # rules (Press of Battle) are in the math and claimed; the
-            # target's stay noted until it strikes in its turn.
-            *_unit_rule_notes(striker.unit, claimed=striker.fighting_ranks().factored),
+            # rules (Press of Battle) and its effective-WS rules are in the math
+            # and claimed; the target's stay noted until it strikes in its turn.
+            # With no engagement conditions passed here, a first-round rule like
+            # Martial Prowess is unknown, so it factors nothing and stays noted.
+            *_unit_rule_notes(
+                striker.unit,
+                claimed={*striker.fighting_ranks().factored, *engagement.weapon_skill.factored},
+            ),
             *_unit_rule_notes(target.unit),
             *engagement.notes,
         ),
@@ -517,6 +531,30 @@ def effective_initiative(
     return replace(modified, value=min(modified.value + charge_bonus, 10))
 
 
+def effective_weapon_skill(
+    contingent: Contingent,
+    conditions: Mapping[Condition, bool | None] | None = None,
+) -> EffectiveCharacteristic:
+    """The Weapon Skill a contingent fights at, all printed modifiers included.
+
+    The sibling of :func:`effective_initiative` for the To Hit chart: the
+    rank-and-file Weapon Skill, modified by the loadout's rule-granted
+    characteristic modifiers under the evaluated ``conditions`` (Martial
+    Prowess's +1 in the first round of combat). A profile with no printed
+    Weapon Skill counts as 0 — the caller validates that a fighter has one
+    before reaching here. Read for both sides of a strike: the striker's own
+    To Hit, and the target's WS the roll is made against.
+
+    Returns:
+        The effective Weapon Skill, with the rule names factored into it and
+        those left unfactored — the caller reports the latter.
+    """
+    base = contingent.unit.profiles[0][Characteristic.WEAPON_SKILL] or 0
+    return effective_characteristic(
+        base, Characteristic.WEAPON_SKILL, contingent.loadout.rules, conditions
+    )
+
+
 def _prior_loss_pmf(pmf: Sequence[float] | None, models: int, name: str) -> Sequence[float]:
     # A side's pre-combat loss distribution: pmf[k] = P(k models lost before
     # any blows are struck. None means none were lost — certainty at zero. A
@@ -614,8 +652,22 @@ def fight(
     # the other.
     a_conditions = _combat_conditions(first_round, a)
     b_conditions = _combat_conditions(first_round, b)
-    a_strikes = _engage(a, b, hit_modifier=0, conditions=a_conditions, phase_rules=phase_rules)
-    b_strikes = _engage(b, a, hit_modifier=0, conditions=b_conditions, phase_rules=phase_rules)
+    a_strikes = _engage(
+        a,
+        b,
+        hit_modifier=0,
+        conditions=a_conditions,
+        target_conditions=b_conditions,
+        phase_rules=phase_rules,
+    )
+    b_strikes = _engage(
+        b,
+        a,
+        hit_modifier=0,
+        conditions=b_conditions,
+        target_conditions=a_conditions,
+        phase_rules=phase_rules,
+    )
     a_bonus = 0 if a.movement.charge is None else a.movement.charge.initiative_bonus
     b_bonus = 0 if b.movement.charge is None else b.movement.charge.initiative_bonus
     a_initiative = effective_initiative(a, a_bonus, a_conditions)
@@ -637,17 +689,28 @@ def fight(
                     losses[a_lost][b_lost] += weight * mass
 
     first_striker = None if a_first is None else (a if a_first else b)
-    # A rule factored into the striking order or the fighting-rank depth is
-    # in the math — claimed, so never noted; both sides strike, so each
-    # claims its own. A mirror match dedups the identical remainder.
+    # A rule factored into the striking order, the fighting-rank depth, or the
+    # effective Weapon Skill is in the math — claimed, so never noted; both
+    # sides strike, so each claims its own. A mirror match dedups the identical
+    # remainder.
     notes = tuple(
         dict.fromkeys(
             [
                 *_unit_rule_notes(
-                    a.unit, claimed={*a_initiative.factored, *a.fighting_ranks().factored}
+                    a.unit,
+                    claimed={
+                        *a_initiative.factored,
+                        *a.fighting_ranks().factored,
+                        *a_strikes.weapon_skill.factored,
+                    },
                 ),
                 *_unit_rule_notes(
-                    b.unit, claimed={*b_initiative.factored, *b.fighting_ranks().factored}
+                    b.unit,
+                    claimed={
+                        *b_initiative.factored,
+                        *b.fighting_ranks().factored,
+                        *b_strikes.weapon_skill.factored,
+                    },
                 ),
                 *a_strikes.notes,
                 *b_strikes.notes,

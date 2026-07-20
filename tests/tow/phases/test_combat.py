@@ -10,6 +10,7 @@ from avelorn.tow.phases.combat import (
     FightResult,
     combat_result,
     effective_initiative,
+    effective_weapon_skill,
     fight,
     strike,
     strike_unit,
@@ -649,6 +650,77 @@ def test_first_round_flag_governs_the_first_round_rules() -> None:
     later = COMBAT.fight(later_engagement)
 
     assert fresh.a_initiative.value == later.a_initiative.value + 1
+
+
+# --- Martial Prowess, the +1 Weapon Skill in the first round, from data/ ---
+
+
+def test_effective_weapon_skill_gains_one_in_the_first_round() -> None:
+    """Martial Prowess lifts Weapon Skill by one, and only in the first round.
+
+    The data-driven +1 WS is read for the first round, honoured as a no-op in
+    a later round (factored, no change), and left unfactored when the round is
+    unknown — the same three dispositions the Initiative query reports.
+    """
+    spearmen = REPO.units["elven-spearmen"]  # WS4, Martial Prowess
+    elves = _fielded(spearmen, 5)
+    base = spearmen.profiles[0][Characteristic.WEAPON_SKILL]
+    assert base is not None
+
+    first = effective_weapon_skill(elves, {Condition.FIRST_ROUND_OF_COMBAT: True})
+    assert first.value == base + 1
+    assert "Martial Prowess" in first.factored
+
+    later = effective_weapon_skill(elves, {Condition.FIRST_ROUND_OF_COMBAT: False})
+    assert later.value == base
+    assert "Martial Prowess" in later.factored  # honoured by not applying
+
+    unknown = effective_weapon_skill(elves)  # no round fact
+    assert unknown.value == base
+    assert "Martial Prowess" in unknown.unfactored
+
+
+def _only_martial_prowess(unit: Unit) -> Unit:
+    # The unit stripped to Martial Prowess alone, so equal Initiative keeps the
+    # blows simultaneous and uncoupled — the WS change is the only asymmetry.
+    return unit.model_copy(update={"special_rules": ["Martial Prowess"]})
+
+
+def test_fight_first_round_martial_prowess_sharpens_both_sides() -> None:
+    """The +1 WS reaches the dice for the striker and, as target WS, against it.
+
+    A body carrying only Martial Prowess against a plain copy of itself, at
+    equal Initiative (simultaneous, uncoupled): in the first round it strikes
+    at WS5 and fells more of the foe than in a later round at WS4, and — its
+    raised WS being the target the foe rolls against — it also loses fewer of
+    its own. The factored rule leaves no "not factored" note in either round,
+    the later round honouring it as a no-op.
+    """
+    spearmen = REPO.units["elven-spearmen"]
+    elves = _fielded(_only_martial_prowess(spearmen), 5).wielding("Thrusting Spear")
+    foe = _fielded(spearmen.model_copy(update={"special_rules": []}), 5).wielding(
+        "Thrusting Spear"
+    )
+
+    first = fight(elves, foe, first_round=True)
+    later = fight(elves, foe, first_round=False)
+
+    assert first.first_striker is None and later.first_striker is None  # equal I4
+    assert expected_value(first.b_casualties) > expected_value(later.b_casualties)  # striker WS
+    assert expected_value(first.a_casualties) < expected_value(later.a_casualties)  # target WS
+    assert not any("Martial Prowess" in note for note in first.notes)
+    assert not any("Martial Prowess" in note for note in later.notes)
+
+
+def test_fight_unknown_round_leaves_martial_prowess_noted() -> None:
+    """Without the round fact the +1 WS cannot be evaluated: noted, no bonus."""
+    spearmen = REPO.units["elven-spearmen"]
+    elves = _fielded(_only_martial_prowess(spearmen), 5).wielding("Thrusting Spear")
+    foe = _fielded(spearmen.model_copy(update={"special_rules": []}), 5).wielding(
+        "Thrusting Spear"
+    )
+    result = fight(elves, foe)  # first round unknown
+    assert any("Martial Prowess" in note for note in result.notes)
 
 
 # --- combat chapter rules in force, factored into the strike ---
