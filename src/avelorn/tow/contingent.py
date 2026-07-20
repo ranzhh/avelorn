@@ -14,10 +14,14 @@ from enum import StrEnum
 
 from avelorn.core.registry import Registry
 from avelorn.tow.data import TOWRepository, default_repository
-from avelorn.tow.engine.rules import printed_rule
+from avelorn.tow.engine.rules import (
+    EffectiveCharacteristic,
+    effective_fighting_ranks,
+    printed_rule,
+)
 from avelorn.tow.muster import Complement
 from avelorn.tow.schema.armour import Armour
-from avelorn.tow.schema.rule import Rule
+from avelorn.tow.schema.rule import Condition, Rule
 from avelorn.tow.schema.unit import Characteristic, Unit
 from avelorn.tow.schema.weapon import Weapon
 
@@ -279,6 +283,18 @@ class Formation:
             sizes.append(self.remainder)
         return tuple(sizes[1:])
 
+    def front_ranks(self, depth: int) -> int:
+        """The models standing in the front ``depth`` ranks.
+
+        The front rank plus the ``depth - 1`` ranks directly behind it —
+        the geometry a fighting rank of a given depth draws its models
+        from. ``depth`` of one is just the front rank (:attr:`files`).
+
+        Returns:
+            The model count in the front ``depth`` ranks.
+        """
+        return self.files + sum(self.rear_rank_sizes[: depth - 1])
+
 
 @dataclass(frozen=True)
 class Contingent:
@@ -390,19 +406,37 @@ class Contingent:
         ranks_behind_first = formation.full_ranks + rear - 1
         return min(max(ranks_behind_first, 0), profile.max_rank_bonus)
 
+    def fighting_ranks(self) -> EffectiveCharacteristic:
+        """How many ranks fight at full Attacks, and the rules behind the count.
+
+        One rank by default — only the front rank fights
+        (the-combat-phase/who-can-fight) — deepened by the rank-modifying
+        rules the contingent carries: Press of Battle takes it to two, except
+        on a turn it charged. The rules are read from the loadout and gated on
+        the contingent's own charge, so the depth holds whatever a survivor
+        count; ``factored`` / ``unfactored`` name the rules evaluated into it,
+        for the combat notes.
+
+        Returns:
+            The fighting-rank depth, with the rule names factored into it and
+            those left unfactored.
+        """
+        return effective_fighting_ranks(
+            1, self.loadout.rules, {Condition.CHARGED: self.movement.charge is not None}
+        )
+
     def fighting_rank(self) -> int:
         """The models that fight at their full Attacks — the fighting rank.
 
-        Only the fighting rank fights — the front rank, in base contact with
-        the foe (the-combat-phase/who-can-fight: "usually, only models in a
-        fighting rank can fight, whilst the models behind them press
-        forward"); the whole front rank is taken to be engaged, an equally
-        wide foe. The models behind press forward but do not fight.
+        The front rank, in base contact with the foe, plus the ranks a rule
+        deepens it to (:meth:`fighting_ranks`); the whole front rank is taken
+        to be engaged, an equally wide foe. Models further back press forward
+        but do not fight.
 
         Returns:
             The number of models in the fighting rank.
         """
-        return self.formation.files
+        return self.formation.front_ranks(self.fighting_ranks().value)
 
     def melee_attacks(self) -> int:
         """The attacks this body throws striking a frontal melee.

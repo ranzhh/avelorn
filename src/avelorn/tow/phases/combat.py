@@ -390,7 +390,10 @@ def strike_unit(
         distribution=distribution,
         casualties=casualties,
         notes=(
-            *_unit_rule_notes(striker.unit),
+            # Only the striker throws blows here, so only its fighting-rank
+            # rules (Press of Battle) are in the math and claimed; the
+            # target's stay noted until it strikes in its turn.
+            *_unit_rule_notes(striker.unit, claimed=striker.fighting_ranks().factored),
             *_unit_rule_notes(target.unit),
             *engagement.notes,
         ),
@@ -629,13 +632,18 @@ def fight(
                     losses[a_lost][b_lost] += weight * mass
 
     first_striker = None if a_first is None else (a if a_first else b)
-    # A rule factored into the striking order is in the math — claimed,
-    # so never noted; a mirror match dedups the identical remainder.
+    # A rule factored into the striking order or the fighting-rank depth is
+    # in the math — claimed, so never noted; both sides strike, so each
+    # claims its own. A mirror match dedups the identical remainder.
     notes = tuple(
         dict.fromkeys(
             [
-                *_unit_rule_notes(a.unit, claimed=a_initiative.factored),
-                *_unit_rule_notes(b.unit, claimed=b_initiative.factored),
+                *_unit_rule_notes(
+                    a.unit, claimed={*a_initiative.factored, *a.fighting_ranks().factored}
+                ),
+                *_unit_rule_notes(
+                    b.unit, claimed={*b_initiative.factored, *b.fighting_ranks().factored}
+                ),
                 *a_strikes.notes,
                 *b_strikes.notes,
             ]

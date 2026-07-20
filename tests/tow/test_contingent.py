@@ -470,37 +470,55 @@ def test_rank_bonus_is_capped_by_troop_type(spearmen_unit: Unit) -> None:
     assert _fielded(spearmen_unit, 25).rank_bonus == 2  # five ranks, capped
 
 
-def test_fighting_rank_is_the_front_rank(spearmen_unit: Unit) -> None:
-    """The fighting rank is the front rank's models — one rank deep for now.
+def test_fighting_rank_press_of_battle_deepens_a_stationary_body(spearmen_unit: Unit) -> None:
+    """Regular Infantry's Press of Battle makes the fighting rank two deep.
 
-    Regular Infantry are five wide by default: a full rank is five, a deeper
-    body still fights with its front five, and a partial single rank fights
-    with all it has.
+    Regular Infantry are five wide by default and confer Press of Battle.
+    Stationary, the fighting rank runs two ranks deep: a lone rank fights
+    alone, a deeper body adds the rank behind — two ranks, never a third. A
+    charge lapses the rule, back to the front rank alone.
     """
-    assert _fielded(spearmen_unit, 5).fighting_rank() == 5  # one full rank
-    assert _fielded(spearmen_unit, 12).fighting_rank() == 5  # the front of a deeper body
-    assert _fielded(spearmen_unit, 3).fighting_rank() == 3  # a partial single rank
+    assert _fielded(spearmen_unit, 5).fighting_rank() == 5  # one rank, nothing behind it
+    assert _fielded(spearmen_unit, 10).fighting_rank() == 10  # two full ranks fight
+    assert _fielded(spearmen_unit, 12).fighting_rank() == 10  # front two of three ranks
+    charged = _fielded(spearmen_unit, 12).charging(Charge(3, ChargeArc.FRONT))
+    assert charged.fighting_rank() == 5  # Press of Battle lapses on a charge
 
 
-def test_melee_attacks_are_the_fighting_rank_alone(spearmen_unit: Unit) -> None:
-    """Only the front rank fights; deeper ranks add nothing, a wider front does.
+def test_fighting_ranks_reports_press_of_battle_as_factored(spearmen_unit: Unit) -> None:
+    """The depth carries the rules folded into it: Press of Battle, factored.
 
-    Regular Infantry are A1, five wide by default. A single rank of five
-    throws five; ten or fifteen throw the same five (the ranks behind press
-    forward but do not fight); ranked wider, the whole body is one fighting
-    rank and every model throws.
+    Present whether it deepens the rank (stationary) or is honoured as a
+    no-op (charged) — always evaluated, so always factored, never unknown.
+    """
+    stationary = _fielded(spearmen_unit, 10).fighting_ranks()
+    assert stationary.value == 2
+    assert "Press of Battle" in stationary.factored
+    assert stationary.unfactored == ()
+
+    charged = _fielded(spearmen_unit, 10).charging(Charge(3, ChargeArc.FRONT)).fighting_ranks()
+    assert charged.value == 1
+    assert "Press of Battle" in charged.factored
+
+
+def test_melee_attacks_are_the_fighting_ranks_attacks(spearmen_unit: Unit) -> None:
+    """melee_attacks is the fighting rank times Attacks; depth adds no more.
+
+    Stationary Regular Infantry (A1) fight two ranks: five throw five, ten
+    throw ten, fifteen throw ten as well (the third rank stays out), and a
+    fifteen-wide single rank throws all fifteen.
     """
     assert _fielded(spearmen_unit, 5).melee_attacks() == 5  # one rank of five
-    assert _fielded(spearmen_unit, 10).melee_attacks() == 5  # front rank of a two-rank body
-    assert _fielded(spearmen_unit, 15).melee_attacks() == 5  # deeper still, front rank only
+    assert _fielded(spearmen_unit, 10).melee_attacks() == 10  # two ranks of five
+    assert _fielded(spearmen_unit, 15).melee_attacks() == 10  # third rank stays out
     assert _fielded(spearmen_unit, 15, frontage=15).melee_attacks() == 15  # all in one rank
 
 
 def test_melee_attacks_scale_with_the_attacks_characteristic(spearmen_unit: Unit) -> None:
-    """Each fighting-rank model throws its full Attacks."""
+    """Each fighting model throws its full Attacks: a rank of five at A2 is ten."""
     two_attacks = spearmen_unit.model_copy(deep=True)
     two_attacks.profiles[0].characteristics[Characteristic.ATTACKS] = 2
-    assert _fielded(two_attacks, 10).melee_attacks() == 10  # a front rank of five, A2
+    assert _fielded(two_attacks, 5).melee_attacks() == 10  # a single rank of five, A2
 
 
 def test_a_rear_rank_counts_only_when_wide_enough(spearmen_unit: Unit) -> None:
