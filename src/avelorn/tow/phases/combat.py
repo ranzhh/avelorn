@@ -48,7 +48,7 @@ from avelorn.tow.engine.charts import (
     wound_target,
 )
 from avelorn.tow.engine.rules import (
-    EffectiveCharacteristic,
+    EffectiveValue,
     compile_rules,
     effective_characteristic,
 )
@@ -221,7 +221,7 @@ class _Engagement:
     """
 
     striker: Contingent
-    weapon_skill: EffectiveCharacteristic
+    weapon_skill: EffectiveValue
     p_unsaved: float
     p_kill: float
     target_wounds: int
@@ -442,8 +442,8 @@ class FightResult:
     losses: list[list[float]]  # losses[a_lost][b_lost] = joint probability
     first_striker: Contingent | None
     notes: tuple[str, ...] = ()
-    a_initiative: EffectiveCharacteristic = EffectiveCharacteristic(0)
-    b_initiative: EffectiveCharacteristic = EffectiveCharacteristic(0)
+    a_initiative: EffectiveValue = EffectiveValue(0)
+    b_initiative: EffectiveValue = EffectiveValue(0)
     a_rank_bonus: int = 0
     b_rank_bonus: int = 0
 
@@ -503,7 +503,7 @@ def effective_initiative(
     contingent: Contingent,
     charge_bonus: int = 0,
     conditions: Mapping[Condition, bool | None] | None = None,
-) -> EffectiveCharacteristic:
+) -> EffectiveValue:
     """The Initiative a contingent strikes at, all printed modifiers included.
 
     The striking-order assembler, and the one home of the Initiative
@@ -534,7 +534,7 @@ def effective_initiative(
 def effective_weapon_skill(
     contingent: Contingent,
     conditions: Mapping[Condition, bool | None] | None = None,
-) -> EffectiveCharacteristic:
+) -> EffectiveValue:
     """The Weapon Skill a contingent fights at, all printed modifiers included.
 
     The sibling of :func:`effective_initiative` for the To Hit chart: the
