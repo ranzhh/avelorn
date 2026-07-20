@@ -2,6 +2,7 @@
 # Rules: https://tow.whfb.app/troop-types-in-detail/heavy-infantry
 id: heavy-infantry
 name: Heavy Infantry
+unit_strength: 1
 models_per_rank: 4
 max_rank_bonus: 2
 special_rules:

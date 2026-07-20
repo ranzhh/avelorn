@@ -554,3 +554,18 @@ def test_a_troop_type_that_does_not_rank_up_claims_no_bonus(spearmen_unit: Unit)
         update={"troop_type_profile": REPO.troop_types["monstrous-creature"]}
     )
     assert _fielded(monster, 6).rank_bonus == 0
+
+
+def test_unit_strength_sums_one_per_model_for_infantry(spearmen_unit: Unit) -> None:
+    """A Regular Infantry body's Unit Strength is one per model, thinned by losses."""
+    assert _fielded(spearmen_unit, 10).unit_strength() == 10  # US 1 x 10 models
+    assert _fielded(spearmen_unit, 10).remove_casualties(3).unit_strength() == 7
+
+
+def test_unit_strength_of_a_monster_scales_with_its_wounds(spearmen_unit: Unit) -> None:
+    """An "As Starting Wounds" body's Unit Strength is its Wounds times its models."""
+    monster = spearmen_unit.model_copy(
+        deep=True, update={"troop_type_profile": REPO.troop_types["monstrous-creature"]}
+    )
+    monster.profiles[0].characteristics[Characteristic.WOUNDS] = 4
+    assert _fielded(monster, 3).unit_strength() == 12  # 3 models x 4 Wounds each

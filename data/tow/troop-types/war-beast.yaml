@@ -1,5 +1,6 @@
 # Source: https://tow.whfb.app/troop-types-at-a-glance/troop-type-table
 id: war-beast
 name: War Beast
+unit_strength: 1
 models_per_rank: 5
 max_rank_bonus: 1

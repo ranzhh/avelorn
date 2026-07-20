@@ -1,3 +1,4 @@
 # Source: https://tow.whfb.app/troop-types-at-a-glance/troop-type-table
 id: behemoth
 name: Behemoth
+unit_strength: as-starting-wounds

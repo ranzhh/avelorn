@@ -1,3 +1,4 @@
 # Source: https://tow.whfb.app/troop-types-at-a-glance/troop-type-table
 id: war-machine
 name: War Machine
+unit_strength: as-starting-wounds

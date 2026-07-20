@@ -1,3 +1,4 @@
 # Source: https://tow.whfb.app/troop-types-at-a-glance/troop-type-table
 id: swarm
 name: Swarm
+unit_strength: 3

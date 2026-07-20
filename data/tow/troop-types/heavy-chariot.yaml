@@ -1,3 +1,4 @@
 # Source: https://tow.whfb.app/troop-types-at-a-glance/troop-type-table
 id: heavy-chariot
 name: Heavy Chariot
+unit_strength: 5
