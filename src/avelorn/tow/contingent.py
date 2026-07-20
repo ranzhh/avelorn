@@ -17,6 +17,7 @@ from avelorn.tow.data import TOWRepository, default_repository
 from avelorn.tow.engine.rules import (
     EffectiveCharacteristic,
     effective_fighting_ranks,
+    effective_supporting_ranks,
     printed_rule,
 )
 from avelorn.tow.muster import Complement
@@ -438,19 +439,54 @@ class Contingent:
         """
         return self.formation.front_ranks(self.fighting_ranks().value)
 
+    def supporting_ranks(self) -> EffectiveCharacteristic:
+        """How many ranks support at one attack each, and the rules behind it.
+
+        None by default — only the fighting rank fights. A weapon in hand that
+        allows supporting attacks (the thrusting spear's Fight in Extra Rank)
+        lets the rank directly behind the fighting rank strike at one attack
+        each, except on a charge. Read from the weapon in hand's Combat-profile
+        rules — the grant is the weapon's, not the unit's — gated on the
+        contingent's own charge; ``factored`` / ``unfactored`` name the rules
+        evaluated in, for the combat notes.
+
+        Returns:
+            The supporting-rank count, with the rule names factored into it and
+            those left unfactored.
+        """
+        return effective_supporting_ranks(
+            0, self._weapon_rules(), {Condition.CHARGED: self.movement.charge is not None}
+        )
+
+    def _weapon_rules(self) -> list[Rule]:
+        # The resolved rules on the weapon in hand's Combat profile: the entries
+        # for its printed names, from the loadout's weapon-rule index. Empty
+        # when nothing is in hand or the weapon has no Combat profile.
+        weapon = self.weapon
+        profile = weapon.combat_profile if weapon is not None else None
+        if profile is None:
+            return []
+        index = self.loadout.weapon_rules
+        return [index[name] for name in profile.special_rules if name in index]
+
     def melee_attacks(self) -> int:
         """The attacks this body throws striking a frontal melee.
 
-        Its fighting rank (:meth:`fighting_rank`) each make their full
-        Attacks. The supporting attacks that some weapons grant the rank
-        behind (Fight in Extra Rank) are a separate rule, not modelled here.
-        A profile with no printed Attacks throws none.
+        Its fighting rank (:meth:`fighting_rank`) each make their full Attacks;
+        each model in the supporting ranks behind it (:meth:`supporting_ranks`,
+        granted by a weapon like the thrusting spear) makes a single supporting
+        attack. A profile with no printed Attacks throws none.
 
         Returns:
             The number of attacks thrown this round.
         """
         attacks_per_model = self.unit.profiles[0][Characteristic.ATTACKS] or 0
-        return self.fighting_rank() * attacks_per_model
+        fighting = self.fighting_ranks().value
+        supporting = self.supporting_ranks().value
+        formation = self.formation
+        fighting_models = formation.front_ranks(fighting)
+        supporting_models = formation.front_ranks(fighting + supporting) - fighting_models
+        return fighting_models * attacks_per_model + supporting_models
 
     def after(self, movement: Movement) -> "Contingent":
         """This contingent with its Movement-phase ``movement`` set.

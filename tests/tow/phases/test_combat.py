@@ -104,7 +104,7 @@ def test_strike_unit_spearmen_vs_spearmen() -> None:
     assert result.wound_target == 4
     assert result.save_target == 5
     assert result.p_unsaved == pytest.approx(1 / 6)
-    assert any("Fight In Extra Rank" in note for note in result.notes)  # weapon rule unfactored
+    assert not any("Fight In Extra Rank" in note for note in result.notes)  # now factored
     assert any("Valour of Ages" in note for note in result.notes)  # unit special rule
     assert any("thrusting spear" in note.lower() for note in result.notes)  # weapon notes
 
@@ -134,25 +134,41 @@ def test_strike_unit_attacks_scale_with_the_attacks_characteristic() -> None:
     assert result.attacks == 10
 
 
-def test_strike_unit_press_of_battle_fights_two_ranks() -> None:
-    """Regular Infantry fight two ranks deep (Press of Battle), never a third.
+def test_strike_unit_fights_two_full_ranks_plus_a_supporting_rank() -> None:
+    """A stationary spear block fights three ranks: two full, one supporting.
 
-    Elven Spearmen are Regular Infantry, so stationary they fight two ranks
-    at full Attacks: ten A1 models throw ten, and fifteen throw ten as well —
-    the third rank stays out. Press of Battle is in the math, so it leaves no
-    note; the thrusting spear's Fight in Extra Rank is still unfactored.
+    Elven Spearmen (Regular Infantry, A1) with thrusting spears, stationary:
+    Press of Battle makes the front two ranks fight at full Attacks and Fight
+    in Extra Rank lets the third rank support at one attack each — fifteen
+    models throw 10 + 5 = 15. A fourth rank stays out entirely, so twenty
+    throw the same fifteen.
     """
     spearmen = REPO.units["elven-spearmen"]  # A1, Regular Infantry (5 wide)
-    two_ranks = strike_unit(
-        _fielded(spearmen, 10).wielding("Thrusting Spear"), _fielded(spearmen, 40)
-    )
-    assert two_ranks.attacks == 10  # two ranks of five
-
     three_ranks = strike_unit(
         _fielded(spearmen, 15).wielding("Thrusting Spear"), _fielded(spearmen, 40)
     )
-    assert three_ranks.attacks == 10  # the third rank stays out
-    assert any("Fight In Extra Rank" in note for note in two_ranks.notes)  # still unfactored
+    assert three_ranks.attacks == 15  # two full ranks (10) + one supporting rank (5)
+
+    four_ranks = strike_unit(
+        _fielded(spearmen, 20).wielding("Thrusting Spear"), _fielded(spearmen, 40)
+    )
+    assert four_ranks.attacks == 15  # the fourth rank neither fights nor supports
+
+
+def test_strike_unit_supporting_models_strike_at_one_attack_each() -> None:
+    """A supporting-rank model makes one attack, whatever its Attacks value.
+
+    A2 spearmen three ranks deep: the front two ranks (ten models) strike at
+    A2 for twenty, and the supporting third rank (five models) adds one each —
+    twenty-five, not thirty.
+    """
+    spearmen = REPO.units["elven-spearmen"]
+    two_attacks = spearmen.model_copy(deep=True)
+    two_attacks.profiles[0].characteristics[Characteristic.ATTACKS] = 2
+    result = strike_unit(
+        _fielded(two_attacks, 15).wielding("Thrusting Spear"), _fielded(spearmen, 40)
+    )
+    assert result.attacks == 25  # 10 * 2 (two full ranks) + 5 * 1 (one supporting rank)
 
 
 def test_strike_unit_press_of_battle_lapses_on_a_charge() -> None:
@@ -168,23 +184,6 @@ def test_strike_unit_press_of_battle_lapses_on_a_charge() -> None:
     )
     result = strike_unit(charging, _fielded(spearmen, 40))
     assert result.attacks == 5  # the front rank only
-
-
-def test_strike_unit_widening_the_front_brings_more_models_to_fight() -> None:
-    """A wider fighting rank fights with more models; extra depth does not.
-
-    Fifteen A1 spearmen ranked five wide fight two ranks — ten; ranked
-    fifteen wide they are a single fighting rank of all fifteen.
-    """
-    spearmen = REPO.units["elven-spearmen"]
-    narrow = strike_unit(
-        _fielded(spearmen, 15).wielding("Thrusting Spear"), _fielded(spearmen, 40)
-    )
-    wide = strike_unit(
-        _fielded(spearmen, 15, frontage=15).wielding("Thrusting Spear"), _fielded(spearmen, 40)
-    )
-    assert narrow.attacks == 10  # two ranks of five
-    assert wide.attacks == 15  # one rank of fifteen
 
 
 def test_strike_unit_rejects_a_missile_only_weapon() -> None:
@@ -266,42 +265,39 @@ def test_fight_coupling_reduces_the_return_strike() -> None:
         _fielded(spearmen, 5).wielding("Thrusting Spear"), _fielded(spearmen, 5)
     )
     assert expected_value(result.a_casualties) < expected_value(full_strength.casualties)
-    assert any("Fight In Extra Rank" in note for note in result.notes)
 
 
-def test_fight_caps_a_deep_unit_at_its_fighting_rank() -> None:
-    """In a fight, ranks of depth add no blows, but a wider front does.
+def test_fight_caps_a_deep_spear_unit_at_three_ranks() -> None:
+    """Depth past three ranks adds nothing: two fight, one supports, the rest wait.
 
-    Two I4 spearmen bodies strike simultaneously, so each side's blows land
-    at its entering strength (no coupling reduction). Against a defender too
-    large to wipe out, fifteen attackers three ranks deep fell exactly as
-    many as ten attackers two ranks deep — both fight with the same two ranks
-    (Press of Battle; stationary, so it applies), the third staying out. The
-    same fifteen ranked one rank wide fell strictly more: all fifteen are in
-    the fighting rank.
+    Two I4 spear bodies strike simultaneously, so each side's blows land at its
+    entering strength (no coupling reduction). Against a defender too large to
+    wipe out, a four-rank attacker fells exactly as many as a three-rank one —
+    both throw two full ranks plus one supporting rank (Press of Battle + Fight
+    in Extra Rank), the fourth rank idle. A two-rank attacker fells fewer: it
+    has no third rank to support from.
     """
     spearmen = REPO.units["elven-spearmen"]
     big = _fielded(spearmen, 40)
-    deep = fight(
+    four = fight(
+        _fielded(spearmen, 20).wielding("Thrusting Spear"), big.wielding("Thrusting Spear")
+    )
+    three = fight(
         _fielded(spearmen, 15).wielding("Thrusting Spear"), big.wielding("Thrusting Spear")
     )
-    shallow = fight(
+    two = fight(
         _fielded(spearmen, 10).wielding("Thrusting Spear"), big.wielding("Thrusting Spear")
     )
-    wide = fight(
-        _fielded(spearmen, 15, frontage=15).wielding("Thrusting Spear"),
-        big.wielding("Thrusting Spear"),
-    )
-    assert expected_value(deep.b_casualties) == pytest.approx(expected_value(shallow.b_casualties))
-    assert expected_value(wide.b_casualties) > expected_value(deep.b_casualties)
+    assert expected_value(four.b_casualties) == pytest.approx(expected_value(three.b_casualties))
+    assert expected_value(three.b_casualties) > expected_value(two.b_casualties)
 
 
-def test_fight_factors_press_of_battle_for_both_sides() -> None:
-    """Both sides strike, so each has Press of Battle in the math — no note.
+def test_fight_factors_the_rank_rules_for_both_sides() -> None:
+    """Both sides strike, so each side's rank rules are in the math — no note.
 
-    A mirror of stationary Regular Infantry: each fights two ranks, and Press
-    of Battle is claimed for both, so it never appears in the round's notes —
-    unlike the thrusting spear's Fight in Extra Rank, still unfactored.
+    A mirror of stationary spear-armed Regular Infantry: Press of Battle (the
+    troop type's) and Fight in Extra Rank (the spear's) are claimed for both
+    sides, so neither is left in the round's notes.
     """
     spearmen = REPO.units["elven-spearmen"]
     result = fight(
@@ -309,7 +305,7 @@ def test_fight_factors_press_of_battle_for_both_sides() -> None:
         _fielded(spearmen, 10).wielding("Thrusting Spear"),
     )
     assert not any("Press of Battle" in note for note in result.notes)
-    assert any("Fight In Extra Rank" in note for note in result.notes)
+    assert not any("Fight In Extra Rank" in note for note in result.notes)
 
 
 def test_fight_rejects_negative_models() -> None:
