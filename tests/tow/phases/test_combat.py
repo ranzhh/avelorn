@@ -109,6 +109,19 @@ def test_strike_unit_spearmen_vs_spearmen() -> None:
     assert any("thrusting spear" in note.lower() for note in result.notes)  # weapon notes
 
 
+def test_strike_unit_notes_the_troop_types_conferred_rules() -> None:
+    """Rules a troop type confers surface as unfactored, owned by the type.
+
+    Elven Spearmen are Regular Infantry, which confers Press of Battle,
+    Massed Infantry and Parry — none printed on the datasheet. Each is
+    reported not factored and attributed to the troop type, not the unit.
+    """
+    spearmen = REPO.units["elven-spearmen"]
+    result = strike_unit(_fielded(spearmen, 5).wielding("Thrusting Spear"), _fielded(spearmen, 10))
+    for rule in ("Press of Battle", "Massed Infantry", "Parry"):
+        assert any(f"{rule} (Regular Infantry)" in note for note in result.notes)
+
+
 def test_strike_unit_attacks_scale_with_the_attacks_characteristic() -> None:
     """The fighting rank makes its full Attacks: A2 over a rank of 5 is 10 attacks."""
     spearmen = REPO.units["elven-spearmen"]

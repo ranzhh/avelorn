@@ -440,10 +440,16 @@ class FightResult:
 def _unit_rule_notes(unit: Unit, claimed: Collection[str] = ()) -> list[str]:
     # The one owner of a unit rule's disposition: noted unless a consumer
     # claimed it (the initiative read claims what it factored, honoured
-    # no-ops included). Notes are built once, never parsed or matched.
+    # no-ops included). Notes are built once, never parsed or matched. A
+    # rule printed on the datasheet is owned by the unit; a rule the troop
+    # type confers (Press of Battle, ...) is owned by the troop type.
+    troop_type = unit.troop_type_profile
+    owned = [(printed, unit.name) for printed in unit.special_rules]
+    if troop_type is not None:
+        owned += [(printed, troop_type.name) for printed in troop_type.special_rules]
     return [
-        f"special rule not factored: {printed} ({unit.name})"
-        for printed in unit.special_rules
+        f"special rule not factored: {printed} ({owner})"
+        for printed, owner in owned
         if printed not in claimed
     ]
 
