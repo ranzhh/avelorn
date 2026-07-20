@@ -295,6 +295,11 @@ def _engage(
     modifiers, unfactored = compile_rules(
         profile.special_rules, striker.loadout.weapon_rules, conditions
     )
+    # A supporting-rank weapon rule (Fight in Extra Rank) is factored into the
+    # attack count, not the dice walk, so the walk leaves it unfactored — claim
+    # it out, the way shooting claims Volley Fire off a volley.
+    supporting_factored = striker.supporting_ranks().factored
+    unfactored = [rule for rule in unfactored if rule not in supporting_factored]
     notes.extend(f"weapon rule not factored: {rule} ({weapon.name})" for rule in unfactored)
     phase_modifiers, phase_unfactored = compile_rules(sorted(phase_rules), phase_rules, conditions)
     modifiers.extend(phase_modifiers)

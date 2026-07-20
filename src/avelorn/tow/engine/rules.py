@@ -267,6 +267,25 @@ def effective_fighting_ranks(
     return _effective_quantity(base, "fighting-ranks", rules, conditions)
 
 
+def effective_supporting_ranks(
+    base: int,
+    rules: Sequence[Rule],
+    conditions: Mapping[Condition, bool | None] | None = None,
+) -> EffectiveCharacteristic:
+    """Apply the rules' modifiers to the number of supporting ranks.
+
+    The fighting-rank query's twin for the ``supporting-ranks`` formation
+    quantity — the ranks behind the fighting rank that support at one attack
+    each. Folds the rank modifiers a weapon carries (Fight in Extra Rank's
+    +1) over ``base`` — none by default — under the evaluated ``conditions``,
+    reporting which rules were factored and which the facts could not answer.
+
+    Returns:
+        The effective count with the factored and unfactored rule names.
+    """
+    return _effective_quantity(base, "supporting-ranks", rules, conditions)
+
+
 def _effective_quantity(
     base: int,
     key: Characteristic | RankKind,
