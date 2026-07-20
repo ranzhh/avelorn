@@ -119,7 +119,7 @@ def strike(
 ) -> StrikeResult:
     """Resolve a set of identical close-combat attacks probabilistically.
 
-    ``attacks`` blows are rolled at ``weapon_skill`` against a defender of
+    ``attacks`` blows are rolled at ``weapon_skill`` against a target of
     ``target_weapon_skill``; ``hit_modifier`` follows the printed sign
     convention (a penalty is negative and raises the target). Wounds,
     saves and casualty accumulation match shooting: see
@@ -211,18 +211,19 @@ class _Engagement:
     """One side's per-attack resolution against a specific foe.
 
     The matchup-dependent, fighter-count-independent half of a melee
-    strike: the per-attack probabilities and reported targets, plus the
-    Attacks each model makes and the defender's Wounds. Given a number of
-    fighters, :func:`wound_and_casualties` turns it into a casualty
-    distribution — so the dice walk runs once even when the same side
-    strikes with several fighter counts (a return strike whose numbers
-    depend on casualties already taken).
+    strike: the per-attack probabilities and reported targets, the
+    ``striker`` throwing the blows, and the target's Wounds. The dice
+    walk depends only on the matchup, so it runs once; :meth:`attacks` then
+    turns any surviving strength into that many blows (its fighting rank)
+    and :func:`wound_and_casualties` into a casualty distribution — the same
+    walk serves a return strike whose numbers depend on casualties already
+    taken.
     """
 
+    striker: Contingent
     p_unsaved: float
     p_kill: float
-    attacks_per_model: int
-    defender_wounds: int
+    target_wounds: int
     hit_target: int
     wound_target: int | None
     save_target: int | None
@@ -230,10 +231,25 @@ class _Engagement:
     p_wound: float
     notes: tuple[str, ...]
 
+    def attacks(self, survivors: int) -> int:
+        """The blows ``survivors`` of the striking models throw this round.
+
+        The striker reduced to its ``survivors`` throws its fighting rank
+        (:meth:`~avelorn.tow.contingent.Contingent.melee_attacks`) — its full
+        frontage until losses cut past the rear ranks into the front one, and
+        the narrowed front thereafter — so a body thinned to fewer than a rank
+        swings back with fewer attacks.
+
+        Returns:
+            The number of attacks thrown.
+        """
+        thinned = self.striker.remove_casualties(self.striker.models - survivors)
+        return thinned.melee_attacks()
+
 
 def _engage(
-    attacker: Contingent,
-    defender: Contingent,
+    striker: Contingent,
+    target: Contingent,
     *,
     hit_modifier: int,
     conditions: Mapping[Condition, bool | None] | None = None,
@@ -241,35 +257,35 @@ def _engage(
 ) -> _Engagement:
     # The matchup half of a strike, shared by strike_unit and fight:
     # extract rank-and-file stats, resolve the weapon's Combat profile and
-    # the defender's armour, compile the weapon's rules, and walk one
+    # the target's armour, compile the weapon's rules, and walk one
     # attack. TODO(#46): rank-and-file profile only — a champion fighting
     # at a different WS is a separate attack batch needing unit composition.
-    weapon = attacker.in_hand()
+    weapon = striker.in_hand()
     profile = weapon.combat_profile
     if profile is None:
         raise ValueError(f"{weapon.name} has no Combat profile; it cannot fight")
-    striker, target = attacker.unit, defender.unit
-    weapon_skill = striker.profiles[0][Characteristic.WEAPON_SKILL]
-    target_weapon_skill = target.profiles[0][Characteristic.WEAPON_SKILL]
-    attacks_per_model = striker.profiles[0][Characteristic.ATTACKS]
-    toughness = target.profiles[0][Characteristic.TOUGHNESS]
+    striker_unit, target_unit = striker.unit, target.unit
+    weapon_skill = striker_unit.profiles[0][Characteristic.WEAPON_SKILL]
+    target_weapon_skill = target_unit.profiles[0][Characteristic.WEAPON_SKILL]
+    attacks_per_model = striker_unit.profiles[0][Characteristic.ATTACKS]
+    toughness = target_unit.profiles[0][Characteristic.TOUGHNESS]
     if weapon_skill is None:
-        raise ValueError(f"{striker.name} has no Weapon Skill; it cannot fight")
+        raise ValueError(f"{striker_unit.name} has no Weapon Skill; it cannot fight")
     if target_weapon_skill is None:
-        raise ValueError(f"{target.name} has no Weapon Skill; its To Hit is undefined")
+        raise ValueError(f"{target_unit.name} has no Weapon Skill; its To Hit is undefined")
     if attacks_per_model is None:
-        raise ValueError(f"{striker.name} has no Attacks; it cannot fight")
+        raise ValueError(f"{striker_unit.name} has no Attacks; it cannot fight")
     if toughness is None:
-        raise ValueError(f"{target.name} has no Toughness; it cannot be wounded")
+        raise ValueError(f"{target_unit.name} has no Toughness; it cannot be wounded")
 
-    wielder_strength = striker.profiles[0][Characteristic.STRENGTH]
+    wielder_strength = striker_unit.profiles[0][Characteristic.STRENGTH]
     if profile.strength.is_relative and wielder_strength is None:
         raise ValueError(
-            f"{weapon.name} strikes at the wielder's Strength, but {striker.name} has none"
+            f"{weapon.name} strikes at the wielder's Strength, but {striker_unit.name} has none"
         )
     strength = profile.strength.resolve(wielder_strength or 0)
 
-    armour_value = defender_armour(defender.loadout.armour)
+    armour_value = defender_armour(target.loadout.armour)
     notes: list[str] = []
     # This striker's engagement conditions gate its rules, exactly as a
     # volley's do: a weapon rule whose condition the facts answer is
@@ -277,7 +293,7 @@ def _engage(
     # unknown stays noted. The combat chapter's rules in force
     # (phase_rules) apply to every strike, gated by the same facts.
     modifiers, unfactored = compile_rules(
-        profile.special_rules, attacker.loadout.weapon_rules, conditions
+        profile.special_rules, striker.loadout.weapon_rules, conditions
     )
     notes.extend(f"weapon rule not factored: {rule} ({weapon.name})" for rule in unfactored)
     phase_modifiers, phase_unfactored = compile_rules(sorted(phase_rules), phase_rules, conditions)
@@ -292,22 +308,22 @@ def _engage(
     p_unsaved, p_kill, hit = _per_attack(hit, wound, save, None, modifiers)
     # Wounds accumulate into whole slain models; a profile with no printed
     # Wounds ("-") is treated as a single-Wound model.
-    defender_wounds = target.profiles[0][Characteristic.WOUNDS] or 1
+    target_wounds = target_unit.profiles[0][Characteristic.WOUNDS] or 1
     logger.debug(
         "%s (WS %d, A %d) vs %s (WS %d, T %d): per-attack unsaved p=%.3f",
-        striker.name,
+        striker_unit.name,
         weapon_skill,
         attacks_per_model,
-        target.name,
+        target_unit.name,
         target_weapon_skill,
         toughness,
         p_unsaved,
     )
     return _Engagement(
+        striker=striker,
         p_unsaved=p_unsaved,
         p_kill=p_kill,
-        attacks_per_model=attacks_per_model,
-        defender_wounds=defender_wounds,
+        target_wounds=target_wounds,
         hit_target=hit,
         wound_target=wound,
         save_target=save,
@@ -318,44 +334,49 @@ def _engage(
 
 
 def strike_unit(
-    attacker: Contingent,
-    defender: Contingent,
+    striker: Contingent,
+    target: Contingent,
     *,
     hit_modifier: int = 0,
 ) -> StrikeResult:
-    """Resolve ``attacker`` striking against ``defender`` with the weapon in hand.
+    """Resolve ``striker`` striking against ``target`` with the weapon in hand.
 
-    Each fielded model (``attacker.models``) makes its full Attacks with
-    the Combat profile of the weapon the attacker is wielding
-    (``attacker.in_hand()``), using each side's first (rank-and-file)
-    profile; casualties cap at the defender's fielded ``models``. The
-    defender's save folds from its resolved loadout, and the weapon's
-    rules compile into the dice walk from the attacker's resolved loadout
-    (``attacker.loadout.weapon_rules``). Unit special rules are not
-    factored into the math yet — every one is listed in the result's
-    notes.
+    Only the striker's fighting rank fights — its front rank, in base
+    contact, each model making its full Attacks (``striker.melee_attacks``
+    — the-combat-phase/who-can-fight): a body deeper than one rank no longer
+    throws every model's Attacks, only its front. The Combat profile is the
+    weapon the striker is wielding (``striker.in_hand()``), using each
+    side's first (rank-and-file) profile; casualties cap at the target's
+    fielded ``models``. The target's save folds from its resolved loadout,
+    and the weapon's rules compile into the dice walk from the striker's
+    resolved loadout (``striker.loadout.weapon_rules``). Unit special rules
+    are not factored into the math yet — every one is listed in the result's
+    notes. The whole front rank is taken to be in base contact (an equally
+    wide foe); a foe of a different frontage, and the supporting attacks the
+    rank behind gets from Fight in Extra Rank / Martial Prowess, are not
+    modelled yet.
 
     Returns:
         The close-combat outcome for this side's blows.
 
     Raises:
-        ValueError: the attacker has no weapon in hand, the weapon has no
-            Combat profile, either profile lacks Weapon Skill, the attacker
-            profile has no Attacks, the defender profile has no Toughness, or
-            the weapon strikes at the wielder's Strength and the attacker
+        ValueError: the striker has no weapon in hand, the weapon has no
+            Combat profile, either profile lacks Weapon Skill, the striker
+            profile has no Attacks, the target profile has no Toughness, or
+            the weapon strikes at the wielder's Strength and the striker
             profile has none.
     """
-    fighters, defenders = attacker.models, defender.models
+    fighters, targets = striker.models, target.models
     if fighters < 0:
         raise ValueError("fighters must be >= 0")
-    engagement = _engage(attacker, defender, hit_modifier=hit_modifier)
-    attacks = fighters * engagement.attacks_per_model
+    engagement = _engage(striker, target, hit_modifier=hit_modifier)
+    attacks = engagement.attacks(fighters)
     distribution, casualties = wound_and_casualties(
         attacks,
         p_unsaved=engagement.p_unsaved,
         p_kill=engagement.p_kill,
-        wounds_per_model=engagement.defender_wounds,
-        targets=defenders,
+        wounds_per_model=engagement.target_wounds,
+        targets=targets,
     )
     return StrikeResult(
         attacks=attacks,
@@ -369,11 +390,11 @@ def strike_unit(
         distribution=distribution,
         casualties=casualties,
         notes=(
-            *_unit_rule_notes(attacker.unit),
-            *_unit_rule_notes(defender.unit),
+            *_unit_rule_notes(striker.unit),
+            *_unit_rule_notes(target.unit),
             *engagement.notes,
         ),
-        target_models=defenders,
+        target_models=targets,
     )
 
 
@@ -550,10 +571,12 @@ def fight(
     unevaluated stays noted. Deferred and noted, not modelled here:
     Always Strikes First/Last and the Initiative modifiers granted by
     weapons (a Thrusting Spear's bonus when charged) — surfaced in the
-    result's notes; the break test, ranks and supporting attacks (#28),
-    split-profile champions (#46), and multi-unit combats. Every fighter is
-    treated as in base contact making its full Attacks. Score the round
-    with :func:`combat_result`.
+    result's notes; the supporting attacks Fight in Extra Rank / Martial
+    Prowess grant the rank behind, split-profile champions (#46), and
+    multi-unit combats. Each side fights with its fighting rank only — the
+    front rank in base contact (:meth:`~avelorn.tow.contingent.Contingent.melee_attacks`),
+    the whole front rank taken to be engaged (an equally wide foe). Score the
+    round with :func:`combat_result`.
 
     Returns:
         The joint distribution of casualties for the round, oriented so
@@ -628,12 +651,12 @@ def fight(
 
 
 def _fell(engagement: _Engagement, fighters: int, *, targets: int) -> list[float]:
-    # Casualties inflicted on the defender by ``fighters`` models striking.
+    # Casualties inflicted on the target by ``fighters`` models striking.
     _, casualties = wound_and_casualties(
-        fighters * engagement.attacks_per_model,
+        engagement.attacks(fighters),
         p_unsaved=engagement.p_unsaved,
         p_kill=engagement.p_kill,
-        wounds_per_model=engagement.defender_wounds,
+        wounds_per_model=engagement.target_wounds,
         targets=targets,
     )
     return casualties
