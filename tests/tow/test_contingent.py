@@ -163,6 +163,7 @@ def test_field_resolves_equipment_into_the_loadout(spearmen_unit: Unit) -> None:
             "Massed Infantry",
             "Parry",
         ),
+        weapon_rules={"Fight In Extra Rank": REPO.rules["fight-in-extra-rank"]},
     )
 
 
@@ -328,6 +329,20 @@ def test_loadout_resolves_the_carried_weapons_rules(spearmen_unit: Unit) -> None
     index = archers.loadout.weapon_rules
     assert set(index) == {"Armour Bane (1)"}
     assert index["Armour Bane (1)"].name == "Armour Bane (1)"
+
+
+def test_thrusting_spear_resolves_fight_in_extra_rank(spearmen_unit: Unit) -> None:
+    """The spear's Fight In Extra Rank resolves into the weapon-rule index.
+
+    It carries the supporting-ranks effect the melee count reads; a spear-armed
+    contingent resolves it onto its loadout the way any weapon rule resolves.
+    """
+    fielded = Contingent.field(spearmen_unit, 10, data=REPO)
+    rule = fielded.loadout.weapon_rules["Fight In Extra Rank"]
+    assert rule is REPO.rules["fight-in-extra-rank"]
+    effect = rule.effects[0]
+    assert isinstance(effect, ModifierEffect)
+    assert effect.then == {"supporting-ranks": 1}
 
 
 def test_an_uncarried_weapon_cannot_be_wielded(spearmen_unit: Unit) -> None:

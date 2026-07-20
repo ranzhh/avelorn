@@ -1,0 +1,17 @@
+# Source: https://tow.whfb.app/troop-types-in-detail/fight-in-extra-rank
+id: fight-in-extra-rank
+name: Fight In Extra Rank
+category: Troop Types
+paragraphs:
+  - Certain weapons, such as thrusting or throwing spears, allow warriors not in the fighting rank
+    to attack from behind their comrades. A model with this special rule may make a supporting attack.
+# Hand-authored: the supporting rank directly behind the fighting rank strikes at one attack each
+# (the-combat-phase/supporting-attacks, how-many-attacks). The `charged: false` gate encodes the
+# thrusting spear's printed restriction ("cannot make a supporting attack during a turn in which it
+# charged") — our only carrier. A future Fight-in-Extra-Rank weapon without that restriction would
+# move the gate onto the weapon.
+effects:
+  - when:
+      charged: false
+    then:
+      supporting-ranks: 1
