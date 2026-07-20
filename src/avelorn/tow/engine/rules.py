@@ -190,10 +190,11 @@ def _compile_effect(
         if amount == "X":
             # Unsubstituted placeholder: the printed name carried no parameter.
             return None
-        if isinstance(quantity, Characteristic):
-            # Characteristic changes are consumed by the
-            # effective-characteristic query, not the walk; as a weapon
-            # or phase rule they are honestly unfactored.
+        if quantity not in _ROLLS:
+            # The walk handles only roll quantities (the _ROLLS vocabulary).
+            # A characteristic is the effective-characteristic query's, a rank
+            # quantity the fighting-rank query's; as a weapon or phase rule
+            # here they are honestly unfactored.
             return None
         roll = _ROLLS[quantity]
         if natural is not None and _SEQUENCE[natural.roll] >= _SEQUENCE[roll.stage]:

@@ -99,6 +99,19 @@ def test_compile_effectless_rule_stays_unfactored() -> None:
     assert unfactored == ["Killing Blow"]
 
 
+def test_compile_rank_quantity_stays_unfactored_in_the_dice_walk() -> None:
+    """A rank quantity is not a dice-walk modifier — the walk leaves it unfactored.
+
+    fighting-ranks is read by the fighting-rank query, not the walk; as a
+    rule compiled for the walk it produces no modifier and is reported, the
+    way a characteristic change is.
+    """
+    rules = _one_rule(ModifierEffect(then={"fighting-ranks": 1}))
+    transforms, unfactored = compile_rules(["Doctored"], rules)
+    assert transforms == []
+    assert unfactored == ["Doctored"]
+
+
 def test_compile_parameter_placeholder_without_value_stays_unfactored() -> None:
     """The X placeholder needs a bracketed number in the printed name."""
     rule = REPO.rules["armour-bane"]

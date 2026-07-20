@@ -465,6 +465,8 @@ def _combat_conditions(first_round: bool | None, side: Contingent) -> dict[Condi
                 # A charge is a move, and the Movement folds it in: moved is
                 # true for a charge as for any other move this turn.
                 return side.movement.moved
+            case Condition.CHARGED:
+                return side.movement.charge is not None
             case Condition.AT_LONG_RANGE:
                 return False  # no shot is taken in close combat
             case Condition.FIRST_ROUND_OF_COMBAT:
