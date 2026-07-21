@@ -1,0 +1,20 @@
+# Source: https://tow.whfb.app/special-rules/parry
+id: parry
+name: Parry
+category: Special Rules
+paragraphs:
+  - Whilst engaged in close combat, a model with this rule that is equipped with and chooses to use a hand weapon and shield
+    improves its armour value by 1, to a maximum of 3+.
+# Hand-authored, diffable against the paragraph above: +1 armour value (a
+# better save, so the save target lowers by one), capped at the best save of
+# 3+, while a hand weapon and a shield are the equipment in use. The printed
+# restriction to infantry is not expressed — the engine fields only infantry
+# in close combat today — nor is "whilst engaged in close combat", since the
+# armour fold runs only for a close-combat save, never a volley's.
+effects:
+  - requires:
+      wielding: Hand Weapon
+      worn: Shield
+    then:
+      armour-value: 1
+    maximum: 3

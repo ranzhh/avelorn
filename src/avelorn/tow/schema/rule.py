@@ -67,21 +67,37 @@ class Condition(StrEnum):
     OUTNUMBERS = "outnumbers"
 
 
+class EquipmentUse(StrEnum):
+    """How a model uses a piece of equipment — the ``requires`` vocabulary.
+
+    A rule can be gated on the gear a model has in use, beside the engagement
+    ``when``: ``wielding`` names the weapon in hand, ``worn`` a piece of armour
+    worn. A closed, append-only vocabulary like :class:`Condition`; a member
+    joins when a rule needs a use the loadout can answer (a mount, later).
+    """
+
+    WIELDING = "wielding"
+    WORN = "worn"
+
+
 class Seam(StrEnum):
     """Where a ``then`` quantity is consumed.
 
     A modifier's quantity lands in exactly one place, and the seam names it:
-    the dice walk (roll quantities); the effective-characteristic query — the
-    one seam that caps a value at a printed maximum; the fighting-rank query;
-    or the combat-result fold. :meth:`ModifierEffect._then_speaks_to_one_seam`
-    holds a single effect to one seam, so all-or-nothing reporting stays per
-    consumer.
+    the dice walk (roll quantities); the effective-characteristic query; the
+    fighting-rank query; the combat-result fold; or the armour fold, which
+    improves the defender's armour value before its save.
+    :meth:`ModifierEffect._then_speaks_to_one_seam` holds a single effect to
+    one seam, so all-or-nothing reporting stays per consumer. The
+    characteristic and armour seams cap a value at a printed maximum — a
+    ceiling on a characteristic, a floor (the best save) on the armour value.
     """
 
     ROLL = "roll"
     CHARACTERISTIC = "characteristic"
     RANK = "rank"
     COMBAT_RESULT = "combat-result"
+    ARMOUR = "armour"
 
 
 class Quantity(StrEnum):
@@ -91,8 +107,9 @@ class Quantity(StrEnum):
     joins when an imported rule needs it. Each member knows the :class:`Seam`
     that consumes it, so routing is the member's own knowledge, not a side
     table: ``to-hit`` and ``armour-piercing`` land on the dice walk,
-    ``fighting-ranks`` / ``supporting-ranks`` on the fighting-rank query, and
-    ``combat-result`` on the combat-result fold. A profile
+    ``fighting-ranks`` / ``supporting-ranks`` on the fighting-rank query,
+    ``combat-result`` on the combat-result fold, and ``armour-value`` on the
+    armour fold (a defender improving its own save). A profile
     :class:`~avelorn.tow.schema.unit.Characteristic` is the one quantity kept
     apart — a stat vocabulary used far beyond modifiers — so a ``then`` key is
     a Quantity or a Characteristic.
@@ -103,6 +120,7 @@ class Quantity(StrEnum):
     FIGHTING_RANKS = "fighting-ranks"
     SUPPORTING_RANKS = "supporting-ranks"
     COMBAT_RESULT = "combat-result"
+    ARMOUR_VALUE = "armour-value"
 
     @property
     def seam(self) -> Seam:
@@ -114,6 +132,8 @@ class Quantity(StrEnum):
                 return Seam.RANK
             case Quantity.COMBAT_RESULT:
                 return Seam.COMBAT_RESULT
+            case Quantity.ARMOUR_VALUE:
+                return Seam.ARMOUR
             case unhandled:
                 assert_never(unhandled)
 
@@ -188,13 +208,19 @@ class ModifierEffect(BaseModel):
     ("+1 modifier to its Initiative characteristic" is ``I: 1``, consumed
     by the effective-characteristic query), a formation quantity like the
     number of fighting ranks ("fighting-ranks: 1", consumed by the
-    fighting-rank query), or a combat-result point ("combat-result: 1",
-    summed into the round's score). The literal ``"X"`` means the rule's
-    bracketed parameter ("the amount shown in brackets after the name of
-    this special rule").
-    Where a change lands follows from its quantity, so no stage is
-    spelled out. ``maximum`` is a printed ceiling on the modified value
-    ("to a maximum of 10"); only a characteristic prints one.
+    fighting-rank query), a combat-result point ("combat-result: 1", summed
+    into the round's score), or an armour-value improvement
+    ("armour-value: 1", folded into the defender's save). The literal ``"X"``
+    means the rule's bracketed parameter ("the amount shown in brackets after
+    the name of this special rule").
+    Where a change lands follows from its quantity, so no stage is spelled
+    out. ``requires`` gates the effect on equipment in use beside the
+    engagement ``when`` — Parry's "a hand weapon and a shield" is
+    ``{wielding: Hand Weapon, worn: Shield}`` — evaluated against the
+    contingent's loadout wherever the consuming seam has it. ``maximum`` is a
+    printed limit on the modified value ("to a maximum of 10" / "to a maximum
+    of 3+"): a ceiling on a characteristic, the best attainable save (a floor)
+    on an armour value.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -202,6 +228,7 @@ class ModifierEffect(BaseModel):
     when: Annotated[dict[Condition | Literal["natural"], TriggerFact], Field(min_length=1)] | (
         None
     ) = None
+    requires: Annotated[dict[EquipmentUse, str], Field(min_length=1)] | None = None
     then: Annotated[
         dict[Quantity | Characteristic, int | Literal["X"]],
         Field(min_length=1),
@@ -218,9 +245,12 @@ class ModifierEffect(BaseModel):
             if key != NATURAL and not isinstance(fact, bool):
                 raise ValueError(f"condition {key!r} requires true or false")
         if self.maximum is not None and not any(
-            isinstance(quantity, Characteristic) for quantity in self.then
+            isinstance(quantity, Characteristic) or quantity == Quantity.ARMOUR_VALUE
+            for quantity in self.then
         ):
-            raise ValueError("maximum bounds a characteristic; the then moves none")
+            raise ValueError(
+                "maximum bounds a characteristic or armour value; the then moves neither"
+            )
         return self
 
     @model_validator(mode="after")
@@ -234,7 +264,7 @@ class ModifierEffect(BaseModel):
         if len(seams) > 1:
             raise ValueError(
                 "a then may not mix quantities across seams "
-                f"(roll / characteristic / rank / combat-result): {sorted(seams)}"
+                f"(roll / characteristic / rank / combat-result / armour): {sorted(seams)}"
             )
         return self
 
@@ -260,6 +290,16 @@ class ModifierEffect(BaseModel):
             for key, fact in (self.when or {}).items()
             if isinstance(key, Condition) and isinstance(fact, bool)
         }
+
+    @property
+    def requirements(self) -> dict[EquipmentUse, str]:
+        """The equipment the effect needs in use, by how it is used.
+
+        Returns:
+            The required equipment name per use, empty when the effect names
+            none (it applies whatever the loadout).
+        """
+        return dict(self.requires or {})
 
 
 class RerollEffect(BaseModel):
