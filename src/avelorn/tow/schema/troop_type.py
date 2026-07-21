@@ -9,7 +9,11 @@ each member — how it ranks up, the special rules it confers, and its base
 size in time.
 """
 
+from typing import assert_never
+
 from pydantic import BaseModel, ConfigDict, Field
+
+from avelorn.tow.schema.unit_strength import UnitStrength, UnitStrengthMarker
 
 
 class TroopTypeProfile(BaseModel):
@@ -19,7 +23,10 @@ class TroopTypeProfile(BaseModel):
     toward the Rank Bonus, or None for a troop type that does not rank up
     (Swarm, Heavy Chariot, the monsters and war machines that fight as
     single models); ``max_rank_bonus`` is the most extra ranks it may
-    claim. ``special_rules`` are the rules the troop type confers on every
+    claim. ``unit_strength`` is each model's Unit Strength as the
+    troop-type table prints it — a fixed count, or "As Starting Wounds"
+    for the troop types whose strength scales with the model.
+    ``special_rules`` are the rules the troop type confers on every
     unit of it (Regular Infantry's Press of Battle, say), as printed
     display-name strings — the type's own rules, held apart from the
     datasheet's ``special_rules`` because their owner is the troop type,
@@ -30,9 +37,31 @@ class TroopTypeProfile(BaseModel):
 
     id: str  # stable slug, e.g. "regular-infantry"
     name: str  # display name, matching the TroopType value ("Regular Infantry")
+    unit_strength: UnitStrength
     models_per_rank: int | None = Field(default=None, ge=1)
     max_rank_bonus: int = Field(default=0, ge=0)
     special_rules: tuple[str, ...] = ()
+
+    def unit_strength_per_model(self, wounds: int | None) -> int:
+        """This troop type's Unit Strength for one model of ``wounds`` Wounds.
+
+        A fixed count for most troop types; the model's starting Wounds for
+        the ones the table prints "W" (Monstrous Creatures, Behemoths, War
+        Machines) — where a profile with no printed Wounds counts as one, as
+        the wound rules treat it. Each marker is matched on its own: a new
+        one added to :class:`~avelorn.tow.schema.unit_strength.UnitStrengthMarker`
+        fails this match rather than silently reading Wounds.
+
+        Returns:
+            The per-model Unit Strength.
+        """
+        match self.unit_strength:
+            case int() as fixed:
+                return fixed
+            case UnitStrengthMarker.STARTING_WOUNDS:
+                return wounds or 1
+            case unreachable:
+                assert_never(unreachable)
 
     def default_frontage(self, models: int) -> int:
         """The width this troop type ranks up at when none is chosen.

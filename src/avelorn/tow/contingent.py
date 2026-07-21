@@ -488,6 +488,24 @@ class Contingent:
         supporting_models = formation.front_ranks(fighting + supporting) - fighting_models
         return fighting_models * attacks_per_model + supporting_models
 
+    def unit_strength(self) -> int:
+        """This body's Unit Strength: its models' per-model strength, summed.
+
+        The troop type sets each model's Unit Strength — a fixed count, or the
+        model's starting Wounds for the monsters and war machines the table
+        prints as "As Starting Wounds"
+        (:meth:`~avelorn.tow.schema.troop_type.TroopTypeProfile.unit_strength_per_model`) —
+        and this body's is that times its current ``models``, so casualties
+        thin it as they do the model count.
+
+        Returns:
+            The Unit Strength of the models on the table.
+        """
+        per_model = self.unit.rank_and_file.unit_strength_per_model(
+            self.unit.profiles[0][Characteristic.WOUNDS]
+        )
+        return self.models * per_model
+
     def after(self, movement: Movement) -> "Contingent":
         """This contingent with its Movement-phase ``movement`` set.
 

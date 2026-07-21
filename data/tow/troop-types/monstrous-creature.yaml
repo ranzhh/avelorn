@@ -1,3 +1,4 @@
 # Source: https://tow.whfb.app/troop-types-at-a-glance/troop-type-table
 id: monstrous-creature
 name: Monstrous Creature
+unit_strength: W

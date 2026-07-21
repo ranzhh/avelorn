@@ -1,5 +1,6 @@
 # Source: https://tow.whfb.app/troop-types-at-a-glance/troop-type-table
 id: light-chariot
 name: Light Chariot
+unit_strength: 3
 models_per_rank: 3
 max_rank_bonus: 1
