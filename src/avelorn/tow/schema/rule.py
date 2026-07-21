@@ -62,34 +62,48 @@ class Condition(StrEnum):
     FIRST_ROUND_OF_COMBAT = "first_round_of_combat"
     # "a turn in which it charged" — narrower than MOVED (a march is not a charge)
     CHARGED = "charged"
+    # "a higher Unit Strength than the enemy" — outnumbering by Unit Strength,
+    # a relational fact the combat weighs when scoring the round
+    OUTNUMBERS = "outnumbers"
 
 
 # The quantities a modifier can change, in the rulebook's own modifier
 # vocabulary, grouped by the seam that consumes them. Roll quantities land
 # on a stage of the dice walk (the compiler owns that mapping, exhaustively);
-# rank quantities are read by the fighting-rank query. A profile
-# characteristic is the third seam. A ``then`` speaks to exactly one of the
-# three (see :meth:`ModifierEffect._then_speaks_to_one_seam`).
+# rank quantities are read by the fighting-rank query; a combat-result
+# quantity is a signed point added to a side's score. A profile
+# characteristic is the fourth seam. A ``then`` speaks to exactly one of the
+# four (see :meth:`ModifierEffect._then_speaks_to_one_seam`).
 ModifierKind = Literal["to-hit", "armour-piercing"]  # roll quantities — the dice walk
 # Formation quantities — the fighting-rank query. ``fighting-ranks`` deepens
 # the rank fighting at full Attacks (Press of Battle); ``supporting-ranks``
 # adds ranks that support at one attack each (Fight in Extra Rank).
 RankKind = Literal["fighting-ranks", "supporting-ranks"]
+# Combat-result quantities — summed into a side's combat result score. One
+# generic hook: a signed point (a bonus, or a malus) the combat adds without
+# naming what granted it (Massed Infantry's +1, a standard's +1, later a
+# malus), exactly as the rank folds sum without naming their rules.
+CombatResultKind = Literal["combat-result"]
 
 _ROLL_KINDS = frozenset(get_args(ModifierKind))
 _RANK_KINDS = frozenset(get_args(RankKind))
+_COMBAT_RESULT_KINDS = frozenset(get_args(CombatResultKind))
 
 
-def _seam_of(quantity: "ModifierKind | RankKind | Characteristic") -> str:
+def _seam_of(quantity: "ModifierKind | RankKind | CombatResultKind | Characteristic") -> str:
     """The seam that consumes a ``then`` quantity.
 
     Returns:
-        ``"characteristic"``, ``"rank"``, or ``"roll"`` — the query or walk
-        that reads the quantity.
+        ``"characteristic"``, ``"rank"``, ``"combat-result"``, or ``"roll"``
+        — the query, fold, or walk that reads the quantity.
     """
     if isinstance(quantity, Characteristic):
         return "characteristic"
-    return "rank" if quantity in _RANK_KINDS else "roll"
+    if quantity in _RANK_KINDS:
+        return "rank"
+    if quantity in _COMBAT_RESULT_KINDS:
+        return "combat-result"
+    return "roll"
 
 
 class NaturalRoll(BaseModel):
@@ -150,11 +164,12 @@ class ModifierEffect(BaseModel):
     A quantity is a roll of the attack sequence by its kind (consumed by
     the dice walk), a profile characteristic by its printed abbreviation
     ("+1 modifier to its Initiative characteristic" is ``I: 1``, consumed
-    by the effective-characteristic query), or a formation quantity like
-    the number of fighting ranks ("fighting-ranks: 1", consumed by the
-    fighting-rank query). The literal ``"X"`` means the rule's bracketed
-    parameter ("the amount shown in brackets after the name of this
-    special rule").
+    by the effective-characteristic query), a formation quantity like the
+    number of fighting ranks ("fighting-ranks: 1", consumed by the
+    fighting-rank query), or a combat-result point ("combat-result: 1",
+    summed into the round's score). The literal ``"X"`` means the rule's
+    bracketed parameter ("the amount shown in brackets after the name of
+    this special rule").
     Where a change lands follows from its quantity, so no stage is
     spelled out. ``maximum`` is a printed ceiling on the modified value
     ("to a maximum of 10"); only a characteristic prints one.
@@ -166,7 +181,8 @@ class ModifierEffect(BaseModel):
         None
     ) = None
     then: Annotated[
-        dict[ModifierKind | RankKind | Characteristic, int | Literal["X"]], Field(min_length=1)
+        dict[ModifierKind | RankKind | CombatResultKind | Characteristic, int | Literal["X"]],
+        Field(min_length=1),
     ]
     maximum: int | None = None
 

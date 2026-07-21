@@ -231,6 +231,10 @@ def _engagement_conditions(
                 # A volley is not struck in a round of close combat (a
                 # unit in combat cannot shoot), so the fact never arises.
                 return False
+            case Condition.OUTNUMBERS:
+                # Outnumbering weighs a combat result, which a volley never
+                # scores, so the fact never arises for a shot.
+                return False
             case unanswered:
                 assert_never(unanswered)
 

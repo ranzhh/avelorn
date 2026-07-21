@@ -33,6 +33,7 @@ from avelorn.core.registry import Registry, UnknownNameError
 from avelorn.tow.engine.attack import Modifier
 from avelorn.tow.schema.rule import (
     PARAMETER_SUFFIX,
+    CombatResultKind,
     Condition,
     ModifierEffect,
     ModifierKind,
@@ -292,15 +293,37 @@ def effective_supporting_ranks(
     return _effective_quantity(base, "supporting-ranks", rules, conditions)
 
 
+def effective_combat_result_bonus(
+    rules: Sequence[Rule],
+    conditions: Mapping[Condition, bool | None] | None = None,
+) -> EffectiveValue:
+    """Sum the combat-result points a side's rules grant it, bonuses and maluses.
+
+    The generic combat hook: one signed total folded from every
+    ``combat-result`` modifier a contingent's rules carry (Massed Infantry's
+    +1 when it outnumbers the foe), gated on the evaluated ``conditions``.
+    The combat sums this into the round's score without naming what granted
+    it — the same shape as the rank folds — so a new bonus or malus is a rule
+    in data, not a change here. ``factored`` / ``unfactored`` name the rules
+    evaluated in, for the combat notes.
+
+    Returns:
+        The signed combat-result total with the factored and unfactored
+        rule names.
+    """
+    return _effective_quantity(0, "combat-result", rules, conditions)
+
+
 def _effective_quantity(
     base: int,
-    key: Characteristic | RankKind,
+    key: Characteristic | RankKind | CombatResultKind,
     rules: Sequence[Rule],
     conditions: Mapping[Condition, bool | None] | None = None,
 ) -> EffectiveValue:
     # One base value folded over the ``key`` modifiers a contingent's rules
-    # carry — shared by the characteristic and fighting-rank queries, which
-    # differ only in the ``then`` key they read. All-or-nothing per rule; a
+    # carry — shared by the characteristic, fighting-rank, and combat-result
+    # queries, which differ only in the ``then`` key they read. All-or-nothing
+    # per rule; a
     # rule needing an unknown fact, an unbound parameter, or an event face
     # (no die is rolled at a query) is reported unfactored.
     conditions = conditions or {}

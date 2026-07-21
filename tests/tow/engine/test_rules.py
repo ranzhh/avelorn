@@ -12,6 +12,7 @@ from avelorn.tow.engine.rules import (
     _condition_applies,
     compile_rules,
     effective_characteristic,
+    effective_combat_result_bonus,
     effective_fighting_ranks,
     effective_supporting_ranks,
     printed_rule,
@@ -450,3 +451,25 @@ def test_effective_supporting_ranks_folds_over_a_base_of_none() -> None:
     charged = effective_supporting_ranks(0, [rule], {Condition.CHARGED: True})
     assert charged.value == 0
     assert charged.factored == ("Doctored",)
+
+
+def test_effective_combat_result_bonus_sums_signed_points_under_the_conditions() -> None:
+    """The combat-result fold: +1 when the condition holds, 0 when it does not.
+
+    Outnumbering: the +1 lands, factored. Even: honoured by not applying,
+    still factored. Unknown: unfactored, its point left out of the total.
+    """
+    effect = ModifierEffect(when={Condition.OUTNUMBERS: True}, then={"combat-result": 1})
+    rule = Rule(id="massed", name="Massed Infantry", paragraphs=["…"], effects=[effect])
+
+    outnumbering = effective_combat_result_bonus([rule], {Condition.OUTNUMBERS: True})
+    assert outnumbering.value == 1
+    assert outnumbering.factored == ("Massed Infantry",)
+
+    even = effective_combat_result_bonus([rule], {Condition.OUTNUMBERS: False})
+    assert even.value == 0
+    assert even.factored == ("Massed Infantry",)
+
+    unknown = effective_combat_result_bonus([rule], {})
+    assert unknown.value == 0
+    assert unknown.unfactored == ("Massed Infantry",)

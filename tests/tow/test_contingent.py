@@ -156,11 +156,11 @@ def test_field_resolves_equipment_into_the_loadout(spearmen_unit: Unit) -> None:
             REPO.rules["martial-prowess"],
             REPO.rules["valour-of-ages"],
             REPO.rules["press-of-battle"],
+            REPO.rules["massed-infantry"],
         ),
         unresolved_rules=(
             "Close Order",
             "Regimental Unit",
-            "Massed Infantry",
             "Parry",
         ),
         weapon_rules={"Fight In Extra Rank": REPO.rules["fight-in-extra-rank"]},
@@ -282,6 +282,7 @@ def test_field_tolerates_rules_without_entries(spearmen_unit: Unit) -> None:
         "martial-prowess",
         "valour-of-ages",
         "press-of-battle",  # conferred by the Regular Infantry troop type
+        "massed-infantry",  # also conferred by the troop type
     ]
     assert "Shieldwall" in contingent.loadout.unresolved_rules
 
