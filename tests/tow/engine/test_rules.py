@@ -23,6 +23,7 @@ from avelorn.tow.schema.rule import (
     Condition,
     ModifierEffect,
     NaturalRoll,
+    Quantity,
     Rule,
     RuleEffect,
 )
@@ -109,7 +110,7 @@ def test_compile_rank_quantity_stays_unfactored_in_the_dice_walk() -> None:
     rule compiled for the walk it produces no modifier and is reported, the
     way a characteristic change is.
     """
-    rules = _one_rule(ModifierEffect(then={"fighting-ranks": 1}))
+    rules = _one_rule(ModifierEffect(then={Quantity.FIGHTING_RANKS: 1}))
     transforms, unfactored = compile_rules(["Doctored"], rules)
     assert transforms == []
     assert unfactored == ["Doctored"]
@@ -130,7 +131,7 @@ def test_unconditional_armour_piercing_modifier_factors() -> None:
     refused (an AP improvement not gated on a die): hit 3+, wound 4+,
     save 5+ worsened to 6+ on every attack, p = 2/3 * 1/2 * 5/6 = 5/18.
     """
-    rules = _one_rule(ModifierEffect(then={"armour-piercing": 1}))
+    rules = _one_rule(ModifierEffect(then={Quantity.ARMOUR_PIERCING: 1}))
     transforms, unfactored = compile_rules(["Doctored"], rules)
     assert unfactored == []
     profile = AttackProfile.shooting(
@@ -146,7 +147,7 @@ def test_trigger_at_or_after_the_landing_stage_stays_unfactored() -> None:
     already made; the rule is honestly unfactored, never a silent no-op.
     """
     effect = ModifierEffect(
-        when={"natural": NaturalRoll(face=6, roll=Stage.ROLL_TO_WOUND)}, then={"to-hit": 1}
+        when={"natural": NaturalRoll(face=6, roll=Stage.ROLL_TO_WOUND)}, then={Quantity.TO_HIT: 1}
     )
     transforms, unfactored = compile_rules(["Doctored"], _one_rule(effect))
     assert transforms == []
@@ -306,23 +307,22 @@ def test_conjunctive_condition_with_known_false_member_does_not_apply() -> None:
     assert _condition_applies(both, {moved: True, ranged: True}) is True
 
 
-def test_every_modifier_kind_declares_its_roll() -> None:
-    """Each modifier kind maps onto a roll the attack profile carries.
+def test_every_roll_quantity_declares_its_roll() -> None:
+    """Each roll-seam quantity maps onto a roll the attack profile carries.
 
-    Drift guard for the table's exhaustiveness: a kind joining the
-    vocabulary must declare which roll it changes, and the profile must
-    carry a target for that roll's stage. Both sides are introspected,
-    so new members are covered automatically.
+    Drift guard for the table's exhaustiveness: a quantity whose seam is the
+    dice walk must declare which roll it changes, and the profile must carry
+    a target for that roll's stage. The seam vocabulary is introspected, so
+    new members are covered automatically.
     """
-    from typing import get_args
-
     from avelorn.tow.engine.rules import _ROLLS
-    from avelorn.tow.schema.rule import ModifierKind
+    from avelorn.tow.schema.rule import Quantity, Seam
 
     profile = AttackProfile.shooting(hit_target=4, wound_target=4, save_target=4, ward_target=4)
-    for kind in get_args(ModifierKind):
-        assert kind in _ROLLS, kind
-        profile.target(_ROLLS[kind].stage)  # KeyError if the stage rolls no target
+    roll_quantities = [q for q in Quantity if q.seam is Seam.ROLL]
+    for quantity in roll_quantities:
+        assert quantity in _ROLLS, quantity
+        profile.target(_ROLLS[quantity].stage)  # KeyError if the stage rolls no target
 
 
 def test_armour_bane_two_leaves_no_save_at_all() -> None:
@@ -410,7 +410,7 @@ def test_effective_characteristic_ignores_other_characteristics() -> None:
 
 def _press_of_battle() -> Rule:
     # A rank modifier in the Press of Battle shape: +1 fighting rank, off on a charge.
-    effect = ModifierEffect(when={Condition.CHARGED: False}, then={"fighting-ranks": 1})
+    effect = ModifierEffect(when={Condition.CHARGED: False}, then={Quantity.FIGHTING_RANKS: 1})
     return Rule(id="doctored", name="Doctored", paragraphs=["…"], effects=[effect])
 
 
@@ -441,7 +441,7 @@ def test_effective_supporting_ranks_folds_over_a_base_of_none() -> None:
     Stationary: the +1 lands (one supporting rank), factored. Charged:
     honoured by not applying (none), still factored.
     """
-    effect = ModifierEffect(when={Condition.CHARGED: False}, then={"supporting-ranks": 1})
+    effect = ModifierEffect(when={Condition.CHARGED: False}, then={Quantity.SUPPORTING_RANKS: 1})
     rule = Rule(id="doctored", name="Doctored", paragraphs=["…"], effects=[effect])
 
     stationary = effective_supporting_ranks(0, [rule], {Condition.CHARGED: False})
@@ -459,7 +459,7 @@ def test_effective_combat_result_bonus_sums_signed_points_under_the_conditions()
     Outnumbering: the +1 lands, factored. Even: honoured by not applying,
     still factored. Unknown: unfactored, its point left out of the total.
     """
-    effect = ModifierEffect(when={Condition.OUTNUMBERS: True}, then={"combat-result": 1})
+    effect = ModifierEffect(when={Condition.OUTNUMBERS: True}, then={Quantity.COMBAT_RESULT: 1})
     rule = Rule(id="massed", name="Massed Infantry", paragraphs=["…"], effects=[effect])
 
     outnumbering = effective_combat_result_bonus([rule], {Condition.OUTNUMBERS: True})
