@@ -17,10 +17,11 @@ Starting Wounds" cell is read.
 
 from typing import Literal
 
-# The troop-type table's "As Starting Wounds" cell: a model's Unit Strength
-# is the Wounds on its profile, not a fixed count.
-AS_STARTING_WOUNDS = "as-starting-wounds"
+# The troop-type table's "W" cell (As Starting Wounds): a model's Unit
+# Strength is the Wounds on its profile, not a fixed count. "W" is the
+# table's own abbreviation, kept verbatim.
+AS_STARTING_WOUNDS = "W"
 
 # A troop type's per-model Unit Strength as the table prints it: a fixed
-# count, or the "As Starting Wounds" marker resolved against the model.
-type UnitStrength = int | Literal["as-starting-wounds"]
+# count, or the "W" marker resolved against the model's Wounds.
+type UnitStrength = int | Literal["W"]
