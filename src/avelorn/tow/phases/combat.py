@@ -51,6 +51,7 @@ from avelorn.tow.engine.rules import (
     EffectiveValue,
     compile_rules,
     effective_characteristic,
+    effective_combat_result_bonus,
 )
 from avelorn.tow.phases.movement import Engagement
 from avelorn.tow.schema.rule import Condition, Rule
@@ -436,7 +437,12 @@ class FightResult:
     reported so a caller prints the value the math used, as the shooting
     result reports its effective To Hit target. ``a_rank_bonus`` and
     ``b_rank_bonus`` are each side's combat-result Rank Bonus, which
-    :func:`combat_result` adds to that side's score.
+    :func:`combat_result` adds to that side's score. ``a_unit_strength`` and
+    ``b_unit_strength`` are the Unit Strengths the round compared (reported,
+    and the basis of an outnumbering bonus). ``a_combat_result_bonus`` and
+    ``b_combat_result_bonus`` are the rule-granted combat-result points each
+    side accrued (Massed Infantry's +1, and later others) — a signed total
+    :func:`combat_result` adds to the score alongside the Rank Bonus.
     """
 
     losses: list[list[float]]  # losses[a_lost][b_lost] = joint probability
@@ -446,6 +452,10 @@ class FightResult:
     b_initiative: EffectiveValue = EffectiveValue(0)
     a_rank_bonus: int = 0
     b_rank_bonus: int = 0
+    a_unit_strength: int = 0
+    b_unit_strength: int = 0
+    a_combat_result_bonus: int = 0
+    b_combat_result_bonus: int = 0
 
     @property
     def a_casualties(self) -> list[float]:
@@ -476,11 +486,14 @@ def _unit_rule_notes(unit: Unit, claimed: Collection[str] = ()) -> list[str]:
     ]
 
 
-def _combat_conditions(first_round: bool | None, side: Contingent) -> dict[Condition, bool | None]:
+def _combat_conditions(
+    first_round: bool | None, side: Contingent, foe: Contingent
+) -> dict[Condition, bool | None]:
     # One fact per Condition member for one side of the combat; None =
     # unknown. Exhaustive like the shooting producer: a new member fails
     # the type check until it is answered here. ``first_round`` is the
-    # combat's, a relational fact; the rest read the side's own state.
+    # combat's, a relational fact, and OUTNUMBERS weighs the two sides'
+    # Unit Strength; the rest read the side's own state.
     def fact(condition: Condition) -> bool | None:
         match condition:
             case Condition.MOVED:
@@ -493,6 +506,9 @@ def _combat_conditions(first_round: bool | None, side: Contingent) -> dict[Condi
                 return False  # no shot is taken in close combat
             case Condition.FIRST_ROUND_OF_COMBAT:
                 return first_round
+            case Condition.OUTNUMBERS:
+                # Strictly greater: equal Unit Strength outnumbers neither.
+                return side.unit_strength() > foe.unit_strength()
             case unanswered:
                 assert_never(unanswered)
 
@@ -650,8 +666,8 @@ def fight(
     # gate its strike's dice walk (weapon and chapter rules) and its
     # striking-order Initiative — no fact is computed for one and denied
     # the other.
-    a_conditions = _combat_conditions(first_round, a)
-    b_conditions = _combat_conditions(first_round, b)
+    a_conditions = _combat_conditions(first_round, a, b)
+    b_conditions = _combat_conditions(first_round, b, a)
     a_strikes = _engage(
         a,
         b,
@@ -673,6 +689,11 @@ def fight(
     a_initiative = effective_initiative(a, a_bonus, a_conditions)
     b_initiative = effective_initiative(b, b_bonus, b_conditions)
     a_first = _strikes_first(a_initiative.value, b_initiative.value)
+    # Each side's rule-granted combat-result points, summed under its facts
+    # (Massed Infantry's +1 when it outnumbers): folded here, added to the
+    # score in combat_result, and claimed out of the notes below.
+    a_combat_result = effective_combat_result_bonus(a.loadout.rules, a_conditions)
+    b_combat_result = effective_combat_result_bonus(b.loadout.rules, b_conditions)
 
     # Each side may enter already thinned by pre-combat casualties (a Stand &
     # Shoot volley, say); the two are independent, so the round is the
@@ -702,6 +723,7 @@ def fight(
                         *a_initiative.factored,
                         *a.fighting_ranks().factored,
                         *a_strikes.weapon_skill.factored,
+                        *a_combat_result.factored,
                     },
                 ),
                 *_unit_rule_notes(
@@ -710,6 +732,7 @@ def fight(
                         *b_initiative.factored,
                         *b.fighting_ranks().factored,
                         *b_strikes.weapon_skill.factored,
+                        *b_combat_result.factored,
                     },
                 ),
                 *a_strikes.notes,
@@ -731,6 +754,10 @@ def fight(
         b_initiative=b_initiative,
         a_rank_bonus=a.rank_bonus,
         b_rank_bonus=b.rank_bonus,
+        a_unit_strength=a.unit_strength(),
+        b_unit_strength=b.unit_strength(),
+        a_combat_result_bonus=a_combat_result.value,
+        b_combat_result_bonus=b_combat_result.value,
     )
 
 
@@ -825,10 +852,11 @@ class CombatResult:
 
     ``margin`` maps a signed lead ``m`` to P(A's score - B's score == m);
     positive means A is ahead. A side's score is the unsaved wounds it
-    inflicted plus its Rank Bonus; the remaining components are listed in
-    ``notes`` (#28). For 1-Wound models wounds inflicted equal models
-    removed; the wound-count for multi-Wound models is not modelled. The
-    signed ``margin`` is what the Break test adds to the loser's roll.
+    inflicted plus its Rank Bonus and any rule-granted combat-result points
+    (Massed Infantry's outnumbering +1); the components still unmodelled are
+    listed in ``notes`` (#28). For 1-Wound models wounds inflicted equal
+    models removed; the wound-count for multi-Wound models is not modelled.
+    The signed ``margin`` is what the Break test adds to the loser's roll.
     """
 
     p_a_wins: float
@@ -843,22 +871,28 @@ def combat_result(result: FightResult) -> CombatResult:
 
     Composes on a :class:`FightResult`'s joint loss distribution: A's score
     is how many models (= wounds, for 1-Wound units) B lost plus A's Rank
-    Bonus, B's the reverse. The rank bonuses are fixed per side, so they
-    shift every lead by the same constant. Because the two sides are
-    correlated under Initiative order, the win/draw/win split and the
-    signed margin come from the joint, not from differencing the marginals.
+    Bonus and rule-granted combat-result points, B's the reverse. Those
+    per-side additions are fixed for the round, so they shift every lead by
+    the same constant. Because the two sides are correlated under Initiative
+    order, the win/draw/win split and the signed margin come from the joint,
+    not from differencing the marginals.
 
     Returns:
         The exact win/draw/loss probabilities and signed margin distribution.
     """
     margin: dict[int, float] = {}
     p_a_wins = p_draw = p_b_wins = 0.0
-    rank_delta = result.a_rank_bonus - result.b_rank_bonus
+    # A's fixed edge over B: Rank Bonus plus the rule-granted combat-result
+    # points (Massed Infantry, ...), each a signed per-side constant that
+    # shifts every lead alike. A scores B's losses + these; B the reverse.
+    static_delta = (result.a_rank_bonus - result.b_rank_bonus) + (
+        result.a_combat_result_bonus - result.b_combat_result_bonus
+    )
     for a_lost, row in enumerate(result.losses):
         for b_lost, mass in enumerate(row):
             if mass == 0.0:
                 continue
-            lead = (b_lost - a_lost) + rank_delta  # A scores B's losses + ranks; B the reverse
+            lead = (b_lost - a_lost) + static_delta
             margin[lead] = margin.get(lead, 0.0) + mass
             if lead > 0:
                 p_a_wins += mass

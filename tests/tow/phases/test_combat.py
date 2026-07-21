@@ -484,6 +484,52 @@ def test_combat_result_simultaneous_is_symmetric() -> None:
     assert cr.p_draw == pytest.approx(26 / 36)
 
 
+def test_combat_result_adds_the_combat_result_bonus_to_the_score() -> None:
+    """A rule-granted combat-result point shifts every lead, like the Rank Bonus.
+
+    Giving A +1 combat-result point and B +0 shifts every margin up by one —
+    the engine sums the point without caring which rule granted it.
+    """
+    losses = [[0.25, 0.25], [0.25, 0.25]]  # symmetric: each side loses 0 or 1
+    plain = combat_result(FightResult(losses=losses, first_striker=None))
+    bonused = combat_result(
+        FightResult(
+            losses=losses, first_striker=None, a_combat_result_bonus=1, b_combat_result_bonus=0
+        )
+    )
+    assert {lead + 1: mass for lead, mass in plain.margin.items()} == bonused.margin
+
+
+# --- Massed Infantry: the outnumbering side's +1 combat result, from data/ ---
+
+
+def test_fight_massed_infantry_bonuses_the_side_with_higher_unit_strength() -> None:
+    """The side with the higher Unit Strength claims Massed Infantry's +1.
+
+    Two Regular Infantry bodies (both carry Massed Infantry at US 1 per model)
+    of different sizes: the larger outnumbers, so its combat-result bonus is +1
+    and the smaller's is 0 — it has the rule but not the higher Unit Strength.
+    Both sides evaluate the rule, so neither leaves it noted.
+    """
+    spearmen = REPO.units["elven-spearmen"]
+    big = _fielded(spearmen, 10).wielding("Thrusting Spear")
+    small = _fielded(spearmen, 5).wielding("Thrusting Spear")
+    result = fight(big, small)
+    assert (result.a_unit_strength, result.b_unit_strength) == (10, 5)
+    assert result.a_combat_result_bonus == 1
+    assert result.b_combat_result_bonus == 0
+    assert not any("Massed Infantry" in note for note in result.notes)
+
+
+def test_fight_massed_infantry_needs_a_strictly_higher_unit_strength() -> None:
+    """Equal Unit Strength outnumbers neither side, so no one claims the +1."""
+    spearmen = REPO.units["elven-spearmen"]
+    side = _fielded(spearmen, 5).wielding("Thrusting Spear")
+    result = fight(side, _fielded(spearmen, 5).wielding("Thrusting Spear"))
+    assert (result.a_combat_result_bonus, result.b_combat_result_bonus) == (0, 0)
+    assert not any("Massed Infantry" in note for note in result.notes)  # honoured, still claimed
+
+
 # --- rule-granted Initiative modifiers, consumed through the loadout ---
 
 
