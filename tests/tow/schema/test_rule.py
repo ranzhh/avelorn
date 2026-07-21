@@ -238,4 +238,9 @@ def test_every_quantity_routes_to_a_seam() -> None:
     """
     from avelorn.tow.schema.rule import Quantity, Seam
 
-    assert {q.seam for q in Quantity} == {Seam.ROLL, Seam.RANK, Seam.COMBAT_RESULT}
+    assert {q.seam for q in Quantity} == {
+        Seam.ROLL,
+        Seam.RANK,
+        Seam.COMBAT_RESULT,
+        Seam.ARMOUR,
+    }

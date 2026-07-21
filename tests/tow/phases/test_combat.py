@@ -110,6 +110,37 @@ def test_strike_unit_spearmen_vs_spearmen() -> None:
     assert any("thrusting spear" in note.lower() for note in result.notes)  # weapon notes
 
 
+def test_strike_unit_parry_betters_the_targets_save_with_hand_weapon_and_shield() -> None:
+    """A target using a hand weapon and shield parries: its save is one better.
+
+    Elven Spearmen carry light armour and a shield (a 5+ save). Fielded
+    wielding a Hand Weapon, Parry improves it to 4+; wielding a Thrusting
+    Spear instead, the hand-weapon requirement is unmet and the save stays 5+.
+    """
+    spearmen = REPO.units["elven-spearmen"]
+    attacker = _fielded(spearmen, 5).wielding("Hand Weapon")
+
+    parrying = strike_unit(attacker, _fielded(spearmen, 10).wielding("Hand Weapon"))
+    assert parrying.save_target == 4  # 5+ bettered to 4+ by Parry
+
+    spear = strike_unit(attacker, _fielded(spearmen, 10).wielding("Thrusting Spear"))
+    assert spear.save_target == 5  # not a hand weapon: Parry honoured, no change
+
+
+def test_fight_parry_is_claimed_when_both_sides_use_hand_weapon_and_shield() -> None:
+    """Both sides' saves are resolved in a fight, so both claim Parry from the notes.
+
+    Each Elven Spearmen body wields a Hand Weapon over its shield, so Parry is
+    evaluated for each as the other's target and leaves no "not factored" note.
+    """
+    spearmen = REPO.units["elven-spearmen"]
+    result = fight(
+        _fielded(spearmen, 5).wielding("Hand Weapon"),
+        _fielded(spearmen, 5).wielding("Hand Weapon"),
+    )
+    assert not any("Parry" in note for note in result.notes)
+
+
 def test_strike_unit_notes_the_troop_types_conferred_rules() -> None:
     """Rules a troop type confers surface as unfactored, owned by the type.
 

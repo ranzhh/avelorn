@@ -50,6 +50,7 @@ from avelorn.tow.engine.charts import (
 from avelorn.tow.engine.rules import (
     EffectiveValue,
     compile_rules,
+    effective_armour_value,
     effective_characteristic,
     effective_combat_result_bonus,
 )
@@ -223,6 +224,7 @@ class _Engagement:
 
     striker: Contingent
     weapon_skill: EffectiveValue
+    target_armour: EffectiveValue
     p_unsaved: float
     p_kill: float
     target_wounds: int
@@ -289,6 +291,20 @@ def _engage(
     strength = profile.strength.resolve(wielder_strength or 0)
 
     armour_value = defender_armour(target.loadout.armour)
+    # The defender's own rules may better its save (Parry's +1 with a hand
+    # weapon and shield in use), gated on its equipment and engagement facts;
+    # a lower armour value is a better save. Nothing to improve unarmoured.
+    if armour_value is None:
+        target_armour = EffectiveValue(0)
+    else:
+        target_armour = effective_armour_value(
+            armour_value,
+            target.loadout.rules,
+            target_conditions,
+            wielding=target.weapon.name if target.weapon is not None else None,
+            worn=[piece.name for piece in target.loadout.armour],
+        )
+        armour_value = target_armour.value
     notes: list[str] = []
     # This striker's engagement conditions gate its rules, exactly as a
     # volley's do: a weapon rule whose condition the facts answer is
@@ -336,6 +352,7 @@ def _engage(
     return _Engagement(
         striker=striker,
         weapon_skill=striker_ws,
+        target_armour=target_armour,
         p_unsaved=p_unsaved,
         p_kill=p_kill,
         target_wounds=target_wounds,
@@ -414,7 +431,9 @@ def strike_unit(
                 striker.unit,
                 claimed={*striker.fighting_ranks().factored, *engagement.weapon_skill.factored},
             ),
-            *_unit_rule_notes(target.unit),
+            # The target throws no blows here, but its save is resolved, so its
+            # save-improving rules (Parry) are factored and claimed.
+            *_unit_rule_notes(target.unit, claimed=engagement.target_armour.factored),
             *engagement.notes,
         ),
         target_models=targets,
@@ -724,6 +743,8 @@ def fight(
                         *a.fighting_ranks().factored,
                         *a_strikes.weapon_skill.factored,
                         *a_combat_result.factored,
+                        # a's save-improving rules are read while it is b's target
+                        *b_strikes.target_armour.factored,
                     },
                 ),
                 *_unit_rule_notes(
@@ -733,6 +754,7 @@ def fight(
                         *b.fighting_ranks().factored,
                         *b_strikes.weapon_skill.factored,
                         *b_combat_result.factored,
+                        *a_strikes.target_armour.factored,
                     },
                 ),
                 *a_strikes.notes,

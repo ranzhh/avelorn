@@ -25,15 +25,17 @@ likewise unfactored: recognised text the engine cannot yet honour.
 
 import logging
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
+from typing import assert_never
 
 from avelorn.core.registry import Registry, UnknownNameError
 from avelorn.tow.engine.attack import Modifier
 from avelorn.tow.schema.rule import (
     PARAMETER_SUFFIX,
     Condition,
+    EquipmentUse,
     ModifierEffect,
     Quantity,
     Rule,
@@ -181,6 +183,10 @@ def _compile_effect(
         # are not attack modifiers; their seams consume them directly.
         # As a weapon rule they are honestly unfactored.
         return None
+    if effect.requires is not None:
+        # The walk has no loadout, so it cannot answer an equipment gate;
+        # an equipment-gated effect is honestly unfactored here.
+        return None
     applies = _condition_applies(effect.conditions, conditions)
     if applies is None:
         return None  # the context cannot answer the condition
@@ -314,6 +320,66 @@ def effective_combat_result_bonus(
     return _effective_quantity(0, Quantity.COMBAT_RESULT, rules, conditions)
 
 
+def effective_armour_value(
+    base: int,
+    rules: Sequence[Rule],
+    conditions: Mapping[Condition, bool | None] | None = None,
+    *,
+    wielding: str | None,
+    worn: Collection[str],
+) -> EffectiveValue:
+    """Improve a defender's armour value by the rules that better its save.
+
+    The armour fold: every ``armour-value`` modifier a contingent's rules
+    carry (Parry's +1 with a hand weapon and shield) betters the save by
+    lowering the armour value — a lower value is a better save, so an
+    improvement subtracts — gated on the engagement ``conditions`` and the
+    equipment each rule ``requires`` in use (``wielding`` the weapon in hand,
+    ``worn`` the armour worn), and floored at the printed ``maximum`` (the
+    best save it may reach). All-or-nothing per rule; a rule whose facts the
+    conditions or the loadout cannot answer is reported unfactored.
+
+    Returns:
+        The improved armour value with the factored and unfactored rule names.
+    """
+    conditions = conditions or {}
+    value = base
+    factored: list[str] = []
+    unfactored: list[str] = []
+    for rule in rules:
+        matching = [
+            (effect, effect.then[Quantity.ARMOUR_VALUE])
+            for effect in rule.effects
+            if isinstance(effect, ModifierEffect) and Quantity.ARMOUR_VALUE in effect.then
+        ]
+        if not matching:
+            continue
+        answers = [
+            (
+                effect,
+                amount,
+                _condition_applies(effect.conditions, conditions),
+                _equipment_applies(effect.requirements, wielding, worn),
+            )
+            for effect, amount in matching
+        ]
+        if any(
+            amount == "X" or when is None or gear is None or effect.natural is not None
+            for effect, amount, when, gear in answers
+        ):
+            unfactored.append(rule.name)
+            continue
+        for effect, amount, when, gear in answers:
+            if not when or not gear or not isinstance(amount, int):
+                continue
+            value -= amount  # a lower armour value is a better save
+            if effect.maximum is not None:
+                value = max(value, effect.maximum)  # cannot improve past the best save
+        factored.append(rule.name)
+        logger.debug("armour-value modifier factored: %s -> %d", rule.name, value)
+    return EffectiveValue(value, tuple(factored), tuple(unfactored))
+
+
 def _effective_quantity(
     base: int,
     key: Quantity | Characteristic,
@@ -345,9 +411,12 @@ def _effective_quantity(
             for effect, amount in matching
         ]
         if any(
-            amount == "X" or answer is None or effect.natural is not None
+            amount == "X" or answer is None or effect.natural is not None or effect.requires
             for effect, amount, answer in answers
         ):
+            # An equipment gate (``requires``) is not answerable here — only
+            # the armour fold carries a loadout — so a rule that needs one is
+            # reported unfactored rather than applied blind.
             unfactored.append(rule.name)
             continue
         for effect, amount, answer in answers:
@@ -376,4 +445,27 @@ def _condition_applies(
             unknown = True
         elif actual != required:
             return False  # definitely does not apply, whatever the unknowns
+    return None if unknown else True
+
+
+def _equipment_applies(
+    requires: Mapping[EquipmentUse, str], wielding: str | None, worn: Collection[str]
+) -> bool | None:
+    # Conjunction over the equipment a rule needs in use, mirroring
+    # _condition_applies: one known mismatch settles "does not apply"; an
+    # unknown (nothing armed, so the weapon in hand is undecided) decides only
+    # when nothing is known-False. The worn pieces are always known.
+    unknown = False
+    for use, name in requires.items():
+        match use:
+            case EquipmentUse.WIELDING:
+                if wielding is None:
+                    unknown = True
+                elif wielding != name:
+                    return False
+            case EquipmentUse.WORN:
+                if name not in worn:
+                    return False
+            case unhandled:
+                assert_never(unhandled)
     return None if unknown else True

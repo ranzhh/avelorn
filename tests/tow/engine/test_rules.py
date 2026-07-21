@@ -11,6 +11,7 @@ from avelorn.tow.engine.attack import AttackProfile, RollState, resolve_attack
 from avelorn.tow.engine.rules import (
     _condition_applies,
     compile_rules,
+    effective_armour_value,
     effective_characteristic,
     effective_combat_result_bonus,
     effective_fighting_ranks,
@@ -21,6 +22,7 @@ from avelorn.tow.phases.shooting import shoot_unit
 from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.rule import (
     Condition,
+    EquipmentUse,
     ModifierEffect,
     NaturalRoll,
     Quantity,
@@ -473,3 +475,33 @@ def test_effective_combat_result_bonus_sums_signed_points_under_the_conditions()
     unknown = effective_combat_result_bonus([rule], {})
     assert unknown.value == 0
     assert unknown.unfactored == ("Massed Infantry",)
+
+
+def test_effective_armour_value_betters_the_save_with_the_gear_it_requires() -> None:
+    """Parry lowers the armour value by one, gated on the equipment it requires.
+
+    Hand weapon and shield in use: the +1 lands (a save one better), floored
+    at the printed best of 3+. Without the shield: honoured, no change. With
+    the weapon in hand unknown (nothing armed): unfactored.
+    """
+    effect = ModifierEffect(
+        requires={EquipmentUse.WIELDING: "Hand Weapon", EquipmentUse.WORN: "Shield"},
+        then={Quantity.ARMOUR_VALUE: 1},
+        maximum=3,
+    )
+    rule = Rule(id="parry", name="Parry", paragraphs=["…"], effects=[effect])
+
+    equipped = effective_armour_value(5, [rule], wielding="Hand Weapon", worn=["Shield"])
+    assert equipped.value == 4  # a 5+ save bettered to 4+
+    assert equipped.factored == ("Parry",)
+
+    capped = effective_armour_value(3, [rule], wielding="Hand Weapon", worn=["Shield"])
+    assert capped.value == 3  # cannot improve past the best save of 3+
+
+    no_shield = effective_armour_value(5, [rule], wielding="Hand Weapon", worn=["Light Armour"])
+    assert no_shield.value == 5  # honoured: the required gear is not in use
+    assert no_shield.factored == ("Parry",)
+
+    unarmed = effective_armour_value(5, [rule], wielding=None, worn=["Shield"])
+    assert unarmed.value == 5
+    assert unarmed.unfactored == ("Parry",)  # the weapon in hand is unknown
