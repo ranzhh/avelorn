@@ -7,7 +7,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from avelorn.core.loading import load_yaml
 from avelorn.tow.data import DATA_DIR
-from avelorn.tow.schema.rule import NATURAL, Condition, ModifierEffect, Rule, RuleEffect
+from avelorn.tow.schema.rule import NATURAL, Condition, ModifierEffect, Quantity, Rule, RuleEffect
 from avelorn.tow.schema.unit import Characteristic
 
 _EFFECT = TypeAdapter(RuleEffect)
@@ -179,7 +179,7 @@ def test_parameter_reference_requires_a_placeholder_name() -> None:
             id="armour-bane",
             name="Armour Bane",
             paragraphs=["…"],
-            effects=[ModifierEffect(then={"armour-piercing": "X"})],
+            effects=[ModifierEffect(then={Quantity.ARMOUR_PIERCING: "X"})],
         )
 
 
@@ -227,3 +227,15 @@ def test_a_rank_quantity_is_its_own_seam() -> None:
     assert isinstance(effect, ModifierEffect)
     assert effect.then == {"fighting-ranks": 1}
     assert effect.conditions == {Condition.CHARGED: False}
+
+
+def test_every_quantity_routes_to_a_seam() -> None:
+    """Each Quantity member declares its seam; a new one without a case fails.
+
+    Drift guard: the seam property's match is total, so calling it for every
+    member both proves the routing exists and (via its assert_never fallthrough)
+    trips at runtime the moment a member joins without being placed.
+    """
+    from avelorn.tow.schema.rule import Quantity, Seam
+
+    assert {q.seam for q in Quantity} == {Seam.ROLL, Seam.RANK, Seam.COMBAT_RESULT}

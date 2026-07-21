@@ -33,13 +33,13 @@ from avelorn.core.registry import Registry, UnknownNameError
 from avelorn.tow.engine.attack import Modifier
 from avelorn.tow.schema.rule import (
     PARAMETER_SUFFIX,
-    CombatResultKind,
     Condition,
     ModifierEffect,
-    ModifierKind,
-    RankKind,
+    Quantity,
     Rule,
     RuleEffect,
+    Seam,
+    seam_of,
 )
 from avelorn.tow.schema.stage import Stage
 from avelorn.tow.schema.unit import Characteristic
@@ -156,17 +156,17 @@ class _Roll:
     sign: int  # multiplies the printed amount into target movement
 
 
-# What each modifier kind means, declared once; a drift-guard test keeps
-# it covering the whole kind vocabulary. The printed sign conventions
-# differ per quantity, and ``sign`` carries them: To Hit modifiers speak
-# roll-side (a -1 penalty *raises* the target, so the target moves
-# against the amount), Armour Piercing speaks piercing-side (a +1
-# improvement worsens the save target by the same amount). What a moved
-# target *means* — a 7+ that confirms, a save that cannot be attempted —
-# is each roll's own knowledge, in the walk, never stated here.
-_ROLLS: Mapping[ModifierKind, _Roll] = {
-    "to-hit": _Roll(Stage.ROLL_TO_HIT, sign=-1),
-    "armour-piercing": _Roll(Stage.MAKE_ARMOUR_SAVES, sign=+1),
+# What each roll-seam quantity means, declared once; a drift-guard test keeps
+# it covering every roll-seam Quantity. The printed sign conventions differ
+# per quantity, and ``sign`` carries them: To Hit modifiers speak roll-side
+# (a -1 penalty *raises* the target, so the target moves against the amount),
+# Armour Piercing speaks piercing-side (a +1 improvement worsens the save
+# target by the same amount). What a moved target *means* — a 7+ that
+# confirms, a save that cannot be attempted — is each roll's own knowledge,
+# in the walk, never stated here.
+_ROLLS: Mapping[Quantity, _Roll] = {
+    Quantity.TO_HIT: _Roll(Stage.ROLL_TO_HIT, sign=-1),
+    Quantity.ARMOUR_PIERCING: _Roll(Stage.MAKE_ARMOUR_SAVES, sign=+1),
 }
 
 
@@ -271,7 +271,7 @@ def effective_fighting_ranks(
     Returns:
         The effective depth with the factored and unfactored rule names.
     """
-    return _effective_quantity(base, "fighting-ranks", rules, conditions)
+    return _effective_quantity(base, Quantity.FIGHTING_RANKS, rules, conditions)
 
 
 def effective_supporting_ranks(
@@ -290,7 +290,7 @@ def effective_supporting_ranks(
     Returns:
         The effective count with the factored and unfactored rule names.
     """
-    return _effective_quantity(base, "supporting-ranks", rules, conditions)
+    return _effective_quantity(base, Quantity.SUPPORTING_RANKS, rules, conditions)
 
 
 def effective_combat_result_bonus(
@@ -311,22 +311,24 @@ def effective_combat_result_bonus(
         The signed combat-result total with the factored and unfactored
         rule names.
     """
-    return _effective_quantity(0, "combat-result", rules, conditions)
+    return _effective_quantity(0, Quantity.COMBAT_RESULT, rules, conditions)
 
 
 def _effective_quantity(
     base: int,
-    key: Characteristic | RankKind | CombatResultKind,
+    key: Quantity | Characteristic,
     rules: Sequence[Rule],
     conditions: Mapping[Condition, bool | None] | None = None,
 ) -> EffectiveValue:
     # One base value folded over the ``key`` modifiers a contingent's rules
     # carry — shared by the characteristic, fighting-rank, and combat-result
     # queries, which differ only in the ``then`` key they read. All-or-nothing
-    # per rule; a
-    # rule needing an unknown fact, an unbound parameter, or an event face
-    # (no die is rolled at a query) is reported unfactored.
+    # per rule; a rule needing an unknown fact, an unbound parameter, or an
+    # event face (no die is rolled at a query) is reported unfactored. A
+    # printed maximum caps only the characteristic seam — the one that prints
+    # one — so ranks and combat-result points accumulate uncapped.
     conditions = conditions or {}
+    caps = seam_of(key) is Seam.CHARACTERISTIC
     value = base
     factored: list[str] = []
     unfactored: list[str] = []
@@ -352,7 +354,7 @@ def _effective_quantity(
             if not answer or not isinstance(amount, int):
                 continue
             value += amount
-            if effect.maximum is not None:
+            if caps and effect.maximum is not None:
                 value = min(value, effect.maximum)
         factored.append(rule.name)
         logger.debug("%s modifier factored: %s -> %d", key, rule.name, value)

@@ -27,7 +27,7 @@ approximated.
 
 from collections.abc import Mapping
 from enum import StrEnum
-from typing import Annotated, Literal, get_args
+from typing import Annotated, Literal, assert_never
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -67,43 +67,65 @@ class Condition(StrEnum):
     OUTNUMBERS = "outnumbers"
 
 
-# The quantities a modifier can change, in the rulebook's own modifier
-# vocabulary, grouped by the seam that consumes them. Roll quantities land
-# on a stage of the dice walk (the compiler owns that mapping, exhaustively);
-# rank quantities are read by the fighting-rank query; a combat-result
-# quantity is a signed point added to a side's score. A profile
-# characteristic is the fourth seam. A ``then`` speaks to exactly one of the
-# four (see :meth:`ModifierEffect._then_speaks_to_one_seam`).
-ModifierKind = Literal["to-hit", "armour-piercing"]  # roll quantities — the dice walk
-# Formation quantities — the fighting-rank query. ``fighting-ranks`` deepens
-# the rank fighting at full Attacks (Press of Battle); ``supporting-ranks``
-# adds ranks that support at one attack each (Fight in Extra Rank).
-RankKind = Literal["fighting-ranks", "supporting-ranks"]
-# Combat-result quantities — summed into a side's combat result score. One
-# generic hook: a signed point (a bonus, or a malus) the combat adds without
-# naming what granted it (Massed Infantry's +1, a standard's +1, later a
-# malus), exactly as the rank folds sum without naming their rules.
-CombatResultKind = Literal["combat-result"]
+class Seam(StrEnum):
+    """Where a ``then`` quantity is consumed.
 
-_ROLL_KINDS = frozenset(get_args(ModifierKind))
-_RANK_KINDS = frozenset(get_args(RankKind))
-_COMBAT_RESULT_KINDS = frozenset(get_args(CombatResultKind))
+    A modifier's quantity lands in exactly one place, and the seam names it:
+    the dice walk (roll quantities); the effective-characteristic query — the
+    one seam that caps a value at a printed maximum; the fighting-rank query;
+    or the combat-result fold. :meth:`ModifierEffect._then_speaks_to_one_seam`
+    holds a single effect to one seam, so all-or-nothing reporting stays per
+    consumer.
+    """
+
+    ROLL = "roll"
+    CHARACTERISTIC = "characteristic"
+    RANK = "rank"
+    COMBAT_RESULT = "combat-result"
 
 
-def _seam_of(quantity: "ModifierKind | RankKind | CombatResultKind | Characteristic") -> str:
-    """The seam that consumes a ``then`` quantity.
+class Quantity(StrEnum):
+    """A quantity a modifier can change, in the rulebook's own modifier vocabulary.
+
+    The whole modifier vocabulary in one closed, append-only enum — a member
+    joins when an imported rule needs it. Each member knows the :class:`Seam`
+    that consumes it, so routing is the member's own knowledge, not a side
+    table: ``to-hit`` and ``armour-piercing`` land on the dice walk,
+    ``fighting-ranks`` / ``supporting-ranks`` on the fighting-rank query, and
+    ``combat-result`` on the combat-result fold. A profile
+    :class:`~avelorn.tow.schema.unit.Characteristic` is the one quantity kept
+    apart — a stat vocabulary used far beyond modifiers — so a ``then`` key is
+    a Quantity or a Characteristic.
+    """
+
+    TO_HIT = "to-hit"
+    ARMOUR_PIERCING = "armour-piercing"
+    FIGHTING_RANKS = "fighting-ranks"
+    SUPPORTING_RANKS = "supporting-ranks"
+    COMBAT_RESULT = "combat-result"
+
+    @property
+    def seam(self) -> Seam:
+        """The seam that consumes this quantity."""
+        match self:
+            case Quantity.TO_HIT | Quantity.ARMOUR_PIERCING:
+                return Seam.ROLL
+            case Quantity.FIGHTING_RANKS | Quantity.SUPPORTING_RANKS:
+                return Seam.RANK
+            case Quantity.COMBAT_RESULT:
+                return Seam.COMBAT_RESULT
+            case unhandled:
+                assert_never(unhandled)
+
+
+def seam_of(key: "Quantity | Characteristic") -> Seam:
+    """The seam that consumes a ``then`` key.
 
     Returns:
-        ``"characteristic"``, ``"rank"``, ``"combat-result"``, or ``"roll"``
-        — the query, fold, or walk that reads the quantity.
+        The quantity's own seam, or the characteristic seam for a profile
+        characteristic (the quantity kept outside :class:`Quantity`).
     """
-    if isinstance(quantity, Characteristic):
-        return "characteristic"
-    if quantity in _RANK_KINDS:
-        return "rank"
-    if quantity in _COMBAT_RESULT_KINDS:
-        return "combat-result"
-    return "roll"
+    return Seam.CHARACTERISTIC if isinstance(key, Characteristic) else key.seam
 
 
 class NaturalRoll(BaseModel):
@@ -181,7 +203,7 @@ class ModifierEffect(BaseModel):
         None
     ) = None
     then: Annotated[
-        dict[ModifierKind | RankKind | CombatResultKind | Characteristic, int | Literal["X"]],
+        dict[Quantity | Characteristic, int | Literal["X"]],
         Field(min_length=1),
     ]
     maximum: int | None = None
@@ -203,17 +225,16 @@ class ModifierEffect(BaseModel):
 
     @model_validator(mode="after")
     def _then_speaks_to_one_seam(self) -> "ModifierEffect":
-        # Roll quantities are consumed by the dice walk, characteristics by
-        # the effective-characteristic query, rank quantities by the
-        # fighting-rank query. All-or-nothing reporting holds per consumer,
-        # so one effect may not straddle them: a mixed then could be
-        # half-consumed while its rule's note is dropped whole. Split the
-        # sentence into one effect per seam.
-        seams = {_seam_of(quantity) for quantity in self.then}
+        # Each seam (the dice walk, the characteristic query, the fighting-rank
+        # query, the combat-result fold) consumes its quantities all-or-nothing,
+        # so one effect may not straddle two: a mixed then could be half-consumed
+        # while its rule's note is dropped whole. Split the sentence into one
+        # effect per seam.
+        seams = {seam_of(quantity) for quantity in self.then}
         if len(seams) > 1:
             raise ValueError(
-                f"a then may not mix quantities across seams (roll / characteristic / rank): "
-                f"{sorted(seams)}"
+                "a then may not mix quantities across seams "
+                f"(roll / characteristic / rank / combat-result): {sorted(seams)}"
             )
         return self
 

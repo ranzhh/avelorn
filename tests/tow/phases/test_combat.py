@@ -16,7 +16,7 @@ from avelorn.tow.phases.combat import (
     strike_unit,
 )
 from avelorn.tow.schema.phase import Phase
-from avelorn.tow.schema.rule import Condition, ModifierEffect, Rule
+from avelorn.tow.schema.rule import Condition, ModifierEffect, Quantity, Rule
 from avelorn.tow.schema.unit import Characteristic, Unit
 
 REPO = TOWRepository()
@@ -780,7 +780,7 @@ def _combat_chapter_rule(name: str, when: dict | None = None) -> Rule:
         name=name,
         paragraphs=["…"],
         category=Phase.COMBAT,
-        effects=[ModifierEffect(when=when, then={"to-hit": 1})],
+        effects=[ModifierEffect(when=when, then={Quantity.TO_HIT: 1})],
     )
 
 
