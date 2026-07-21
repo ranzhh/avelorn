@@ -81,13 +81,13 @@ class EquipmentUse(StrEnum):
 
 
 class Seam(StrEnum):
-    """Where a ``then`` quantity is consumed.
+    """Where an operation's quantity is consumed.
 
     A modifier's quantity lands in exactly one place, and the seam names it:
     the dice walk (roll quantities); the effective-characteristic query; the
     fighting-rank query; the combat-result fold; or the armour fold, which
     improves the defender's armour value before its save.
-    :meth:`ModifierEffect._then_speaks_to_one_seam` holds a single effect to
+    :meth:`ModifierEffect._ops_speak_to_one_seam` holds a single effect to
     one seam, so all-or-nothing reporting stays per consumer. The
     characteristic and armour seams cap a value at a printed maximum — a
     ceiling on a characteristic, a floor (the best save) on the armour value.
@@ -111,8 +111,8 @@ class Quantity(StrEnum):
     ``combat-result`` on the combat-result fold, and ``armour-value`` on the
     armour fold (a defender improving its own save). A profile
     :class:`~avelorn.tow.schema.unit.Characteristic` is the one quantity kept
-    apart — a stat vocabulary used far beyond modifiers — so a ``then`` key is
-    a Quantity or a Characteristic.
+    apart — a stat vocabulary used far beyond modifiers — so an operation's
+    key is a Quantity or a Characteristic.
     """
 
     TO_HIT = "to-hit"
@@ -139,7 +139,7 @@ class Quantity(StrEnum):
 
 
 def seam_of(key: "Quantity | Characteristic") -> Seam:
-    """The seam that consumes a ``then`` key.
+    """The seam that consumes an operation's key.
 
     Returns:
         The quantity's own seam, or the characteristic seam for a profile
@@ -188,31 +188,39 @@ class ModifierEffect(BaseModel):
 
     "*If* a model rolls a natural 6 when making a roll To Wound, the
     Armour Piercing of its weapon is improved by X" — ``when`` holds
-    the if, ``then`` holds the consequence. ``when`` is one flat
-    conjunction: state conditions by :class:`Condition` member (facts
-    of the engagement, known once before any die is cast; an
-    unanswerable one leaves the whole rule unfactored and reported,
-    one answered False is honoured by not applying) and at most one
-    ``natural`` event (:class:`NaturalRoll` — a face shown by an attack
-    die, decided branch by branch, never unknown). Without a ``when``
-    the modifier applies to every attack. Deliberately not a language:
-    no ``else``, no nesting — an effect is one flat ``when`` and one
-    ``then``, and a rule needing more belongs in a code handler.
+    the if, the operation (``add`` / ``set``) holds the consequence.
+    ``when`` is one flat conjunction: state conditions by
+    :class:`Condition` member (facts of the engagement, known once before
+    any die is cast; an unanswerable one leaves the whole rule unfactored
+    and reported, one answered False is honoured by not applying) and at
+    most one ``natural`` event (:class:`NaturalRoll` — a face shown by an
+    attack die, decided branch by branch, never unknown). Without a
+    ``when`` the modifier applies to every attack. Deliberately not a
+    language: no ``else``, no nesting — an effect is one flat ``when`` and
+    one operation, and a rule needing more belongs in a code handler.
 
-    ``then`` maps each modified quantity to its printed amount, in the
-    quantity's own printed sign convention: To Hit penalties negative
-    ("-1 To Hit modifier" is ``to-hit: -1``), Armour Piercing
-    improvements positive ("improved by 1" is ``armour-piercing: 1``).
+    The operation names itself, mirroring how the page prints it. ``add``
+    is a signed delta the rulebook writes as a modifier — To Hit penalties
+    negative ("-1 To Hit modifier" is ``add: {to-hit: -1}``), Armour
+    Piercing improvements positive ("improved by 1" is
+    ``add: {armour-piercing: 1}``). ``set`` is a replacement the rulebook
+    writes as prose — "improves its Initiative characteristic to 10" is
+    ``set: {I: 10}`` — applied before any additive modifier, and honoured
+    only where a base value is read (the characteristic query and its
+    siblings); the dice walk and the armour fold, which move a target
+    rather than replace a base, read ``add`` alone. An effect carries at
+    least one operation, and both map each quantity to its printed amount.
     A quantity is a roll of the attack sequence by its kind (consumed by
     the dice walk), a profile characteristic by its printed abbreviation
-    ("+1 modifier to its Initiative characteristic" is ``I: 1``, consumed
-    by the effective-characteristic query), a formation quantity like the
-    number of fighting ranks ("fighting-ranks: 1", consumed by the
-    fighting-rank query), a combat-result point ("combat-result: 1", summed
-    into the round's score), or an armour-value improvement
-    ("armour-value: 1", folded into the defender's save). The literal ``"X"``
-    means the rule's bracketed parameter ("the amount shown in brackets after
-    the name of this special rule").
+    ("+1 modifier to its Initiative characteristic" is ``add: {I: 1}``,
+    consumed by the effective-characteristic query), a formation quantity
+    like the number of fighting ranks (``add: {fighting-ranks: 1}``,
+    consumed by the fighting-rank query), a combat-result point
+    (``add: {combat-result: 1}``, summed into the round's score), or an
+    armour-value improvement (``add: {armour-value: 1}``, folded into the
+    defender's save). The literal ``"X"`` means the rule's bracketed
+    parameter ("the amount shown in brackets after the name of this
+    special rule").
     Where a change lands follows from its quantity, so no stage is spelled
     out. ``requires`` gates the effect on equipment in use beside the
     engagement ``when`` — Parry's "a hand weapon and a shield" is
@@ -223,17 +231,39 @@ class ModifierEffect(BaseModel):
     on an armour value.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    # populate_by_name so the `set` operation is reachable in Python as the
+    # non-shadowing attribute ``set_`` (a bare ``set`` field would shadow the
+    # builtin wherever a ``set[...]`` annotation is evaluated in this class).
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     when: Annotated[dict[Condition | Literal["natural"], TriggerFact], Field(min_length=1)] | (
         None
     ) = None
     requires: Annotated[dict[EquipmentUse, str], Field(min_length=1)] | None = None
-    then: Annotated[
-        dict[Quantity | Characteristic, int | Literal["X"]],
-        Field(min_length=1),
-    ]
+    add: (
+        Annotated[dict[Quantity | Characteristic, int | Literal["X"]], Field(min_length=1)] | None
+    ) = None
+    set_: (
+        Annotated[dict[Quantity | Characteristic, int | Literal["X"]], Field(min_length=1)] | None
+    ) = Field(default=None, alias="set")
     maximum: int | None = None
+
+    @property
+    def quantities(self) -> set["Quantity | Characteristic"]:
+        """Every quantity this effect touches, across its operations.
+
+        Returns:
+            The union of the ``add`` and ``set`` keys.
+        """
+        return {*(self.add or {}), *(self.set_ or {})}
+
+    @model_validator(mode="after")
+    def _carries_an_operation(self) -> "ModifierEffect":
+        # A modifier without a consequence is meaningless: it must add or
+        # set something (a present-but-empty map fails its own min_length).
+        if not self.add and not self.set_:
+            raise ValueError("a modifier needs an operation: add or set")
+        return self
 
     @model_validator(mode="after")
     def _facts_match_their_keys(self) -> "ModifierEffect":
@@ -246,24 +276,25 @@ class ModifierEffect(BaseModel):
                 raise ValueError(f"condition {key!r} requires true or false")
         if self.maximum is not None and not any(
             isinstance(quantity, Characteristic) or quantity == Quantity.ARMOUR_VALUE
-            for quantity in self.then
+            for quantity in self.quantities
         ):
             raise ValueError(
-                "maximum bounds a characteristic or armour value; the then moves neither"
+                "maximum bounds a characteristic or armour value; the operation moves neither"
             )
         return self
 
     @model_validator(mode="after")
-    def _then_speaks_to_one_seam(self) -> "ModifierEffect":
+    def _ops_speak_to_one_seam(self) -> "ModifierEffect":
         # Each seam (the dice walk, the characteristic query, the fighting-rank
         # query, the combat-result fold) consumes its quantities all-or-nothing,
-        # so one effect may not straddle two: a mixed then could be half-consumed
-        # while its rule's note is dropped whole. Split the sentence into one
-        # effect per seam.
-        seams = {seam_of(quantity) for quantity in self.then}
+        # so one effect may not straddle two: a mixed operation could be half-
+        # consumed while its rule's note is dropped whole. Split the sentence
+        # into one effect per seam. Add and set are weighed together — a single
+        # effect that both adds and sets must still land on one seam.
+        seams = {seam_of(quantity) for quantity in self.quantities}
         if len(seams) > 1:
             raise ValueError(
-                "a then may not mix quantities across seams "
+                "an operation may not mix quantities across seams "
                 f"(roll / characteristic / rank / combat-result / armour): {sorted(seams)}"
             )
         return self
@@ -328,8 +359,8 @@ RuleEffect = ModifierEffect | RerollEffect
 def references_parameter(effect: RuleEffect) -> bool:
     """Whether any of the effect's values reference the X parameter.
 
-    Introspects the effect's fields, looking inside mappings (a
-    ``then``'s amounts), so a new X-bearing field participates
+    Introspects the effect's fields, looking inside mappings (an
+    operation's amounts), so a new X-bearing field participates
     automatically.
 
     Returns:

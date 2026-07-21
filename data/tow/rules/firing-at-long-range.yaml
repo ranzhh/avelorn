@@ -10,5 +10,5 @@ paragraphs:
 effects:
   - when:
       at_long_range: true
-    then:
+    add:
       to-hit: -1

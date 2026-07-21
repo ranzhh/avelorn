@@ -13,5 +13,5 @@ paragraphs:
 effects:
   - when:
       outnumbers: true
-    then:
+    add:
       combat-result: 1

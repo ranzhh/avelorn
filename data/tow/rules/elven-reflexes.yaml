@@ -12,6 +12,6 @@ paragraphs:
 effects:
   - when:
       first_round_of_combat: true
-    then:
+    add:
       I: 1
     maximum: 10

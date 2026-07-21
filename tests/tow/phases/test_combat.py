@@ -575,7 +575,7 @@ def _reflexive(unit: Unit) -> Contingent:
         effects=[
             ModifierEffect(
                 when={Condition.FIRST_ROUND_OF_COMBAT: True},
-                then={Characteristic.INITIATIVE: 1},
+                add={Characteristic.INITIATIVE: 1},
                 maximum=10,
             )
         ],
@@ -811,7 +811,7 @@ def _combat_chapter_rule(name: str, when: dict | None = None) -> Rule:
         name=name,
         paragraphs=["…"],
         category=Phase.COMBAT,
-        effects=[ModifierEffect(when=when, then={Quantity.TO_HIT: 1})],
+        effects=[ModifierEffect(when=when, add={Quantity.TO_HIT: 1})],
     )
 
 

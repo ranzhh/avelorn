@@ -70,11 +70,11 @@ def test_printed_rule_substitutes_the_parameter() -> None:
     assert rule.name == "Armour Bane (1)"
     effect = rule.effects[0]
     assert isinstance(effect, ModifierEffect)
-    assert effect.then == {"armour-piercing": 1}
+    assert effect.add == {"armour-piercing": 1}
     # The filed entry is untouched: the placeholder still reads "X".
     filed = REPO.rules["armour-bane"].effects[0]
     assert isinstance(filed, ModifierEffect)
-    assert filed.then == {"armour-piercing": "X"}
+    assert filed.add == {"armour-piercing": "X"}
 
 
 def test_printed_rule_unknown_name() -> None:
@@ -112,7 +112,7 @@ def test_compile_rank_quantity_stays_unfactored_in_the_dice_walk() -> None:
     rule compiled for the walk it produces no modifier and is reported, the
     way a characteristic change is.
     """
-    rules = _one_rule(ModifierEffect(then={Quantity.FIGHTING_RANKS: 1}))
+    rules = _one_rule(ModifierEffect(add={Quantity.FIGHTING_RANKS: 1}))
     transforms, unfactored = compile_rules(["Doctored"], rules)
     assert transforms == []
     assert unfactored == ["Doctored"]
@@ -133,7 +133,7 @@ def test_unconditional_armour_piercing_modifier_factors() -> None:
     refused (an AP improvement not gated on a die): hit 3+, wound 4+,
     save 5+ worsened to 6+ on every attack, p = 2/3 * 1/2 * 5/6 = 5/18.
     """
-    rules = _one_rule(ModifierEffect(then={Quantity.ARMOUR_PIERCING: 1}))
+    rules = _one_rule(ModifierEffect(add={Quantity.ARMOUR_PIERCING: 1}))
     transforms, unfactored = compile_rules(["Doctored"], rules)
     assert unfactored == []
     profile = AttackProfile.shooting(
@@ -149,7 +149,7 @@ def test_trigger_at_or_after_the_landing_stage_stays_unfactored() -> None:
     already made; the rule is honestly unfactored, never a silent no-op.
     """
     effect = ModifierEffect(
-        when={"natural": NaturalRoll(face=6, roll=Stage.ROLL_TO_WOUND)}, then={Quantity.TO_HIT: 1}
+        when={"natural": NaturalRoll(face=6, roll=Stage.ROLL_TO_WOUND)}, add={Quantity.TO_HIT: 1}
     )
     transforms, unfactored = compile_rules(["Doctored"], _one_rule(effect))
     assert transforms == []
@@ -354,7 +354,7 @@ def _initiative_rule(
     when: dict[Condition | Literal["natural"], bool | NaturalRoll] | None = None,
     characteristic: Characteristic = Characteristic.INITIATIVE,
 ) -> Rule:
-    effect = ModifierEffect(when=when, then={characteristic: amount}, maximum=maximum)
+    effect = ModifierEffect(when=when, add={characteristic: amount}, maximum=maximum)
     return Rule(id="doctored", name="Doctored (X)", paragraphs=["…"], effects=[effect])
 
 
@@ -410,9 +410,86 @@ def test_effective_characteristic_ignores_other_characteristics() -> None:
     assert result.unfactored == ()
 
 
+# --- set: the replace operation, before its Strike First/Last data lands ---
+
+
+def _set_initiative(value: int, name: str = "Doctored Set") -> Rule:
+    # A rule that sets Initiative outright — the Strike First/Last shape, ahead of
+    # its real data: `set: {I: value}`, no add.
+    effect = ModifierEffect(set={Characteristic.INITIATIVE: value})
+    return Rule(id="doctored-set", name=name, paragraphs=["…"], effects=[effect])
+
+
+def test_effective_characteristic_set_replaces_the_base() -> None:
+    """A set operation replaces the base value outright, and is factored."""
+    result = effective_characteristic(4, Characteristic.INITIATIVE, [_set_initiative(10)])
+    assert result.value == 10
+    assert result.factored == ("Doctored Set",)
+    assert result.unfactored == ()
+
+
+def test_effective_characteristic_set_lands_before_add() -> None:
+    """A set replaces the base before additive modifiers stack on top.
+
+    Strike Last's shape (set to 1) beside a separate +1 (a charge, say): the
+    set lands first, so the base 4 is replaced by 1 and the add lifts it to 2 —
+    not 5. Order in the list must not matter, so the add rule leads here.
+    """
+    result = effective_characteristic(
+        4,
+        Characteristic.INITIATIVE,
+        [_initiative_rule(amount=1, maximum=None), _set_initiative(1)],
+    )
+    assert result.value == 2
+
+
+def test_effective_characteristic_set_then_add_still_caps() -> None:
+    """Set to 10, then +1, capped by the add's printed maximum (Strike First on a charge)."""
+    result = effective_characteristic(
+        4,
+        Characteristic.INITIATIVE,
+        [_set_initiative(10), _initiative_rule(amount=1, maximum=10)],
+    )
+    assert result.value == 10
+
+
+def test_effective_characteristic_conflicting_sets_cancel() -> None:
+    """Two rules setting the same characteristic to different values cancel.
+
+    Strike First (to 10) against Strike Last (to 1): the base stands, and both
+    rules are honoured — factored, just to no effect. This is the rule-agnostic
+    model of the printed "the two rules cancel one another out" clause.
+    """
+    result = effective_characteristic(
+        4,
+        Characteristic.INITIATIVE,
+        [_set_initiative(10, "Set High"), _set_initiative(1, "Set Low")],
+    )
+    assert result.value == 4
+    assert set(result.factored) == {"Set High", "Set Low"}
+    assert result.unfactored == ()
+
+
+def test_effective_characteristic_agreeing_sets_apply_once() -> None:
+    """Only disagreeing sets cancel; two rules setting the same value still apply."""
+    result = effective_characteristic(
+        4, Characteristic.INITIATIVE, [_set_initiative(10, "A"), _set_initiative(10, "B")]
+    )
+    assert result.value == 10
+    assert set(result.factored) == {"A", "B"}
+
+
+def test_set_is_not_a_roll_modifier() -> None:
+    """The dice walk moves a target, not a base — a set is honestly unfactored there."""
+    effect = ModifierEffect(set={Quantity.TO_HIT: 1})
+    modifiers, unfactored = compile_rules(["Doctored"], _one_rule(effect))
+    assert modifiers == []
+    assert unfactored == ["Doctored"]
+
+
 def _press_of_battle() -> Rule:
     # A rank modifier in the Press of Battle shape: +1 fighting rank, off on a charge.
-    effect = ModifierEffect(when={Condition.CHARGED: False}, then={Quantity.FIGHTING_RANKS: 1})
+    effect = ModifierEffect(when={Condition.CHARGED: False}, add={Quantity.FIGHTING_RANKS: 1})
     return Rule(id="doctored", name="Doctored", paragraphs=["…"], effects=[effect])
 
 
@@ -443,7 +520,7 @@ def test_effective_supporting_ranks_folds_over_a_base_of_none() -> None:
     Stationary: the +1 lands (one supporting rank), factored. Charged:
     honoured by not applying (none), still factored.
     """
-    effect = ModifierEffect(when={Condition.CHARGED: False}, then={Quantity.SUPPORTING_RANKS: 1})
+    effect = ModifierEffect(when={Condition.CHARGED: False}, add={Quantity.SUPPORTING_RANKS: 1})
     rule = Rule(id="doctored", name="Doctored", paragraphs=["…"], effects=[effect])
 
     stationary = effective_supporting_ranks(0, [rule], {Condition.CHARGED: False})
@@ -461,7 +538,7 @@ def test_effective_combat_result_bonus_sums_signed_points_under_the_conditions()
     Outnumbering: the +1 lands, factored. Even: honoured by not applying,
     still factored. Unknown: unfactored, its point left out of the total.
     """
-    effect = ModifierEffect(when={Condition.OUTNUMBERS: True}, then={Quantity.COMBAT_RESULT: 1})
+    effect = ModifierEffect(when={Condition.OUTNUMBERS: True}, add={Quantity.COMBAT_RESULT: 1})
     rule = Rule(id="massed", name="Massed Infantry", paragraphs=["…"], effects=[effect])
 
     outnumbering = effective_combat_result_bonus([rule], {Condition.OUTNUMBERS: True})
@@ -486,7 +563,7 @@ def test_effective_armour_value_betters_the_save_with_the_gear_it_requires() -> 
     """
     effect = ModifierEffect(
         requires={EquipmentUse.WIELDING: "Hand Weapon", EquipmentUse.WORN: "Shield"},
-        then={Quantity.ARMOUR_VALUE: 1},
+        add={Quantity.ARMOUR_VALUE: 1},
         maximum=3,
     )
     rule = Rule(id="parry", name="Parry", paragraphs=["…"], effects=[effect])
