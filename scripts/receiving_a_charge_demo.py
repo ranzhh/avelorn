@@ -8,9 +8,14 @@ unit it hits, standing still, keeps all three: two ranks at full Attacks plus
 one supporting rank. The charger strikes first for its charge Initiative
 bonus, but with a third of the blows.
 
+Then the payoff: the charger is stuck at one rank whichever weapon it draws,
+and a thrusting spear and a hand weapon strike alike (Strength 3) — but a hand
+weapon and shield turn on Parry (a 4+ save, not 5+), so the charger fares
+measurably better trading its spear for them, the counterattack blunted.
+
 Resolved exactly, no dice rolled. Prints who fights on each side, the striking
-order, each side's casualty distribution, and the combat result — then the
-verdict.
+order, each side's casualty distribution, the combat result, and the charger's
+weapon comparison — then the verdict.
 
 Usage: uv run python scripts/receiving_a_charge_demo.py [spearmen] [charge_inches]
 
@@ -24,6 +29,23 @@ from avelorn.core.dice import expected_value
 from avelorn.core.logging import configure_logging
 from avelorn.tow.contingent import Charge, ChargeArc
 from avelorn.tow.game import TOWGame
+
+
+def _resolve(game: "TOWGame", spearmen, models: int, inches: int, charger_weapon: str):
+    """Charge ``models`` spearmen (armed with ``charger_weapon``) into standing spearmen.
+
+    The charged keep their thrusting spears; only the charger's weapon in hand
+    varies, so the two resolutions differ by the charger's arming alone.
+
+    Returns:
+        The engagement, the fought round, and its scored result.
+    """
+    chargers = game.field(spearmen, models).wielding(charger_weapon)
+    receivers = game.field(spearmen, models).wielding("Thrusting Spear")
+    engagement = game.movement.charge(chargers, receivers, Charge(inches, ChargeArc.FRONT))
+    engagement.react()  # Hold — Spearmen carry no missile weapon to Stand & Shoot with
+    melee = game.combat.fight(engagement)
+    return engagement, melee, game.combat.result(melee)
 
 
 def _print_casualties(label: str, casualties: list[float], models: int) -> None:
@@ -53,14 +75,9 @@ def main() -> None:
 
     game = TOWGame.load_data()
     spearmen = game.units["elven-spearmen"]
-    chargers = game.field(spearmen, args.spearmen).wielding("Thrusting Spear")
-    receivers = game.field(spearmen, args.spearmen).wielding("Thrusting Spear")
-
-    move = Charge(args.charge_inches, ChargeArc.FRONT)
-    engagement = game.movement.charge(chargers, receivers, move)
-    engagement.react()  # Hold — Spearmen carry no missile weapon to Stand & Shoot with
-    melee = game.combat.fight(engagement)
-    scored = game.combat.result(melee)
+    engagement, melee, scored = _resolve(
+        game, spearmen, args.spearmen, args.charge_inches, "Thrusting Spear"
+    )
 
     # The engagement carries the *charged* copy of the chargers (rank rules
     # lapsed); the receivers stand as fielded — so ask each for what it throws.
@@ -105,6 +122,25 @@ def main() -> None:
         "\n  verdict: Elven Spearmen would rather receive a charge than deliver one.\n"
         "  Even striking first, a charging unit swings with a single rank while the\n"
         "  unit it hits swings with three."
+    )
+
+    # The payoff: the charger is stuck at one rank whichever weapon it draws,
+    # and a thrusting spear and a hand weapon both strike at Strength 3 — so the
+    # attack is unchanged. But a hand weapon and shield turn on Parry (a 4+ save
+    # in place of 5+), blunting the counterattack. Re-resolve so armed.
+    _, hw_melee, hw_scored = _resolve(
+        game, spearmen, args.spearmen, args.charge_inches, "Hand Weapon"
+    )
+    print(
+        "\n  the charger's weapon (the charged keep their spears either way):\n"
+        f"  - thrusting spear:      P(chargers win) {scored.p_a_wins:.3f}, "
+        f"expected losses {expected_value(melee.a_casualties):.2f} of {args.spearmen}\n"
+        f"  - hand weapon + shield: P(chargers win) {hw_scored.p_a_wins:.3f}, "
+        f"expected losses {expected_value(hw_melee.a_casualties):.2f} of {args.spearmen}  "
+        "(Parry: a 4+ save)\n"
+        "\n  verdict: even charging into a single rank, the chargers do better with\n"
+        "  hand weapon and shield — same blows struck, but Parry's 4+ save blunts\n"
+        "  the counterattack the spear leaves them open to."
     )
 
     if melee.notes:
