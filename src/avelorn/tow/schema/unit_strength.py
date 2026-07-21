@@ -11,17 +11,27 @@ which side outnumbers the other for the combat-result bonus, panic, and
 the like.
 
 The value lives on each troop type's data (``TroopTypeProfile``), and the
-troop type resolves it against a model's Wounds — the one place the "As
-Starting Wounds" cell is read.
+troop type resolves it against a model's Wounds — the one place a marker
+like "W" is read.
 """
 
-from typing import Literal
+from enum import StrEnum
 
-# The troop-type table's "W" cell (As Starting Wounds): a model's Unit
-# Strength is the Wounds on its profile, not a fixed count. "W" is the
-# table's own abbreviation, kept verbatim.
-AS_STARTING_WOUNDS = "W"
+
+class UnitStrengthMarker(StrEnum):
+    """The troop-type table's non-numeric Unit Strength markers.
+
+    A closed, append-only vocabulary like the rulebook's other tables: a
+    member joins when the Unit Strength column prints a new marker in place
+    of a number. ``STARTING_WOUNDS`` is the table's "W" — the model's Unit
+    Strength is its starting Wounds, not a fixed count. Each marker names a
+    distinct resolution, so the troop type must match on the member rather
+    than lump every non-numeric value together.
+    """
+
+    STARTING_WOUNDS = "W"
+
 
 # A troop type's per-model Unit Strength as the table prints it: a fixed
-# count, or the "W" marker resolved against the model's Wounds.
-type UnitStrength = int | Literal["W"]
+# count, or a marker resolved against the model (STARTING_WOUNDS -> Wounds).
+type UnitStrength = int | UnitStrengthMarker
