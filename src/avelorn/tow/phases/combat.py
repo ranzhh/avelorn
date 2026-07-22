@@ -48,7 +48,10 @@ from avelorn.tow.engine.charts import (
     wound_target,
 )
 from avelorn.tow.engine.rules import (
+    ChargeEvent,
     EffectiveValue,
+    GateContext,
+    GateFacts,
     compile_rules,
     effective_armour_value,
     effective_characteristic,
@@ -256,8 +259,8 @@ def _engage(
     target: Contingent,
     *,
     hit_modifier: int,
-    conditions: Mapping[Condition, bool | None] | None = None,
-    target_conditions: Mapping[Condition, bool | None] | None = None,
+    conditions: "GateFacts | None" = None,
+    target_conditions: "GateFacts | None" = None,
     phase_rules: Mapping[str, Rule] = _NONE_IN_PLAY,
 ) -> _Engagement:
     # The matchup half of a strike, shared by strike_unit and fight:
@@ -514,22 +517,20 @@ def _unit_rule_notes(unit: Unit, claimed: Collection[str] = ()) -> list[str]:
     ]
 
 
-def _combat_conditions(
-    first_round: bool | None, side: Contingent, foe: Contingent
-) -> dict[Condition, bool | None]:
-    # One fact per Condition member for one side of the combat; None =
-    # unknown. Exhaustive like the shooting producer: a new member fails
-    # the type check until it is answered here. ``first_round`` is the
-    # combat's, a relational fact, and OUTNUMBERS weighs the two sides'
-    # Unit Strength; the rest read the side's own state.
+def _combat_conditions(first_round: bool | None, side: Contingent, foe: Contingent) -> GateContext:
+    # The gate facts for one side of the combat: the flat conditions (one per
+    # Condition member; None = unknown) plus the charge event. Exhaustive like
+    # the shooting producer: a new Condition member fails the type check until
+    # it is answered here. ``first_round`` is the combat's, a relational fact,
+    # and OUTNUMBERS weighs the two sides' Unit Strength; the rest read the
+    # side's own state. The charge event carries the side's charge distance so
+    # a gate can ask ``charging.distance`` (Furious Charge's 3").
     def fact(condition: Condition) -> bool | None:
         match condition:
             case Condition.MOVED:
                 # A charge is a move, and the Movement folds it in: moved is
                 # true for a charge as for any other move this turn.
                 return side.movement.moved
-            case Condition.CHARGED:
-                return side.movement.charge is not None
             case Condition.AT_LONG_RANGE:
                 return False  # no shot is taken in close combat
             case Condition.FIRST_ROUND_OF_COMBAT:
@@ -540,13 +541,17 @@ def _combat_conditions(
             case unanswered:
                 assert_never(unanswered)
 
-    return {condition: fact(condition) for condition in Condition}
+    charge = side.movement.charge
+    return GateContext(
+        conditions={condition: fact(condition) for condition in Condition},
+        charging=ChargeEvent(distance=charge.full_inches) if charge is not None else None,
+    )
 
 
 def effective_initiative(
     contingent: Contingent,
     charge_bonus: int = 0,
-    conditions: Mapping[Condition, bool | None] | None = None,
+    conditions: "GateFacts | None" = None,
 ) -> EffectiveValue:
     """The Initiative a contingent strikes at, all printed modifiers included.
 
@@ -585,7 +590,7 @@ def effective_initiative(
 
 def effective_weapon_skill(
     contingent: Contingent,
-    conditions: Mapping[Condition, bool | None] | None = None,
+    conditions: "GateFacts | None" = None,
 ) -> EffectiveValue:
     """The Weapon Skill a contingent fights at, all printed modifiers included.
 

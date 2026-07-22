@@ -11,6 +11,6 @@ paragraphs:
 # one extra rank deep (base 1 -> 2); a charge this turn lapses it.
 effects:
   - when:
-      charged: false
+      charging: false
     add:
       fighting-ranks: 1
