@@ -375,7 +375,5 @@ def test_engagement_conditions_cover_every_condition() -> None:
     """
     profile = REPO.weapons["longbow"].missile_profile
     assert profile is not None
-    conditions = _engagement_conditions(
-        profile, moved=False, distance=None, force_short_range=False
-    )
-    assert set(conditions) == set(Condition)
+    context = _engagement_conditions(profile, moved=False, distance=None, force_short_range=False)
+    assert set(context.conditions) == set(Condition)

@@ -9,6 +9,8 @@ from avelorn.tow.contingent import Contingent, Movement
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.engine.attack import AttackProfile, RollState, resolve_attack
 from avelorn.tow.engine.rules import (
+    ChargeEvent,
+    GateContext,
     _condition_applies,
     compile_rules,
     effective_armour_value,
@@ -21,6 +23,7 @@ from avelorn.tow.engine.rules import (
 from avelorn.tow.phases.shooting import shoot_unit
 from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.rule import (
+    ChargeGate,
     Condition,
     EquipmentUse,
     ModifierEffect,
@@ -351,7 +354,8 @@ def test_armour_bane_two_leaves_no_save_at_all() -> None:
 def _initiative_rule(
     amount: int | Literal["X"] = 1,
     maximum: int | None = 10,
-    when: dict[Condition | Literal["natural"], bool | NaturalRoll] | None = None,
+    when: dict[Condition | Literal["natural", "charging"], bool | NaturalRoll | ChargeGate]
+    | None = None,
     characteristic: Characteristic = Characteristic.INITIATIVE,
 ) -> Rule:
     effect = ModifierEffect(when=when, add={characteristic: amount}, maximum=maximum)
@@ -495,47 +499,59 @@ def test_set_is_unfactored_at_the_walk() -> None:
 
 def _press_of_battle() -> Rule:
     # A rank modifier in the Press of Battle shape: +1 fighting rank, off on a charge.
-    effect = ModifierEffect(when={Condition.CHARGED: False}, add={Quantity.FIGHTING_RANKS: 1})
+    effect = ModifierEffect(when={"charging": False}, add={Quantity.FIGHTING_RANKS: 1})
     return Rule(id="doctored", name="Doctored", paragraphs=["…"], effects=[effect])
 
 
 def test_effective_fighting_ranks_folds_a_rank_modifier() -> None:
-    """A rank modifier deepens the base of one, gated on the charge fact.
+    """A rank modifier deepens the base of one, gated on the charge event.
 
-    Not charged: the +1 lands (two ranks), factored. Charged: honoured by
-    not applying (one rank), still factored — the fact was answered.
-    Unknown charge: the rule cannot be evaluated, so it is unfactored and the
-    base stands.
+    Not charging: the +1 lands (two ranks), factored. Charging: honoured by
+    not applying (one rank), still factored. The charge is always known (a
+    model's movement is settled), so there is no unknown-charge case — the
+    tri-state unknown lives on the flat conditions, not on the event.
     """
-    stationary = effective_fighting_ranks(1, [_press_of_battle()], {Condition.CHARGED: False})
+    stationary = effective_fighting_ranks(1, [_press_of_battle()], GateContext(charging=None))
     assert stationary.value == 2
     assert stationary.factored == ("Doctored",)
 
-    charged = effective_fighting_ranks(1, [_press_of_battle()], {Condition.CHARGED: True})
+    charging = GateContext(charging=ChargeEvent(distance=6))
+    charged = effective_fighting_ranks(1, [_press_of_battle()], charging)
     assert charged.value == 1
     assert charged.factored == ("Doctored",)
-
-    unknown = effective_fighting_ranks(1, [_press_of_battle()], {})
-    assert unknown.value == 1
-    assert unknown.unfactored == ("Doctored",)
 
 
 def test_effective_supporting_ranks_folds_over_a_base_of_none() -> None:
     """The supporting-ranks twin: base zero, a +1 rank rule gated on the charge.
 
-    Stationary: the +1 lands (one supporting rank), factored. Charged:
+    Stationary: the +1 lands (one supporting rank), factored. Charging:
     honoured by not applying (none), still factored.
     """
-    effect = ModifierEffect(when={Condition.CHARGED: False}, add={Quantity.SUPPORTING_RANKS: 1})
+    effect = ModifierEffect(when={"charging": False}, add={Quantity.SUPPORTING_RANKS: 1})
     rule = Rule(id="doctored", name="Doctored", paragraphs=["…"], effects=[effect])
 
-    stationary = effective_supporting_ranks(0, [rule], {Condition.CHARGED: False})
+    stationary = effective_supporting_ranks(0, [rule], GateContext(charging=None))
     assert stationary.value == 1
     assert stationary.factored == ("Doctored",)
 
-    charged = effective_supporting_ranks(0, [rule], {Condition.CHARGED: True})
+    charged = effective_supporting_ranks(0, [rule], GateContext(charging=ChargeEvent(distance=6)))
     assert charged.value == 0
     assert charged.factored == ("Doctored",)
+
+
+def test_charge_gate_properties_have_a_matching_event_field() -> None:
+    """Every property a charge gate can constrain is a field the event supplies.
+
+    Drift guard: the evaluator reads a gate property off the same-named event
+    attribute, so a property added to :class:`ChargeGate` without the matching
+    :class:`ChargeEvent` field would evaluate against nothing. Keeps the two in
+    step (the pairing the docstrings promise).
+    """
+    from dataclasses import fields
+
+    gate_properties = set(ChargeGate.model_fields)
+    event_fields = {f.name for f in fields(ChargeEvent)}
+    assert gate_properties <= event_fields
 
 
 def test_effective_combat_result_bonus_sums_signed_points_under_the_conditions() -> None:

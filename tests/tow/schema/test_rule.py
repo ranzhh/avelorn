@@ -106,12 +106,15 @@ def test_condition_requires_a_boolean_fact() -> None:
 
 
 def test_the_event_key_stays_outside_the_condition_vocabulary() -> None:
-    """The reserved "natural" key must never collide with a Condition.
+    """The reserved "natural" / "charging" keys must never collide with a Condition.
 
-    Drift guard: both live in the same when mapping, so a member named
-    "natural" joining the enum would shadow the event key.
+    Drift guard: all live in the same when mapping, so a Condition member named
+    "natural" or "charging" would shadow the reserved event key.
     """
-    assert NATURAL not in {condition.value for condition in Condition}
+    from avelorn.tow.schema.rule import CHARGING
+
+    reserved = {NATURAL, CHARGING}
+    assert reserved.isdisjoint({condition.value for condition in Condition})
 
 
 def test_add_rejects_an_unknown_quantity() -> None:
@@ -201,9 +204,9 @@ def test_modifier_rejects_the_retired_then_key() -> None:
 
 
 def test_condition_outside_the_vocabulary_rejected() -> None:
-    """A condition name outside the closed enum is a data error."""
+    """A condition name outside the closed vocabulary is a data error."""
     with pytest.raises(ValidationError, match="when"):
-        _EFFECT.validate_python({"when": {"charging": True}, "add": {"to-hit": -1}})
+        _EFFECT.validate_python({"when": {"sprinting": True}, "add": {"to-hit": -1}})
 
 
 def test_condition_must_ask_something() -> None:
@@ -270,10 +273,39 @@ def test_ops_speak_to_one_seam() -> None:
 
 def test_a_rank_quantity_is_its_own_seam() -> None:
     """A formation quantity is a valid, single-seam operation (Press of Battle's shape)."""
-    effect = _EFFECT.validate_python({"when": {"charged": False}, "add": {"fighting-ranks": 1}})
+    effect = _EFFECT.validate_python({"when": {"charging": False}, "add": {"fighting-ranks": 1}})
     assert isinstance(effect, ModifierEffect)
     assert effect.add == {"fighting-ranks": 1}
-    assert effect.conditions == {Condition.CHARGED: False}
+    assert effect.conditions == {}  # charging is an event, not a flat condition
+    assert effect.charge is False
+
+
+def test_charging_gate_parses_a_distance_predicate() -> None:
+    """The charge event is a path: charging -> distance -> comparator (Furious Charge)."""
+    effect = _EFFECT.validate_python(
+        {"when": {"charging": {"distance": {"at_least": 3}}}, "add": {"A": 1}}
+    )
+    assert isinstance(effect, ModifierEffect)
+    assert effect.conditions == {}
+    gate = effect.charge
+    assert gate is not None and not isinstance(gate, bool)
+    assert gate.distance is not None and gate.distance.at_least == 3
+
+
+def test_charging_gate_rejects_an_unknown_property() -> None:
+    """A charge property outside the model is a data error at load (path validation)."""
+    with pytest.raises(ValidationError, match="speed"):
+        _EFFECT.validate_python(
+            {"when": {"charging": {"speed": {"at_least": 3}}}, "add": {"A": 1}}
+        )
+
+
+def test_comparison_names_exactly_one_comparator() -> None:
+    """A comparison leaf tests one thing; two comparators is a data error."""
+    with pytest.raises(ValidationError, match="exactly one"):
+        _EFFECT.validate_python(
+            {"when": {"charging": {"distance": {"at_least": 3, "at_most": 6}}}, "add": {"A": 1}}
+        )
 
 
 def test_every_quantity_routes_to_a_seam() -> None:

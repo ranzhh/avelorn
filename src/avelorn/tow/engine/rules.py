@@ -27,13 +27,14 @@ import logging
 import re
 from collections.abc import Collection, Mapping, Sequence
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import assert_never
 
 from avelorn.core.registry import Registry, UnknownNameError
 from avelorn.tow.engine.attack import Modifier
 from avelorn.tow.schema.rule import (
     PARAMETER_SUFFIX,
+    ChargeGate,
     Condition,
     EquipmentUse,
     ModifierEffect,
@@ -52,6 +53,51 @@ _PARAMETERISED = re.compile(r"^(?P<base>.+) \((?P<value>\d+)\)$")
 
 # The attack sequence's order, for "can this die still shape that roll".
 _SEQUENCE = {stage: position for position, stage in enumerate(Stage)}
+
+
+@dataclass(frozen=True)
+class ChargeEvent:
+    """The model's own charge this turn — the charge event and its properties.
+
+    Built by a producer when the model charged; a gate navigates its
+    properties (``charging.distance``). New properties (the arc, the number of
+    enemy models charged) join here and on :class:`~avelorn.tow.schema.rule.ChargeGate`
+    together — a drift guard keeps the two in step.
+    """
+
+    distance: int  # inches of the charge move
+
+
+@dataclass(frozen=True)
+class GateContext:
+    """The evaluated facts a gate is tested against.
+
+    Bundles the flat engagement conditions with the typed events a gate can
+    navigate (the charge event today). A producer builds one; the evaluator
+    walks a gate against it. A bare conditions mapping is accepted anywhere a
+    context is and normalised to one carrying no events (:func:`_as_context`),
+    so the flat-condition callers and their tests are untouched.
+    """
+
+    conditions: Mapping[Condition, bool | None] = field(default_factory=dict)
+    charging: ChargeEvent | None = None  # None = known not-charging
+
+
+# A gate is evaluated against either a full context or a bare conditions
+# mapping (the pre-event shape, normalised on the way in).
+GateFacts = GateContext | Mapping[Condition, bool | None]
+
+
+def _as_context(facts: "GateFacts | None") -> GateContext:
+    """Normalise a context-or-mapping into a :class:`GateContext`.
+
+    Returns:
+        The context itself, or a context wrapping the bare conditions mapping
+        (no events) — so a caller may still pass a plain ``{Condition: bool}``.
+    """
+    if isinstance(facts, GateContext):
+        return facts
+    return GateContext(conditions=facts or {})
 
 
 def printed_rule(printed: str, rules: Registry[Rule]) -> Rule | None:
@@ -102,7 +148,7 @@ def _with_parameter(effect: RuleEffect, parameter: int) -> RuleEffect:
 def compile_rules(
     printed_rules: Sequence[str],
     resolved: Mapping[str, Rule],
-    conditions: Mapping[Condition, bool | None] | None = None,
+    conditions: "GateFacts | None" = None,
 ) -> tuple[list[Modifier], list[str]]:
     """Compile printed rule names into modifier records.
 
@@ -120,12 +166,12 @@ def compile_rules(
         carrying an effect the engine cannot honour yet) — the caller
         reports those.
     """
-    conditions = conditions or {}
+    context = _as_context(conditions)
     modifiers: list[Modifier] = []
     unfactored: list[str] = []
     for printed in printed_rules:
         rule = resolved.get(printed)
-        compiled = _compile(rule, conditions) if rule is not None else None
+        compiled = _compile(rule, context) if rule is not None else None
         if compiled is None:
             unfactored.append(printed)
         else:
@@ -135,7 +181,7 @@ def compile_rules(
     return modifiers, unfactored
 
 
-def _compile(rule: Rule, conditions: Mapping[Condition, bool | None]) -> list[Modifier] | None:
+def _compile(rule: Rule, context: GateContext) -> list[Modifier] | None:
     # All-or-nothing: every effect must compile, or the rule is
     # unfactored. An effect whose condition evaluates False compiles to
     # no modifiers — honoured, not unfactored.
@@ -143,7 +189,7 @@ def _compile(rule: Rule, conditions: Mapping[Condition, bool | None]) -> list[Mo
         return None
     modifiers: list[Modifier] = []
     for effect in rule.effects:
-        compiled = _compile_effect(effect, conditions)
+        compiled = _compile_effect(effect, context)
         if compiled is None:
             return None
         modifiers.extend(compiled)
@@ -172,9 +218,7 @@ _ROLLS: Mapping[Quantity, _Roll] = {
 }
 
 
-def _compile_effect(
-    effect: RuleEffect, conditions: Mapping[Condition, bool | None]
-) -> list[Modifier] | None:
+def _compile_effect(effect: RuleEffect, context: GateContext) -> list[Modifier] | None:
     # One effect, top to bottom: bail where the walk cannot honour it,
     # gate on the when's state, then record each additive entry as data —
     # which roll's target moves, by how much, on which natural face.
@@ -195,7 +239,7 @@ def _compile_effect(
         # The walk has no loadout, so it cannot answer an equipment gate;
         # an equipment-gated effect is honestly unfactored here.
         return None
-    applies = _condition_applies(effect.conditions, conditions)
+    applies = _gate_applies(effect, context)
     if applies is None:
         return None  # the context cannot answer the condition
     if not applies:
@@ -247,7 +291,7 @@ def effective_characteristic(
     base: int,
     characteristic: Characteristic,
     rules: Sequence[Rule],
-    conditions: Mapping[Condition, bool | None] | None = None,
+    conditions: "GateFacts | None" = None,
 ) -> EffectiveValue:
     """Apply the rules' modifiers to one characteristic read.
 
@@ -272,7 +316,7 @@ def effective_characteristic(
 def effective_fighting_ranks(
     base: int,
     rules: Sequence[Rule],
-    conditions: Mapping[Condition, bool | None] | None = None,
+    conditions: "GateFacts | None" = None,
 ) -> EffectiveValue:
     """Apply the rules' modifiers to the number of fighting ranks.
 
@@ -291,7 +335,7 @@ def effective_fighting_ranks(
 def effective_supporting_ranks(
     base: int,
     rules: Sequence[Rule],
-    conditions: Mapping[Condition, bool | None] | None = None,
+    conditions: "GateFacts | None" = None,
 ) -> EffectiveValue:
     """Apply the rules' modifiers to the number of supporting ranks.
 
@@ -309,7 +353,7 @@ def effective_supporting_ranks(
 
 def effective_combat_result_bonus(
     rules: Sequence[Rule],
-    conditions: Mapping[Condition, bool | None] | None = None,
+    conditions: "GateFacts | None" = None,
 ) -> EffectiveValue:
     """Sum the combat-result points a side's rules grant it, bonuses and maluses.
 
@@ -331,7 +375,7 @@ def effective_combat_result_bonus(
 def effective_armour_value(
     base: int,
     rules: Sequence[Rule],
-    conditions: Mapping[Condition, bool | None] | None = None,
+    conditions: "GateFacts | None" = None,
     *,
     wielding: str | None,
     worn: Collection[str],
@@ -350,7 +394,7 @@ def effective_armour_value(
     Returns:
         The improved armour value with the factored and unfactored rule names.
     """
-    conditions = conditions or {}
+    context = _as_context(conditions)
     value = base
     factored: list[str] = []
     unfactored: list[str] = []
@@ -366,7 +410,7 @@ def effective_armour_value(
             (
                 effect,
                 amount,
-                _condition_applies(effect.conditions, conditions),
+                _gate_applies(effect, context),
                 _equipment_applies(effect.requirements, wielding, worn),
             )
             for effect, amount in matching
@@ -392,7 +436,7 @@ def _effective_quantity(
     base: int,
     key: Quantity | Characteristic,
     rules: Sequence[Rule],
-    conditions: Mapping[Condition, bool | None] | None = None,
+    conditions: "GateFacts | None" = None,
 ) -> EffectiveValue:
     # One base value folded over the ``key`` operations a contingent's rules
     # carry — shared by the characteristic, fighting-rank, and combat-result
@@ -407,7 +451,7 @@ def _effective_quantity(
     # additive folds stack on top. Sets that disagree on the target cancel one
     # another (Strike First's 10 against Strike Last's 1), leaving the base to
     # stand — each still honoured, just to no effect.
-    conditions = conditions or {}
+    context = _as_context(conditions)
     caps = seam_of(key) is Seam.CHARACTERISTIC
     factored: list[str] = []
     unfactored: list[str] = []
@@ -424,8 +468,7 @@ def _effective_quantity(
         if not matching:
             continue
         answers = [
-            (effect, op, amount, _condition_applies(effect.conditions, conditions))
-            for effect, op, amount in matching
+            (effect, op, amount, _gate_applies(effect, context)) for effect, op, amount in matching
         ]
         if any(
             amount == "X" or answer is None or effect.natural is not None or effect.requires
@@ -455,6 +498,40 @@ def _effective_quantity(
             value = min(value, maximum)
     logger.debug("%s -> %d (%d rule(s) factored)", key, value, len(factored))
     return EffectiveValue(value, tuple(factored), tuple(unfactored))
+
+
+def _gate_applies(effect: ModifierEffect, context: GateContext) -> bool | None:
+    # The whole gate: the flat state conditions AND the charge event, ANDed.
+    # None = unknown (a fact the context could not answer) — reported
+    # unfactored by the caller; False = a fact known not to hold — honoured as
+    # a no-op. A known-False anywhere settles False even amid unknowns.
+    state = _condition_applies(effect.conditions, context.conditions)
+    charge = _charge_applies(effect.charge, context.charging)
+    if state is False or charge is False:
+        return False
+    if state is None or charge is None:
+        return None
+    return True
+
+
+def _charge_applies(gate: "bool | ChargeGate | None", event: ChargeEvent | None) -> bool | None:
+    # The charge event is always known (a model's movement is settled this
+    # turn), so this returns a definite bool, never unknown. A bare bool gates
+    # on presence; a ChargeGate requires the event and tests each named
+    # property against the same-named field of the event.
+    if gate is None:
+        return True
+    if isinstance(gate, bool):
+        return (event is not None) == gate
+    if event is None:
+        return False  # a property gate requires a charge; the model made none
+    for name in type(gate).model_fields:
+        comparison = getattr(gate, name)
+        if comparison is None:
+            continue
+        if not comparison.matches(getattr(event, name)):
+            return False
+    return True
 
 
 def _condition_applies(

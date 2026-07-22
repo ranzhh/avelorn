@@ -60,11 +60,13 @@ class Condition(StrEnum):
     AT_LONG_RANGE = "at_long_range"
     # "during the first round of any combat"
     FIRST_ROUND_OF_COMBAT = "first_round_of_combat"
-    # "a turn in which it charged" — narrower than MOVED (a march is not a charge)
-    CHARGED = "charged"
     # "a higher Unit Strength than the enemy" — outnumbering by Unit Strength,
     # a relational fact the combat weighs when scoring the round
     OUTNUMBERS = "outnumbers"
+
+    # NB: "a turn in which it charged" is no longer a flat Condition — it is the
+    # `charging` event (:class:`ChargeGate`), which carries the charge's own
+    # properties (its distance), so a rule can ask `charging.distance >= 3`.
 
 
 class EquipmentUse(StrEnum):
@@ -178,9 +180,70 @@ class NaturalRoll(BaseModel):
 # colliding with a Condition member.
 NATURAL = "natural"
 
-# A trigger fact: a state condition's required answer, or the natural
-# roll the event key names.
-TriggerFact = bool | NaturalRoll
+# The "charging" key in a ``when`` mapping: the model's own charge event,
+# carrying its properties (:class:`ChargeGate`). Like NATURAL, a reserved key
+# outside the flat Condition vocabulary; a drift guard keeps it from colliding.
+CHARGING = "charging"
+
+
+class Comparison(BaseModel):
+    """A predicate on one numeric property of an event: exactly one comparator.
+
+    The leaf of a gate path — ``charging.distance`` is constrained by
+    ``{at_least: 3}``, ``{at_most: 6}`` or ``{equals: 8}``. The comparator
+    vocabulary is closed and append-only, the same discipline as
+    :class:`Condition` / :class:`Quantity`; a new one joins when a rule needs
+    it. Exactly one comparator is set — a leaf tests one thing.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    equals: int | None = None
+    at_least: int | None = None
+    at_most: int | None = None
+
+    @model_validator(mode="after")
+    def _names_one_comparator(self) -> "Comparison":
+        chosen = [c for c in ("equals", "at_least", "at_most") if getattr(self, c) is not None]
+        if len(chosen) != 1:
+            raise ValueError("a comparison names exactly one of: equals, at_least, at_most")
+        return self
+
+    def matches(self, value: int) -> bool:
+        """Whether ``value`` satisfies this comparison.
+
+        Returns:
+            True if the property's value meets the comparator.
+        """
+        if self.equals is not None:
+            return value == self.equals
+        if self.at_least is not None:
+            return value >= self.at_least
+        assert self.at_most is not None  # the validator guarantees one is set
+        return value <= self.at_most
+
+
+class ChargeGate(BaseModel):
+    """A gate on the charge event — the model's own charge this turn.
+
+    The typed home for "a turn in which it charged", carrying the charge's
+    properties so a rule can constrain them: Furious Charge asks
+    ``{distance: {at_least: 3}}``. A property name outside this model is a
+    data error at load (``extra=forbid``), the same closed-vocabulary
+    discipline the flat conditions have — load-time path validation falls out
+    of the typed model. New properties (the arc, the number of enemy models
+    charged) join here as rules need them.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    distance: Comparison | None = None  # inches of the charge move
+
+    @model_validator(mode="after")
+    def _asks_something(self) -> "ChargeGate":
+        if self.distance is None:
+            raise ValueError("a charging gate must constrain a property (e.g. distance)")
+        return self
 
 
 class ModifierEffect(BaseModel):
@@ -236,8 +299,12 @@ class ModifierEffect(BaseModel):
     # builtin wherever a ``set[...]`` annotation is evaluated in this class).
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    when: Annotated[dict[Condition | Literal["natural"], TriggerFact], Field(min_length=1)] | (
-        None
+    when: (
+        Annotated[
+            dict[Condition | Literal["natural", "charging"], bool | NaturalRoll | ChargeGate],
+            Field(min_length=1),
+        ]
+        | None
     ) = None
     requires: Annotated[dict[EquipmentUse, str], Field(min_length=1)] | None = None
     add: (
@@ -281,12 +348,17 @@ class ModifierEffect(BaseModel):
 
     @model_validator(mode="after")
     def _facts_match_their_keys(self) -> "ModifierEffect":
-        # One flat mapping, two kinds of key: a state condition requires
-        # true/false, the event key requires the natural roll.
+        # One flat mapping, three kinds of key: a state condition requires
+        # true/false; the natural event requires a die's face; the charging
+        # event requires true/false (presence) or a property gate.
         for key, fact in (self.when or {}).items():
-            if key == NATURAL and not isinstance(fact, NaturalRoll):
-                raise ValueError("'natural' names a die's face: {face, roll}")
-            if key != NATURAL and not isinstance(fact, bool):
+            if key == NATURAL:
+                if not isinstance(fact, NaturalRoll):
+                    raise ValueError("'natural' names a die's face: {face, roll}")
+            elif key == CHARGING:
+                if not isinstance(fact, bool | ChargeGate):
+                    raise ValueError("'charging' takes true/false (presence) or a property gate")
+            elif not isinstance(fact, bool):
                 raise ValueError(f"condition {key!r} requires true or false")
         if self.maximum is not None and not any(
             isinstance(quantity, Characteristic) or quantity == Quantity.ARMOUR_VALUE
@@ -328,13 +400,29 @@ class ModifierEffect(BaseModel):
         """The state triggers: the engagement facts the when asks.
 
         Returns:
-            The required answer per asked condition.
+            The required answer per asked condition (flat conditions only —
+            the charging event is read via :attr:`charge`).
         """
         return {
             key: fact
             for key, fact in (self.when or {}).items()
             if isinstance(key, Condition) and isinstance(fact, bool)
         }
+
+    @property
+    def charge(self) -> "bool | ChargeGate | None":
+        """The charge event the when gates on, if any.
+
+        Returns:
+            ``True`` / ``False`` to require the model be (not) charging, a
+            :class:`ChargeGate` to constrain the charge's properties, or None
+            when the when does not gate on charging. Note ``False`` is a real
+            gate (require not-charging), distinct from None — test ``is None``.
+        """
+        fact = (self.when or {}).get(CHARGING)
+        # The validator guarantees the charging key is bool | ChargeGate; a
+        # NaturalRoll never lands here (narrowed for the type checker).
+        return None if isinstance(fact, NaturalRoll) else fact
 
     @property
     def requirements(self) -> dict[EquipmentUse, str]:

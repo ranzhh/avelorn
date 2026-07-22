@@ -15,7 +15,9 @@ from enum import StrEnum
 from avelorn.core.registry import Registry
 from avelorn.tow.data import TOWRepository, default_repository
 from avelorn.tow.engine.rules import (
+    ChargeEvent,
     EffectiveValue,
+    GateContext,
     effective_characteristic,
     effective_fighting_ranks,
     effective_supporting_ranks,
@@ -23,7 +25,7 @@ from avelorn.tow.engine.rules import (
 )
 from avelorn.tow.muster import Complement
 from avelorn.tow.schema.armour import Armour
-from avelorn.tow.schema.rule import Condition, Rule
+from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.unit import Characteristic, Unit
 from avelorn.tow.schema.weapon import Weapon
 
@@ -408,6 +410,15 @@ class Contingent:
         ranks_behind_first = formation.full_ranks + rear - 1
         return min(max(ranks_behind_first, 0), profile.max_rank_bonus)
 
+    def _charge_context(self) -> GateContext:
+        # The gate facts a charge-sensitive read is evaluated against: the
+        # charge event, present with its distance when this contingent charged,
+        # absent (known not-charging) otherwise. The charge is always known, so
+        # a rule gated on charging is never left unfactored for want of the fact.
+        charge = self.movement.charge
+        event = ChargeEvent(distance=charge.full_inches) if charge is not None else None
+        return GateContext(charging=event)
+
     def fighting_ranks(self) -> EffectiveValue:
         """How many ranks fight at full Attacks, and the rules behind the count.
 
@@ -423,9 +434,7 @@ class Contingent:
             The fighting-rank depth, with the rule names factored into it and
             those left unfactored.
         """
-        return effective_fighting_ranks(
-            1, self.loadout.rules, {Condition.CHARGED: self.movement.charge is not None}
-        )
+        return effective_fighting_ranks(1, self.loadout.rules, self._charge_context())
 
     def fighting_rank(self) -> int:
         """The models that fight at their full Attacks — the fighting rank.
@@ -455,9 +464,7 @@ class Contingent:
             The supporting-rank count, with the rule names factored into it and
             those left unfactored.
         """
-        return effective_supporting_ranks(
-            0, self.in_hand_rules(), {Condition.CHARGED: self.movement.charge is not None}
-        )
+        return effective_supporting_ranks(0, self.in_hand_rules(), self._charge_context())
 
     def in_hand_rules(self) -> list[Rule]:
         """The resolved rules on the weapon in hand's Combat profile.
@@ -497,10 +504,7 @@ class Contingent:
         """
         base = self.unit.profiles[0][Characteristic.ATTACKS] or 0
         return effective_characteristic(
-            base,
-            Characteristic.ATTACKS,
-            self.loadout.rules,
-            {Condition.CHARGED: self.movement.charge is not None},
+            base, Characteristic.ATTACKS, self.loadout.rules, self._charge_context()
         )
 
     def melee_attacks(self) -> int:

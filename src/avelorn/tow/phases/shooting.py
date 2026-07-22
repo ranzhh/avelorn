@@ -42,7 +42,7 @@ from avelorn.tow.engine.charts import (
     wound_probability,
     wound_target,
 )
-from avelorn.tow.engine.rules import compile_rules
+from avelorn.tow.engine.rules import GateContext, compile_rules
 from avelorn.tow.schema.psychology import PanicCause
 from avelorn.tow.schema.rule import Condition, RerollEffect, Rule
 from avelorn.tow.schema.stage import Stage
@@ -212,19 +212,17 @@ def _at_long_range(profile: WeaponProfile, distance: int | None) -> bool | None:
 
 def _engagement_conditions(
     profile: WeaponProfile, moved: bool, distance: int | None, force_short_range: bool
-) -> dict[Condition, bool | None]:
-    # One fact per Condition member; None = unknown. The match is
-    # exhaustive (assert_never), so a new member fails the type check —
-    # and a drift-guard test — until it is answered here. A shot forced
-    # short (a Stand & Shoot reaction) is never at long range.
+) -> GateContext:
+    # The gate facts for a volley: one flat condition per Condition member
+    # (None = unknown), and no charge event — a shooter never charged this turn
+    # (a unit that charged is locked in combat and takes no shot). The match is
+    # exhaustive (assert_never), so a new member fails the type check — and a
+    # drift-guard test — until it is answered here. A shot forced short (a
+    # Stand & Shoot reaction) is never at long range.
     def fact(condition: Condition) -> bool | None:
         match condition:
             case Condition.MOVED:
                 return moved
-            case Condition.CHARGED:
-                # A unit that charged is locked in combat and takes no shot,
-                # so a shooter never charged this turn.
-                return False
             case Condition.AT_LONG_RANGE:
                 return False if force_short_range else _at_long_range(profile, distance)
             case Condition.FIRST_ROUND_OF_COMBAT:
@@ -238,7 +236,7 @@ def _engagement_conditions(
             case unanswered:
                 assert_never(unanswered)
 
-    return {condition: fact(condition) for condition in Condition}
+    return GateContext(conditions={condition: fact(condition) for condition in Condition})
 
 
 def shoot_unit(
