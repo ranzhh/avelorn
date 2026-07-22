@@ -1,0 +1,22 @@
+# Source: https://tow.whfb.app/special-rules/strike-first
+id: strike-first
+name: Strike First
+page: 177
+category: Special Rules
+flavour: Some warriors are gifted with supernatural speed and reactions, whilst others bear weapons enchanted to move
+  like quicksilver through the air.
+paragraphs:
+  - During the Combat phase, a model with this special rule that is engaged in combat improves its Initiative
+    characteristic to 10 (before any other modifiers are applied). If a model has both this rule and Strike Last, the
+    two rules cancel one another out.
+# Hand-authored, diffable against the paragraphs above.
+# "improves its Initiative ... to 10 (before any other modifiers are applied)" is
+# a set on the characteristic, resolved before the additive folds. "engaged in
+# combat" is unconditional here — the Initiative read only runs for a fighting
+# model — so the effect carries no when. The cancellation with Strike Last is not
+# spelled out in the data: two rules that set the same characteristic to different
+# values cancel in the effective-value fold, so the clause is honoured
+# structurally, not by naming the paired rule.
+effects:
+  - set:
+      I: 10
