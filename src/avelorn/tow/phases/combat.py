@@ -19,7 +19,7 @@ from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, replace
 from itertools import product
 from math import isclose
-from typing import ClassVar, assert_never, overload
+from typing import ClassVar, overload
 
 from avelorn.core.dice import expected_value
 from avelorn.core.game import Phase
@@ -51,14 +51,13 @@ from avelorn.tow.engine.rules import (
     ChargeEvent,
     EffectiveValue,
     GateContext,
-    GateFacts,
     compile_rules,
     effective_armour_value,
     effective_characteristic,
     effective_combat_result_bonus,
 )
 from avelorn.tow.phases.movement import Engagement
-from avelorn.tow.schema.rule import Condition, Rule
+from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.unit import Characteristic, Unit
 
 logger = logging.getLogger(__name__)
@@ -259,8 +258,8 @@ def _engage(
     target: Contingent,
     *,
     hit_modifier: int,
-    conditions: "GateFacts | None" = None,
-    target_conditions: "GateFacts | None" = None,
+    conditions: "GateContext | None" = None,
+    target_conditions: "GateContext | None" = None,
     phase_rules: Mapping[str, Rule] = _NONE_IN_PLAY,
 ) -> _Engagement:
     # The matchup half of a strike, shared by strike_unit and fight:
@@ -518,40 +517,26 @@ def _unit_rule_notes(unit: Unit, claimed: Collection[str] = ()) -> list[str]:
 
 
 def _combat_conditions(first_round: bool | None, side: Contingent, foe: Contingent) -> GateContext:
-    # The gate facts for one side of the combat: the flat conditions (one per
-    # Condition member; None = unknown) plus the charge event. Exhaustive like
-    # the shooting producer: a new Condition member fails the type check until
-    # it is answered here. ``first_round`` is the combat's, a relational fact,
-    # and OUTNUMBERS weighs the two sides' Unit Strength; the rest read the
-    # side's own state. The charge event carries the side's charge distance so
-    # a gate can ask ``charging.distance`` (Furious Charge's 3").
-    def fact(condition: Condition) -> bool | None:
-        match condition:
-            case Condition.MOVED:
-                # A charge is a move, and the Movement folds it in: moved is
-                # true for a charge as for any other move this turn.
-                return side.movement.moved
-            case Condition.AT_LONG_RANGE:
-                return False  # no shot is taken in close combat
-            case Condition.FIRST_ROUND_OF_COMBAT:
-                return first_round
-            case Condition.OUTNUMBERS:
-                # Strictly greater: equal Unit Strength outnumbers neither.
-                return side.unit_strength() > foe.unit_strength()
-            case unanswered:
-                assert_never(unanswered)
-
+    # The gate facts for one side of the combat. ``first_round`` is the combat's
+    # (a relational fact); ``outnumbers`` weighs the two sides' Unit Strength
+    # (strictly greater — equal Unit Strength outnumbers neither); the movement
+    # facts read the side's own state, the charge carrying its distance so a
+    # gate can ask ``movement.charge.distance`` (Furious Charge's 3"). No shot
+    # is taken in close combat, so the volley fact is settled False.
     charge = side.movement.charge
     return GateContext(
-        conditions={condition: fact(condition) for condition in Condition},
-        charging=ChargeEvent(distance=charge.full_inches) if charge is not None else None,
+        first_round=first_round,
+        outnumbers=side.unit_strength() > foe.unit_strength(),
+        moved=side.movement.moved,
+        charge=ChargeEvent(distance=charge.full_inches) if charge is not None else None,
+        at_long_range=False,
     )
 
 
 def effective_initiative(
     contingent: Contingent,
     charge_bonus: int = 0,
-    conditions: "GateFacts | None" = None,
+    conditions: "GateContext | None" = None,
 ) -> EffectiveValue:
     """The Initiative a contingent strikes at, all printed modifiers included.
 
@@ -590,7 +575,7 @@ def effective_initiative(
 
 def effective_weapon_skill(
     contingent: Contingent,
-    conditions: "GateFacts | None" = None,
+    conditions: "GateContext | None" = None,
 ) -> EffectiveValue:
     """The Weapon Skill a contingent fights at, all printed modifiers included.
 

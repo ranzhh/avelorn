@@ -42,39 +42,12 @@ from avelorn.tow.schema.unit import Characteristic
 PARAMETER_SUFFIX = " (X)"
 
 
-class Condition(StrEnum):
-    """The engagement facts an effect can be gated on — the "when" vocabulary.
-
-    The single declaration, like :class:`~avelorn.tow.schema.stage.Stage`
-    for game moments: an effect's ``when`` maps members to the value it
-    requires, and the engine supplies a fact per member — both checked
-    against this enum, so a name outside it fails at data load and a
-    member the engine forgets to answer fails its drift guard. It is
-    append-only: a member joins when an imported rule's condition needs
-    it and the engagement context can carry the fact.
-    """
-
-    # "moved for any reason during this turn"
-    MOVED = "moved"
-    # "further away than half the weapon's maximum range"
-    AT_LONG_RANGE = "at_long_range"
-    # "during the first round of any combat"
-    FIRST_ROUND_OF_COMBAT = "first_round_of_combat"
-    # "a higher Unit Strength than the enemy" — outnumbering by Unit Strength,
-    # a relational fact the combat weighs when scoring the round
-    OUTNUMBERS = "outnumbers"
-
-    # NB: "a turn in which it charged" is no longer a flat Condition — it is the
-    # `charging` event (:class:`ChargeGate`), which carries the charge's own
-    # properties (its distance), so a rule can ask `charging.distance >= 3`.
-
-
 class EquipmentUse(StrEnum):
     """How a model uses a piece of equipment — the ``requires`` vocabulary.
 
     A rule can be gated on the gear a model has in use, beside the engagement
     ``when``: ``wielding`` names the weapon in hand, ``worn`` a piece of armour
-    worn. A closed, append-only vocabulary like :class:`Condition`; a member
+    worn. A closed, append-only vocabulary like :class:`Quantity`; a member
     joins when a rule needs a use the loadout can answer (a mount, later).
     """
 
@@ -175,25 +148,14 @@ class NaturalRoll(BaseModel):
         return roll
 
 
-# The "natural" key in a ``when`` mapping: the one event trigger,
-# beside the state conditions. A drift-guard test keeps it from ever
-# colliding with a Condition member.
-NATURAL = "natural"
-
-# The "charging" key in a ``when`` mapping: the model's own charge event,
-# carrying its properties (:class:`ChargeGate`). Like NATURAL, a reserved key
-# outside the flat Condition vocabulary; a drift guard keeps it from colliding.
-CHARGING = "charging"
-
-
 class Comparison(BaseModel):
     """A predicate on one numeric property of an event: exactly one comparator.
 
     The leaf of a gate path — ``charging.distance`` is constrained by
     ``{at_least: 3}``, ``{at_most: 6}`` or ``{equals: 8}``. The comparator
     vocabulary is closed and append-only, the same discipline as
-    :class:`Condition` / :class:`Quantity`; a new one joins when a rule needs
-    it. Exactly one comparator is set — a leaf tests one thing.
+    :class:`Quantity`; a new one joins when a rule needs it. Exactly one
+    comparator is set — a leaf tests one thing.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -246,21 +208,91 @@ class ChargeGate(BaseModel):
         return self
 
 
+class CombatGate(BaseModel):
+    """A gate on the close combat the model is fighting.
+
+    Facts of the combat itself, not the model: ``first_round`` (Elven Reflexes,
+    Martial Prowess) and ``outnumbers`` — whether this side's Unit Strength
+    beats the foe's (Massed Infantry). Both are booleans today; the subject is
+    where a round *number* or a flank/rear facing would join.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    first_round: bool | None = None
+    outnumbers: bool | None = None
+
+
+class MovementGate(BaseModel):
+    """A gate on how the model moved this turn.
+
+    ``moved`` is any move (Moving and Shooting's To Hit penalty); ``charge`` is
+    the charge — ``false`` to require the model did not charge (Press of Battle,
+    Fight in Extra Rank), or a :class:`ChargeGate` to constrain the charge's
+    properties (Furious Charge's ``{distance: {at_least: 3}}``).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    moved: bool | None = None
+    charge: bool | ChargeGate | None = None
+
+
+class ShootingGate(BaseModel):
+    """A gate on the volley the model is firing.
+
+    ``at_long_range`` is whether the target sits beyond half the weapon's
+    maximum range (Firing at Long Range). The subject is where a range band or
+    a cover fact would join.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    at_long_range: bool | None = None
+
+
+class When(BaseModel):
+    """An effect's gate: the facts that must hold for it to apply.
+
+    A typed tree, one field per subject — the combat, the model's movement, the
+    volley it fires — each carrying that subject's own facts, plus the
+    ``natural`` dice event. A rule reads as ``subject -> property (-> comparator)``:
+    ``{combat: {first_round: true}}``, ``{movement: {charge: {distance: {at_least: 3}}}}``.
+    A subject or property name outside these models is a data error at load
+    (``extra=forbid``) — the closed vocabulary the old flat Condition enum gave,
+    now structural. Every set fact is conjoined; without a ``when`` the modifier
+    applies to every attack.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    combat: CombatGate | None = None
+    movement: MovementGate | None = None
+    shooting: ShootingGate | None = None
+    natural: NaturalRoll | None = None
+
+    @model_validator(mode="after")
+    def _gates_something(self) -> "When":
+        if not any((self.combat, self.movement, self.shooting, self.natural)):
+            raise ValueError(
+                "a when must gate on something: combat, movement, shooting, or natural"
+            )
+        return self
+
+
 class ModifierEffect(BaseModel):
     """One printed conditional modifier, shaped as the sentence prints it.
 
     "*If* a model rolls a natural 6 when making a roll To Wound, the
     Armour Piercing of its weapon is improved by X" — ``when`` holds
-    the if, the operation (``add`` / ``set``) holds the consequence.
-    ``when`` is one flat conjunction: state conditions by
-    :class:`Condition` member (facts of the engagement, known once before
-    any die is cast; an unanswerable one leaves the whole rule unfactored
-    and reported, one answered False is honoured by not applying) and at
-    most one ``natural`` event (:class:`NaturalRoll` — a face shown by an
-    attack die, decided branch by branch, never unknown). Without a
-    ``when`` the modifier applies to every attack. Deliberately not a
-    language: no ``else``, no nesting — an effect is one flat ``when`` and
-    one operation, and a rule needing more belongs in a code handler.
+    the if (a :class:`When` gate), the operation (``add`` / ``set``) holds
+    the consequence. ``When`` is a typed tree, ``subject -> property``: the
+    combat's facts, the model's movement, the volley it fires, and the
+    ``natural`` die event. Every set fact is conjoined; a state fact the
+    engine cannot answer leaves the whole rule unfactored and reported, one
+    answered False is honoured by not applying. Without a ``when`` the
+    modifier applies to every attack. A rule needing branching or ``else``
+    belongs in a code handler, not this data.
 
     The operation names itself, mirroring how the page prints it. ``add``
     is a signed delta the rulebook writes as a modifier — To Hit penalties
@@ -299,13 +331,7 @@ class ModifierEffect(BaseModel):
     # builtin wherever a ``set[...]`` annotation is evaluated in this class).
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    when: (
-        Annotated[
-            dict[Condition | Literal["natural", "charging"], bool | NaturalRoll | ChargeGate],
-            Field(min_length=1),
-        ]
-        | None
-    ) = None
+    when: When | None = None
     requires: Annotated[dict[EquipmentUse, str], Field(min_length=1)] | None = None
     add: (
         Annotated[dict[Quantity | Characteristic, int | Literal["X"]], Field(min_length=1)] | None
@@ -347,19 +373,9 @@ class ModifierEffect(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def _facts_match_their_keys(self) -> "ModifierEffect":
-        # One flat mapping, three kinds of key: a state condition requires
-        # true/false; the natural event requires a die's face; the charging
-        # event requires true/false (presence) or a property gate.
-        for key, fact in (self.when or {}).items():
-            if key == NATURAL:
-                if not isinstance(fact, NaturalRoll):
-                    raise ValueError("'natural' names a die's face: {face, roll}")
-            elif key == CHARGING:
-                if not isinstance(fact, bool | ChargeGate):
-                    raise ValueError("'charging' takes true/false (presence) or a property gate")
-            elif not isinstance(fact, bool):
-                raise ValueError(f"condition {key!r} requires true or false")
+    def _maximum_bounds_a_capped_quantity(self) -> "ModifierEffect":
+        # A printed ceiling caps a characteristic or the armour value; on any
+        # other quantity it is meaningless, so a data error.
         if self.maximum is not None and not any(
             isinstance(quantity, Characteristic) or quantity == Quantity.ARMOUR_VALUE
             for quantity in self.quantities
@@ -387,42 +403,12 @@ class ModifierEffect(BaseModel):
 
     @property
     def natural(self) -> NaturalRoll | None:
-        """The event trigger, if the when names one.
+        """The die event the when names, if any.
 
         Returns:
             The natural roll, or None for a state-only when.
         """
-        fact = (self.when or {}).get(NATURAL)
-        return fact if isinstance(fact, NaturalRoll) else None
-
-    @property
-    def conditions(self) -> dict[Condition, bool]:
-        """The state triggers: the engagement facts the when asks.
-
-        Returns:
-            The required answer per asked condition (flat conditions only —
-            the charging event is read via :attr:`charge`).
-        """
-        return {
-            key: fact
-            for key, fact in (self.when or {}).items()
-            if isinstance(key, Condition) and isinstance(fact, bool)
-        }
-
-    @property
-    def charge(self) -> "bool | ChargeGate | None":
-        """The charge event the when gates on, if any.
-
-        Returns:
-            ``True`` / ``False`` to require the model be (not) charging, a
-            :class:`ChargeGate` to constrain the charge's properties, or None
-            when the when does not gate on charging. Note ``False`` is a real
-            gate (require not-charging), distinct from None — test ``is None``.
-        """
-        fact = (self.when or {}).get(CHARGING)
-        # The validator guarantees the charging key is bool | ChargeGate; a
-        # NaturalRoll never lands here (narrowed for the type checker).
-        return None if isinstance(fact, NaturalRoll) else fact
+        return self.when.natural if self.when is not None else None
 
     @property
     def requirements(self) -> dict[EquipmentUse, str]:

@@ -13,7 +13,7 @@ import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from fractions import Fraction
-from typing import ClassVar, assert_never
+from typing import ClassVar
 
 from avelorn.core.dice import expected_value
 from avelorn.core.game import Phase
@@ -44,7 +44,7 @@ from avelorn.tow.engine.charts import (
 )
 from avelorn.tow.engine.rules import GateContext, compile_rules
 from avelorn.tow.schema.psychology import PanicCause
-from avelorn.tow.schema.rule import Condition, RerollEffect, Rule
+from avelorn.tow.schema.rule import RerollEffect, Rule
 from avelorn.tow.schema.stage import Stage
 from avelorn.tow.schema.unit import Characteristic
 from avelorn.tow.schema.weapon import WeaponProfile
@@ -213,30 +213,19 @@ def _at_long_range(profile: WeaponProfile, distance: int | None) -> bool | None:
 def _engagement_conditions(
     profile: WeaponProfile, moved: bool, distance: int | None, force_short_range: bool
 ) -> GateContext:
-    # The gate facts for a volley: one flat condition per Condition member
-    # (None = unknown), and no charge event — a shooter never charged this turn
-    # (a unit that charged is locked in combat and takes no shot). The match is
-    # exhaustive (assert_never), so a new member fails the type check — and a
-    # drift-guard test — until it is answered here. A shot forced short (a
-    # Stand & Shoot reaction) is never at long range.
-    def fact(condition: Condition) -> bool | None:
-        match condition:
-            case Condition.MOVED:
-                return moved
-            case Condition.AT_LONG_RANGE:
-                return False if force_short_range else _at_long_range(profile, distance)
-            case Condition.FIRST_ROUND_OF_COMBAT:
-                # A volley is not struck in a round of close combat (a
-                # unit in combat cannot shoot), so the fact never arises.
-                return False
-            case Condition.OUTNUMBERS:
-                # Outnumbering weighs a combat result, which a volley never
-                # scores, so the fact never arises for a shot.
-                return False
-            case unanswered:
-                assert_never(unanswered)
-
-    return GateContext(conditions={condition: fact(condition) for condition in Condition})
+    # The gate facts for a volley: the shooting facts (whether the model moved,
+    # whether the shot is at long range — a shot forced short, a Stand & Shoot
+    # reaction, never is) and the settled non-shooting facts. A volley is not
+    # struck in a round of close combat and a shooter never charged this turn (a
+    # unit in combat cannot shoot), so the combat and charge facts are False /
+    # absent, never leaving a rule that gates on them unfactored.
+    return GateContext(
+        moved=moved,
+        at_long_range=False if force_short_range else _at_long_range(profile, distance),
+        first_round=False,
+        outnumbers=False,
+        charge=None,
+    )
 
 
 def shoot_unit(

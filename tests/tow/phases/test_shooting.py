@@ -8,7 +8,6 @@ from avelorn.tow.contingent import Contingent, Movement
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.engine.attack import AttackProfile, Outcome, RollState, Transform
 from avelorn.tow.phases.shooting import _engagement_conditions, shoot, shoot_unit
-from avelorn.tow.schema.rule import Condition
 from avelorn.tow.schema.stage import Stage
 from avelorn.tow.schema.unit import Characteristic, Unit
 
@@ -366,14 +365,19 @@ def test_shoot_instant_kills_match_the_spike_distribution() -> None:
     assert sum(result.distribution) == pytest.approx(1.0)
 
 
-def test_engagement_conditions_cover_every_condition() -> None:
-    """The shooting producer answers every Condition member.
+def test_engagement_conditions_build_the_shooting_facts() -> None:
+    """The shooting producer sets the shooting facts and settles the rest.
 
-    Drift guard behind the producer's exhaustive match: a member added
-    to the vocabulary must be supplied here (if only as unknown) —
-    never silently absent from compilation.
+    A moved shooter at unknown range: ``moved`` true, ``at_long_range`` unknown
+    (no distance); the non-shooting facts are settled — no combat round, no
+    outnumbering, no charge — so a rule gating on them is honoured, never left
+    unfactored for want of a fact a volley cannot supply.
     """
     profile = REPO.weapons["longbow"].missile_profile
     assert profile is not None
-    context = _engagement_conditions(profile, moved=False, distance=None, force_short_range=False)
-    assert set(context.conditions) == set(Condition)
+    context = _engagement_conditions(profile, moved=True, distance=None, force_short_range=False)
+    assert context.moved is True
+    assert context.at_long_range is None  # no distance -> unknown band
+    assert context.first_round is False
+    assert context.outnumbers is False
+    assert context.charge is None

@@ -11,7 +11,8 @@ from avelorn.tow.engine.attack import AttackProfile, RollState, resolve_attack
 from avelorn.tow.engine.rules import (
     ChargeEvent,
     GateContext,
-    _condition_applies,
+    _bool_fact,
+    _gate_applies,
     compile_rules,
     effective_armour_value,
     effective_characteristic,
@@ -24,13 +25,13 @@ from avelorn.tow.phases.shooting import shoot_unit
 from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.rule import (
     ChargeGate,
-    Condition,
     EquipmentUse,
     ModifierEffect,
     NaturalRoll,
     Quantity,
     Rule,
     RuleEffect,
+    When,
 )
 from avelorn.tow.schema.stage import Stage
 from avelorn.tow.schema.unit import Characteristic, Unit
@@ -152,7 +153,7 @@ def test_trigger_at_or_after_the_landing_stage_stays_unfactored() -> None:
     already made; the rule is honestly unfactored, never a silent no-op.
     """
     effect = ModifierEffect(
-        when={"natural": NaturalRoll(face=6, roll=Stage.ROLL_TO_WOUND)}, add={Quantity.TO_HIT: 1}
+        when=When(natural=NaturalRoll(face=6, roll=Stage.ROLL_TO_WOUND)), add={Quantity.TO_HIT: 1}
     )
     transforms, unfactored = compile_rules(["Doctored"], _one_rule(effect))
     assert transforms == []
@@ -280,36 +281,34 @@ def test_staying_still_volley_fires_while_the_to_hit_is_a_wash() -> None:
     assert stay.expected_casualties > move_in.expected_casualties
 
 
-def test_every_condition_is_consulted() -> None:
-    """Each Condition, when asked, must gate on the engagement facts.
+def test_bool_fact_is_tri_state() -> None:
+    """A boolean fact: asked but unanswerable is unknown (None); else it must match.
 
-    Drift guard: a condition asked for but absent from the facts must
-    make the rule unevaluatable (None), never be silently ignored.
-    Iterates the vocabulary so new members are covered automatically.
+    A fact the rule does not ask (required None) is no constraint; asked but the
+    context cannot answer (actual None) is unevaluatable, never silently ignored.
     """
-    from avelorn.tow.schema.rule import Condition
-
-    for condition in Condition:
-        when = {condition: True}
-        assert _condition_applies(when, {}) is None, condition
-        assert _condition_applies(when, {condition: True}) is True, condition
-        assert _condition_applies(when, {condition: False}) is False, condition
+    assert _bool_fact(True, None) is None  # asked, context can't answer
+    assert _bool_fact(True, True) is True
+    assert _bool_fact(True, False) is False
+    assert _bool_fact(None, False) is True  # not asked -> no constraint
 
 
-def test_conjunctive_condition_with_known_false_member_does_not_apply() -> None:
-    """One known-False conjunct settles it, even beside an unknown one.
+def test_gate_conjunction_settles_on_a_known_false() -> None:
+    """One known-False fact settles the gate, even beside an unknown one.
 
-    {moved: True, at_long_range: True} against a stationary unit at an
-    unknown distance definitely does not apply — silent no-op, not
-    "cannot be evaluated".
+    A gate on movement.moved and shooting.at_long_range against a stationary
+    shooter at an unknown range definitely does not apply — a no-op, not
+    "cannot be evaluated"; a matching known fact beside an unknown stays None.
     """
-    from avelorn.tow.schema.rule import Condition
-
-    moved, ranged = Condition.MOVED, Condition.AT_LONG_RANGE
-    both = {moved: True, ranged: True}
-    assert _condition_applies(both, {moved: False, ranged: None}) is False
-    assert _condition_applies(both, {moved: True, ranged: None}) is None
-    assert _condition_applies(both, {moved: True, ranged: True}) is True
+    effect = ModifierEffect(
+        when=When.model_validate(
+            {"movement": {"moved": True}, "shooting": {"at_long_range": True}}
+        ),
+        add={Quantity.TO_HIT: -1},
+    )
+    assert _gate_applies(effect, GateContext(moved=False, at_long_range=None)) is False
+    assert _gate_applies(effect, GateContext(moved=True, at_long_range=None)) is None
+    assert _gate_applies(effect, GateContext(moved=True, at_long_range=True)) is True
 
 
 def test_every_roll_quantity_declares_its_roll() -> None:
@@ -354,11 +353,13 @@ def test_armour_bane_two_leaves_no_save_at_all() -> None:
 def _initiative_rule(
     amount: int | Literal["X"] = 1,
     maximum: int | None = 10,
-    when: dict[Condition | Literal["natural", "charging"], bool | NaturalRoll | ChargeGate]
-    | None = None,
+    when: dict[str, object] | None = None,
     characteristic: Characteristic = Characteristic.INITIATIVE,
 ) -> Rule:
-    effect = ModifierEffect(when=when, add={characteristic: amount}, maximum=maximum)
+    payload: dict[str, object] = {"add": {characteristic: amount}, "maximum": maximum}
+    if when is not None:
+        payload["when"] = when
+    effect = ModifierEffect.model_validate(payload)
     return Rule(id="doctored", name="Doctored (X)", paragraphs=["…"], effects=[effect])
 
 
@@ -380,8 +381,8 @@ def test_effective_characteristic_honours_the_printed_maximum() -> None:
 
 def test_effective_characteristic_unknown_condition_is_unfactored() -> None:
     """A modifier gated on an unanswered fact does not apply, and is reported."""
-    rule = _initiative_rule(when={Condition.FIRST_ROUND_OF_COMBAT: True})
-    result = effective_characteristic(4, Characteristic.INITIATIVE, [rule], {})
+    rule = _initiative_rule(when={"combat": {"first_round": True}})
+    result = effective_characteristic(4, Characteristic.INITIATIVE, [rule], GateContext())
     assert result.value == 4
     assert result.factored == ()
     assert result.unfactored == ("Doctored (X)",)
@@ -389,9 +390,9 @@ def test_effective_characteristic_unknown_condition_is_unfactored() -> None:
 
 def test_effective_characteristic_false_condition_is_honoured() -> None:
     """A condition answered False applies nothing — factored, not reported."""
-    rule = _initiative_rule(when={Condition.FIRST_ROUND_OF_COMBAT: True})
+    rule = _initiative_rule(when={"combat": {"first_round": True}})
     result = effective_characteristic(
-        4, Characteristic.INITIATIVE, [rule], {Condition.FIRST_ROUND_OF_COMBAT: False}
+        4, Characteristic.INITIATIVE, [rule], GateContext(first_round=False)
     )
     assert result.value == 4
     assert result.factored == ("Doctored (X)",)
@@ -499,7 +500,9 @@ def test_set_is_unfactored_at_the_walk() -> None:
 
 def _press_of_battle() -> Rule:
     # A rank modifier in the Press of Battle shape: +1 fighting rank, off on a charge.
-    effect = ModifierEffect(when={"charging": False}, add={Quantity.FIGHTING_RANKS: 1})
+    effect = ModifierEffect(
+        when=When.model_validate({"movement": {"charge": False}}), add={Quantity.FIGHTING_RANKS: 1}
+    )
     return Rule(id="doctored", name="Doctored", paragraphs=["…"], effects=[effect])
 
 
@@ -511,11 +514,11 @@ def test_effective_fighting_ranks_folds_a_rank_modifier() -> None:
     model's movement is settled), so there is no unknown-charge case — the
     tri-state unknown lives on the flat conditions, not on the event.
     """
-    stationary = effective_fighting_ranks(1, [_press_of_battle()], GateContext(charging=None))
+    stationary = effective_fighting_ranks(1, [_press_of_battle()], GateContext(charge=None))
     assert stationary.value == 2
     assert stationary.factored == ("Doctored",)
 
-    charging = GateContext(charging=ChargeEvent(distance=6))
+    charging = GateContext(charge=ChargeEvent(distance=6))
     charged = effective_fighting_ranks(1, [_press_of_battle()], charging)
     assert charged.value == 1
     assert charged.factored == ("Doctored",)
@@ -527,14 +530,17 @@ def test_effective_supporting_ranks_folds_over_a_base_of_none() -> None:
     Stationary: the +1 lands (one supporting rank), factored. Charging:
     honoured by not applying (none), still factored.
     """
-    effect = ModifierEffect(when={"charging": False}, add={Quantity.SUPPORTING_RANKS: 1})
+    effect = ModifierEffect(
+        when=When.model_validate({"movement": {"charge": False}}),
+        add={Quantity.SUPPORTING_RANKS: 1},
+    )
     rule = Rule(id="doctored", name="Doctored", paragraphs=["…"], effects=[effect])
 
-    stationary = effective_supporting_ranks(0, [rule], GateContext(charging=None))
+    stationary = effective_supporting_ranks(0, [rule], GateContext(charge=None))
     assert stationary.value == 1
     assert stationary.factored == ("Doctored",)
 
-    charged = effective_supporting_ranks(0, [rule], GateContext(charging=ChargeEvent(distance=6)))
+    charged = effective_supporting_ranks(0, [rule], GateContext(charge=ChargeEvent(distance=6)))
     assert charged.value == 0
     assert charged.factored == ("Doctored",)
 
@@ -560,18 +566,20 @@ def test_effective_combat_result_bonus_sums_signed_points_under_the_conditions()
     Outnumbering: the +1 lands, factored. Even: honoured by not applying,
     still factored. Unknown: unfactored, its point left out of the total.
     """
-    effect = ModifierEffect(when={Condition.OUTNUMBERS: True}, add={Quantity.COMBAT_RESULT: 1})
+    effect = ModifierEffect(
+        when=When.model_validate({"combat": {"outnumbers": True}}), add={Quantity.COMBAT_RESULT: 1}
+    )
     rule = Rule(id="massed", name="Massed Infantry", paragraphs=["…"], effects=[effect])
 
-    outnumbering = effective_combat_result_bonus([rule], {Condition.OUTNUMBERS: True})
+    outnumbering = effective_combat_result_bonus([rule], GateContext(outnumbers=True))
     assert outnumbering.value == 1
     assert outnumbering.factored == ("Massed Infantry",)
 
-    even = effective_combat_result_bonus([rule], {Condition.OUTNUMBERS: False})
+    even = effective_combat_result_bonus([rule], GateContext(outnumbers=False))
     assert even.value == 0
     assert even.factored == ("Massed Infantry",)
 
-    unknown = effective_combat_result_bonus([rule], {})
+    unknown = effective_combat_result_bonus([rule], GateContext())
     assert unknown.value == 0
     assert unknown.unfactored == ("Massed Infantry",)
 
