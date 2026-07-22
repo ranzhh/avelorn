@@ -161,6 +161,19 @@ def test_add_and_set_may_share_a_seam() -> None:
     assert effect.add == {Characteristic.INITIATIVE: 1}
 
 
+def test_set_rejects_a_roll_quantity() -> None:
+    """A set replaces a base value; a roll's target has none, so it is a data error.
+
+    Loud at load — the same discipline as a maximum on a roll — rather than a
+    note that would go silently unfactored forever. Armour value is likewise
+    an improvement, not a base to replace.
+    """
+    with pytest.raises(ValidationError, match="set cannot replace a roll or armour"):
+        _EFFECT.validate_python({"set": {"to-hit": 1}})
+    with pytest.raises(ValidationError, match="set cannot replace a roll or armour"):
+        _EFFECT.validate_python({"set": {"armour-value": 3}})
+
+
 def test_maximum_requires_a_characteristic() -> None:
     """Only a characteristic prints a ceiling; on a roll it is a data error."""
     with pytest.raises(ValidationError, match="maximum"):

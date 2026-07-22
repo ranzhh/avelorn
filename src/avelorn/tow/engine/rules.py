@@ -184,8 +184,12 @@ def _compile_effect(
         # As a weapon rule they are honestly unfactored.
         return None
     if effect.set_:
-        # The walk moves a roll's target; a roll has no base value to
-        # replace, so a `set` is not a roll modifier — honestly unfactored.
+        # A set replaces a base value, which the effective-value query reads,
+        # not the walk (the walk only moves a roll's target). A set on a roll
+        # quantity is rejected at load, so any set reaching here belongs to
+        # another seam — unfactored, exactly as the characteristic and rank
+        # adds below are. None is this compiler's "unfactored" signal (turned
+        # into a visible "not factored" note by compile_rules), never an error.
         return None
     if effect.requires is not None:
         # The walk has no loadout, so it cannot answer an equipment gate;

@@ -266,6 +266,20 @@ class ModifierEffect(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def _set_replaces_a_base(self) -> "ModifierEffect":
+        # A set replaces a base value, so it is meaningful only where a base is
+        # read: the effective-value fold's seams (a characteristic, a rank
+        # depth, a combat-result running total). The dice walk *moves* a roll's
+        # target and the armour fold *improves* a value — neither has a base to
+        # replace, so a set there is a data error caught loudly at load, not a
+        # note that would go silently unfactored forever.
+        forbidden = {Seam.ROLL, Seam.ARMOUR}
+        offending = sorted(seam_of(q) for q in (self.set_ or {}) if seam_of(q) in forbidden)
+        if offending:
+            raise ValueError(f"a set cannot replace a roll or armour quantity: {offending}")
+        return self
+
+    @model_validator(mode="after")
     def _facts_match_their_keys(self) -> "ModifierEffect":
         # One flat mapping, two kinds of key: a state condition requires
         # true/false, the event key requires the natural roll.

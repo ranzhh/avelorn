@@ -479,9 +479,15 @@ def test_effective_characteristic_agreeing_sets_apply_once() -> None:
     assert set(result.factored) == {"A", "B"}
 
 
-def test_set_is_not_a_roll_modifier() -> None:
-    """The dice walk moves a target, not a base — a set is honestly unfactored there."""
-    effect = ModifierEffect(set={Quantity.TO_HIT: 1})
+def test_set_is_unfactored_at_the_walk() -> None:
+    """A set reaching the dice walk belongs to another seam — unfactored, not applied.
+
+    The walk moves a roll's target; a set replaces a base the effective-value
+    query reads. A characteristic set as a weapon rule compiles to no modifier
+    and is reported, the way a characteristic add is. (A set on a roll quantity
+    cannot reach here — the schema rejects it at load.)
+    """
+    effect = ModifierEffect(set={Characteristic.INITIATIVE: 10})
     modifiers, unfactored = compile_rules(["Doctored"], _one_rule(effect))
     assert modifiers == []
     assert unfactored == ["Doctored"]
