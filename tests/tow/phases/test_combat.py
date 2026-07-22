@@ -628,6 +628,86 @@ def test_fight_unknown_round_leaves_the_rule_noted() -> None:
     assert any("Doctored Reflexes" in note for note in result.notes)
 
 
+# --- Strike First / Strike Last: Initiative set, before other modifiers ---
+
+
+def _carrying(*rule_ids: str) -> Contingent:
+    # A deployed-style spearman carrying real special rules from data, attached
+    # to its loadout and named on the unit so their notes reconcile — the
+    # Strike First / Strike Last shape, rules the Initiative read consumes.
+    rules = tuple(REPO.rules[rid] for rid in rule_ids)
+    unit = REPO.units["elven-spearmen"].model_copy(
+        update={"special_rules": [r.name for r in rules]}
+    )
+    spear = REPO.weapons["thrusting-spear"]
+    return Contingent(unit, 1, Loadout((spear,), (), rules, ()), frontage=1).wielding(
+        "Thrusting Spear"
+    )
+
+
+def _plain_spearman() -> Contingent:
+    # The symmetric foe: elven-spearmen (Initiative 4) with its printed rules
+    # stripped, so nothing of its own touches the Initiative comparison.
+    bare = REPO.units["elven-spearmen"].model_copy(update={"special_rules": []})
+    return _fielded(bare, 1).wielding("Thrusting Spear")
+
+
+def test_effective_initiative_strike_first_sets_ten() -> None:
+    """Strike First replaces Initiative with 10, and the rule is factored."""
+    ei = effective_initiative(_carrying("strike-first"), 0, {})
+    assert ei.value == 10
+    assert "Strike First" in ei.factored
+
+
+def test_effective_initiative_strike_last_sets_one_before_the_charge() -> None:
+    """Strike Last replaces Initiative with 1 before the charge bonus is added.
+
+    The set lands first, so a +1 charge bonus lifts the 1 to 2 — not the base 4
+    to 5. This is the "before any other modifiers are applied" clause.
+    """
+    ei = effective_initiative(_carrying("strike-last"), 1, {})
+    assert ei.value == 2
+    assert "Strike Last" in ei.factored
+
+
+def test_effective_initiative_strike_first_and_last_cancel() -> None:
+    """Carrying both rules, the two sets cancel and the base Initiative stands.
+
+    Both are still honoured (factored) — the printed "cancel one another out",
+    modelled as two disagreeing sets washing out.
+    """
+    ei = effective_initiative(_carrying("strike-first", "strike-last"), 0, {})
+    assert ei.value == 4  # the printed elven-spearmen Initiative
+    assert set(ei.factored) >= {"Strike First", "Strike Last"}
+
+
+def test_fight_strike_first_strikes_before_the_foe() -> None:
+    """A Strike First model strikes first; its rule is in the math, so unnoted."""
+    quick = _carrying("strike-first")
+    result = fight(quick, _plain_spearman(), first_round=True)
+    assert result.first_striker is quick
+    assert not any("Strike First" in note for note in result.notes)
+
+
+def test_fight_strike_last_yields_the_first_blows() -> None:
+    """A Strike Last model strikes last; the faster foe strikes first."""
+    slow = _carrying("strike-last")
+    foe = _plain_spearman()
+    result = fight(slow, foe, first_round=True)
+    assert result.first_striker is foe
+    assert not any("Strike Last" in note for note in result.notes)
+
+
+def test_fight_strike_first_and_last_cancel_to_simultaneous() -> None:
+    """Both rules cancel: equal Initiative with the mirror foe strikes at once.
+
+    Neither note is reported — both are honoured (factored), just to no effect.
+    """
+    result = fight(_carrying("strike-first", "strike-last"), _plain_spearman(), first_round=True)
+    assert result.first_striker is None
+    assert not any("Strike First" in note or "Strike Last" in note for note in result.notes)
+
+
 # --- Elven Reflexes, end to end from data/ ---
 
 

@@ -1,0 +1,21 @@
+# Source: https://tow.whfb.app/special-rules/strike-last
+id: strike-last
+name: Strike Last
+page: 178
+category: Special Rules
+flavour: Some warriors are incredibly slow and ponderous by nature, whilst others may be encumbered by massive weapons
+  that slow them down.
+paragraphs:
+  - During the Combat phase, a model with this special rule that is engaged in combat reduces its Initiative
+    characteristic to 1 (before any other modifiers are applied). If a model has both this rule and Strike First, the
+    two rules cancel one another out.
+# Hand-authored, diffable against the paragraphs above.
+# "reduces its Initiative ... to 1 (before any other modifiers are applied)" is a
+# set on the characteristic, resolved before the additive folds — a charge's +1
+# then lifts it to 2, since the set lands first. "engaged in combat" is
+# unconditional here, so the effect carries no when. The cancellation with Strike
+# First is honoured structurally: two rules setting the same characteristic to
+# different values cancel in the effective-value fold (see strike-first.yaml).
+effects:
+  - set:
+      I: 1

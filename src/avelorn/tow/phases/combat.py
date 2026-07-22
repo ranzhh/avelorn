@@ -654,15 +654,18 @@ def fight(
     ``models``. The returned ``losses`` count only this round's melee
     casualties, so pre-combat losses never inflate the combat result.
 
-    Rule-granted characteristic modifiers on the unit (Elven Reflexes)
-    apply to the striking order through the loadout of a contingent
-    fielded with deploy(), gated on the side's facts; one left
-    unevaluated stays noted. Deferred and noted, not modelled here:
-    Always Strikes First/Last and the Initiative modifiers granted by
-    weapons (a Thrusting Spear's bonus when charged) — surfaced in the
-    result's notes; the supporting attacks Fight in Extra Rank / Martial
-    Prowess grant the rank behind, split-profile champions (#46), and
-    multi-unit combats. Each side fights with its fighting rank only — the
+    Rule-granted characteristic modifiers on the unit apply to the
+    striking order through the loadout of a contingent fielded with
+    deploy(), gated on the side's facts; one left unevaluated stays
+    noted. This covers Elven Reflexes (+1 Initiative in the first round)
+    and Strike First / Strike Last, which set Initiative to 10 / 1 before
+    those modifiers apply — a model carrying both has them cancel, since
+    two rules setting the same characteristic to different values wash
+    out. Deferred and noted, not modelled here: the Initiative modifiers
+    granted by weapons (a Thrusting Spear's bonus when charged) —
+    surfaced in the result's notes; the supporting attacks Fight in Extra
+    Rank / Martial Prowess grant the rank behind, split-profile champions
+    (#46), and multi-unit combats. Each side fights with its fighting rank only — the
     front rank in base contact (:meth:`~avelorn.tow.contingent.Contingent.melee_attacks`),
     the whole front rank taken to be engaged (an equally wide foe). Score the
     round with :func:`combat_result`.
