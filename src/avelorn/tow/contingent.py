@@ -16,6 +16,7 @@ from avelorn.core.registry import Registry
 from avelorn.tow.data import TOWRepository, default_repository
 from avelorn.tow.engine.rules import (
     EffectiveValue,
+    effective_characteristic,
     effective_fighting_ranks,
     effective_supporting_ranks,
     printed_rule,
@@ -479,18 +480,44 @@ class Contingent:
         index = self.loadout.weapon_rules
         return [index[name] for name in profile.special_rules if name in index]
 
+    def effective_attacks(self) -> EffectiveValue:
+        """The Attacks each fighting-rank model makes, rule modifiers included.
+
+        The rank-and-file Attacks characteristic, modified by the rule-granted
+        characteristic modifiers the contingent carries (Furious Charge's +1 on
+        a turn it charged), gated on its own charge. A profile with no printed
+        Attacks counts as 0. This shapes the fighting rank's blows only —
+        a supporting attack is one regardless of the Attacks characteristic.
+        ``factored`` / ``unfactored`` name the rules evaluated in, for the
+        combat notes.
+
+        Returns:
+            The effective Attacks, with the rule names factored into it and
+            those left unfactored.
+        """
+        base = self.unit.profiles[0][Characteristic.ATTACKS] or 0
+        return effective_characteristic(
+            base,
+            Characteristic.ATTACKS,
+            self.loadout.rules,
+            {Condition.CHARGED: self.movement.charge is not None},
+        )
+
     def melee_attacks(self) -> int:
         """The attacks this body throws striking a frontal melee.
 
-        Its fighting rank (:meth:`fighting_rank`) each make their full Attacks;
-        each model in the supporting ranks behind it (:meth:`supporting_ranks`,
-        granted by a weapon like the thrusting spear) makes a single supporting
-        attack. A profile with no printed Attacks throws none.
+        Its fighting rank (:meth:`fighting_rank`) each make their full effective
+        Attacks (:meth:`effective_attacks` — the printed characteristic plus a
+        rule's charge bonus, Furious Charge); each model in the supporting ranks
+        behind it (:meth:`supporting_ranks`, granted by a weapon like the
+        thrusting spear) makes a single supporting attack, whatever the Attacks
+        characteristic. A profile with no printed Attacks throws none from its
+        fighting rank.
 
         Returns:
             The number of attacks thrown this round.
         """
-        attacks_per_model = self.unit.profiles[0][Characteristic.ATTACKS] or 0
+        attacks_per_model = self.effective_attacks().value
         fighting = self.fighting_ranks().value
         supporting = self.supporting_ranks().value
         formation = self.formation

@@ -434,7 +434,11 @@ def strike_unit(
             # Martial Prowess is unknown, so it factors nothing and stays noted.
             *_unit_rule_notes(
                 striker.unit,
-                claimed={*striker.fighting_ranks().factored, *engagement.weapon_skill.factored},
+                claimed={
+                    *striker.fighting_ranks().factored,
+                    *striker.effective_attacks().factored,
+                    *engagement.weapon_skill.factored,
+                },
             ),
             # The target throws no blows here, but its save is resolved, so its
             # save-improving rules (Parry) are factored and claimed.
@@ -747,10 +751,10 @@ def fight(
                     losses[a_lost][b_lost] += weight * mass
 
     first_striker = None if a_first is None else (a if a_first else b)
-    # A rule factored into the striking order, the fighting-rank depth, or the
-    # effective Weapon Skill is in the math — claimed, so never noted; both
-    # sides strike, so each claims its own. A mirror match dedups the identical
-    # remainder.
+    # A rule factored into the striking order, the fighting-rank depth, the
+    # effective Attacks, or the effective Weapon Skill is in the math — claimed,
+    # so never noted; both sides strike, so each claims its own. A mirror match
+    # dedups the identical remainder.
     notes = tuple(
         dict.fromkeys(
             [
@@ -759,6 +763,7 @@ def fight(
                     claimed={
                         *a_initiative.factored,
                         *a.fighting_ranks().factored,
+                        *a.effective_attacks().factored,
                         *a_strikes.weapon_skill.factored,
                         *a_combat_result.factored,
                         # a's save-improving rules are read while it is b's target
@@ -770,6 +775,7 @@ def fight(
                     claimed={
                         *b_initiative.factored,
                         *b.fighting_ranks().factored,
+                        *b.effective_attacks().factored,
                         *b_strikes.weapon_skill.factored,
                         *b_combat_result.factored,
                         *a_strikes.target_armour.factored,

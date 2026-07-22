@@ -776,6 +776,38 @@ def test_fight_unit_strike_first_and_weapon_strike_last_cancel() -> None:
     assert set(ei.factored) >= {"Strike First", "Strike Last"}
 
 
+# --- Furious Charge: +1 Attacks on the charge ---
+
+
+def test_effective_attacks_furious_charge_adds_on_the_charge() -> None:
+    """Furious Charge lifts the Attacks characteristic by one on a charging turn."""
+    charging = _carrying("furious-charge").charging(Charge(6, ChargeArc.FRONT))
+    attacks = charging.effective_attacks()
+    assert attacks.value == 2  # base A1 + 1
+    assert "Furious Charge" in attacks.factored
+
+
+def test_effective_attacks_furious_charge_honoured_while_standing() -> None:
+    """Standing still, Furious Charge grants nothing — honoured, still factored."""
+    attacks = _carrying("furious-charge").effective_attacks()
+    assert attacks.value == 1
+    assert "Furious Charge" in attacks.factored
+
+
+def test_melee_attacks_grow_with_furious_charge() -> None:
+    """The fighting rank throws its Furious-Charge Attacks: one more on the charge."""
+    charging = _carrying("furious-charge").charging(Charge(6, ChargeArc.FRONT))
+    standing = _carrying("furious-charge")
+    assert charging.melee_attacks() == standing.melee_attacks() + 1
+
+
+def test_fight_furious_charge_is_factored_not_noted() -> None:
+    """A charging model's Furious Charge is in the math, so it leaves no note."""
+    charging = _carrying("furious-charge").charging(Charge(6, ChargeArc.FRONT))
+    result = fight(charging, _plain_spearman(), first_round=True)
+    assert not any("Furious Charge" in note for note in result.notes)
+
+
 # --- Elven Reflexes, end to end from data/ ---
 
 

@@ -1,0 +1,20 @@
+# Source: https://tow.whfb.app/special-rules/furious-charge
+id: furious-charge
+name: Furious Charge
+page: 171
+category: Special Rules
+flavour: Some warriors charge home with such fury that their first blows land with redoubled ferocity.
+paragraphs:
+  - During a turn in which it made a charge move of 3" or more, a model with this special rule gains a +1 modifier to
+    its Attacks characteristic.
+# Hand-authored, diffable against the paragraphs above.
+# A +1 Attacks modifier gated on the charge — read by the effective-Attacks
+# query, which shapes the fighting rank's blows (a supporting attack is one
+# each regardless). The "3\" or more" qualifier is not modelled: the CHARGED
+# condition records that a charge was made, not its distance, so a charge
+# shorter than 3" would factor this where the rulebook would not.
+effects:
+  - when:
+      charged: true
+    add:
+      A: 1
