@@ -10,5 +10,5 @@ paragraphs:
 effects:
   - when:
       moved: true
-    then:
+    add:
       to-hit: -1

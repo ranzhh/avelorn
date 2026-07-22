@@ -84,7 +84,7 @@ def printed_rule(printed: str, rules: Registry[Rule]) -> Rule | None:
 
 def _with_parameter(effect: RuleEffect, parameter: int) -> RuleEffect:
     # Substitute the printed parameter into every "X" placeholder the
-    # effect carries, looking inside mappings (a then's amounts).
+    # effect carries, looking inside mappings (an operation's amounts).
     # Introspects the effect's fields, so a new X-bearing field
     # participates automatically.
     placeholders: dict = {}
@@ -176,12 +176,20 @@ def _compile_effect(
     effect: RuleEffect, conditions: Mapping[Condition, bool | None]
 ) -> list[Modifier] | None:
     # One effect, top to bottom: bail where the walk cannot honour it,
-    # gate on the when's state, then record each then entry as data —
+    # gate on the when's state, then record each additive entry as data —
     # which roll's target moves, by how much, on which natural face.
     if not isinstance(effect, ModifierEffect):
         # Effects for other seams (e.g. re-rolls on make-panic-tests)
         # are not attack modifiers; their seams consume them directly.
         # As a weapon rule they are honestly unfactored.
+        return None
+    if effect.set_:
+        # A set replaces a base value, which the effective-value query reads,
+        # not the walk (the walk only moves a roll's target). A set on a roll
+        # quantity is rejected at load, so any set reaching here belongs to
+        # another seam — unfactored, exactly as the characteristic and rank
+        # adds below are. None is this compiler's "unfactored" signal (turned
+        # into a visible "not factored" note by compile_rules), never an error.
         return None
     if effect.requires is not None:
         # The walk has no loadout, so it cannot answer an equipment gate;
@@ -194,7 +202,7 @@ def _compile_effect(
         return []  # honoured: the situation does not arise
     natural = effect.natural
     modifiers: list[Modifier] = []
-    for quantity, amount in effect.then.items():
+    for quantity, amount in (effect.add or {}).items():
         if amount == "X":
             # Unsubstituted placeholder: the printed name carried no parameter.
             return None
@@ -348,9 +356,9 @@ def effective_armour_value(
     unfactored: list[str] = []
     for rule in rules:
         matching = [
-            (effect, effect.then[Quantity.ARMOUR_VALUE])
+            (effect, (effect.add or {})[Quantity.ARMOUR_VALUE])
             for effect in rule.effects
-            if isinstance(effect, ModifierEffect) and Quantity.ARMOUR_VALUE in effect.then
+            if isinstance(effect, ModifierEffect) and Quantity.ARMOUR_VALUE in (effect.add or {})
         ]
         if not matching:
             continue
@@ -386,47 +394,66 @@ def _effective_quantity(
     rules: Sequence[Rule],
     conditions: Mapping[Condition, bool | None] | None = None,
 ) -> EffectiveValue:
-    # One base value folded over the ``key`` modifiers a contingent's rules
+    # One base value folded over the ``key`` operations a contingent's rules
     # carry — shared by the characteristic, fighting-rank, and combat-result
-    # queries, which differ only in the ``then`` key they read. All-or-nothing
+    # queries, which differ only in the ``key`` they read. All-or-nothing
     # per rule; a rule needing an unknown fact, an unbound parameter, or an
     # event face (no die is rolled at a query) is reported unfactored. A
     # printed maximum caps only the characteristic seam — the one that prints
     # one — so ranks and combat-result points accumulate uncapped.
+    #
+    # Two passes, because a `set` replaces the base "before any other
+    # modifiers are applied": every applicable set is resolved first, then the
+    # additive folds stack on top. Sets that disagree on the target cancel one
+    # another (Strike First's 10 against Strike Last's 1), leaving the base to
+    # stand — each still honoured, just to no effect.
     conditions = conditions or {}
     caps = seam_of(key) is Seam.CHARACTERISTIC
-    value = base
     factored: list[str] = []
     unfactored: list[str] = []
+    sets: list[int] = []
+    adds: list[tuple[int, int | None]] = []  # (amount, the effect's printed maximum)
     for rule in rules:
         matching = [
-            (effect, effect.then[key])
+            (effect, op, operations[key])
             for effect in rule.effects
-            if isinstance(effect, ModifierEffect) and key in effect.then
+            if isinstance(effect, ModifierEffect)
+            for op, operations in (("add", effect.add or {}), ("set", effect.set_ or {}))
+            if key in operations
         ]
         if not matching:
             continue
         answers = [
-            (effect, amount, _condition_applies(effect.conditions, conditions))
-            for effect, amount in matching
+            (effect, op, amount, _condition_applies(effect.conditions, conditions))
+            for effect, op, amount in matching
         ]
         if any(
             amount == "X" or answer is None or effect.natural is not None or effect.requires
-            for effect, amount, answer in answers
+            for effect, op, amount, answer in answers
         ):
             # An equipment gate (``requires``) is not answerable here — only
             # the armour fold carries a loadout — so a rule that needs one is
             # reported unfactored rather than applied blind.
             unfactored.append(rule.name)
             continue
-        for effect, amount, answer in answers:
+        for effect, op, amount, answer in answers:
             if not answer or not isinstance(amount, int):
                 continue
-            value += amount
-            if caps and effect.maximum is not None:
-                value = min(value, effect.maximum)
+            if op == "set":
+                sets.append(amount)
+            else:
+                adds.append((amount, effect.maximum if caps else None))
         factored.append(rule.name)
-        logger.debug("%s modifier factored: %s -> %d", key, rule.name, value)
+    value = base
+    targets = set(sets)
+    if len(targets) == 1:
+        value = targets.pop()  # a single agreed target replaces the base
+    # no set leaves the base; conflicting sets cancel, and the base stands
+    for amount, maximum in adds:
+        value += amount
+        if maximum is not None:
+            value = min(value, maximum)
+    logger.debug("%s -> %d (%d rule(s) factored)", key, value, len(factored))
     return EffectiveValue(value, tuple(factored), tuple(unfactored))
 
 

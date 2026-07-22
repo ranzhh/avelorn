@@ -20,5 +20,5 @@ paragraphs:
 effects:
   - when:
       first_round_of_combat: true
-    then:
+    add:
       WS: 1

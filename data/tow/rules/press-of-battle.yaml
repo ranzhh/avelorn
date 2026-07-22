@@ -12,5 +12,5 @@ paragraphs:
 effects:
   - when:
       charged: false
-    then:
+    add:
       fighting-ranks: 1

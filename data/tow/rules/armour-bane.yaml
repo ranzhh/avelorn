@@ -15,5 +15,5 @@ effects:
       natural:
         face: 6
         roll: roll-to-wound
-    then:
+    add:
       armour-piercing: X

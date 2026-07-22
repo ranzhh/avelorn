@@ -33,18 +33,18 @@ def test_when_parses_state_beside_event() -> None:
     effect = _EFFECT.validate_python(
         {
             "when": {"moved": True, "natural": {"face": 6, "roll": "roll-to-wound"}},
-            "then": {"to-hit": -1},
+            "add": {"to-hit": -1},
         }
     )
     assert isinstance(effect, ModifierEffect)
     assert effect.conditions == {Condition.MOVED: True}
     assert effect.natural is not None and effect.natural.face == 6
-    assert effect.then == {"to-hit": -1}
+    assert effect.add == {"to-hit": -1}
 
 
 def test_when_is_optional() -> None:
     """Without a when, the modifier applies to every attack."""
-    effect = _EFFECT.validate_python({"then": {"armour-piercing": 1}})
+    effect = _EFFECT.validate_python({"add": {"armour-piercing": 1}})
     assert isinstance(effect, ModifierEffect)
     assert effect.conditions == {}
     assert effect.natural is None
@@ -56,7 +56,7 @@ def test_natural_rejects_an_unknown_roll() -> None:
         _EFFECT.validate_python(
             {
                 "when": {"natural": {"face": 6, "roll": "roll-to-wnd"}},
-                "then": {"armour-piercing": 1},
+                "add": {"armour-piercing": 1},
             }
         )
 
@@ -67,7 +67,7 @@ def test_natural_rejects_an_impossible_face() -> None:
         _EFFECT.validate_python(
             {
                 "when": {"natural": {"face": 7, "roll": "roll-to-wound"}},
-                "then": {"armour-piercing": 1},
+                "add": {"armour-piercing": 1},
             }
         )
 
@@ -83,7 +83,7 @@ def test_natural_rejects_a_rollless_stage() -> None:
         _EFFECT.validate_python(
             {
                 "when": {"natural": {"face": 6, "roll": "make-panic-tests"}},
-                "then": {"armour-piercing": 1},
+                "add": {"armour-piercing": 1},
             }
         )
 
@@ -91,7 +91,7 @@ def test_natural_rejects_a_rollless_stage() -> None:
 def test_natural_requires_a_roll_fact() -> None:
     """The event key takes a die's face, not a true/false."""
     with pytest.raises(ValidationError, match="natural"):
-        _EFFECT.validate_python({"when": {"natural": True}, "then": {"armour-piercing": 1}})
+        _EFFECT.validate_python({"when": {"natural": True}, "add": {"armour-piercing": 1}})
 
 
 def test_condition_requires_a_boolean_fact() -> None:
@@ -100,7 +100,7 @@ def test_condition_requires_a_boolean_fact() -> None:
         _EFFECT.validate_python(
             {
                 "when": {"moved": {"face": 6, "roll": "roll-to-wound"}},
-                "then": {"to-hit": -1},
+                "add": {"to-hit": -1},
             }
         )
 
@@ -114,36 +114,70 @@ def test_the_event_key_stays_outside_the_condition_vocabulary() -> None:
     assert NATURAL not in {condition.value for condition in Condition}
 
 
-def test_then_rejects_an_unknown_quantity() -> None:
+def test_add_rejects_an_unknown_quantity() -> None:
     """A quantity outside the closed vocabulary is a data error."""
-    with pytest.raises(ValidationError, match="then"):
-        _EFFECT.validate_python({"then": {"to-wnd": -1}})
+    with pytest.raises(ValidationError, match="add"):
+        _EFFECT.validate_python({"add": {"to-wnd": -1}})
 
 
-def test_then_is_required() -> None:
-    """A modifier without a consequence is meaningless."""
-    with pytest.raises(ValidationError, match="then"):
+def test_an_effect_needs_an_operation() -> None:
+    """A modifier without an add or set is meaningless."""
+    with pytest.raises(ValidationError, match="operation"):
         _EFFECT.validate_python({"when": {"moved": True}})
 
 
-def test_then_must_move_something() -> None:
-    """An empty then is meaningless."""
+def test_an_operation_must_move_something() -> None:
+    """An empty add is meaningless."""
     with pytest.raises(ValidationError, match="at least 1"):
-        _EFFECT.validate_python({"then": {}})
+        _EFFECT.validate_python({"add": {}})
 
 
-def test_then_moves_a_characteristic() -> None:
-    """A profile characteristic is one more quantity a then can move."""
-    effect = _EFFECT.validate_python({"then": {"I": 1}, "maximum": 10})
+def test_add_moves_a_characteristic() -> None:
+    """A profile characteristic is one more quantity an add can move."""
+    effect = _EFFECT.validate_python({"add": {"I": 1}, "maximum": 10})
     assert isinstance(effect, ModifierEffect)
-    assert effect.then == {Characteristic.INITIATIVE: 1}
+    assert effect.add == {Characteristic.INITIATIVE: 1}
     assert effect.maximum == 10
+
+
+def test_set_parses_under_its_alias() -> None:
+    """The set operation loads under its printed key and reads back as set_.
+
+    Strike First's shape: replace the Initiative characteristic outright,
+    no add. The YAML key is ``set``; the attribute dodges the builtin.
+    """
+    effect = _EFFECT.validate_python({"set": {"I": 10}})
+    assert isinstance(effect, ModifierEffect)
+    assert effect.set_ == {Characteristic.INITIATIVE: 10}
+    assert effect.add is None
+    assert effect.quantities == {Characteristic.INITIATIVE}
+
+
+def test_add_and_set_may_share_a_seam() -> None:
+    """One effect may both add and set, as long as it stays on one seam."""
+    effect = _EFFECT.validate_python({"set": {"I": 10}, "add": {"I": 1}})
+    assert isinstance(effect, ModifierEffect)
+    assert effect.set_ == {Characteristic.INITIATIVE: 10}
+    assert effect.add == {Characteristic.INITIATIVE: 1}
+
+
+def test_set_rejects_a_roll_quantity() -> None:
+    """A set replaces a base value; a roll's target has none, so it is a data error.
+
+    Loud at load — the same discipline as a maximum on a roll — rather than a
+    note that would go silently unfactored forever. Armour value is likewise
+    an improvement, not a base to replace.
+    """
+    with pytest.raises(ValidationError, match="set cannot replace a roll or armour"):
+        _EFFECT.validate_python({"set": {"to-hit": 1}})
+    with pytest.raises(ValidationError, match="set cannot replace a roll or armour"):
+        _EFFECT.validate_python({"set": {"armour-value": 3}})
 
 
 def test_maximum_requires_a_characteristic() -> None:
     """Only a characteristic prints a ceiling; on a roll it is a data error."""
     with pytest.raises(ValidationError, match="maximum"):
-        _EFFECT.validate_python({"then": {"to-hit": -1}, "maximum": 10})
+        _EFFECT.validate_python({"add": {"to-hit": -1}, "maximum": 10})
 
 
 def test_modifier_rejects_a_spelled_out_stage() -> None:
@@ -153,19 +187,29 @@ def test_modifier_rejects_a_spelled_out_stage() -> None:
     which must now fail loudly rather than parse inert.
     """
     with pytest.raises(ValidationError, match="stage"):
-        _EFFECT.validate_python({"stage": "roll-to-hit", "then": {"to-hit": -1}})
+        _EFFECT.validate_python({"stage": "roll-to-hit", "add": {"to-hit": -1}})
+
+
+def test_modifier_rejects_the_retired_then_key() -> None:
+    """The old bare-number ``then`` field is gone; it must fail loudly.
+
+    Pins the migration to named operations — a leftover ``then`` in data
+    is a forbidden extra, not a silent inert.
+    """
+    with pytest.raises(ValidationError, match="then"):
+        _EFFECT.validate_python({"then": {"to-hit": -1}})
 
 
 def test_condition_outside_the_vocabulary_rejected() -> None:
     """A condition name outside the closed enum is a data error."""
     with pytest.raises(ValidationError, match="when"):
-        _EFFECT.validate_python({"when": {"charging": True}, "then": {"to-hit": -1}})
+        _EFFECT.validate_python({"when": {"charging": True}, "add": {"to-hit": -1}})
 
 
 def test_condition_must_ask_something() -> None:
     """An empty when is meaningless."""
     with pytest.raises(ValidationError, match="at least 1"):
-        _EFFECT.validate_python({"when": {}, "then": {"to-hit": -1}})
+        _EFFECT.validate_python({"when": {}, "add": {"to-hit": -1}})
 
 
 def test_parameter_reference_requires_a_placeholder_name() -> None:
@@ -179,7 +223,7 @@ def test_parameter_reference_requires_a_placeholder_name() -> None:
             id="armour-bane",
             name="Armour Bane",
             paragraphs=["…"],
-            effects=[ModifierEffect(then={Quantity.ARMOUR_PIERCING: "X"})],
+            effects=[ModifierEffect(add={Quantity.ARMOUR_PIERCING: "X"})],
         )
 
 
@@ -204,28 +248,31 @@ def test_reroll_effect_rejects_unknown_cause() -> None:
         )
 
 
-def test_then_speaks_to_one_seam() -> None:
+def test_ops_speak_to_one_seam() -> None:
     """One effect may not move quantities from two seams together.
 
     Roll quantities are consumed by the dice walk, characteristics by the
     characteristic read, rank quantities by the fighting-rank query; all-
-    or-nothing reporting holds per consumer, so a mixed then could be
+    or-nothing reporting holds per consumer, so a mixed operation could be
     half-consumed while its rule's note is dropped whole. A rule whose
-    sentence spans seams writes one effect per seam.
+    sentence spans seams writes one effect per seam — and add and set are
+    weighed together.
     """
     with pytest.raises(ValidationError, match="may not mix"):
-        _EFFECT.validate_python({"then": {"to-hit": -1, "I": 1}})  # roll + characteristic
+        _EFFECT.validate_python({"add": {"to-hit": -1, "I": 1}})  # roll + characteristic
     with pytest.raises(ValidationError, match="may not mix"):
-        _EFFECT.validate_python({"then": {"fighting-ranks": 1, "I": 1}})  # rank + characteristic
+        _EFFECT.validate_python({"add": {"fighting-ranks": 1, "I": 1}})  # rank + characteristic
     with pytest.raises(ValidationError, match="may not mix"):
-        _EFFECT.validate_python({"then": {"fighting-ranks": 1, "to-hit": -1}})  # rank + roll
+        _EFFECT.validate_python({"add": {"fighting-ranks": 1, "to-hit": -1}})  # rank + roll
+    with pytest.raises(ValidationError, match="may not mix"):
+        _EFFECT.validate_python({"set": {"I": 10}, "add": {"to-hit": -1}})  # set + add, two seams
 
 
 def test_a_rank_quantity_is_its_own_seam() -> None:
-    """A formation quantity is a valid, single-seam then (Press of Battle's shape)."""
-    effect = _EFFECT.validate_python({"when": {"charged": False}, "then": {"fighting-ranks": 1}})
+    """A formation quantity is a valid, single-seam operation (Press of Battle's shape)."""
+    effect = _EFFECT.validate_python({"when": {"charged": False}, "add": {"fighting-ranks": 1}})
     assert isinstance(effect, ModifierEffect)
-    assert effect.then == {"fighting-ranks": 1}
+    assert effect.add == {"fighting-ranks": 1}
     assert effect.conditions == {Condition.CHARGED: False}
 
 

@@ -306,7 +306,7 @@ def test_field_substitutes_rule_parameters_as_printed(spearmen_unit: Unit) -> No
     rule = next(r for r in contingent.loadout.rules if r.name == "Armour Bane (2)")
     effect = rule.effects[0]
     assert isinstance(effect, ModifierEffect)
-    assert effect.then == {"armour-piercing": 2}
+    assert effect.add == {"armour-piercing": 2}
 
 
 def test_loadout_answers_the_weapon_choice_by_printed_name(spearmen_unit: Unit) -> None:
@@ -345,7 +345,7 @@ def test_thrusting_spear_resolves_fight_in_extra_rank(spearmen_unit: Unit) -> No
     assert rule is REPO.rules["fight-in-extra-rank"]
     effect = rule.effects[0]
     assert isinstance(effect, ModifierEffect)
-    assert effect.then == {"supporting-ranks": 1}
+    assert effect.add == {"supporting-ranks": 1}
 
 
 def test_an_uncarried_weapon_cannot_be_wielded(spearmen_unit: Unit) -> None:
