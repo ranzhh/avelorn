@@ -314,11 +314,16 @@ def _engage(
     modifiers, unfactored = compile_rules(
         profile.special_rules, striker.loadout.weapon_rules, conditions
     )
-    # A supporting-rank weapon rule (Fight in Extra Rank) is factored into the
-    # attack count, not the dice walk, so the walk leaves it unfactored — claim
-    # it out, the way shooting claims Volley Fire off a volley.
-    supporting_factored = striker.supporting_ranks().factored
-    unfactored = [rule for rule in unfactored if rule not in supporting_factored]
+    # A weapon rule the walk cannot factor may still be consumed by another
+    # seam: the supporting-rank query (Fight in Extra Rank, folded into the
+    # attack count) or the striking-order Initiative read (a great weapon's
+    # Strike Last, which sets Initiative). Claim both out of the walk's
+    # unfactored notes, the way shooting claims Volley Fire off a volley.
+    claimed = {
+        *striker.supporting_ranks().factored,
+        *effective_initiative(striker, conditions=conditions).factored,
+    }
+    unfactored = [rule for rule in unfactored if rule not in claimed]
     notes.extend(f"weapon rule not factored: {rule} ({weapon.name})" for rule in unfactored)
     phase_modifiers, phase_unfactored = compile_rules(sorted(phase_rules), phase_rules, conditions)
     modifiers.extend(phase_modifiers)
@@ -542,12 +547,21 @@ def effective_initiative(
     """The Initiative a contingent strikes at, all printed modifiers included.
 
     The striking-order assembler, and the one home of the Initiative
-    ceiling: the rank-and-file Initiative, modified by the loadout's
-    rule-granted characteristic modifiers under the evaluated
-    ``conditions``, plus the ``charge_bonus`` the charge already
-    arc-capped (:attr:`~avelorn.tow.contingent.Charge.initiative_bonus`),
-    the total capped at 10 (the-combat-phase/charging-units). A profile
-    with no printed Initiative counts as 0.
+    ceiling: the rank-and-file Initiative, modified by the rule-granted
+    characteristic modifiers under the evaluated ``conditions``, plus the
+    ``charge_bonus`` the charge already arc-capped
+    (:attr:`~avelorn.tow.contingent.Charge.initiative_bonus`), the total
+    capped at 10 (the-combat-phase/charging-units). A profile with no
+    printed Initiative counts as 0.
+
+    The Initiative-setting rules fold from two sources: the unit's own
+    loadout rules (Strike First, Elven Reflexes) and the rules on the
+    weapon in hand (a great weapon's Strike Last), both weighed together —
+    so a model with Strike First and a Strike Last weapon has the two
+    cancel, exactly as if it printed both. The set lands before the
+    additive modifiers and the charge bonus (Strike Last's I1 becomes I2
+    for a charger), and a rule the walk cannot factor but the read can (a
+    weapon's Strike Last) is claimed here so it is not reported unfactored.
 
     The charge reaches here once, and only as a number: its facts (that
     the charger moved) travel in ``conditions``, its Initiative
@@ -560,9 +574,8 @@ def effective_initiative(
         the caller reports the latter.
     """
     base = contingent.unit.profiles[0][Characteristic.INITIATIVE] or 0
-    modified = effective_characteristic(
-        base, Characteristic.INITIATIVE, contingent.loadout.rules, conditions
-    )
+    rules = [*contingent.loadout.rules, *contingent.in_hand_rules()]
+    modified = effective_characteristic(base, Characteristic.INITIATIVE, rules, conditions)
     return replace(modified, value=min(modified.value + charge_bonus, 10))
 
 
@@ -654,16 +667,18 @@ def fight(
     ``models``. The returned ``losses`` count only this round's melee
     casualties, so pre-combat losses never inflate the combat result.
 
-    Rule-granted characteristic modifiers on the unit apply to the
-    striking order through the loadout of a contingent fielded with
-    deploy(), gated on the side's facts; one left unevaluated stays
-    noted. This covers Elven Reflexes (+1 Initiative in the first round)
-    and Strike First / Strike Last, which set Initiative to 10 / 1 before
-    those modifiers apply — a model carrying both has them cancel, since
-    two rules setting the same characteristic to different values wash
-    out. Deferred and noted, not modelled here: the Initiative modifiers
-    granted by weapons (a Thrusting Spear's bonus when charged) —
-    surfaced in the result's notes; the supporting attacks Fight in Extra
+    Rule-granted characteristic modifiers apply to the striking order
+    through the loadout of a contingent fielded with deploy(), gated on
+    the side's facts; one left unevaluated stays noted. They fold from the
+    unit's own rules (Elven Reflexes's +1 in the first round, Strike
+    First) and from the weapon in hand (a great weapon's Strike Last) —
+    Strike First / Strike Last set Initiative to 10 / 1 before those
+    modifiers apply, and a model whose unit and weapon supply both has
+    them cancel, since two rules setting the same characteristic to
+    different values wash out. Deferred and noted, not modelled here: the
+    Initiative bonus a Thrusting Spear grants when charged in its front
+    arc — printed as free-text weapon notes, not a structured rule, so it
+    stays surfaced in the notes; the supporting attacks Fight in Extra
     Rank / Martial Prowess grant the rank behind, split-profile champions
     (#46), and multi-unit combats. Each side fights with its fighting rank only — the
     front rank in base contact (:meth:`~avelorn.tow.contingent.Contingent.melee_attacks`),
