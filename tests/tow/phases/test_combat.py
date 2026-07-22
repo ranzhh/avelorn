@@ -18,6 +18,7 @@ from avelorn.tow.phases.combat import (
 from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.rule import Condition, ModifierEffect, Quantity, Rule
 from avelorn.tow.schema.unit import Characteristic, Unit
+from avelorn.tow.schema.weapon import Weapon
 
 REPO = TOWRepository()
 
@@ -706,6 +707,73 @@ def test_fight_strike_first_and_last_cancel_to_simultaneous() -> None:
     result = fight(_carrying("strike-first", "strike-last"), _plain_spearman(), first_round=True)
     assert result.first_striker is None
     assert not any("Strike First" in note or "Strike Last" in note for note in result.notes)
+
+
+# --- Strike Last from the weapon in hand: the great-weapon route ---
+
+
+def _strike_last_weapon() -> Weapon:
+    # A doctored great weapon whose Combat profile carries Strike Last — a
+    # synthetic stand-in for the Chracian Great Blade, so the routing test does
+    # not lean on any imported army data.
+    spear = REPO.weapons["thrusting-spear"]
+    combat = spear.combat_profile
+    assert combat is not None  # the thrusting spear is a Combat weapon
+    profile = combat.model_copy(update={"special_rules": ["Strike Last"]})
+    return spear.model_copy(
+        update={
+            "id": "doctored-blade",
+            "name": "Doctored Blade",
+            "profiles": [profile],
+            "notes": None,
+        }
+    )
+
+
+def _wielding_strike_last(*unit_rule_ids: str) -> Contingent:
+    # An elven spearman wielding the Strike-Last blade, optionally also carrying
+    # unit rules (to test the unit-and-weapon cancellation). The weapon's Strike
+    # Last resolves through the loadout's weapon-rule index.
+    rules = tuple(REPO.rules[rid] for rid in unit_rule_ids)
+    unit = REPO.units["elven-spearmen"].model_copy(
+        update={"special_rules": [r.name for r in rules]}
+    )
+    weapon_rules = {"Strike Last": REPO.rules["strike-last"]}
+    loadout = Loadout((_strike_last_weapon(),), (), rules, (), weapon_rules)
+    return Contingent(unit, 1, loadout, frontage=1).wielding("Doctored Blade")
+
+
+def test_effective_initiative_reads_a_strike_last_weapon() -> None:
+    """Strike Last on the weapon in hand reaches the Initiative read.
+
+    The rule rides on the great weapon's Combat profile, not the unit, yet it
+    sets the wielder's Initiative to 1 — folded through in_hand_rules and
+    factored, never left as an unfactored weapon note.
+    """
+    ei = effective_initiative(_wielding_strike_last(), 0, {})
+    assert ei.value == 1
+    assert "Strike Last" in ei.factored
+
+
+def test_fight_strike_last_weapon_yields_the_first_blows() -> None:
+    """A wielder of a Strike-Last weapon strikes last; the weapon note is claimed."""
+    slow = _wielding_strike_last()
+    foe = _plain_spearman()
+    result = fight(slow, foe, first_round=True)
+    assert result.first_striker is foe
+    assert result.a_initiative.value == 1
+    assert not any("Strike Last" in note for note in result.notes)
+
+
+def test_fight_unit_strike_first_and_weapon_strike_last_cancel() -> None:
+    """Strike First on the unit and Strike Last on the weapon cancel across pools.
+
+    The two sources fold together, so a Strike First model wielding a Strike
+    Last weapon has neither apply — the base Initiative (4) stands, both factored.
+    """
+    ei = effective_initiative(_wielding_strike_last("strike-first"), 0, {})
+    assert ei.value == 4
+    assert set(ei.factored) >= {"Strike First", "Strike Last"}
 
 
 # --- Elven Reflexes, end to end from data/ ---

@@ -455,13 +455,23 @@ class Contingent:
             those left unfactored.
         """
         return effective_supporting_ranks(
-            0, self._weapon_rules(), {Condition.CHARGED: self.movement.charge is not None}
+            0, self.in_hand_rules(), {Condition.CHARGED: self.movement.charge is not None}
         )
 
-    def _weapon_rules(self) -> list[Rule]:
-        # The resolved rules on the weapon in hand's Combat profile: the entries
-        # for its printed names, from the loadout's weapon-rule index. Empty
-        # when nothing is in hand or the weapon has no Combat profile.
+    def in_hand_rules(self) -> list[Rule]:
+        """The resolved rules on the weapon in hand's Combat profile.
+
+        The entries for the wielded weapon's printed rule names, from the
+        loadout's weapon-rule index — the rules that ride with the weapon a
+        contingent chose to swing (a great weapon's Strike Last, a thrusting
+        spear's Fight in Extra Rank). Empty when nothing is in hand or the
+        weapon has no Combat profile. Read wherever a weapon-in-hand rule
+        modifies a quantity: the supporting-rank query and the striking-order
+        Initiative read.
+
+        Returns:
+            The resolved in-hand weapon rules, empty when none apply.
+        """
         weapon = self.weapon
         profile = weapon.combat_profile if weapon is not None else None
         if profile is None:
