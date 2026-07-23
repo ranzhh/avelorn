@@ -44,7 +44,7 @@ def test_weapon_type_rejects_a_family_outside_the_vocabulary() -> None:
             {
                 "id": "crossbow",
                 "name": "Crossbow",
-                "weapon_type": "Crossbow",
+                "weapon_type": "crossbow",
                 "profiles": [{"R": 24, "S": 4}],
             }
         )

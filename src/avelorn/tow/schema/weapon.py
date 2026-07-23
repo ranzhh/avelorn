@@ -25,11 +25,12 @@ class WeaponType(StrEnum):
     not carry the family as a field, and the individual weapon entries do not
     name it, so it is hand-authored here. A member joins, and a weapon is
     classified, only when a rule needs to gate on the family — the same
-    just-in-time discipline the rest of the vocabulary follows. Values are the
-    family as the rulebook names it.
+    just-in-time discipline the rest of the vocabulary follows. Values are slugs,
+    matching the id convention of rules and weapons, so a future rule specific to
+    a weapon family can key on the family as it keys on a slug.
     """
 
-    BOW = "Bow"
+    BOW = "bow"
 
 
 class WeaponStrength(BaseModel):

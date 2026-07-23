@@ -1,6 +1,6 @@
 # Source: https://tow.whfb.app/weapons-of-war/warbow
 id: warbow
 name: Warbow
-weapon_type: Bow
+weapon_type: bow
 profiles:
   - { R: 24, S: S, AP: '-', special_rules: [Volley Fire] }
