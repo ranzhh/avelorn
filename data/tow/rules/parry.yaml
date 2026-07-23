@@ -7,12 +7,16 @@ paragraphs:
     improves its armour value by 1, to a maximum of 3+.
 # Hand-authored, diffable against the paragraph above: +1 armour value (a
 # better save, so the save target lowers by one), capped at the best save of
-# 3+, while a hand weapon and a shield are the equipment in use. The printed
-# restriction to infantry is not expressed — the engine fields only infantry
-# in close combat today — nor is "whilst engaged in close combat", since the
-# armour fold runs only for a close-combat save, never a volley's.
+# 3+, while a hand weapon and a shield are the equipment in use. "Whilst engaged
+# in close combat" is the `combat` presence gate — a state of the model, not a
+# property of the attack (a shot at a unit locked in combat would still benefit,
+# RAW), which is why it is not a `target_of` gate like Lion Cloak's. The printed
+# restriction to infantry is not expressed — the engine fields only infantry in
+# close combat today.
 effects:
-  - requires:
+  - when:
+      combat: true
+    requires:
       wielding: Hand Weapon
       worn: Shield
     add:

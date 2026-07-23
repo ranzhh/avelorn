@@ -366,18 +366,19 @@ def test_shoot_instant_kills_match_the_spike_distribution() -> None:
 
 
 def test_engagement_conditions_build_the_shooting_facts() -> None:
-    """The shooting producer sets the shooting facts and settles the rest.
+    """The shooting producer sets the shooting facts and leaves the rest absent.
 
     A moved shooter at unknown range: ``moved`` true, ``at_long_range`` unknown
-    (no distance); the non-shooting facts are settled — no combat round, no
-    outnumbering, no charge — so a rule gating on them is honoured, never left
-    unfactored for want of a fact a volley cannot supply.
+    (no distance). The shooter is not engaged in close combat and is the
+    attacker, not a target, so ``combat`` and ``target_of`` are both absent
+    (the defender's incoming-attack facts are built separately for its save);
+    ``charge`` is None because a shooter never charged.
     """
     profile = REPO.weapons["longbow"].missile_profile
     assert profile is not None
     context = _engagement_conditions(profile, moved=True, distance=None, force_short_range=False)
     assert context.movement.moved is True
     assert context.shooting.at_long_range is None  # no distance -> unknown band
-    assert context.combat.first_round is False
-    assert context.combat.outnumbers is False
+    assert context.combat is None
+    assert context.target_of is None
     assert context.movement.charge is None

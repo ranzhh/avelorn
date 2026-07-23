@@ -256,29 +256,62 @@ class ShootingGate(Gate):
     at_long_range: bool | None = None
 
 
+class AttackKind(StrEnum):
+    """The kind of attack a model is the target of — a closed, append-only set.
+
+    The rulebook names attacks by kind, and rules gate on the *positive* kind
+    they care about: Lion Cloak on ``shooting``, Parry on being in close combat.
+    "Not shooting" is not "close combat" — a spell is neither — so the kind is
+    categorical, never a boolean. A member joins when a rule needs it (a spell
+    ``magic`` kind when a magic-attack path exists).
+    """
+
+    CLOSE_COMBAT = "close_combat"
+    SHOOTING = "shooting"
+
+
+class AttackGate(Gate):
+    """A gate on the attack a model is the target of.
+
+    The incoming attack, from the defender's side: its ``kind`` (Lion Cloak
+    fires only ``against ... shooting attacks``) and whether it is ``magical``
+    (Lion Cloak wants non-magical, the reason it does not help against a magical
+    bow). Orthogonal facts — a shooting or a close-combat attack may be magical.
+    """
+
+    kind: AttackKind | None = None
+    magical: bool | None = None
+
+
 class When(Gate):
     """An effect's gate: the facts that must hold for it to apply.
 
-    A typed tree, one field per subject — the combat, the model's movement, the
-    volley it fires — each carrying that subject's own facts, plus the
-    ``natural`` dice event. A rule reads as ``subject -> property (-> comparator)``:
-    ``{combat: {first_round: true}}``, ``{movement: {charge: {distance: {at_least: 3}}}}``.
-    A subject or property name outside these models is a data error at load
-    (``extra=forbid``) — the closed vocabulary the old flat Condition enum gave,
-    now structural. Every set fact is conjoined; without a ``when`` the modifier
-    applies to every attack.
+    A typed tree, one field per subject — the combat the model is engaged in,
+    its movement, the volley it fires, the attack it is the target of — each
+    carrying that subject's own facts, plus the ``natural`` dice event. A rule
+    reads as ``subject -> property (-> comparator)``:
+    ``{combat: {first_round: true}}``, ``{target_of: {kind: shooting}}``.
+
+    ``combat`` and ``target_of`` are presence entities: ``combat: true`` gates
+    on being engaged in a close combat (Parry's "whilst engaged in close
+    combat"), a nested gate on being engaged *and* a property (Elven Reflexes's
+    first round); ``target_of`` names the incoming attack. A subject or property
+    outside these models is a data error at load (``extra=forbid``) — the closed
+    vocabulary the flat Condition enum gave, now structural. Every set fact is
+    conjoined; without a ``when`` the modifier applies to every attack.
     """
 
-    combat: CombatGate | None = None
+    combat: bool | CombatGate | None = None
     movement: MovementGate | None = None
     shooting: ShootingGate | None = None
+    target_of: bool | AttackGate | None = None
     natural: NaturalRoll | None = None
 
     @model_validator(mode="after")
     def _gates_something(self) -> "When":
-        if not any((self.combat, self.movement, self.shooting, self.natural)):
+        if not any((self.combat, self.movement, self.shooting, self.target_of, self.natural)):
             raise ValueError(
-                "a when must gate on something: combat, movement, shooting, or natural"
+                "a when must gate on something: combat, movement, shooting, target_of, or natural"
             )
         return self
 

@@ -9,8 +9,10 @@ from avelorn.tow.contingent import Contingent, Movement
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.engine.attack import AttackProfile, RollState, resolve_attack
 from avelorn.tow.engine.rules import (
+    AttackFacts,
     ChargeEvent,
     CombatFacts,
+    EffectiveValue,
     GateContext,
     MovementFacts,
     ShootingFacts,
@@ -26,6 +28,7 @@ from avelorn.tow.engine.rules import (
 from avelorn.tow.phases.shooting import shoot_unit
 from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.rule import (
+    AttackKind,
     ChargeGate,
     EquipmentUse,
     ModifierEffect,
@@ -293,9 +296,13 @@ def test_scalar_fact_is_tri_state() -> None:
         when=When.model_validate({"combat": {"first_round": True}}),
         add={Quantity.COMBAT_RESULT: 1},
     )
-    assert _gate_applies(effect, GateContext()) is None  # context can't answer
+    # Combat present but the round unanswered: the property is what is unknown.
+    assert _gate_applies(effect, GateContext(combat=CombatFacts())) is None
     assert _gate_applies(effect, GateContext(combat=CombatFacts(first_round=True))) is True
     assert _gate_applies(effect, GateContext(combat=CombatFacts(first_round=False))) is False
+    # Combat absent is a known negative, not an unknown: the first-round-of-combat
+    # bonus definitely does not apply (there is no combat), honoured as a no-op.
+    assert _gate_applies(effect, GateContext()) is False
 
 
 def test_gate_conjunction_settles_on_a_known_false() -> None:
@@ -395,7 +402,10 @@ def test_effective_characteristic_honours_the_printed_maximum() -> None:
 def test_effective_characteristic_unknown_condition_is_unfactored() -> None:
     """A modifier gated on an unanswered fact does not apply, and is reported."""
     rule = _initiative_rule(when={"combat": {"first_round": True}})
-    result = effective_characteristic(4, Characteristic.INITIATIVE, [rule], GateContext())
+    # Combat present, its round unanswered: the gate cannot be evaluated.
+    result = effective_characteristic(
+        4, Characteristic.INITIATIVE, [rule], GateContext(combat=CombatFacts())
+    )
     assert result.value == 4
     assert result.factored == ()
     assert result.unfactored == ("Doctored (X)",)
@@ -571,12 +581,18 @@ def test_gate_and_context_mirror_each_other() -> None:
     """
     from dataclasses import fields
 
-    from avelorn.tow.schema.rule import CombatGate, MovementGate, ShootingGate
+    from avelorn.tow.schema.rule import (
+        AttackGate,
+        CombatGate,
+        MovementGate,
+        ShootingGate,
+    )
 
     pairs = [
         (CombatGate, CombatFacts),
         (MovementGate, MovementFacts),
         (ShootingGate, ShootingFacts),
+        (AttackGate, AttackFacts),
         (ChargeGate, ChargeEvent),
     ]
     for gate, facts in pairs:
@@ -620,7 +636,7 @@ def test_effective_combat_result_bonus_sums_signed_points_under_the_conditions()
     assert even.value == 0
     assert even.factored == ("Massed Infantry",)
 
-    unknown = effective_combat_result_bonus([rule], GateContext())
+    unknown = effective_combat_result_bonus([rule], GateContext(combat=CombatFacts()))
     assert unknown.value == 0
     assert unknown.unfactored == ("Massed Infantry",)
 
@@ -653,3 +669,41 @@ def test_effective_armour_value_betters_the_save_with_the_gear_it_requires() -> 
     unarmed = effective_armour_value(5, [rule], wielding=None, worn=["Shield"])
     assert unarmed.value == 5
     assert unarmed.unfactored == ("Parry",)  # the weapon in hand is unknown
+
+
+def test_lion_cloak_betters_the_save_only_against_non_magical_shooting() -> None:
+    """Lion Cloak reads the incoming attack, not the model's state.
+
+    The real rule from the data: +1 armour value (a save one better), floored
+    at the printed best of 2+, against a non-magical shooting attack. Against a
+    magical shot, or a close-combat attack, it is honoured as a no-op — the
+    gate reads the attack's kind and whether it is magical, so a magical bow
+    (the Bow of Avelorn) turns the cloak's protection off.
+    """
+    rule = REPO.rules["lion-cloak"]
+
+    def save(target_of: AttackFacts | None) -> EffectiveValue:
+        return effective_armour_value(
+            4, [rule], GateContext(target_of=target_of), wielding=None, worn=[]
+        )
+
+    plain_shot = save(AttackFacts(kind=AttackKind.SHOOTING, magical=False))
+    assert plain_shot.value == 3  # a 4+ save bettered to 3+
+    assert plain_shot.factored == ("Lion Cloak",)
+
+    capped = effective_armour_value(
+        2,
+        [rule],
+        GateContext(target_of=AttackFacts(kind=AttackKind.SHOOTING, magical=False)),
+        wielding=None,
+        worn=[],
+    )
+    assert capped.value == 2  # cannot improve past the best save of 2+
+
+    magical_shot = save(AttackFacts(kind=AttackKind.SHOOTING, magical=True))
+    assert magical_shot.value == 4  # honoured: a magical shot pierces the cloak
+    assert magical_shot.factored == ("Lion Cloak",)
+
+    melee = save(AttackFacts(kind=AttackKind.CLOSE_COMBAT, magical=False))
+    assert melee.value == 4  # honoured: not a shooting attack
+    assert melee.factored == ("Lion Cloak",)
