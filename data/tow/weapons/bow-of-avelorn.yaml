@@ -1,5 +1,6 @@
 # Source: https://tow.whfb.app/weapons-of-war/bow-of-avelorn
 id: bow-of-avelorn
 name: Bow of Avelorn
+weapon_type: bow
 profiles:
   - { R: 30, S: S, AP: '-', special_rules: [Armour Bane (1), Magical Attacks, Volley Fire] }

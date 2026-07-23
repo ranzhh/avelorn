@@ -9,7 +9,7 @@ from avelorn.core.loading import load_yaml
 from avelorn.tow.data import DATA_DIR, TOWRepository
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.unit import Unit
-from avelorn.tow.schema.weapon import Weapon, WeaponProfile, WeaponStrength
+from avelorn.tow.schema.weapon import Weapon, WeaponProfile, WeaponStrength, WeaponType
 
 REPO = TOWRepository()
 WEAPON_FILES = sorted(DATA_DIR.glob("tow/weapons/*.yaml"))
@@ -28,6 +28,26 @@ def test_weapon_yaml_is_valid(path: Path) -> None:
     """Every weapon YAML under data/ validates against the schema."""
     weapon = load_yaml(path, Weapon)
     assert weapon.id == path.stem
+
+
+def test_weapon_type_classifies_the_bows() -> None:
+    """Each bow declares the Bow family; a weapon no rule groups stays unclassified."""
+    for slug in ("longbow", "warbow", "bow-of-avelorn"):
+        assert REPO.weapons[slug].weapon_type is WeaponType.BOW
+    assert REPO.weapons["hand-weapon"].weapon_type is None  # no rule needs its family yet
+
+
+def test_weapon_type_rejects_a_family_outside_the_vocabulary() -> None:
+    """A weapon family outside the closed, append-only set is a data error."""
+    with pytest.raises(ValidationError):
+        Weapon.model_validate(
+            {
+                "id": "crossbow",
+                "name": "Crossbow",
+                "weapon_type": "crossbow",
+                "profiles": [{"R": 24, "S": 4}],
+            }
+        )
 
 
 @pytest.mark.parametrize("path", ARMOUR_FILES, ids=lambda p: p.stem)
