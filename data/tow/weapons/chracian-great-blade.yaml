@@ -1,0 +1,5 @@
+# Source: https://tow.whfb.app/weapons-of-war/chracian-great-blade
+id: chracian-great-blade
+name: Chracian Great Blade
+profiles:
+  - { R: Combat, S: S+2, AP: -3, special_rules: [Requires Two Hands, Strike Last] }
