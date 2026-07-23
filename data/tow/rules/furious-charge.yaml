@@ -15,8 +15,9 @@ paragraphs:
 # does not factor this.
 effects:
   - when:
-      charging:
-        distance:
-          at_least: 3
+      movement:
+        charge:
+          distance:
+            at_least: 3
     add:
       A: 1

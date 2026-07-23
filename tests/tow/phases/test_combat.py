@@ -5,6 +5,7 @@ import pytest
 from avelorn.core.dice import binomial_distribution, expected_value
 from avelorn.tow.contingent import Charge, ChargeArc, Contingent, Loadout
 from avelorn.tow.data import TOWRepository
+from avelorn.tow.engine.rules import CombatFacts, GateContext
 from avelorn.tow.phases.combat import (
     CombatPhase,
     FightResult,
@@ -16,7 +17,7 @@ from avelorn.tow.phases.combat import (
     strike_unit,
 )
 from avelorn.tow.schema.phase import Phase
-from avelorn.tow.schema.rule import Condition, ModifierEffect, Quantity, Rule
+from avelorn.tow.schema.rule import ModifierEffect, Quantity, Rule, When
 from avelorn.tow.schema.unit import Characteristic, Unit
 from avelorn.tow.schema.weapon import Weapon
 
@@ -575,7 +576,7 @@ def _reflexive(unit: Unit) -> Contingent:
         paragraphs=["…"],
         effects=[
             ModifierEffect(
-                when={Condition.FIRST_ROUND_OF_COMBAT: True},
+                when=When.model_validate({"combat": {"first_round": True}}),
                 add={Characteristic.INITIATIVE: 1},
                 maximum=10,
             )
@@ -655,7 +656,7 @@ def _plain_spearman() -> Contingent:
 
 def test_effective_initiative_strike_first_sets_ten() -> None:
     """Strike First replaces Initiative with 10, and the rule is factored."""
-    ei = effective_initiative(_carrying("strike-first"), 0, {})
+    ei = effective_initiative(_carrying("strike-first"), 0, GateContext())
     assert ei.value == 10
     assert "Strike First" in ei.factored
 
@@ -666,7 +667,7 @@ def test_effective_initiative_strike_last_sets_one_before_the_charge() -> None:
     The set lands first, so a +1 charge bonus lifts the 1 to 2 — not the base 4
     to 5. This is the "before any other modifiers are applied" clause.
     """
-    ei = effective_initiative(_carrying("strike-last"), 1, {})
+    ei = effective_initiative(_carrying("strike-last"), 1, GateContext())
     assert ei.value == 2
     assert "Strike Last" in ei.factored
 
@@ -677,7 +678,7 @@ def test_effective_initiative_strike_first_and_last_cancel() -> None:
     Both are still honoured (factored) — the printed "cancel one another out",
     modelled as two disagreeing sets washing out.
     """
-    ei = effective_initiative(_carrying("strike-first", "strike-last"), 0, {})
+    ei = effective_initiative(_carrying("strike-first", "strike-last"), 0, GateContext())
     assert ei.value == 4  # the printed elven-spearmen Initiative
     assert set(ei.factored) >= {"Strike First", "Strike Last"}
 
@@ -750,7 +751,7 @@ def test_effective_initiative_reads_a_strike_last_weapon() -> None:
     sets the wielder's Initiative to 1 — folded through in_hand_rules and
     factored, never left as an unfactored weapon note.
     """
-    ei = effective_initiative(_wielding_strike_last(), 0, {})
+    ei = effective_initiative(_wielding_strike_last(), 0, GateContext())
     assert ei.value == 1
     assert "Strike Last" in ei.factored
 
@@ -771,7 +772,7 @@ def test_fight_unit_strike_first_and_weapon_strike_last_cancel() -> None:
     The two sources fold together, so a Strike First model wielding a Strike
     Last weapon has neither apply — the base Initiative (4) stands, both factored.
     """
-    ei = effective_initiative(_wielding_strike_last("strike-first"), 0, {})
+    ei = effective_initiative(_wielding_strike_last("strike-first"), 0, GateContext())
     assert ei.value == 4
     assert set(ei.factored) >= {"Strike First", "Strike Last"}
 
@@ -924,11 +925,11 @@ def test_effective_weapon_skill_gains_one_in_the_first_round() -> None:
     base = spearmen.profiles[0][Characteristic.WEAPON_SKILL]
     assert base is not None
 
-    first = effective_weapon_skill(elves, {Condition.FIRST_ROUND_OF_COMBAT: True})
+    first = effective_weapon_skill(elves, GateContext(combat=CombatFacts(first_round=True)))
     assert first.value == base + 1
     assert "Martial Prowess" in first.factored
 
-    later = effective_weapon_skill(elves, {Condition.FIRST_ROUND_OF_COMBAT: False})
+    later = effective_weapon_skill(elves, GateContext(combat=CombatFacts(first_round=False)))
     assert later.value == base
     assert "Martial Prowess" in later.factored  # honoured by not applying
 
@@ -986,12 +987,13 @@ def test_fight_unknown_round_leaves_martial_prowess_noted() -> None:
 def _combat_chapter_rule(name: str, when: dict | None = None) -> Rule:
     # A Combat-phase chapter rule granting +1 To Hit: a double for any
     # rule the chapter puts in force, factored into every strike under it.
+    gate = When.model_validate(when) if when is not None else None
     return Rule(
         id="doctored-combat-rule",
         name=name,
         paragraphs=["…"],
         category=Phase.COMBAT,
-        effects=[ModifierEffect(when=when, add={Quantity.TO_HIT: 1})],
+        effects=[ModifierEffect(when=gate, add={Quantity.TO_HIT: 1})],
     )
 
 
@@ -1027,7 +1029,7 @@ def test_fight_leaves_an_unanswerable_combat_rule_noted() -> None:
     spearmen = REPO.units["elven-spearmen"]
     a, b = _fielded(spearmen, 5), _fielded(spearmen, 5)
     rule = _combat_chapter_rule(
-        "Doctored First-Round Rule", when={Condition.FIRST_ROUND_OF_COMBAT: True}
+        "Doctored First-Round Rule", when={"combat": {"first_round": True}}
     )
     plain = fight(a.wielding("Thrusting Spear"), b.wielding("Thrusting Spear"))
     noted = fight(

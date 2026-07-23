@@ -18,6 +18,7 @@ from avelorn.tow.engine.rules import (
     ChargeEvent,
     EffectiveValue,
     GateContext,
+    MovementFacts,
     effective_characteristic,
     effective_fighting_ranks,
     effective_supporting_ranks,
@@ -411,13 +412,14 @@ class Contingent:
         return min(max(ranks_behind_first, 0), profile.max_rank_bonus)
 
     def _charge_context(self) -> GateContext:
-        # The gate facts a charge-sensitive read is evaluated against: the
-        # charge event, present with its distance when this contingent charged,
-        # absent (known not-charging) otherwise. The charge is always known, so
-        # a rule gated on charging is never left unfactored for want of the fact.
+        # The movement facts a charge-sensitive read is evaluated against: the
+        # charge event (present with its distance when this contingent charged,
+        # absent otherwise) and whether it moved. Both are always known, so a
+        # rule gated on the model's movement is never left unfactored for want
+        # of the fact.
         charge = self.movement.charge
         event = ChargeEvent(distance=charge.full_inches) if charge is not None else None
-        return GateContext(charging=event)
+        return GateContext(movement=MovementFacts(moved=self.movement.moved, charge=event))
 
     def fighting_ranks(self) -> EffectiveValue:
         """How many ranks fight at full Attacks, and the rules behind the count.

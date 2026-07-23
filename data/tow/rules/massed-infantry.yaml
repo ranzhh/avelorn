@@ -12,6 +12,7 @@ paragraphs:
 # more units with this rule" is simply the side that carries it.
 effects:
   - when:
-      outnumbers: true
+      combat:
+        outnumbers: true
     add:
       combat-result: 1

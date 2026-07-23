@@ -9,6 +9,7 @@ paragraphs:
 # Hand-authored, diffable against the paragraphs above.
 effects:
   - when:
-      at_long_range: true
+      shooting:
+        at_long_range: true
     add:
       to-hit: -1

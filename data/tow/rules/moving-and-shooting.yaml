@@ -9,6 +9,7 @@ paragraphs:
 # Hand-authored, diffable against the paragraphs above.
 effects:
   - when:
-      moved: true
+      movement:
+        moved: true
     add:
       to-hit: -1

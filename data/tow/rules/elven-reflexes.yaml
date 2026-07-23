@@ -11,7 +11,8 @@ paragraphs:
 # "(but not its mount)" is not modelled: mounts do not exist in the engine yet.
 effects:
   - when:
-      first_round_of_combat: true
+      combat:
+        first_round: true
     add:
       I: 1
     maximum: 10

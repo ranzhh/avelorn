@@ -19,6 +19,7 @@ paragraphs:
 # rather than approximated with a kind bespoke to one rule.
 effects:
   - when:
-      first_round_of_combat: true
+      combat:
+        first_round: true
     add:
       WS: 1

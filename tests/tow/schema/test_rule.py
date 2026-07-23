@@ -7,7 +7,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from avelorn.core.loading import load_yaml
 from avelorn.tow.data import DATA_DIR
-from avelorn.tow.schema.rule import NATURAL, Condition, ModifierEffect, Quantity, Rule, RuleEffect
+from avelorn.tow.schema.rule import ModifierEffect, Quantity, Rule, RuleEffect
 from avelorn.tow.schema.unit import Characteristic
 
 _EFFECT = TypeAdapter(RuleEffect)
@@ -28,16 +28,17 @@ def test_rule_yaml_is_valid(path: Path) -> None:
     assert rule.paragraphs
 
 
-def test_when_parses_state_beside_event() -> None:
-    """One flat when: state conditions and the natural event, side by side."""
+def test_when_parses_a_subject_fact_beside_the_event() -> None:
+    """A when carries subject facts (movement) beside the natural die event."""
     effect = _EFFECT.validate_python(
         {
-            "when": {"moved": True, "natural": {"face": 6, "roll": "roll-to-wound"}},
+            "when": {"movement": {"moved": True}, "natural": {"face": 6, "roll": "roll-to-wound"}},
             "add": {"to-hit": -1},
         }
     )
     assert isinstance(effect, ModifierEffect)
-    assert effect.conditions == {Condition.MOVED: True}
+    assert effect.when is not None and effect.when.movement is not None
+    assert effect.when.movement.moved is True
     assert effect.natural is not None and effect.natural.face == 6
     assert effect.add == {"to-hit": -1}
 
@@ -46,7 +47,7 @@ def test_when_is_optional() -> None:
     """Without a when, the modifier applies to every attack."""
     effect = _EFFECT.validate_python({"add": {"armour-piercing": 1}})
     assert isinstance(effect, ModifierEffect)
-    assert effect.conditions == {}
+    assert effect.when is None
     assert effect.natural is None
 
 
@@ -94,27 +95,15 @@ def test_natural_requires_a_roll_fact() -> None:
         _EFFECT.validate_python({"when": {"natural": True}, "add": {"armour-piercing": 1}})
 
 
-def test_condition_requires_a_boolean_fact() -> None:
-    """A state condition takes true/false, not a die's face."""
-    with pytest.raises(ValidationError, match="true or false"):
+def test_a_boolean_subject_fact_rejects_a_die_face() -> None:
+    """A subject's boolean fact takes true/false, not a die's face."""
+    with pytest.raises(ValidationError, match="movement"):
         _EFFECT.validate_python(
             {
-                "when": {"moved": {"face": 6, "roll": "roll-to-wound"}},
+                "when": {"movement": {"moved": {"face": 6, "roll": "roll-to-wound"}}},
                 "add": {"to-hit": -1},
             }
         )
-
-
-def test_the_event_key_stays_outside_the_condition_vocabulary() -> None:
-    """The reserved "natural" / "charging" keys must never collide with a Condition.
-
-    Drift guard: all live in the same when mapping, so a Condition member named
-    "natural" or "charging" would shadow the reserved event key.
-    """
-    from avelorn.tow.schema.rule import CHARGING
-
-    reserved = {NATURAL, CHARGING}
-    assert reserved.isdisjoint({condition.value for condition in Condition})
 
 
 def test_add_rejects_an_unknown_quantity() -> None:
@@ -126,7 +115,7 @@ def test_add_rejects_an_unknown_quantity() -> None:
 def test_an_effect_needs_an_operation() -> None:
     """A modifier without an add or set is meaningless."""
     with pytest.raises(ValidationError, match="operation"):
-        _EFFECT.validate_python({"when": {"moved": True}})
+        _EFFECT.validate_python({"when": {"movement": {"moved": True}}})
 
 
 def test_an_operation_must_move_something() -> None:
@@ -211,7 +200,7 @@ def test_condition_outside_the_vocabulary_rejected() -> None:
 
 def test_condition_must_ask_something() -> None:
     """An empty when is meaningless."""
-    with pytest.raises(ValidationError, match="at least 1"):
+    with pytest.raises(ValidationError, match="gate on something"):
         _EFFECT.validate_python({"when": {}, "add": {"to-hit": -1}})
 
 
@@ -273,38 +262,49 @@ def test_ops_speak_to_one_seam() -> None:
 
 def test_a_rank_quantity_is_its_own_seam() -> None:
     """A formation quantity is a valid, single-seam operation (Press of Battle's shape)."""
-    effect = _EFFECT.validate_python({"when": {"charging": False}, "add": {"fighting-ranks": 1}})
-    assert isinstance(effect, ModifierEffect)
-    assert effect.add == {"fighting-ranks": 1}
-    assert effect.conditions == {}  # charging is an event, not a flat condition
-    assert effect.charge is False
-
-
-def test_charging_gate_parses_a_distance_predicate() -> None:
-    """The charge event is a path: charging -> distance -> comparator (Furious Charge)."""
     effect = _EFFECT.validate_python(
-        {"when": {"charging": {"distance": {"at_least": 3}}}, "add": {"A": 1}}
+        {"when": {"movement": {"charge": False}}, "add": {"fighting-ranks": 1}}
     )
     assert isinstance(effect, ModifierEffect)
-    assert effect.conditions == {}
-    gate = effect.charge
+    assert effect.add == {"fighting-ranks": 1}
+    assert effect.when is not None and effect.when.movement is not None
+    assert effect.when.movement.charge is False
+
+
+def test_charge_gate_parses_a_distance_predicate() -> None:
+    """The charge is a path: movement -> charge -> distance -> comparator (Furious Charge)."""
+    effect = _EFFECT.validate_python(
+        {"when": {"movement": {"charge": {"distance": {"at_least": 3}}}}, "add": {"A": 1}}
+    )
+    assert isinstance(effect, ModifierEffect)
+    assert effect.when is not None and effect.when.movement is not None
+    gate = effect.when.movement.charge
     assert gate is not None and not isinstance(gate, bool)
     assert gate.distance is not None and gate.distance.at_least == 3
 
 
-def test_charging_gate_rejects_an_unknown_property() -> None:
+def test_charge_gate_rejects_an_unknown_property() -> None:
     """A charge property outside the model is a data error at load (path validation)."""
     with pytest.raises(ValidationError, match="speed"):
         _EFFECT.validate_python(
-            {"when": {"charging": {"speed": {"at_least": 3}}}, "add": {"A": 1}}
+            {"when": {"movement": {"charge": {"speed": {"at_least": 3}}}}, "add": {"A": 1}}
         )
+
+
+def test_unknown_subject_is_rejected() -> None:
+    """A subject outside the When vocabulary is a data error at load."""
+    with pytest.raises(ValidationError, match="when"):
+        _EFFECT.validate_python({"when": {"weather": {"raining": True}}, "add": {"to-hit": -1}})
 
 
 def test_comparison_names_exactly_one_comparator() -> None:
     """A comparison leaf tests one thing; two comparators is a data error."""
     with pytest.raises(ValidationError, match="exactly one"):
         _EFFECT.validate_python(
-            {"when": {"charging": {"distance": {"at_least": 3, "at_most": 6}}}, "add": {"A": 1}}
+            {
+                "when": {"movement": {"charge": {"distance": {"at_least": 3, "at_most": 6}}}},
+                "add": {"A": 1},
+            }
         )
 
 
