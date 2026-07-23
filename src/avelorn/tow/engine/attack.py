@@ -425,6 +425,24 @@ class Transform:
 
 
 @dataclass(frozen=True)
+class Reroll:
+    """Re-roll one of an attack's dice, once, per the printed re-roll rules.
+
+    The declarative form of a re-roll grant the walk interprets:
+    ``stage`` is the roll re-rolled, and ``on_natural`` restricts it to the
+    dice showing that natural face (Ithilmar Weapons re-rolls rolls To Hit
+    of a natural 1) — None re-rolls every failing die at the stage. Only a
+    failing die is re-rolled (a re-roll of a success is never to a model's
+    benefit and the rulebook grants none), and a die re-rolled is never
+    re-rolled again ("no single dice can be re-rolled more than once"), so
+    the fresh die's own natural 1 stands as a miss.
+    """
+
+    stage: Stage
+    on_natural: int | None = None
+
+
+@dataclass(frozen=True)
 class AttackResolution:
     """Exact outcome-class probabilities of a single attack.
 
@@ -462,20 +480,23 @@ def resolve_attack(
     profile: AttackProfile,
     modifiers: Sequence[Modifier] = (),
     transforms: Sequence[Transform] = (),
+    rerolls: Sequence[Reroll] = (),
 ) -> AttackResolution:
     """Resolve one attack by walking its dice exactly.
 
     ``modifiers`` are the compiled records of printed conditional
-    modifiers; ``transforms`` the bespoke code hooks. How each die
-    resolves is the profile's own rolls' knowledge — a shooting attack
-    confirms 7+ To Hit, a close-combat one never does — fixed where the
-    profile was built (:meth:`AttackProfile.shooting` / ``melee``).
+    modifiers; ``transforms`` the bespoke code hooks; ``rerolls`` the
+    re-roll grants that re-roll a failing die (Ithilmar Weapons re-rolls
+    rolls To Hit of a natural 1). How each die resolves is the profile's
+    own rolls' knowledge — a shooting attack confirms 7+ To Hit, a
+    close-combat one never does — fixed where the profile was built
+    (:meth:`AttackProfile.shooting` / ``melee``).
 
     Returns:
         The exact per-attack outcome-class probabilities.
     """
     outcomes: dict[Outcome, Fraction] = {}
-    for p_path, outcome in walk(profile, modifiers, transforms):
+    for p_path, outcome in walk(profile, modifiers, transforms, rerolls):
         outcomes[outcome] = outcomes.get(outcome, Fraction(0)) + p_path
     before, _ = _plan(modifiers)
     effective = _before_roll(Stage.ROLL_TO_HIT, profile, before, _by_stage(transforms))
@@ -493,12 +514,14 @@ def walk(
     profile: AttackProfile,
     modifiers: Sequence[Modifier] = (),
     transforms: Sequence[Transform] = (),
+    rerolls: Sequence[Reroll] = (),
 ) -> Iterator[tuple[Fraction, Outcome]]:
     """Enumerate every dice path of one attack, applying the rules' changes.
 
     At every stage: untriggered modifiers landing there move its target,
-    bespoke hooks run, the die rolls, and a success fires the modifiers
-    triggered by its natural face — shaping the rolls still to come.
+    bespoke hooks run, the die rolls (its failing dice re-rolled where a
+    grant lands), and a success fires the modifiers triggered by its
+    natural face — shaping the rolls still to come.
 
     Yields:
         ``(probability, outcome)`` per path; the probabilities of all
@@ -506,39 +529,70 @@ def walk(
     """
     before, fired = _plan(modifiers)
     hooked = _by_stage(transforms)
+    rerolled = _rerolls_by_stage(rerolls)
 
     def before_roll(stage: Stage, prof: AttackProfile) -> AttackProfile:
         return _before_roll(stage, prof, before, hooked)
+
+    def branches(stage: Stage, prof: AttackProfile) -> Iterator[tuple[Fraction, int, bool]]:
+        return _branches(prof.roll(stage), rerolled[stage])
 
     def on_success(stage: Stage, face: int, prof: AttackProfile) -> AttackProfile:
         shown = [m for m in fired[stage] if m.trigger is not None and m.trigger.face == face]
         return _on_success(hooked[stage], face, _moved(prof, shown))
 
     hit_profile = before_roll(Stage.ROLL_TO_HIT, profile)
-    for p_hit, hit_face, hit in hit_profile.roll(Stage.ROLL_TO_HIT).branches():
+    for p_hit, hit_face, hit in branches(Stage.ROLL_TO_HIT, hit_profile):
         if not hit:
             yield p_hit, Outcome.NONE
             continue
         wound_profile = before_roll(
             Stage.ROLL_TO_WOUND, on_success(Stage.ROLL_TO_HIT, hit_face, hit_profile)
         )
-        for p_wound, wound_face, wounded in wound_profile.roll(Stage.ROLL_TO_WOUND).branches():
+        for p_wound, wound_face, wounded in branches(Stage.ROLL_TO_WOUND, wound_profile):
             if not wounded:
                 yield p_hit * p_wound, Outcome.NONE
                 continue
             save_profile = before_roll(
                 Stage.MAKE_ARMOUR_SAVES, on_success(Stage.ROLL_TO_WOUND, wound_face, wound_profile)
             )
-            for p_save, _, saved in save_profile.roll(Stage.MAKE_ARMOUR_SAVES).branches():
+            for p_save, _, saved in branches(Stage.MAKE_ARMOUR_SAVES, save_profile):
                 if saved:
                     yield p_hit * p_wound * p_save, Outcome.NONE
                     continue
                 ward_profile = before_roll(Stage.WARD_SAVES, save_profile)
-                for p_ward, _, warded in ward_profile.roll(Stage.WARD_SAVES).branches():
+                for p_ward, _, warded in branches(Stage.WARD_SAVES, ward_profile):
                     yield (
                         p_hit * p_wound * p_save * p_ward,
                         Outcome.NONE if warded else ward_profile.unsaved_outcome,
                     )
+
+
+def _rerolls_by_stage(rerolls: Sequence[Reroll]) -> dict[Stage, list[Reroll]]:
+    by_stage: dict[Stage, list[Reroll]] = {stage: [] for stage in Stage}
+    for reroll in rerolls:
+        by_stage[reroll.stage].append(reroll)
+    return by_stage
+
+
+def _branches(roll: AttackRoll, rerolls: Sequence[Reroll]) -> Iterator[tuple[Fraction, int, bool]]:
+    # Enumerate a roll's die, re-rolling each failing branch a grant covers:
+    # its mass is spread over a fresh roll of the same die, whose branches
+    # stand as thrown (a re-rolled die is never re-rolled again, so its own
+    # natural 1 stays a miss). A success, or a face no grant names, stands.
+    for probability, face, success in roll.branches():
+        if success or not _rerolls_face(rerolls, face):
+            yield probability, face, success
+            continue
+        for p_again, face_again, success_again in roll.branches():
+            yield probability * p_again, face_again, success_again
+
+
+def _rerolls_face(rerolls: Sequence[Reroll], face: int) -> bool:
+    # A grant re-rolls this failing face if it names it (or names no face,
+    # re-rolling every failing die at the stage). Face 0 is a rollless
+    # target (a RollState), which shows no die to re-roll.
+    return face != 0 and any(r.on_natural in (None, face) for r in rerolls)
 
 
 def _plan(

@@ -316,7 +316,45 @@ class When(Gate):
         return self
 
 
-class ModifierEffect(BaseModel):
+class GatedEffect(BaseModel):
+    """The gating an effect carries whatever its consequence: when and requires.
+
+    A modifier and a re-roll grant apply under the same two gates — the
+    engagement ``when`` (a typed state tree, its ``natural`` die event apart)
+    and the equipment a model must have in use (``requires``) — evaluated the
+    same way wherever a seam consumes the effect. The consequence (a modifier's
+    operation, a re-roll's stage) is the subclass's own; the gate is shared here
+    so a new effect kind is gate-able and equipment-gate-able for free.
+    """
+
+    # populate_by_name so a subclass's aliased operation (ModifierEffect's
+    # ``set``) is reachable in Python as the non-shadowing attribute.
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    when: When | None = None
+    requires: Annotated[dict[EquipmentUse, str], Field(min_length=1)] | None = None
+
+    @property
+    def natural(self) -> NaturalRoll | None:
+        """The die event the when names, if any.
+
+        Returns:
+            The natural roll, or None for a state-only when.
+        """
+        return self.when.natural if self.when is not None else None
+
+    @property
+    def requirements(self) -> dict[EquipmentUse, str]:
+        """The equipment the effect needs in use, by how it is used.
+
+        Returns:
+            The required equipment name per use, empty when the effect names
+            none (it applies whatever the loadout).
+        """
+        return dict(self.requires or {})
+
+
+class ModifierEffect(GatedEffect):
     """One printed conditional modifier, shaped as the sentence prints it.
 
     "*If* a model rolls a natural 6 when making a roll To Wound, the
@@ -362,13 +400,6 @@ class ModifierEffect(BaseModel):
     on an armour value.
     """
 
-    # populate_by_name so the `set` operation is reachable in Python as the
-    # non-shadowing attribute ``set_`` (a bare ``set`` field would shadow the
-    # builtin wherever a ``set[...]`` annotation is evaluated in this class).
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
-
-    when: When | None = None
-    requires: Annotated[dict[EquipmentUse, str], Field(min_length=1)] | None = None
     add: (
         Annotated[dict[Quantity | Characteristic, int | Literal["X"]], Field(min_length=1)] | None
     ) = None
@@ -437,44 +468,43 @@ class ModifierEffect(BaseModel):
             )
         return self
 
-    @property
-    def natural(self) -> NaturalRoll | None:
-        """The die event the when names, if any.
 
-        Returns:
-            The natural roll, or None for a state-only when.
-        """
-        return self.when.natural if self.when is not None else None
+class RerollEffect(GatedEffect):
+    """Re-roll a test, under the printed re-roll rules.
 
-    @property
-    def requirements(self) -> dict[EquipmentUse, str]:
-        """The equipment the effect needs in use, by how it is used.
+    The re-roll operation, named by its own key — ``reroll: <stage>``, the
+    self-naming peer of ``add`` and ``set`` (spelled without a hyphen so it is
+    a plain field, no alias). The operation *is* the key; its value is the test
+    re-rolled, and the seam owning that stage consumes the grant directly (an
+    attack roll by the dice walk, a panic test by the fold). A re-roll happens
+    at most once whatever its source ("no single dice can be re-rolled more than
+    once, regardless of the source"), and a multi-dice roll re-rolls all its
+    dice. There is no discriminator field: an effect that carries ``reroll`` is
+    one, exactly as one carrying ``add`` is a modifier (both models forbid the
+    other's keys).
 
-        Returns:
-            The required equipment name per use, empty when the effect names
-            none (it applies whatever the loadout).
-        """
-        return dict(self.requires or {})
-
-
-class RerollEffect(BaseModel):
-    """Re-roll a failed test, under the printed re-roll rules.
-
-    A re-roll happens at most once whatever its source ("no single dice
-    can be re-rolled more than once, regardless of the source"), and a
-    multi-dice roll re-rolls all its dice. Unlike a modifier, the
-    ``stage`` here is the payload — *which* test is re-rolled — and the
-    seam owning that stage consumes the grant directly. ``causes``
-    restricts the grant to specific panic causes (Valour of Ages
-    re-rolls only heavy casualties and fled through); empty means any
-    cause.
+    A grant is restricted to the part of the roll it names, and which
+    restriction is legal depends on the stage's seam. ``causes`` restricts
+    a panic-test re-roll to specific panic causes (Valour of Ages re-rolls
+    only heavy casualties and fled through); empty means any cause.
+    ``on_natural`` restricts an attack-roll re-roll to the dice showing that
+    natural face (Ithilmar Weapons re-rolls rolls To Hit of a natural 1);
+    None re-rolls every failing die at the stage. The two restrictions are
+    mutually exclusive — a panic test shows no natural face, an attack roll
+    has no panic cause — so each belongs to its own seam's stages.
     """
 
-    model_config = ConfigDict(extra="forbid")
-
-    kind: Literal["re-roll"]
-    stage: Stage
+    reroll: Stage
     causes: list[PanicCause] = Field(default_factory=list)
+    on_natural: int | None = Field(default=None, ge=1, le=6)
+
+    @model_validator(mode="after")
+    def _restriction_matches_the_stage(self) -> "RerollEffect":
+        if self.on_natural is not None and self.reroll not in ATTACK_ROLLS:
+            raise ValueError(f"on_natural restricts an attack roll, not {self.reroll}")
+        if self.causes and self.reroll in ATTACK_ROLLS:
+            raise ValueError(f"causes restricts a panic test, not the attack roll {self.reroll}")
+        return self
 
 
 RuleEffect = ModifierEffect | RerollEffect

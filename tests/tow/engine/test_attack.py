@@ -13,6 +13,7 @@ from avelorn.tow.engine.attack import (
     AttackProfile,
     Modifier,
     Outcome,
+    Reroll,
     RollState,
     RollTarget,
     Transform,
@@ -132,6 +133,76 @@ def test_melee_walk_is_exhaustive(hit_target: int) -> None:
         hit_target=hit_target, wound_target=4, save_target=5, ward_target=6
     )
     assert sum(p for p, _ in walk(profile)) == Fraction(1)
+
+
+# --- Re-rolls: a failing die re-rolled once, natural-face restricted. ---
+
+
+def _hit_only(hit_target: int) -> AttackProfile:
+    # An attack that resolves on the To Hit roll alone: wound automatic, no save.
+    return AttackProfile.melee(
+        hit_target=hit_target,
+        wound_target=RollState.AUTOMATIC,
+        save_target=RollState.IMPOSSIBLE,
+        ward_target=RollState.IMPOSSIBLE,
+    )
+
+
+def test_reroll_of_natural_ones_re_rolls_only_the_ones() -> None:
+    """Re-rolling To Hit natural 1s spreads the 1's mass over a fresh roll.
+
+    Hitting on 4+ is 1/2; the natural 1 (a miss) is re-rolled once and hits
+    again on 4+, so the chance rises by 1/6 * 1/2 to 7/12 — the natural 2 and 3,
+    misses that are not 1s, are left to stand (this is not "re-roll all misses").
+    """
+    profile = _hit_only(4)
+    reroll = [Reroll(stage=Stage.ROLL_TO_HIT, on_natural=1)]
+    assert resolve_attack(profile).p_unsaved == Fraction(1, 2)
+    assert resolve_attack(profile, rerolls=reroll).p_unsaved == Fraction(7, 12)
+
+
+def test_a_re_rolled_die_is_never_re_rolled_again() -> None:
+    """A re-rolled natural 1 stands as a miss — no die is re-rolled twice.
+
+    Hitting on 2+ is 5/6; re-rolling the natural 1 adds 1/6 * 5/6, and the
+    fresh die's own natural 1 (1/36) stays a miss rather than re-rolling
+    forever — the chance is 35/36, not 1.
+    """
+    assert resolve_attack(_hit_only(2), rerolls=[Reroll(Stage.ROLL_TO_HIT, 1)]).p_unsaved == (
+        Fraction(35, 36)
+    )
+
+
+def test_unrestricted_reroll_re_rolls_every_miss() -> None:
+    """A grant naming no face re-rolls every failing die at the stage.
+
+    Hitting on 4+ is 1/2; re-rolling all three misses (1, 2, 3) once gives
+    1/2 + 1/2 * 1/2 = 3/4.
+    """
+    assert resolve_attack(_hit_only(4), rerolls=[Reroll(Stage.ROLL_TO_HIT)]).p_unsaved == (
+        Fraction(3, 4)
+    )
+
+
+def test_reroll_leaves_a_successful_die_alone() -> None:
+    """Only failing dice are re-rolled; naming a hitting face changes nothing.
+
+    On a 4+ target the natural 6 hits, so a (contrived) re-roll of natural 6s
+    finds no failing die to re-roll — the chance is the unmodified 1/2.
+    """
+    assert resolve_attack(_hit_only(4), rerolls=[Reroll(Stage.ROLL_TO_HIT, 6)]).p_unsaved == (
+        Fraction(1, 2)
+    )
+
+
+@pytest.mark.parametrize("hit_target", range(2, 7))
+def test_reroll_walk_is_exhaustive(hit_target: int) -> None:
+    """With a re-roll in play the walk still enumerates every path to mass 1."""
+    profile = AttackProfile.melee(
+        hit_target=hit_target, wound_target=4, save_target=5, ward_target=6
+    )
+    reroll = [Reroll(stage=Stage.ROLL_TO_HIT, on_natural=1)]
+    assert sum(p for p, _ in walk(profile, rerolls=reroll)) == Fraction(1)
 
 
 # --- Transform hooks, exercised by test doubles (no shipped rules). ---

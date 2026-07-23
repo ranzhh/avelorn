@@ -524,7 +524,7 @@ def _reroll_grant(loadout: Loadout, cause: PanicCause) -> str | None:
         for effect in rule.effects:
             if (
                 isinstance(effect, RerollEffect)
-                and effect.stage is Stage.MAKE_PANIC_TESTS
+                and effect.reroll is Stage.MAKE_PANIC_TESTS
                 and (not effect.causes or cause in effect.causes)
             ):
                 logger.debug("panic re-roll granted by %s", rule.name)

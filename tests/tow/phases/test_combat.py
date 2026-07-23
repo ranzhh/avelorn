@@ -143,6 +143,28 @@ def test_fight_parry_is_claimed_when_both_sides_use_hand_weapon_and_shield() -> 
     assert not any("Parry" in note for note in result.notes)
 
 
+def test_strike_unit_ithilmar_weapons_re_rolls_to_hit_ones() -> None:
+    """Ithilmar Weapons re-rolls the striker's To Hit natural 1s, and is claimed.
+
+    Sisters of Avelorn fighting with a hand weapon re-roll their To Hit 1s, so
+    more blows land — the same matchup without the rule lands fewer, at the same
+    reported To Hit target (a re-roll shifts the probability, not the target).
+    Because it is factored, Ithilmar Weapons leaves no "not factored" note.
+    """
+    sisters = REPO.units["sisters-of-avelorn"]
+    without = sisters.model_copy(
+        update={"special_rules": [r for r in sisters.special_rules if r != "Ithilmar Weapons"]}
+    )
+    target = _fielded(REPO.units["elven-spearmen"], 10)
+
+    with_reroll = strike_unit(_fielded(sisters, 5).wielding("Hand Weapon"), target)
+    without_reroll = strike_unit(_fielded(without, 5).wielding("Hand Weapon"), target)
+
+    assert with_reroll.p_unsaved > without_reroll.p_unsaved  # re-rolling 1s lands more blows
+    assert with_reroll.hit_target == without_reroll.hit_target  # the target itself is unchanged
+    assert not any("Ithilmar Weapons" in note for note in with_reroll.notes)  # factored, claimed
+
+
 def test_strike_unit_notes_the_troop_types_conferred_rules() -> None:
     """Rules a troop type confers surface as unfactored, owned by the type.
 

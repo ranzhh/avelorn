@@ -11,6 +11,5 @@ paragraphs:
     by a friendly unit.
 # Hand-authored, diffable against the paragraphs above.
 effects:
-  - kind: re-roll
-    stage: make-panic-tests
+  - reroll: make-panic-tests
     causes: [heavy-casualties, fled-through]

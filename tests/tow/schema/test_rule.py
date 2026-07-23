@@ -7,7 +7,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from avelorn.core.loading import load_yaml
 from avelorn.tow.data import DATA_DIR
-from avelorn.tow.schema.rule import ModifierEffect, Quantity, Rule, RuleEffect
+from avelorn.tow.schema.rule import ModifierEffect, Quantity, RerollEffect, Rule, RuleEffect
 from avelorn.tow.schema.unit import Characteristic
 
 _EFFECT = TypeAdapter(RuleEffect)
@@ -220,24 +220,67 @@ def test_parameter_reference_requires_a_placeholder_name() -> None:
 
 
 def test_reroll_effect_parses_with_causes() -> None:
-    """The re-roll kind carries its seam and the printed cause filter."""
+    """The re-roll operation names its seam by key and carries the cause filter."""
     effect = _EFFECT.validate_python(
-        {
-            "kind": "re-roll",
-            "stage": "make-panic-tests",
-            "causes": ["heavy-casualties", "fled-through"],
-        }
+        {"reroll": "make-panic-tests", "causes": ["heavy-casualties", "fled-through"]}
     )
-    assert effect.stage == "make-panic-tests"
+    assert isinstance(effect, RerollEffect)
+    assert effect.reroll == "make-panic-tests"
     assert len(effect.causes) == 2
 
 
 def test_reroll_effect_rejects_unknown_cause() -> None:
     """A cause outside the printed taxonomy is a data error."""
     with pytest.raises(ValidationError, match="causes"):
-        _EFFECT.validate_python(
-            {"kind": "re-roll", "stage": "make-panic-tests", "causes": ["bad-day"]}
-        )
+        _EFFECT.validate_python({"reroll": "make-panic-tests", "causes": ["bad-day"]})
+
+
+def test_reroll_is_its_own_operation_key_beside_add_and_set() -> None:
+    """``re-roll`` discriminates the effect by key, like ``add`` — no ``kind``.
+
+    An effect carrying ``re-roll`` is a re-roll; one carrying ``add`` a modifier.
+    The retired ``kind`` discriminator, and a stray ``add`` on a re-roll, are
+    both forbidden extras — the two shapes reject each other's keys.
+    """
+    assert isinstance(_EFFECT.validate_python({"reroll": "roll-to-hit"}), RerollEffect)
+    with pytest.raises(ValidationError):  # the old kind discriminator is gone
+        _EFFECT.validate_python({"kind": "reroll", "reroll": "roll-to-hit"})
+    with pytest.raises(ValidationError):  # a re-roll is not a modifier
+        _EFFECT.validate_python({"reroll": "roll-to-hit", "add": {"to-hit": -1}})
+
+
+def test_reroll_effect_parses_a_natural_face_on_an_attack_roll() -> None:
+    """An attack-roll re-roll carries the natural face it re-rolls, and its gate."""
+    effect = _EFFECT.validate_python(
+        {
+            "reroll": "roll-to-hit",
+            "on_natural": 1,
+            "when": {"combat": True},
+            "requires": {"wielding": "Hand Weapon"},
+        }
+    )
+    assert isinstance(effect, RerollEffect)
+    assert effect.reroll == "roll-to-hit"
+    assert effect.on_natural == 1
+    assert effect.requirements == {"wielding": "Hand Weapon"}
+
+
+def test_reroll_effect_rejects_a_natural_face_on_a_panic_test() -> None:
+    """on_natural restricts an attack roll; a panic test shows no natural face."""
+    with pytest.raises(ValidationError, match="on_natural"):
+        _EFFECT.validate_python({"reroll": "make-panic-tests", "on_natural": 1})
+
+
+def test_reroll_effect_rejects_a_cause_on_an_attack_roll() -> None:
+    """Causes restricts a panic test; an attack roll has no panic cause."""
+    with pytest.raises(ValidationError, match="causes"):
+        _EFFECT.validate_python({"reroll": "roll-to-hit", "causes": ["heavy-casualties"]})
+
+
+def test_reroll_effect_rejects_a_face_out_of_range() -> None:
+    """A natural face is a die face: 1 to 6."""
+    with pytest.raises(ValidationError):
+        _EFFECT.validate_python({"reroll": "roll-to-hit", "on_natural": 7})
 
 
 def test_ops_speak_to_one_seam() -> None:
