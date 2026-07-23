@@ -14,7 +14,6 @@ from avelorn.tow.engine.rules import (
     GateContext,
     MovementFacts,
     ShootingFacts,
-    _bool_fact,
     _gate_applies,
     compile_rules,
     effective_armour_value,
@@ -284,16 +283,19 @@ def test_staying_still_volley_fires_while_the_to_hit_is_a_wash() -> None:
     assert stay.expected_casualties > move_in.expected_casualties
 
 
-def test_bool_fact_is_tri_state() -> None:
-    """A boolean fact: asked but unanswerable is unknown (None); else it must match.
+def test_scalar_fact_is_tri_state() -> None:
+    """A boolean fact walked: unanswerable is unknown (None); else it must match.
 
-    A fact the rule does not ask (required None) is no constraint; asked but the
-    context cannot answer (actual None) is unevaluatable, never silently ignored.
+    A fact the context cannot answer leaves the rule unevaluatable, never
+    silently ignored; a fact the gate does not ask is no constraint.
     """
-    assert _bool_fact(True, None) is None  # asked, context can't answer
-    assert _bool_fact(True, True) is True
-    assert _bool_fact(True, False) is False
-    assert _bool_fact(None, False) is True  # not asked -> no constraint
+    effect = ModifierEffect(
+        when=When.model_validate({"combat": {"first_round": True}}),
+        add={Quantity.COMBAT_RESULT: 1},
+    )
+    assert _gate_applies(effect, GateContext()) is None  # context can't answer
+    assert _gate_applies(effect, GateContext(combat=CombatFacts(first_round=True))) is True
+    assert _gate_applies(effect, GateContext(combat=CombatFacts(first_round=False))) is False
 
 
 def test_gate_conjunction_settles_on_a_known_false() -> None:
@@ -581,6 +583,20 @@ def test_gate_and_context_mirror_each_other() -> None:
         gate_properties = set(gate.model_fields)
         context_fields = {f.name for f in fields(facts)}
         assert gate_properties <= context_fields, gate.__name__
+
+
+def test_a_gate_that_cannot_hook_the_context_raises() -> None:
+    """A gate node with no matching context fact is a loud drift error.
+
+    The generic walk requires every constrained gate field to name a context
+    fact; a mismatch (the gate and context shapes drifted) raises rather than
+    silently passing — the snag the drift guard above is meant to prevent.
+    """
+    from avelorn.tow.engine.rules import _walk
+    from avelorn.tow.schema.rule import MovementGate
+
+    with pytest.raises(TypeError, match="no matching fact"):
+        _walk(MovementGate(moved=True), CombatFacts())
 
 
 def test_effective_combat_result_bonus_sums_signed_points_under_the_conditions() -> None:

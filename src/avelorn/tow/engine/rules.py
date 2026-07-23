@@ -28,15 +28,19 @@ import re
 from collections.abc import Collection, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field
-from typing import assert_never
+from typing import assert_never, get_args
+
+from pydantic.fields import FieldInfo
 
 from avelorn.core.registry import Registry, UnknownNameError
 from avelorn.tow.engine.attack import Modifier
 from avelorn.tow.schema.rule import (
     PARAMETER_SUFFIX,
-    ChargeGate,
+    Comparison,
     EquipmentUse,
+    Gate,
     ModifierEffect,
+    NaturalRoll,
     Quantity,
     Rule,
     RuleEffect,
@@ -522,60 +526,68 @@ def _effective_quantity(
 
 
 def _gate_applies(effect: ModifierEffect, context: GateContext) -> bool | None:
-    # Walk the effect's When gate against the context, subject by subject, and
+    # A rule's gate holds iff its When tree does, walked against the context.
+    return True if effect.when is None else _walk(effect.when, context)
+
+
+def _walk(gate: Gate, facts: object) -> bool | None:
+    # Walk a gate model against the mirroring facts object, field by field, and
     # conjoin. None = unknown (a state fact the context could not answer) —
     # reported unfactored by the caller; False = a fact known not to hold —
-    # honoured as a no-op. A known-False anywhere settles False even amid
-    # unknowns. The natural die event is not a pre-roll state fact and is not
-    # weighed here — the dice walk consumes it during resolution.
-    when = effect.when
-    if when is None:
-        return True
-    checks: list[bool | None] = []
-    if when.combat is not None:
-        checks.append(_bool_fact(when.combat.first_round, context.combat.first_round))
-        checks.append(_bool_fact(when.combat.outnumbers, context.combat.outnumbers))
-    if when.movement is not None:
-        checks.append(_bool_fact(when.movement.moved, context.movement.moved))
-        checks.append(_charge_applies(when.movement.charge, context.movement.charge))
-    if when.shooting is not None:
-        checks.append(_bool_fact(when.shooting.at_long_range, context.shooting.at_long_range))
-    if any(check is False for check in checks):
-        return False
-    if any(check is None for check in checks):
-        return None
-    return True
-
-
-def _bool_fact(required: bool | None, actual: bool | None) -> bool | None:
-    # One boolean state fact. Not asked (required None) -> no constraint; asked
-    # but the context cannot answer (actual None) -> unknown; otherwise it holds
-    # iff the fact matches what the rule requires.
-    if required is None:
-        return True
-    if actual is None:
-        return None
-    return actual == required
-
-
-def _charge_applies(gate: "bool | ChargeGate | None", event: ChargeEvent | None) -> bool | None:
-    # The charge is always known (a model's movement is settled this turn), so
-    # this returns a definite bool, never unknown. A bare bool gates on presence;
-    # a ChargeGate requires the charge and tests each named property against the
-    # same-named field of the event.
-    if gate is None:
-        return True
-    if isinstance(gate, bool):
-        return (event is not None) == gate
-    if event is None:
-        return False  # a property gate requires a charge; the model made none
-    for name in type(gate).model_fields:
-        comparison = getattr(gate, name)
-        if comparison is None:
+    # honoured as a no-op; a known-False anywhere settles False amid unknowns.
+    # A field the gate leaves unconstrained (None) is skipped, as is the natural
+    # die event (not pre-roll state — the dice walk consumes it via
+    # effect.natural). Every other constrained field must hook into a same-named
+    # fact, or the gate and context shapes have drifted — a loud error.
+    outcomes: list[bool | None] = []
+    for name, info in type(gate).model_fields.items():
+        required = getattr(gate, name)
+        if required is None or isinstance(required, NaturalRoll):
             continue
-        if not comparison.matches(getattr(event, name)):
-            return False
+        try:
+            actual = getattr(facts, name)
+        except AttributeError as err:
+            raise TypeError(
+                f"{type(gate).__name__}.{name} has no matching fact on "
+                f"{type(facts).__name__} — the gate and context shapes have drifted"
+            ) from err
+        outcomes.append(_node_applies(required, actual, _is_branch(info)))
+    if any(outcome is False for outcome in outcomes):
+        return False
+    if any(outcome is None for outcome in outcomes):
+        return None
     return True
+
+
+def _node_applies(required: object, actual: object, is_branch: bool) -> bool | None:
+    # One gate node against its fact. A branch (a subject, or an event like the
+    # charge or a future incoming attack): a bool requires the entity's
+    # presence; a nested gate requires it present and recurses. A leaf: a
+    # Comparison tests a number, a bool tests a boolean — both tri-state, so a
+    # fact the context could not answer (None) leaves the rule unevaluatable.
+    if is_branch:
+        if isinstance(required, bool):
+            return (actual is not None) == required
+        if actual is None:
+            return False  # the gate constrains an entity that did not occur
+        assert isinstance(required, Gate)  # a branch gate is a nested model
+        return _walk(required, actual)
+    if isinstance(required, Comparison):
+        if actual is None:
+            return None
+        assert isinstance(actual, int)  # a Comparison leaf reads a numeric fact
+        return required.matches(actual)
+    return None if actual is None else (actual == required)
+
+
+def _is_branch(info: FieldInfo) -> bool:
+    # A branch slot's gate is a nested Gate — a subject or an event — so its
+    # annotation admits a Gate; a leaf slot holds a bool or a Comparison (which
+    # is deliberately not a Gate). Read off the schema, so a new subject or
+    # entity needs no evaluator change.
+    return any(
+        isinstance(arg, type) and issubclass(arg, Gate) for arg in get_args(info.annotation)
+    )
 
 
 def _equipment_applies(

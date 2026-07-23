@@ -185,7 +185,20 @@ class Comparison(BaseModel):
         return value <= self.at_most
 
 
-class ChargeGate(BaseModel):
+class Gate(BaseModel):
+    """Base for a branch of the gate tree — a subject or an event.
+
+    A branch recurses: its fields are further gates (subjects, events) or leaf
+    predicates. The evaluator tells a branch from a leaf by this base, so a
+    :class:`Comparison` (a leaf predicate, not a subject) is deliberately *not*
+    a Gate. ``extra=forbid`` is inherited, so every gate rejects an unknown
+    property at load — path validation, structural.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ChargeGate(Gate):
     """A gate on the charge event — the model's own charge this turn.
 
     The typed home for "a turn in which it charged", carrying the charge's
@@ -197,8 +210,6 @@ class ChargeGate(BaseModel):
     charged) join here as rules need them.
     """
 
-    model_config = ConfigDict(extra="forbid")
-
     distance: Comparison | None = None  # inches of the charge move
 
     @model_validator(mode="after")
@@ -208,7 +219,7 @@ class ChargeGate(BaseModel):
         return self
 
 
-class CombatGate(BaseModel):
+class CombatGate(Gate):
     """A gate on the close combat the model is fighting.
 
     Facts of the combat itself, not the model: ``first_round`` (Elven Reflexes,
@@ -217,13 +228,11 @@ class CombatGate(BaseModel):
     where a round *number* or a flank/rear facing would join.
     """
 
-    model_config = ConfigDict(extra="forbid")
-
     first_round: bool | None = None
     outnumbers: bool | None = None
 
 
-class MovementGate(BaseModel):
+class MovementGate(Gate):
     """A gate on how the model moved this turn.
 
     ``moved`` is any move (Moving and Shooting's To Hit penalty); ``charge`` is
@@ -232,13 +241,11 @@ class MovementGate(BaseModel):
     properties (Furious Charge's ``{distance: {at_least: 3}}``).
     """
 
-    model_config = ConfigDict(extra="forbid")
-
     moved: bool | None = None
     charge: bool | ChargeGate | None = None
 
 
-class ShootingGate(BaseModel):
+class ShootingGate(Gate):
     """A gate on the volley the model is firing.
 
     ``at_long_range`` is whether the target sits beyond half the weapon's
@@ -246,12 +253,10 @@ class ShootingGate(BaseModel):
     a cover fact would join.
     """
 
-    model_config = ConfigDict(extra="forbid")
-
     at_long_range: bool | None = None
 
 
-class When(BaseModel):
+class When(Gate):
     """An effect's gate: the facts that must hold for it to apply.
 
     A typed tree, one field per subject — the combat, the model's movement, the
@@ -263,8 +268,6 @@ class When(BaseModel):
     now structural. Every set fact is conjoined; without a ``when`` the modifier
     applies to every attack.
     """
-
-    model_config = ConfigDict(extra="forbid")
 
     combat: CombatGate | None = None
     movement: MovementGate | None = None
