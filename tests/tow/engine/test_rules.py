@@ -22,6 +22,7 @@ from avelorn.tow.engine.rules import (
     effective_characteristic,
     effective_combat_result_bonus,
     effective_fighting_ranks,
+    effective_rerolls,
     effective_supporting_ranks,
     printed_rule,
 )
@@ -707,3 +708,31 @@ def test_lion_cloak_betters_the_save_only_against_non_magical_shooting() -> None
     melee = save(AttackFacts(kind=AttackKind.CLOSE_COMBAT, magical=False))
     assert melee.value == 4  # honoured: not a shooting attack
     assert melee.factored == ("Lion Cloak",)
+
+
+def test_effective_rerolls_grants_ithilmar_weapons_with_the_gear_it_requires() -> None:
+    """Ithilmar Weapons re-rolls To Hit natural 1s, gated on gear and engagement.
+
+    Engaged and fighting with a hand weapon: the grant is a To Hit re-roll of
+    natural 1s. Wielding anything else: honoured, no grant. The weapon in hand
+    unknown (nothing armed): unfactored. Combat absent: honoured — no combat,
+    no re-roll.
+    """
+    rule = REPO.rules["ithilmar-weapons"]
+    engaged = GateContext(combat=CombatFacts())
+
+    armed = effective_rerolls([rule], engaged, wielding="Hand Weapon", worn=[])
+    assert armed.factored == ("Ithilmar Weapons",)
+    assert [(r.stage, r.on_natural) for r in armed.rerolls] == [(Stage.ROLL_TO_HIT, 1)]
+
+    great_blade = effective_rerolls([rule], engaged, wielding="Chracian Great Blade", worn=[])
+    assert great_blade.factored == ("Ithilmar Weapons",)  # honoured: not a hand weapon
+    assert great_blade.rerolls == ()
+
+    unarmed = effective_rerolls([rule], engaged, wielding=None, worn=[])
+    assert unarmed.unfactored == ("Ithilmar Weapons",)  # the weapon in hand is unknown
+    assert unarmed.rerolls == ()
+
+    not_in_combat = effective_rerolls([rule], GateContext(), wielding="Hand Weapon", worn=[])
+    assert not_in_combat.factored == ("Ithilmar Weapons",)  # honoured: no combat
+    assert not_in_combat.rerolls == ()

@@ -240,6 +240,42 @@ def test_reroll_effect_rejects_unknown_cause() -> None:
         )
 
 
+def test_reroll_effect_parses_a_natural_face_on_an_attack_roll() -> None:
+    """An attack-roll re-roll carries the natural face it re-rolls, and its gate."""
+    effect = _EFFECT.validate_python(
+        {
+            "kind": "re-roll",
+            "stage": "roll-to-hit",
+            "on_natural": 1,
+            "when": {"combat": True},
+            "requires": {"wielding": "Hand Weapon"},
+        }
+    )
+    assert effect.stage == "roll-to-hit"
+    assert effect.on_natural == 1
+    assert effect.requirements == {"wielding": "Hand Weapon"}
+
+
+def test_reroll_effect_rejects_a_natural_face_on_a_panic_test() -> None:
+    """on_natural restricts an attack roll; a panic test shows no natural face."""
+    with pytest.raises(ValidationError, match="on_natural"):
+        _EFFECT.validate_python({"kind": "re-roll", "stage": "make-panic-tests", "on_natural": 1})
+
+
+def test_reroll_effect_rejects_a_cause_on_an_attack_roll() -> None:
+    """Causes restricts a panic test; an attack roll has no panic cause."""
+    with pytest.raises(ValidationError, match="causes"):
+        _EFFECT.validate_python(
+            {"kind": "re-roll", "stage": "roll-to-hit", "causes": ["heavy-casualties"]}
+        )
+
+
+def test_reroll_effect_rejects_a_face_out_of_range() -> None:
+    """A natural face is a die face: 1 to 6."""
+    with pytest.raises(ValidationError):
+        _EFFECT.validate_python({"kind": "re-roll", "stage": "roll-to-hit", "on_natural": 7})
+
+
 def test_ops_speak_to_one_seam() -> None:
     """One effect may not move quantities from two seams together.
 

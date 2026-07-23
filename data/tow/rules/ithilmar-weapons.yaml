@@ -1,0 +1,27 @@
+# Source: https://tow.whfb.app/special-rules/ithilmar-weapons
+id: ithilmar-weapons
+name: Ithilmar Weapons
+page: 185
+category: Special Rules
+flavour: Weapons crafted of Ithilmar are incredibly lightweight and balanced to perfection. Such blades slice swiftly
+  through the clumsy parries and counter-thrusts of enemies.
+paragraphs:
+  - When engaged in combat, a model with this special rule that is fighting with a hand weapon may re-roll any rolls To
+    Hit of a natural 1. Note that this special rule only applies to a single, non-magical hand weapon and does not apply
+    to a model's mount (should it have one). If the model is using two hand weapons or any other sort of weapon, this
+    special rule ceases to apply.
+# Hand-authored, diffable against the paragraph above: a re-roll of the dice
+# showing a natural 1 To Hit, gated on being engaged in close combat (the
+# `combat` presence gate, as Parry is) and on fighting with a hand weapon (the
+# `requires` equipment gate — the weapon in hand). The re-roll seam re-rolls the
+# 1s only (`on_natural: 1`), not every miss. The "single, non-magical" and
+# "not a mount" restrictions are not expressed — the engine fields one weapon in
+# hand per rank-and-file model, none magical, no mounts, so they cannot arise.
+effects:
+  - kind: re-roll
+    when:
+      combat: true
+    requires:
+      wielding: Hand Weapon
+    stage: roll-to-hit
+    on_natural: 1

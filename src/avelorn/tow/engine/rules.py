@@ -33,22 +33,24 @@ from typing import assert_never, get_args
 from pydantic.fields import FieldInfo
 
 from avelorn.core.registry import Registry, UnknownNameError
-from avelorn.tow.engine.attack import Modifier
+from avelorn.tow.engine.attack import Modifier, Reroll
 from avelorn.tow.schema.rule import (
     PARAMETER_SUFFIX,
     AttackKind,
     Comparison,
     EquipmentUse,
     Gate,
+    GatedEffect,
     ModifierEffect,
     NaturalRoll,
     Quantity,
+    RerollEffect,
     Rule,
     RuleEffect,
     Seam,
     seam_of,
 )
-from avelorn.tow.schema.stage import Stage
+from avelorn.tow.schema.stage import ATTACK_ROLLS, Stage
 from avelorn.tow.schema.unit import Characteristic
 
 logger = logging.getLogger(__name__)
@@ -471,6 +473,75 @@ def effective_armour_value(
     return EffectiveValue(value, tuple(factored), tuple(unfactored))
 
 
+@dataclass(frozen=True)
+class EffectiveRerolls:
+    """The re-roll grants a contingent's rules confer on the attack it makes.
+
+    The re-roll seam's fold, the loadout-aware sibling of the armour fold:
+    every attack-roll re-roll a rule carries (Ithilmar Weapons' re-roll of To
+    Hit natural 1s), gated on the engagement conditions and the equipment it
+    requires in use, compiled into the records the dice walk applies.
+    ``factored`` names the rules evaluated in — including those honoured by not
+    applying (a condition False, or the required gear not in use) — and
+    ``unfactored`` those a fact could not answer; the caller reports the latter.
+    """
+
+    rerolls: tuple[Reroll, ...] = ()
+    factored: tuple[str, ...] = ()
+    unfactored: tuple[str, ...] = ()
+
+
+def effective_rerolls(
+    rules: Sequence[Rule],
+    conditions: "GateContext | None" = None,
+    *,
+    wielding: str | None,
+    worn: Collection[str],
+) -> EffectiveRerolls:
+    """Compile the attack-roll re-rolls a contingent's rules grant.
+
+    The re-roll seam: every :class:`RerollEffect` naming an attack roll (To
+    Hit, To Wound, a save) is gated on the engagement ``conditions`` and the
+    equipment it ``requires`` in use, exactly as the armour fold gates Parry —
+    a rule whose fact the conditions or the loadout cannot answer is reported
+    unfactored, one answered False (or whose gear is not in use) is honoured
+    with no grant. Panic-test re-rolls are another seam's and pass untouched.
+
+    Returns:
+        The re-roll records the dice walk applies, with factored and
+        unfactored rule names.
+    """
+    context = _as_context(conditions)
+    grants: list[Reroll] = []
+    factored: list[str] = []
+    unfactored: list[str] = []
+    for rule in rules:
+        matching = [
+            effect
+            for effect in rule.effects
+            if isinstance(effect, RerollEffect) and effect.stage in ATTACK_ROLLS
+        ]
+        if not matching:
+            continue
+        answers = [
+            (
+                effect,
+                _gate_applies(effect, context),
+                _equipment_applies(effect.requirements, wielding, worn),
+            )
+            for effect in matching
+        ]
+        if any(when is None or gear is None for _, when, gear in answers):
+            unfactored.append(rule.name)
+            continue
+        for effect, when, gear in answers:
+            if when and gear:
+                grants.append(Reroll(stage=effect.stage, on_natural=effect.on_natural))
+        factored.append(rule.name)
+        logger.debug("re-roll grant factored: %s -> %d record(s)", rule.name, len(grants))
+    return EffectiveRerolls(tuple(grants), tuple(factored), tuple(unfactored))
+
+
 def _effective_quantity(
     base: int,
     key: Quantity | Characteristic,
@@ -539,8 +610,9 @@ def _effective_quantity(
     return EffectiveValue(value, tuple(factored), tuple(unfactored))
 
 
-def _gate_applies(effect: ModifierEffect, context: GateContext) -> bool | None:
+def _gate_applies(effect: GatedEffect, context: GateContext) -> bool | None:
     # A rule's gate holds iff its When tree does, walked against the context.
+    # Any gated effect — a modifier or a re-roll grant — reads the same way.
     return True if effect.when is None else _walk(effect.when, context)
 
 

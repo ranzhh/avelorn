@@ -30,6 +30,7 @@ from avelorn.tow.engine.attack import (
     AttackProfile,
     Modifier,
     Outcome,
+    Reroll,
     Roll,
     RollToHitCombat,
     RollToWound,
@@ -51,6 +52,7 @@ from avelorn.tow.engine.rules import (
     AttackFacts,
     ChargeEvent,
     CombatFacts,
+    EffectiveRerolls,
     EffectiveValue,
     GateContext,
     MovementFacts,
@@ -59,6 +61,7 @@ from avelorn.tow.engine.rules import (
     effective_armour_value,
     effective_characteristic,
     effective_combat_result_bonus,
+    effective_rerolls,
 )
 from avelorn.tow.phases.movement import Engagement
 from avelorn.tow.schema.rule import AttackKind, Rule
@@ -195,6 +198,7 @@ def _per_attack(
     ward: int | None,
     modifiers: Sequence[Modifier],
     transforms: Sequence[Transform] = (),
+    rerolls: Sequence[Reroll] = (),
 ) -> tuple[float, float, int]:
     # Walk one melee attack's dice exactly, returning its per-attack
     # unsaved-wound and instant-kill probabilities and the effective To Hit
@@ -209,6 +213,7 @@ def _per_attack(
         ),
         modifiers,
         transforms,
+        rerolls,
     )
     effective = resolution.hit_target if isinstance(resolution.hit_target, int) else hit
     return float(resolution.p_unsaved), float(resolution.p_of(Outcome.INSTANT_KILL)), effective
@@ -231,6 +236,7 @@ class _Engagement:
     striker: Contingent
     weapon_skill: EffectiveValue
     target_armour: EffectiveValue
+    rerolls: EffectiveRerolls
     p_unsaved: float
     p_kill: float
     target_wounds: int
@@ -346,7 +352,18 @@ def _engage(
     hit = melee_hit_target(striker_ws.value, target_ws.value, hit_modifier)
     wound = wound_target(strength, toughness)
     save = armour_save_target(armour_value, profile.armour_piercing)
-    p_unsaved, p_kill, hit = _per_attack(hit, wound, save, None, modifiers)
+    # The striker's own rules may re-roll its dice (Ithilmar Weapons re-rolls
+    # rolls To Hit of a natural 1), gated on the engagement conditions and the
+    # weapon in hand, exactly as the armour fold gates the defender's save.
+    rerolls = effective_rerolls(
+        striker.loadout.rules,
+        conditions,
+        wielding=weapon.name,
+        worn=[piece.name for piece in striker.loadout.armour],
+    )
+    p_unsaved, p_kill, hit = _per_attack(
+        hit, wound, save, None, modifiers, rerolls=rerolls.rerolls
+    )
     # Wounds accumulate into whole slain models; a profile with no printed
     # Wounds ("-") is treated as a single-Wound model.
     target_wounds = target_unit.profiles[0][Characteristic.WOUNDS] or 1
@@ -364,6 +381,7 @@ def _engage(
         striker=striker,
         weapon_skill=striker_ws,
         target_armour=target_armour,
+        rerolls=rerolls,
         p_unsaved=p_unsaved,
         p_kill=p_kill,
         target_wounds=target_wounds,
@@ -466,6 +484,7 @@ def strike_unit(
                     *striker.fighting_ranks().factored,
                     *striker.effective_attacks().factored,
                     *engagement.weapon_skill.factored,
+                    *engagement.rerolls.factored,
                 },
             ),
             # The target throws no blows here, but its save is resolved, so its
@@ -794,6 +813,7 @@ def fight(
                         *a.fighting_ranks().factored,
                         *a.effective_attacks().factored,
                         *a_strikes.weapon_skill.factored,
+                        *a_strikes.rerolls.factored,
                         *a_combat_result.factored,
                         # a's save-improving rules are read while it is b's target
                         *b_strikes.target_armour.factored,
@@ -806,6 +826,7 @@ def fight(
                         *b.fighting_ranks().factored,
                         *b.effective_attacks().factored,
                         *b_strikes.weapon_skill.factored,
+                        *b_strikes.rerolls.factored,
                         *b_combat_result.factored,
                         *a_strikes.target_armour.factored,
                     },
