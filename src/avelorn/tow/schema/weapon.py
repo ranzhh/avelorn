@@ -8,12 +8,28 @@ of "-" becomes 0.
 """
 
 import re
+from enum import StrEnum
 from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.functional_validators import BeforeValidator
 
 _RELATIVE_STRENGTH_RE = re.compile(r"S([+-]\d+)?")
+
+
+class WeaponType(StrEnum):
+    """A weapon's family in the Weapons of War chapter — a closed, append-only set.
+
+    The rulebook groups weapons into families a rule can speak to as one ("any
+    bow" — a longbow, shortbow, warbow or the Bow of Avelorn). The source does
+    not carry the family as a field, and the individual weapon entries do not
+    name it, so it is hand-authored here. A member joins, and a weapon is
+    classified, only when a rule needs to gate on the family — the same
+    just-in-time discipline the rest of the vocabulary follows. Values are the
+    family as the rulebook names it.
+    """
+
+    BOW = "Bow"
 
 
 class WeaponStrength(BaseModel):
@@ -114,6 +130,7 @@ class Weapon(BaseModel):
 
     id: str  # stable slug, e.g. "thrusting-spear"
     name: str
+    weapon_type: WeaponType | None = None  # the rulebook family; None until a rule needs it
     profiles: list[WeaponProfile] = Field(min_length=1)
     notes: str | None = None  # printed usage restrictions, verbatim
 
