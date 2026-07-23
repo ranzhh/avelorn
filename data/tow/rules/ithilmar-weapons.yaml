@@ -18,10 +18,9 @@ paragraphs:
 # "not a mount" restrictions are not expressed — the engine fields one weapon in
 # hand per rank-and-file model, none magical, no mounts, so they cannot arise.
 effects:
-  - kind: re-roll
-    when:
+  - when:
       combat: true
     requires:
       wielding: Hand Weapon
-    stage: roll-to-hit
+    re-roll: roll-to-hit
     on_natural: 1

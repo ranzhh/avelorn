@@ -470,13 +470,17 @@ class ModifierEffect(GatedEffect):
 
 
 class RerollEffect(GatedEffect):
-    """Re-roll a failed test, under the printed re-roll rules.
+    """Re-roll a test, under the printed re-roll rules.
 
-    A re-roll happens at most once whatever its source ("no single dice
-    can be re-rolled more than once, regardless of the source"), and a
-    multi-dice roll re-rolls all its dice. Unlike a modifier, the
-    ``stage`` here is the payload — *which* test is re-rolled — and the
-    seam owning that stage consumes the grant directly.
+    The re-roll operation, named by its own key — ``re-roll: <stage>``, the
+    self-naming peer of ``add`` and ``set``. The operation *is* the key; its
+    value is the test re-rolled, and the seam owning that stage consumes the
+    grant directly (an attack roll by the dice walk, a panic test by the fold).
+    A re-roll happens at most once whatever its source ("no single dice can be
+    re-rolled more than once, regardless of the source"), and a multi-dice roll
+    re-rolls all its dice. There is no discriminator field: an effect that
+    carries ``re-roll`` is one, exactly as one carrying ``add`` is a modifier
+    (both models forbid the other's keys).
 
     A grant is restricted to the part of the roll it names, and which
     restriction is legal depends on the stage's seam. ``causes`` restricts
@@ -489,17 +493,16 @@ class RerollEffect(GatedEffect):
     has no panic cause — so each belongs to its own seam's stages.
     """
 
-    kind: Literal["re-roll"]
-    stage: Stage
+    re_roll: Stage = Field(alias="re-roll")
     causes: list[PanicCause] = Field(default_factory=list)
     on_natural: int | None = Field(default=None, ge=1, le=6)
 
     @model_validator(mode="after")
     def _restriction_matches_the_stage(self) -> "RerollEffect":
-        if self.on_natural is not None and self.stage not in ATTACK_ROLLS:
-            raise ValueError(f"on_natural restricts an attack roll, not {self.stage}")
-        if self.causes and self.stage in ATTACK_ROLLS:
-            raise ValueError(f"causes restricts a panic test, not the attack roll {self.stage}")
+        if self.on_natural is not None and self.re_roll not in ATTACK_ROLLS:
+            raise ValueError(f"on_natural restricts an attack roll, not {self.re_roll}")
+        if self.causes and self.re_roll in ATTACK_ROLLS:
+            raise ValueError(f"causes restricts a panic test, not the attack roll {self.re_roll}")
         return self
 
 

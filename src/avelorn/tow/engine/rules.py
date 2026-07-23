@@ -519,7 +519,7 @@ def effective_rerolls(
         matching = [
             effect
             for effect in rule.effects
-            if isinstance(effect, RerollEffect) and effect.stage in ATTACK_ROLLS
+            if isinstance(effect, RerollEffect) and effect.re_roll in ATTACK_ROLLS
         ]
         if not matching:
             continue
@@ -536,7 +536,7 @@ def effective_rerolls(
             continue
         for effect, when, gear in answers:
             if when and gear:
-                grants.append(Reroll(stage=effect.stage, on_natural=effect.on_natural))
+                grants.append(Reroll(stage=effect.re_roll, on_natural=effect.on_natural))
         factored.append(rule.name)
         logger.debug("re-roll grant factored: %s -> %d record(s)", rule.name, len(grants))
     return EffectiveRerolls(tuple(grants), tuple(factored), tuple(unfactored))
