@@ -448,12 +448,18 @@ class AttackResolution:
 
     ``hit_target`` is the effective Roll to Hit target after transforms'
     pre-roll modifications — the figure to report alongside the
-    probabilities. (Later stages' targets can depend on earlier dice, so
-    only the first stage's effective target is well defined up front.)
+    probabilities. ``save_target`` is the armour save's effective target after
+    the *unconditional* (pre-roll) modifiers that land on it (a unit rule's
+    flat Armour Piercing, say) — well defined up front because those do not
+    depend on earlier dice; a *conditional* improvement (Armour Bane, on a
+    natural 6 To Wound) is not folded in here, as it applies only on that face.
+    (Later stages' targets can otherwise depend on earlier dice, so only these
+    up-front figures are reported.)
     """
 
     outcomes: Mapping[Outcome, Fraction] = field(default_factory=dict)
     hit_target: RollTarget = 0
+    save_target: RollTarget = 0
 
     @property
     def p_unsaved(self) -> Fraction:
@@ -499,8 +505,17 @@ def resolve_attack(
     for p_path, outcome in walk(profile, modifiers, transforms, rerolls):
         outcomes[outcome] = outcomes.get(outcome, Fraction(0)) + p_path
     before, _ = _plan(modifiers)
-    effective = _before_roll(Stage.ROLL_TO_HIT, profile, before, _by_stage(transforms))
-    resolution = AttackResolution(outcomes=outcomes, hit_target=effective.hit_target)
+    hooked = _by_stage(transforms)
+    effective_hit = _before_roll(Stage.ROLL_TO_HIT, profile, before, hooked)
+    # The save's effective target after only the unconditional modifiers on it —
+    # applied to the base profile, since they do not depend on the hit or wound
+    # dice (a conditional bump like Armour Bane rides its natural face, not here).
+    effective_save = _before_roll(Stage.MAKE_ARMOUR_SAVES, profile, before, hooked)
+    resolution = AttackResolution(
+        outcomes=outcomes,
+        hit_target=effective_hit.hit_target,
+        save_target=effective_save.save_target,
+    )
     logger.debug(
         "attack walk: p_unsaved = %s = %.4f (instant kill %s)",
         resolution.p_unsaved,

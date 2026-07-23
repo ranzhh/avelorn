@@ -13,6 +13,7 @@ from avelorn.tow.engine.rules import (
     ChargeEvent,
     CombatFacts,
     EffectiveValue,
+    EquipmentFacts,
     GateContext,
     MovementFacts,
     ShootingFacts,
@@ -41,6 +42,7 @@ from avelorn.tow.schema.rule import (
 )
 from avelorn.tow.schema.stage import Stage
 from avelorn.tow.schema.unit import Characteristic, Unit
+from avelorn.tow.schema.weapon import WeaponType
 
 REPO = TOWRepository()
 
@@ -285,6 +287,81 @@ def test_staying_still_volley_fires_while_the_to_hit_is_a_wash() -> None:
     assert stay.p_unsaved == pytest.approx(move_in.p_unsaved)  # per shot, identical
     assert stay.shots > move_in.shots  # but staying volley fires
     assert stay.expected_casualties > move_in.expected_casualties
+
+
+def test_wielding_gate_is_tri_state() -> None:
+    """The weapon-in-hand gate: matched is True, mismatched False, unknown None.
+
+    A rule gating on the weapon family (Arrows of Isha's "any bow") holds when
+    the weapon in hand is a bow, is honoured as a no-op when it is a named other
+    weapon, and is unevaluatable when nothing names the weapon's family (a plain
+    hand weapon carries no modelled family) — reported, never silently dropped.
+    """
+    by_family = ModifierEffect(
+        when=When.model_validate({"wielding": {"type": "bow"}}),
+        add={Quantity.ARMOUR_PIERCING: 1},
+    )
+    bow = GateContext(wielding=EquipmentFacts(type=WeaponType.BOW))
+    unarmed = GateContext(wielding=EquipmentFacts())  # no family known
+    assert _gate_applies(by_family, bow) is True
+    assert _gate_applies(by_family, unarmed) is None
+    by_name = ModifierEffect(
+        when=When.model_validate({"wielding": {"name": "Longbow"}}),
+        add={Quantity.ARMOUR_PIERCING: 1},
+    )
+    armed = GateContext(wielding=EquipmentFacts(type=WeaponType.BOW, name="Bow of Avelorn"))
+    assert _gate_applies(by_name, armed) is False  # a different named weapon in hand
+
+
+def test_compile_grant_confers_the_named_rule_and_stacks() -> None:
+    """Arrows of Isha's grant expands to Armour Bane's own effect, under the bow gate.
+
+    Firing a bow, the rule yields two modifiers: an unconditional Armour Piercing
+    improvement (the "-1 characteristic"), and the granted Armour Bane (1) — a +1
+    on a natural 6 To Wound, keeping its own inner trigger. It is a separate
+    instance from any the weapon prints, so two Armour Banes stack.
+    """
+    sisters = _fielded(REPO.units["sisters-of-avelorn"], 5).wielding("Bow of Avelorn")
+    bow = GateContext(wielding=EquipmentFacts(type=WeaponType.BOW))
+    index = {rule.name: rule for rule in sisters.loadout.rules}
+    modifiers, unfactored = compile_rules(
+        ["Arrows of Isha"], index, bow, grants=sisters.loadout.granted_rules
+    )
+    assert "Arrows of Isha" not in unfactored
+    save_moves = [(m.move, m.trigger) for m in modifiers if m.lands_on is Stage.MAKE_ARMOUR_SAVES]
+    assert (1, None) in save_moves  # the unconditional -1 Armour Piercing
+    assert any(
+        move == 1 and trigger is not None and trigger.face == 6 for move, trigger in save_moves
+    )  # the granted Armour Bane, on a natural 6 To Wound
+
+
+def test_compile_grant_unfactored_when_the_bow_gate_is_unknown() -> None:
+    """No known weapon family leaves the whole rule unfactored, reported.
+
+    The grant and the flat Armour Piercing both gate on the weapon being a bow;
+    a context that cannot answer that (nothing wielded) factors neither.
+    """
+    sisters = _fielded(REPO.units["sisters-of-avelorn"], 5).wielding("Bow of Avelorn")
+    index = {rule.name: rule for rule in sisters.loadout.rules}
+    modifiers, unfactored = compile_rules(
+        ["Arrows of Isha"], index, GateContext(), grants=sisters.loadout.granted_rules
+    )
+    assert "Arrows of Isha" in unfactored
+    assert modifiers == []
+
+
+def test_compile_grant_unfactored_when_the_granted_rule_is_unresolvable() -> None:
+    """A grant whose named rule has no entry cannot be expanded — unfactored.
+
+    All-or-nothing: the flat clause would compile, but the unresolvable grant
+    takes the whole rule down, reported rather than half-applied.
+    """
+    sisters = _fielded(REPO.units["sisters-of-avelorn"], 5).wielding("Bow of Avelorn")
+    bow = GateContext(wielding=EquipmentFacts(type=WeaponType.BOW))
+    index = {rule.name: rule for rule in sisters.loadout.rules}
+    modifiers, unfactored = compile_rules(["Arrows of Isha"], index, bow, grants={})
+    assert unfactored == ["Arrows of Isha"]
+    assert modifiers == []
 
 
 def test_scalar_fact_is_tri_state() -> None:
@@ -585,6 +662,7 @@ def test_gate_and_context_mirror_each_other() -> None:
     from avelorn.tow.schema.rule import (
         AttackGate,
         CombatGate,
+        EquipmentGate,
         MovementGate,
         ShootingGate,
     )
@@ -593,6 +671,7 @@ def test_gate_and_context_mirror_each_other() -> None:
         (CombatGate, CombatFacts),
         (MovementGate, MovementFacts),
         (ShootingGate, ShootingFacts),
+        (EquipmentGate, EquipmentFacts),
         (AttackGate, AttackFacts),
         (ChargeGate, ChargeEvent),
     ]

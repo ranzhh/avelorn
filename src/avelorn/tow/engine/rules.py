@@ -41,6 +41,7 @@ from avelorn.tow.schema.rule import (
     EquipmentUse,
     Gate,
     GatedEffect,
+    GrantEffect,
     ModifierEffect,
     NaturalRoll,
     Quantity,
@@ -52,6 +53,7 @@ from avelorn.tow.schema.rule import (
 )
 from avelorn.tow.schema.stage import ATTACK_ROLLS, Stage
 from avelorn.tow.schema.unit import Characteristic
+from avelorn.tow.schema.weapon import WeaponType
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +105,19 @@ class ShootingFacts:
 
 
 @dataclass(frozen=True)
+class EquipmentFacts:
+    """The evaluated facts of a piece of equipment in use — behind an EquipmentGate.
+
+    The weapon a model is acting with, as the walk and the folds see it: its
+    ``type`` (the weapon family) and ``name``, either None when nothing is armed
+    (a rule gating on the weapon in hand is then unevaluatable, reported).
+    """
+
+    type: WeaponType | None = None
+    name: str | None = None
+
+
+@dataclass(frozen=True)
 class AttackFacts:
     """The evaluated facts of the incoming attack — the values behind an AttackGate."""
 
@@ -123,13 +138,15 @@ class GateContext:
     ``combat`` and ``target_of`` are presence entities: None means the model is
     not engaged in a close combat / is not the target of an attack (known, not
     unknown), so a rule gating on them is honoured as not-applying. The
-    always-present subjects (``movement``, ``shooting``) keep default facts a
-    phase never sets.
+    always-present subjects (``movement``, ``shooting``, ``wielding``) keep
+    default facts a phase never sets — an unarmed ``wielding`` (both fields None)
+    leaves a weapon-in-hand gate unevaluatable, reported, rather than False.
     """
 
     combat: CombatFacts | None = None
     movement: MovementFacts = field(default_factory=MovementFacts)
     shooting: ShootingFacts = field(default_factory=ShootingFacts)
+    wielding: EquipmentFacts = field(default_factory=EquipmentFacts)
     target_of: AttackFacts | None = None
 
 
@@ -191,13 +208,19 @@ def compile_rules(
     printed_rules: Sequence[str],
     resolved: Mapping[str, Rule],
     conditions: "GateContext | None" = None,
+    *,
+    grants: "Mapping[str, Rule] | None" = None,
 ) -> tuple[list[Modifier], list[str]]:
     """Compile printed rule names into modifier records.
 
     ``resolved`` maps printed names to their rules as printed — built at
     the muster boundary (a loadout's ``weapon_rules``) or from a registry
     scan; a name absent from it is not modelled. ``conditions`` is the
-    evaluated :class:`GateContext` (or None for all-unknown). A rule whose
+    evaluated :class:`GateContext` (or None for all-unknown). ``grants`` maps
+    the printed names of rules *conferred* by a grant effect to their resolved
+    entries (a loadout's ``granted_rules``) — the lookup a
+    :class:`~avelorn.tow.schema.rule.GrantEffect` expands through; a granted
+    name absent from it is unfactored, like any unmodelled rule. A rule whose
     gate needs an unknown fact is unfactored and reported; a rule whose gate
     evaluates False is honoured by not applying — no modifier, no note.
 
@@ -212,7 +235,7 @@ def compile_rules(
     unfactored: list[str] = []
     for printed in printed_rules:
         rule = resolved.get(printed)
-        compiled = _compile(rule, context) if rule is not None else None
+        compiled = _compile(rule, context, grants) if rule is not None else None
         if compiled is None:
             unfactored.append(printed)
         else:
@@ -222,7 +245,9 @@ def compile_rules(
     return modifiers, unfactored
 
 
-def _compile(rule: Rule, context: GateContext) -> list[Modifier] | None:
+def _compile(
+    rule: Rule, context: GateContext, grants: "Mapping[str, Rule] | None" = None
+) -> list[Modifier] | None:
     # All-or-nothing: every effect must compile, or the rule is
     # unfactored. An effect whose condition evaluates False compiles to
     # no modifiers — honoured, not unfactored.
@@ -230,7 +255,7 @@ def _compile(rule: Rule, context: GateContext) -> list[Modifier] | None:
         return None
     modifiers: list[Modifier] = []
     for effect in rule.effects:
-        compiled = _compile_effect(effect, context)
+        compiled = _compile_effect(effect, context, grants)
         if compiled is None:
             return None
         modifiers.extend(compiled)
@@ -259,10 +284,16 @@ _ROLLS: Mapping[Quantity, _Roll] = {
 }
 
 
-def _compile_effect(effect: RuleEffect, context: GateContext) -> list[Modifier] | None:
+def _compile_effect(
+    effect: RuleEffect, context: GateContext, grants: "Mapping[str, Rule] | None" = None
+) -> list[Modifier] | None:
     # One effect, top to bottom: bail where the walk cannot honour it,
     # gate on the when's state, then record each additive entry as data —
     # which roll's target moves, by how much, on which natural face.
+    if isinstance(effect, GrantEffect):
+        # A grant confers a named rule under its own outer gate; the granted
+        # rule's own effects (kept with their inner gates) compile in its place.
+        return _compile_grant(effect, context, grants)
     if not isinstance(effect, ModifierEffect):
         # Effects for other seams (e.g. re-rolls on make-panic-tests)
         # are not attack modifiers; their seams consume them directly.
@@ -304,6 +335,29 @@ def _compile_effect(effect: RuleEffect, context: GateContext) -> list[Modifier] 
             return None
         modifiers.append(Modifier(lands_on=roll.stage, move=roll.sign * amount, trigger=natural))
     return modifiers
+
+
+def _compile_grant(
+    effect: GrantEffect, context: GateContext, grants: "Mapping[str, Rule] | None"
+) -> list[Modifier] | None:
+    # A grant confers a named rule under its own *outer* gate: evaluate that gate,
+    # then — when it holds — compile the granted rule in its place, its own
+    # effects keeping their *inner* gates (Armour Bane's natural-6 To Wound). The
+    # two gates conjoin without merging the trees. The grant stacks with any
+    # instance the model already carries, because each is compiled independently.
+    if effect.requires is not None:
+        # An equipment gate on the grant itself is the loadout's to answer, not
+        # the walk's — honestly unfactored here, as the modifier path is.
+        return None
+    applies = _gate_applies(effect, context)
+    if applies is None:
+        return None  # the context cannot answer the grant's gate
+    if not applies:
+        return []  # honoured: the grant does not fire
+    granted = (grants or {}).get(effect.grants)
+    if granted is None:
+        return None  # the granted rule is not resolvable/modelled — unfactored
+    return _compile(granted, context, grants)
 
 
 @dataclass(frozen=True)
