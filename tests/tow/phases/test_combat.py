@@ -5,7 +5,7 @@ import pytest
 from avelorn.core.dice import binomial_distribution, expected_value
 from avelorn.tow.contingent import Charge, ChargeArc, Contingent, Loadout
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.engine.rules import GateContext
+from avelorn.tow.engine.rules import CombatFacts, GateContext
 from avelorn.tow.phases.combat import (
     CombatPhase,
     FightResult,
@@ -925,11 +925,11 @@ def test_effective_weapon_skill_gains_one_in_the_first_round() -> None:
     base = spearmen.profiles[0][Characteristic.WEAPON_SKILL]
     assert base is not None
 
-    first = effective_weapon_skill(elves, GateContext(first_round=True))
+    first = effective_weapon_skill(elves, GateContext(combat=CombatFacts(first_round=True)))
     assert first.value == base + 1
     assert "Martial Prowess" in first.factored
 
-    later = effective_weapon_skill(elves, GateContext(first_round=False))
+    later = effective_weapon_skill(elves, GateContext(combat=CombatFacts(first_round=False)))
     assert later.value == base
     assert "Martial Prowess" in later.factored  # honoured by not applying
 

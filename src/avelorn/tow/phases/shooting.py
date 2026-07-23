@@ -42,7 +42,13 @@ from avelorn.tow.engine.charts import (
     wound_probability,
     wound_target,
 )
-from avelorn.tow.engine.rules import GateContext, compile_rules
+from avelorn.tow.engine.rules import (
+    CombatFacts,
+    GateContext,
+    MovementFacts,
+    ShootingFacts,
+    compile_rules,
+)
 from avelorn.tow.schema.psychology import PanicCause
 from avelorn.tow.schema.rule import RerollEffect, Rule
 from avelorn.tow.schema.stage import Stage
@@ -220,11 +226,11 @@ def _engagement_conditions(
     # unit in combat cannot shoot), so the combat and charge facts are False /
     # absent, never leaving a rule that gates on them unfactored.
     return GateContext(
-        moved=moved,
-        at_long_range=False if force_short_range else _at_long_range(profile, distance),
-        first_round=False,
-        outnumbers=False,
-        charge=None,
+        movement=MovementFacts(moved=moved),  # a shooter never charged: charge stays None
+        shooting=ShootingFacts(
+            at_long_range=False if force_short_range else _at_long_range(profile, distance)
+        ),
+        combat=CombatFacts(first_round=False, outnumbers=False),
     )
 
 

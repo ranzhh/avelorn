@@ -27,7 +27,7 @@ import logging
 import re
 from collections.abc import Collection, Mapping, Sequence
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import assert_never
 
 from avelorn.core.registry import Registry, UnknownNameError
@@ -68,25 +68,49 @@ class ChargeEvent:
 
 
 @dataclass(frozen=True)
-class GateContext:
-    """The evaluated facts a gate is tested against, grouped by subject.
+class CombatFacts:
+    """The evaluated facts of the close combat — the values behind a CombatGate."""
 
-    A producer builds one for its phase, filling the facts that phase knows;
-    the evaluator walks an effect's :class:`~avelorn.tow.schema.rule.When`
-    gate against it. A state fact is None when unknown (the tri-state the flat
-    conditions carried); ``charge`` is None when the model did not charge
-    (known — a model's movement is settled). Facts a phase never sees keep
-    their defaults, so a rule gating on them is honoured as not-applying.
-    """
-
-    # the combat (CombatGate)
     first_round: bool | None = None
     outnumbers: bool | None = None
-    # the model's movement (MovementGate)
+
+
+@dataclass(frozen=True)
+class MovementFacts:
+    """The evaluated facts of the model's move — the values behind a MovementGate.
+
+    ``charge`` is None when the model did not charge (known, not unknown — a
+    model's movement is settled this turn); otherwise it carries the charge's
+    properties.
+    """
+
     moved: bool | None = None
     charge: ChargeEvent | None = None
-    # the volley (ShootingGate)
+
+
+@dataclass(frozen=True)
+class ShootingFacts:
+    """The evaluated facts of the volley — the values behind a ShootingGate."""
+
     at_long_range: bool | None = None
+
+
+@dataclass(frozen=True)
+class GateContext:
+    """The evaluated facts a gate is tested against, mirroring the When tree.
+
+    One facts object per subject, the peer of the schema's gate models: a
+    producer builds one for its phase, filling the facts that phase knows, and
+    the evaluator walks an effect's :class:`~avelorn.tow.schema.rule.When`
+    against it, subject by subject and property by property. A state fact is
+    None when unknown (the tri-state the gate carries); a subject a phase never
+    sees keeps its default facts, so a rule gating on it is honoured as
+    not-applying rather than left unevaluatable.
+    """
+
+    combat: CombatFacts = field(default_factory=CombatFacts)
+    movement: MovementFacts = field(default_factory=MovementFacts)
+    shooting: ShootingFacts = field(default_factory=ShootingFacts)
 
 
 def _as_context(context: GateContext | None) -> GateContext:
@@ -509,13 +533,13 @@ def _gate_applies(effect: ModifierEffect, context: GateContext) -> bool | None:
         return True
     checks: list[bool | None] = []
     if when.combat is not None:
-        checks.append(_bool_fact(when.combat.first_round, context.first_round))
-        checks.append(_bool_fact(when.combat.outnumbers, context.outnumbers))
+        checks.append(_bool_fact(when.combat.first_round, context.combat.first_round))
+        checks.append(_bool_fact(when.combat.outnumbers, context.combat.outnumbers))
     if when.movement is not None:
-        checks.append(_bool_fact(when.movement.moved, context.moved))
-        checks.append(_charge_applies(when.movement.charge, context.charge))
+        checks.append(_bool_fact(when.movement.moved, context.movement.moved))
+        checks.append(_charge_applies(when.movement.charge, context.movement.charge))
     if when.shooting is not None:
-        checks.append(_bool_fact(when.shooting.at_long_range, context.at_long_range))
+        checks.append(_bool_fact(when.shooting.at_long_range, context.shooting.at_long_range))
     if any(check is False for check in checks):
         return False
     if any(check is None for check in checks):

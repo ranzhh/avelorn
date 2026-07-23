@@ -49,8 +49,11 @@ from avelorn.tow.engine.charts import (
 )
 from avelorn.tow.engine.rules import (
     ChargeEvent,
+    CombatFacts,
     EffectiveValue,
     GateContext,
+    MovementFacts,
+    ShootingFacts,
     compile_rules,
     effective_armour_value,
     effective_characteristic,
@@ -525,11 +528,15 @@ def _combat_conditions(first_round: bool | None, side: Contingent, foe: Continge
     # is taken in close combat, so the volley fact is settled False.
     charge = side.movement.charge
     return GateContext(
-        first_round=first_round,
-        outnumbers=side.unit_strength() > foe.unit_strength(),
-        moved=side.movement.moved,
-        charge=ChargeEvent(distance=charge.full_inches) if charge is not None else None,
-        at_long_range=False,
+        combat=CombatFacts(
+            first_round=first_round,
+            outnumbers=side.unit_strength() > foe.unit_strength(),
+        ),
+        movement=MovementFacts(
+            moved=side.movement.moved,
+            charge=ChargeEvent(distance=charge.full_inches) if charge is not None else None,
+        ),
+        shooting=ShootingFacts(at_long_range=False),
     )
 
 

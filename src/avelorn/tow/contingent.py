@@ -18,6 +18,7 @@ from avelorn.tow.engine.rules import (
     ChargeEvent,
     EffectiveValue,
     GateContext,
+    MovementFacts,
     effective_characteristic,
     effective_fighting_ranks,
     effective_supporting_ranks,
@@ -418,7 +419,7 @@ class Contingent:
         # of the fact.
         charge = self.movement.charge
         event = ChargeEvent(distance=charge.full_inches) if charge is not None else None
-        return GateContext(charge=event, moved=self.movement.moved)
+        return GateContext(movement=MovementFacts(moved=self.movement.moved, charge=event))
 
     def fighting_ranks(self) -> EffectiveValue:
         """How many ranks fight at full Attacks, and the rules behind the count.

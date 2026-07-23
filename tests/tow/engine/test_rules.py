@@ -10,7 +10,10 @@ from avelorn.tow.data import TOWRepository
 from avelorn.tow.engine.attack import AttackProfile, RollState, resolve_attack
 from avelorn.tow.engine.rules import (
     ChargeEvent,
+    CombatFacts,
     GateContext,
+    MovementFacts,
+    ShootingFacts,
     _bool_fact,
     _gate_applies,
     compile_rules,
@@ -306,9 +309,17 @@ def test_gate_conjunction_settles_on_a_known_false() -> None:
         ),
         add={Quantity.TO_HIT: -1},
     )
-    assert _gate_applies(effect, GateContext(moved=False, at_long_range=None)) is False
-    assert _gate_applies(effect, GateContext(moved=True, at_long_range=None)) is None
-    assert _gate_applies(effect, GateContext(moved=True, at_long_range=True)) is True
+    assert _gate_applies(effect, GateContext(movement=MovementFacts(moved=False))) is False
+    assert _gate_applies(effect, GateContext(movement=MovementFacts(moved=True))) is None
+    assert (
+        _gate_applies(
+            effect,
+            GateContext(
+                movement=MovementFacts(moved=True), shooting=ShootingFacts(at_long_range=True)
+            ),
+        )
+        is True
+    )
 
 
 def test_every_roll_quantity_declares_its_roll() -> None:
@@ -392,7 +403,7 @@ def test_effective_characteristic_false_condition_is_honoured() -> None:
     """A condition answered False applies nothing — factored, not reported."""
     rule = _initiative_rule(when={"combat": {"first_round": True}})
     result = effective_characteristic(
-        4, Characteristic.INITIATIVE, [rule], GateContext(first_round=False)
+        4, Characteristic.INITIATIVE, [rule], GateContext(combat=CombatFacts(first_round=False))
     )
     assert result.value == 4
     assert result.factored == ("Doctored (X)",)
@@ -514,11 +525,11 @@ def test_effective_fighting_ranks_folds_a_rank_modifier() -> None:
     model's movement is settled), so there is no unknown-charge case — the
     tri-state unknown lives on the flat conditions, not on the event.
     """
-    stationary = effective_fighting_ranks(1, [_press_of_battle()], GateContext(charge=None))
+    stationary = effective_fighting_ranks(1, [_press_of_battle()], GateContext())
     assert stationary.value == 2
     assert stationary.factored == ("Doctored",)
 
-    charging = GateContext(charge=ChargeEvent(distance=6))
+    charging = GateContext(movement=MovementFacts(charge=ChargeEvent(distance=6)))
     charged = effective_fighting_ranks(1, [_press_of_battle()], charging)
     assert charged.value == 1
     assert charged.factored == ("Doctored",)
@@ -536,28 +547,40 @@ def test_effective_supporting_ranks_folds_over_a_base_of_none() -> None:
     )
     rule = Rule(id="doctored", name="Doctored", paragraphs=["…"], effects=[effect])
 
-    stationary = effective_supporting_ranks(0, [rule], GateContext(charge=None))
+    stationary = effective_supporting_ranks(0, [rule], GateContext())
     assert stationary.value == 1
     assert stationary.factored == ("Doctored",)
 
-    charged = effective_supporting_ranks(0, [rule], GateContext(charge=ChargeEvent(distance=6)))
+    charged = effective_supporting_ranks(
+        0, [rule], GateContext(movement=MovementFacts(charge=ChargeEvent(distance=6)))
+    )
     assert charged.value == 0
     assert charged.factored == ("Doctored",)
 
 
-def test_charge_gate_properties_have_a_matching_event_field() -> None:
-    """Every property a charge gate can constrain is a field the event supplies.
+def test_gate_and_context_mirror_each_other() -> None:
+    """Every gate property the schema declares has a matching context fact.
 
-    Drift guard: the evaluator reads a gate property off the same-named event
-    attribute, so a property added to :class:`ChargeGate` without the matching
-    :class:`ChargeEvent` field would evaluate against nothing. Keeps the two in
-    step (the pairing the docstrings promise).
+    Drift guard: the evaluator reads a gate's property off the same-named field
+    of the context (a subject's facts, or the charge event), so a property added
+    to a gate model without the matching context field would evaluate against
+    nothing. The When subjects, their gates, and the mirroring facts dataclasses
+    must stay in step — as must ChargeGate and ChargeEvent.
     """
     from dataclasses import fields
 
-    gate_properties = set(ChargeGate.model_fields)
-    event_fields = {f.name for f in fields(ChargeEvent)}
-    assert gate_properties <= event_fields
+    from avelorn.tow.schema.rule import CombatGate, MovementGate, ShootingGate
+
+    pairs = [
+        (CombatGate, CombatFacts),
+        (MovementGate, MovementFacts),
+        (ShootingGate, ShootingFacts),
+        (ChargeGate, ChargeEvent),
+    ]
+    for gate, facts in pairs:
+        gate_properties = set(gate.model_fields)
+        context_fields = {f.name for f in fields(facts)}
+        assert gate_properties <= context_fields, gate.__name__
 
 
 def test_effective_combat_result_bonus_sums_signed_points_under_the_conditions() -> None:
@@ -571,11 +594,13 @@ def test_effective_combat_result_bonus_sums_signed_points_under_the_conditions()
     )
     rule = Rule(id="massed", name="Massed Infantry", paragraphs=["…"], effects=[effect])
 
-    outnumbering = effective_combat_result_bonus([rule], GateContext(outnumbers=True))
+    outnumbering = effective_combat_result_bonus(
+        [rule], GateContext(combat=CombatFacts(outnumbers=True))
+    )
     assert outnumbering.value == 1
     assert outnumbering.factored == ("Massed Infantry",)
 
-    even = effective_combat_result_bonus([rule], GateContext(outnumbers=False))
+    even = effective_combat_result_bonus([rule], GateContext(combat=CombatFacts(outnumbers=False)))
     assert even.value == 0
     assert even.factored == ("Massed Infantry",)
 

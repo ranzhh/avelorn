@@ -376,8 +376,8 @@ def test_engagement_conditions_build_the_shooting_facts() -> None:
     profile = REPO.weapons["longbow"].missile_profile
     assert profile is not None
     context = _engagement_conditions(profile, moved=True, distance=None, force_short_range=False)
-    assert context.moved is True
-    assert context.at_long_range is None  # no distance -> unknown band
-    assert context.first_round is False
-    assert context.outnumbers is False
-    assert context.charge is None
+    assert context.movement.moved is True
+    assert context.shooting.at_long_range is None  # no distance -> unknown band
+    assert context.combat.first_round is False
+    assert context.combat.outnumbers is False
+    assert context.movement.charge is None
