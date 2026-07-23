@@ -120,9 +120,7 @@ def _valour(causes: list[PanicCause]) -> Rule:
         id="valour-of-ages",
         name="Valour of Ages",
         paragraphs=["Re-roll text."],
-        effects=[
-            RerollEffect.model_validate({"re-roll": Stage.MAKE_PANIC_TESTS, "causes": causes})
-        ],
+        effects=[RerollEffect(reroll=Stage.MAKE_PANIC_TESTS, causes=causes)],
     )
 
 

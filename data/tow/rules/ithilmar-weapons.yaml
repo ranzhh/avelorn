@@ -22,5 +22,5 @@ effects:
       combat: true
     requires:
       wielding: Hand Weapon
-    re-roll: roll-to-hit
+    reroll: roll-to-hit
     on_natural: 1
