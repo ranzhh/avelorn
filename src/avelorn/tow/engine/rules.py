@@ -36,6 +36,7 @@ from avelorn.core.registry import Registry, UnknownNameError
 from avelorn.tow.engine.attack import Modifier
 from avelorn.tow.schema.rule import (
     PARAMETER_SUFFIX,
+    AttackKind,
     Comparison,
     EquipmentUse,
     Gate,
@@ -100,6 +101,14 @@ class ShootingFacts:
 
 
 @dataclass(frozen=True)
+class AttackFacts:
+    """The evaluated facts of the incoming attack — the values behind an AttackGate."""
+
+    kind: AttackKind | None = None
+    magical: bool | None = None
+
+
+@dataclass(frozen=True)
 class GateContext:
     """The evaluated facts a gate is tested against, mirroring the When tree.
 
@@ -107,14 +116,19 @@ class GateContext:
     producer builds one for its phase, filling the facts that phase knows, and
     the evaluator walks an effect's :class:`~avelorn.tow.schema.rule.When`
     against it, subject by subject and property by property. A state fact is
-    None when unknown (the tri-state the gate carries); a subject a phase never
-    sees keeps its default facts, so a rule gating on it is honoured as
-    not-applying rather than left unevaluatable.
+    None when unknown (the tri-state the gate carries).
+
+    ``combat`` and ``target_of`` are presence entities: None means the model is
+    not engaged in a close combat / is not the target of an attack (known, not
+    unknown), so a rule gating on them is honoured as not-applying. The
+    always-present subjects (``movement``, ``shooting``) keep default facts a
+    phase never sets.
     """
 
-    combat: CombatFacts = field(default_factory=CombatFacts)
+    combat: CombatFacts | None = None
     movement: MovementFacts = field(default_factory=MovementFacts)
     shooting: ShootingFacts = field(default_factory=ShootingFacts)
+    target_of: AttackFacts | None = None
 
 
 def _as_context(context: GateContext | None) -> GateContext:

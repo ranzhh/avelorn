@@ -933,7 +933,7 @@ def test_effective_weapon_skill_gains_one_in_the_first_round() -> None:
     assert later.value == base
     assert "Martial Prowess" in later.factored  # honoured by not applying
 
-    unknown = effective_weapon_skill(elves)  # no round fact
+    unknown = effective_weapon_skill(elves, GateContext(combat=CombatFacts()))  # round unknown
     assert unknown.value == base
     assert "Martial Prowess" in unknown.unfactored
 

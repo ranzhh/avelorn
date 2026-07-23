@@ -43,14 +43,16 @@ from avelorn.tow.engine.charts import (
     wound_target,
 )
 from avelorn.tow.engine.rules import (
-    CombatFacts,
+    AttackFacts,
+    EffectiveValue,
     GateContext,
     MovementFacts,
     ShootingFacts,
     compile_rules,
+    effective_armour_value,
 )
 from avelorn.tow.schema.psychology import PanicCause
-from avelorn.tow.schema.rule import RerollEffect, Rule
+from avelorn.tow.schema.rule import AttackKind, RerollEffect, Rule
 from avelorn.tow.schema.stage import Stage
 from avelorn.tow.schema.unit import Characteristic
 from avelorn.tow.schema.weapon import WeaponProfile
@@ -219,18 +221,17 @@ def _at_long_range(profile: WeaponProfile, distance: int | None) -> bool | None:
 def _engagement_conditions(
     profile: WeaponProfile, moved: bool, distance: int | None, force_short_range: bool
 ) -> GateContext:
-    # The gate facts for a volley: the shooting facts (whether the model moved,
-    # whether the shot is at long range — a shot forced short, a Stand & Shoot
-    # reaction, never is) and the settled non-shooting facts. A volley is not
-    # struck in a round of close combat and a shooter never charged this turn (a
-    # unit in combat cannot shoot), so the combat and charge facts are False /
-    # absent, never leaving a rule that gates on them unfactored.
+    # The gate facts for the shooter's volley: whether the model moved and
+    # whether the shot is at long range (a shot forced short, a Stand & Shoot
+    # reaction, never is). ``combat`` is absent (a shooter is not engaged in
+    # close combat) and ``target_of`` is absent (the shooter is the attacker,
+    # not a target) — the defender's incoming-attack facts are built separately
+    # for its armour save.
     return GateContext(
         movement=MovementFacts(moved=moved),  # a shooter never charged: charge stays None
         shooting=ShootingFacts(
             at_long_range=False if force_short_range else _at_long_range(profile, distance)
         ),
-        combat=CombatFacts(first_round=False, outnumbers=False),
     )
 
 
@@ -342,12 +343,37 @@ def shoot_unit(
         profile.armour_piercing,
     )
 
+    # The defender's own rules may better its save against this volley (Lion
+    # Cloak's +1 vs non-magical shooting), gated on the incoming attack: a
+    # shooting attack, magical iff the missile weapon is. Parry stays inert here
+    # — it gates on being engaged in close combat, and a shot target is not.
     armour_value = defender_armour(defender.loadout.armour)
-    notes: list[str] = []
-    for side in (shooter, target):
-        notes.extend(
-            f"special rule not factored: {rule} ({side.name})" for rule in side.special_rules
+    incoming = GateContext(
+        target_of=AttackFacts(
+            kind=AttackKind.SHOOTING,
+            magical="Magical Attacks" in profile.special_rules,
         )
+    )
+    if armour_value is None:
+        defender_armour_value = EffectiveValue(0)
+    else:
+        defender_armour_value = effective_armour_value(
+            armour_value,
+            defender.loadout.rules,
+            incoming,
+            wielding=defender.weapon.name if defender.weapon is not None else None,
+            worn=[piece.name for piece in defender.loadout.armour],
+        )
+        armour_value = defender_armour_value.value
+    notes: list[str] = []
+    notes.extend(
+        f"special rule not factored: {rule} ({shooter.name})" for rule in shooter.special_rules
+    )
+    notes.extend(
+        f"special rule not factored: {rule} ({target.name})"
+        for rule in target.special_rules
+        if rule not in defender_armour_value.factored
+    )
     conditions = _engagement_conditions(
         profile, attacker.movement.moved, distance, force_short_range
     )

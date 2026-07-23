@@ -48,6 +48,7 @@ from avelorn.tow.engine.charts import (
     wound_target,
 )
 from avelorn.tow.engine.rules import (
+    AttackFacts,
     ChargeEvent,
     CombatFacts,
     EffectiveValue,
@@ -60,7 +61,7 @@ from avelorn.tow.engine.rules import (
     effective_combat_result_bonus,
 )
 from avelorn.tow.phases.movement import Engagement
-from avelorn.tow.schema.rule import Rule
+from avelorn.tow.schema.rule import AttackKind, Rule
 from avelorn.tow.schema.unit import Characteristic, Unit
 
 logger = logging.getLogger(__name__)
@@ -411,7 +412,29 @@ def strike_unit(
     fighters, targets = striker.models, target.models
     if fighters < 0:
         raise ValueError("fighters must be >= 0")
-    engagement = _engage(striker, target, hit_modifier=hit_modifier)
+    # A single strike is close combat, so combat is present — but the round it
+    # falls in, and how the sides outnumber, are not known here, so first-round
+    # and outnumbering rules stay unfactored and noted. The target is the target
+    # of this close-combat attack (magical if the striker's weapon in hand is),
+    # the fact Parry (combat present) and Lion Cloak (an incoming attack) read
+    # for its save; the striker throws the only blows, so it is not itself a
+    # target here.
+    in_hand = striker.in_hand().combat_profile
+    striker_conditions = GateContext(combat=CombatFacts())
+    target_conditions = GateContext(
+        combat=CombatFacts(),
+        target_of=AttackFacts(
+            kind=AttackKind.CLOSE_COMBAT,
+            magical=in_hand is not None and "Magical Attacks" in in_hand.special_rules,
+        ),
+    )
+    engagement = _engage(
+        striker,
+        target,
+        hit_modifier=hit_modifier,
+        conditions=striker_conditions,
+        target_conditions=target_conditions,
+    )
     attacks = engagement.attacks(fighters)
     distribution, casualties = wound_and_casualties(
         attacks,
@@ -435,8 +458,8 @@ def strike_unit(
             # Only the striker throws blows here, so only its fighting-rank
             # rules (Press of Battle) and its effective-WS rules are in the math
             # and claimed; the target's stay noted until it strikes in its turn.
-            # With no engagement conditions passed here, a first-round rule like
-            # Martial Prowess is unknown, so it factors nothing and stays noted.
+            # The round is unknown here, so a first-round rule like Martial
+            # Prowess factors nothing and stays noted.
             *_unit_rule_notes(
                 striker.unit,
                 claimed={
@@ -525,8 +548,13 @@ def _combat_conditions(first_round: bool | None, side: Contingent, foe: Continge
     # (strictly greater — equal Unit Strength outnumbers neither); the movement
     # facts read the side's own state, the charge carrying its distance so a
     # gate can ask ``movement.charge.distance`` (Furious Charge's 3"). No shot
-    # is taken in close combat, so the volley fact is settled False.
+    # is taken in close combat, so the volley fact is settled False. The side
+    # is engaged (``combat`` present) and is the target of the foe's close-combat
+    # attack, magical if the foe's weapon in hand is — the facts Parry and Lion
+    # Cloak read from the defender's side.
     charge = side.movement.charge
+    foe_weapon = foe.weapon
+    foe_profile = foe_weapon.combat_profile if foe_weapon is not None else None
     return GateContext(
         combat=CombatFacts(
             first_round=first_round,
@@ -537,6 +565,10 @@ def _combat_conditions(first_round: bool | None, side: Contingent, foe: Continge
             charge=ChargeEvent(distance=charge.full_inches) if charge is not None else None,
         ),
         shooting=ShootingFacts(at_long_range=False),
+        target_of=AttackFacts(
+            kind=AttackKind.CLOSE_COMBAT,
+            magical=foe_profile is not None and "Magical Attacks" in foe_profile.special_rules,
+        ),
     )
 
 
