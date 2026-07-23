@@ -8,21 +8,19 @@ flavour: Many High Elf nobles fill their quivers with finely crafted arrows. Bou
 paragraphs:
   - Any bow (longbow, shortbow, warbow or Bow of Avelorn) carried by a model with this special rule gains
     the Armour Bane (1) special rule and an Armour Piercing characteristic of -1.
-# Hand-authored, diffable against the paragraph above. Two clauses, one bow gate
-# (the weapon in hand being of the bow family, the seam #107 added):
+# Hand-authored, diffable against the paragraph above. The whole rule is gated
+# on carrying a bow (the weapon-in-hand family, the seam #107 added), so the
+# `when` sits once on the rule and folds into each clause:
 #   - "an Armour Piercing characteristic of -1": a raw characteristic change, an
 #     unconditional +1 Armour Piercing improvement (a lower save).
 #   - "gains the Armour Bane (1) special rule": granted by name, not copied. The
 #     grant resolves to Armour Bane's own effect (a natural-6 To Wound AP bump),
 #     so a change to Armour Bane is tracked automatically. It stacks with the
 #     Bow of Avelorn's printed Armour Bane (1) — two instances, +2 on a natural 6.
+when:
+  wielding:
+    type: bow
 effects:
-  - when:
-      wielding:
-        type: bow
-    add:
+  - add:
       armour-piercing: 1
-  - when:
-      wielding:
-        type: bow
-    grants: Armour Bane (1)
+  - grants: Armour Bane (1)

@@ -597,6 +597,38 @@ class Rule(BaseModel):
     paragraphs: list[str] = Field(min_length=1)  # rule text, as displayed
     effects: list[RuleEffect] = Field(default_factory=list)
 
+    @model_validator(mode="before")
+    @classmethod
+    def _hoist_shared_when(cls, data: object) -> object:
+        # A rule-level ``when`` is the condition the whole rule reads — Arrows
+        # of Isha's "any bow" holds for every clause. Written once at the rule
+        # and conjoined into each effect's own gate here, so the data does not
+        # repeat it and the rest of the engine still reads one gate per effect.
+        # A subject constrained at both the rule and an effect is ambiguous —
+        # a data error, not a silent override — but the union of disjoint
+        # subjects (the rule's "wielding a bow" beside an effect's natural 6)
+        # is the ordinary conjunction.
+        if not isinstance(data, dict) or "when" not in data:
+            return data
+        data = dict(data)
+        shared = data.pop("when")
+        merged: list[object] = []
+        for effect in data.get("effects") or []:
+            if not isinstance(effect, dict):
+                raise TypeError("a rule-level `when` needs its effects written as mappings")
+            own = effect.get("when")
+            if own is None:
+                combined = shared
+            elif overlap := set(shared) & set(own):
+                raise ValueError(
+                    f"a subject is gated at both the rule and an effect: {sorted(overlap)}"
+                )
+            else:
+                combined = {**shared, **own}
+            merged.append({**effect, "when": combined})
+        data["effects"] = merged
+        return data
+
     @model_validator(mode="after")
     def _parameter_requires_placeholder_name(self) -> "Rule":
         # An effect may reference the bracketed parameter ("X") only if

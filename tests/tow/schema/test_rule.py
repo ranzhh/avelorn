@@ -87,6 +87,55 @@ def test_grant_effect_parses_and_discriminates_by_its_key() -> None:
         _EFFECT.validate_python({"grants": "Armour Bane (1)", "add": {"to-hit": -1}})
 
 
+def test_rule_level_when_folds_into_each_effect() -> None:
+    """A rule-level ``when`` is the shared gate, conjoined into every effect.
+
+    Written once at the rule (Arrows of Isha's "any bow"), it lands on each
+    clause — a flat modifier and a grant — so the data does not repeat it and
+    the engine still reads one gate per effect.
+    """
+    rule = Rule.model_validate(
+        {
+            "id": "doctored",
+            "name": "Doctored",
+            "paragraphs": ["…"],
+            "when": {"wielding": {"type": "bow"}},
+            "effects": [{"add": {"armour-piercing": 1}}, {"grants": "Armour Bane (1)"}],
+        }
+    )
+    for effect in rule.effects:
+        assert effect.when is not None and effect.when.wielding is not None
+        assert effect.when.wielding.type == "bow"
+
+
+def test_rule_level_when_conjoins_with_an_effect_gate() -> None:
+    """The rule's gate unions with a disjoint effect gate; a clash is an error."""
+    rule = Rule.model_validate(
+        {
+            "id": "doctored",
+            "name": "Doctored",
+            "paragraphs": ["…"],
+            "when": {"wielding": {"type": "bow"}},
+            "effects": [
+                {"when": {"natural": {"face": 6, "roll": "roll-to-wound"}}, "add": {"to-hit": -1}}
+            ],
+        }
+    )
+    (effect,) = rule.effects
+    assert effect.when is not None
+    assert effect.when.wielding is not None and effect.when.natural is not None
+    with pytest.raises(ValidationError, match="gated at both the rule and an effect"):
+        Rule.model_validate(
+            {
+                "id": "doctored",
+                "name": "Doctored",
+                "paragraphs": ["…"],
+                "when": {"wielding": {"type": "bow"}},
+                "effects": [{"when": {"wielding": {"name": "Longbow"}}, "add": {"to-hit": -1}}],
+            }
+        )
+
+
 def test_when_is_optional() -> None:
     """Without a when, the modifier applies to every attack."""
     effect = _EFFECT.validate_python({"add": {"armour-piercing": 1}})
