@@ -1128,8 +1128,13 @@ def break_test(result: CombatResult, a: Contingent, b: Contingent) -> BreakResul
     """
     a_leadership = a.unit.highest(Characteristic.LEADERSHIP) or 0
     b_leadership = b.unit.highest(Characteristic.LEADERSHIP) or 0
-    a_forced, a_rule = forced_outcome(a.loadout.rules, Decision.BREAK)
-    b_forced, b_rule = forced_outcome(b.loadout.rules, Decision.BREAK)
+    # The break decision's outcomes are BreakOutcomes; narrow the base the seam
+    # returns to the set this test routes (a foreign outcome under break, a data
+    # slip, is left to roll).
+    a_outcome, a_rule = forced_outcome(a.loadout.rules, Decision.BREAK)
+    b_outcome, b_rule = forced_outcome(b.loadout.rules, Decision.BREAK)
+    a_forced = a_outcome if isinstance(a_outcome, BreakOutcome) else None
+    b_forced = b_outcome if isinstance(b_outcome, BreakOutcome) else None
     logger.debug(
         "break test: Ld %d (a, forced=%s) vs Ld %d (b, forced=%s)",
         a_leadership,

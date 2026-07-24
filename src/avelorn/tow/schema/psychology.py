@@ -20,13 +20,22 @@ class PanicCause(StrEnum):
     FLED_THROUGH = "fled-through"
 
 
-class BreakOutcome(StrEnum):
+class Outcome(StrEnum):
+    """A result of a decision that a rule may force — the base of every such set.
+
+    Each decision's own results subclass this (a closed set per decision); a
+    :class:`~avelorn.tow.schema.rule.ChoiceEffect` forces one, and the concrete
+    type is what routes it to the seam that owns that decision. Empty here so
+    the generic effect and seam depend only on the base, never on a decision.
+    """
+
+
+class BreakOutcome(Outcome):
     """A Break test's printed result — the closed set a lost round can produce.
 
     The three outcomes the-combat-phase/break-test names, worst to best for the
     loser's survival: it Breaks (flees, and may be run down), Falls Back in Good
-    Order, or Gives Ground. A rule may fix which one occurs instead of rolling
-    (Stubborn's automatic Fall Back in Good Order).
+    Order, or Gives Ground.
     """
 
     GIVES_GROUND = "gives-ground"

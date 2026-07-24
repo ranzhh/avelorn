@@ -26,12 +26,20 @@ approximated.
 """
 
 from collections.abc import Mapping
+from contextlib import suppress
 from enum import StrEnum
 from typing import Annotated, Literal, assert_never
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
-from avelorn.tow.schema.psychology import BreakOutcome, PanicCause
+from avelorn.tow.schema.psychology import Outcome, PanicCause
 from avelorn.tow.schema.stage import ATTACK_ROLLS, Stage
 from avelorn.tow.schema.unit import Characteristic
 from avelorn.tow.schema.weapon import WeaponType
@@ -564,6 +572,15 @@ class GrantEffect(GatedEffect):
     grants: str  # the printed name of the rule conferred, e.g. "Armour Bane (1)"
 
 
+def _as_outcome(value: object) -> "Outcome":
+    # Resolve a slug to the one Outcome subclass that defines it: the base has no
+    # members, so a ChoiceEffect discovers the concrete set rather than naming it.
+    for outcomes in Outcome.__subclasses__():
+        with suppress(ValueError):
+            return outcomes(value)
+    raise ValueError(f"{value!r} is not a decision outcome")
+
+
 class Decision(StrEnum):
     """A point where an outcome is rolled or chosen, that a rule may force.
 
@@ -579,21 +596,40 @@ class Decision(StrEnum):
 class ChoiceEffect(GatedEffect):
     """Force the outcome of a decision that is otherwise rolled or chosen.
 
-    Stubborn's automatic Fall Back in Good Order: ``forces`` maps a
-    :class:`Decision` to the outcome it takes instead of rolling —
-    ``{break: fall-back-in-good-order}``. Keyed by the decision exactly as a
-    modifier's ``add`` is keyed by the quantity, so the seam that owns a
-    decision reads its own key ("is ``break`` mine, and forced to what?") with
-    no per-rule handler. Self-naming by ``forces`` (the peer of ``add`` /
-    ``grants``); each model forbids the others' keys. A rule that *forbids* an
+    ``forces`` maps a :class:`Decision` to the :class:`~avelorn.tow.schema.psychology.Outcome`
+    it takes instead of rolling — ``{break: fall-back-in-good-order}``. Keyed by
+    the decision exactly as a modifier's ``add`` is keyed by the quantity, so the
+    seam that owns a decision reads its own key ("is ``break`` mine, and forced
+    to what?") with no per-rule handler. The value is typed as the ``Outcome``
+    base; each decision's own results are a subclass (a break's are
+    :class:`~avelorn.tow.schema.psychology.BreakOutcome`), resolved by slug, so
+    this generic effect names no decision. Self-naming by ``forces`` (the peer of
+    ``add`` / ``grants``); each model forbids the others' keys. Forbidding an
     option rather than forcing one is the sibling (a ``forbids`` key) for when
     one lands.
     """
 
-    # The value is the decision's own outcome vocabulary (a BreakOutcome for
-    # break); it widens to a union — paired to the key — when a second decision
-    # with a different outcome set lands.
-    forces: Annotated[dict[Decision, BreakOutcome], Field(min_length=1)]
+    forces: dict[Decision, Outcome]
+
+    @field_validator("forces", mode="plain")
+    @classmethod
+    def _resolve_forced(cls, raw: object) -> dict["Decision", "Outcome"]:
+        # Resolve each entry: the key against the Decision vocabulary, the value
+        # against whichever Outcome subclass defines that slug — so the base is
+        # all this generic effect declares, the concrete set discovered.
+        if not isinstance(raw, dict) or not raw:
+            raise ValueError("forces maps at least one decision to the outcome it forces")
+        resolved: dict[Decision, Outcome] = {}
+        for decision, outcome in raw.items():
+            key = decision if isinstance(decision, Decision) else Decision(decision)
+            resolved[key] = outcome if isinstance(outcome, Outcome) else _as_outcome(outcome)
+        return resolved
+
+    @field_serializer("forces")
+    def _dump_forced(self, forces: dict["Decision", "Outcome"]) -> dict[str, str]:
+        # The values are Outcome subclasses, not the base the field is typed as,
+        # so serialise their slugs explicitly rather than let pydantic warn.
+        return {decision.value: outcome.value for decision, outcome in forces.items()}
 
 
 RuleEffect = ModifierEffect | RerollEffect | GrantEffect | ChoiceEffect
