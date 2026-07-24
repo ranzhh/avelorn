@@ -62,11 +62,12 @@ from avelorn.tow.engine.rules import (
     effective_characteristic,
     effective_combat_result_bonus,
     effective_rerolls,
+    factored_notes,
 )
 from avelorn.tow.phases.movement import Engagement
 from avelorn.tow.schema.psychology import BreakOutcome
 from avelorn.tow.schema.rule import AttackKind, BreakEffect, Rule
-from avelorn.tow.schema.unit import Characteristic, Unit
+from avelorn.tow.schema.unit import Characteristic
 
 logger = logging.getLogger(__name__)
 
@@ -480,7 +481,7 @@ def strike_unit(
             # The round is unknown here, so a first-round rule like Martial
             # Prowess factors nothing and stays noted.
             *_unit_rule_notes(
-                striker.unit,
+                striker,
                 claimed={
                     *striker.fighting_ranks().factored,
                     *striker.effective_attacks().factored,
@@ -490,7 +491,7 @@ def strike_unit(
             ),
             # The target throws no blows here, but its save is resolved, so its
             # save-improving rules (Parry) are factored and claimed.
-            *_unit_rule_notes(target.unit, claimed=engagement.target_armour.factored),
+            *_unit_rule_notes(target, claimed=engagement.target_armour.factored),
             *engagement.notes,
         ),
         target_models=targets,
@@ -580,21 +581,23 @@ class FightResult:
         return derived
 
 
-def _unit_rule_notes(unit: Unit, claimed: Collection[str] = ()) -> list[str]:
-    # The one owner of a unit rule's disposition: noted unless a consumer
-    # claimed it (the initiative read claims what it factored, honoured
-    # no-ops included). Notes are built once, never parsed or matched. A
-    # rule printed on the datasheet is owned by the unit; a rule the troop
-    # type confers (Press of Battle, ...) is owned by the troop type.
+def _unit_rule_notes(side: Contingent, claimed: Collection[str] = ()) -> list[str]:
+    # The one owner of a unit rule's disposition: a rule the consumer could not
+    # claim is reported "not factored"; a claimed rule that authored notes has
+    # them relayed (Stubborn's scope caveats). Notes are built once, never
+    # parsed. A rule printed on the datasheet is owned by the unit; one the
+    # troop type confers (Press of Battle, ...) by the troop type.
+    unit = side.unit
     troop_type = unit.troop_type_profile
     owned = [(printed, unit.name) for printed in unit.special_rules]
     if troop_type is not None:
         owned += [(printed, troop_type.name) for printed in troop_type.special_rules]
-    return [
+    unfactored = [
         f"special rule not factored: {printed} ({owner})"
         for printed, owner in owned
         if printed not in claimed
     ]
+    return unfactored + factored_notes(side.loadout.rules, claimed, unit.name)
 
 
 def _combat_conditions(first_round: bool | None, side: Contingent, foe: Contingent) -> GateContext:
@@ -861,7 +864,7 @@ def fight(
         dict.fromkeys(
             [
                 *_unit_rule_notes(
-                    a.unit,
+                    a,
                     claimed={
                         *a_initiative.factored,
                         *a.fighting_ranks().factored,
@@ -874,7 +877,7 @@ def fight(
                     },
                 ),
                 *_unit_rule_notes(
-                    b.unit,
+                    b,
                     claimed={
                         *b_initiative.factored,
                         *b.fighting_ranks().factored,
@@ -1133,13 +1136,13 @@ def break_test(result: CombatResult, a: Contingent, b: Contingent) -> BreakResul
         b_leadership,
         b_forced,
     )
-    # Surface the fixed-outcome rule's own authored notes — the scope it does
-    # not cover — verbatim, labelled by rule and unit. The engine composes no
-    # prose of its own: a simplification is stated in the rule's data or nowhere.
+    # Relay the fixed-outcome rule's own authored notes (its unmodelled scope),
+    # the same generic relay every seam shares — never engine-composed prose.
     notes = tuple(
-        f"{rule.name} ({contingent.unit.name}): {rule.notes}"
-        for contingent, rule in ((a, a_rule), (b, b_rule))
-        if rule is not None and rule.notes
+        note
+        for side, rule in ((a, a_rule), (b, b_rule))
+        if rule is not None
+        for note in factored_notes(side.loadout.rules, {rule.name}, side.unit.name)
     )
     return BreakResult(
         a=_side_break(

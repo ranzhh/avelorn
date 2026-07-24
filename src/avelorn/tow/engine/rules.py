@@ -245,6 +245,25 @@ def compile_rules(
     return modifiers, unfactored
 
 
+def factored_notes(rules: Sequence[Rule], factored: Collection[str], source: str) -> list[str]:
+    """The authored ``notes`` of the factored rules that carry them.
+
+    A rule's hand-authored :attr:`~avelorn.tow.schema.rule.Rule.notes` (its
+    modelling scope) surface wherever the rule was factored, labelled by rule
+    and ``source`` (the unit) — the generic relay every seam shares, so a
+    caveat is stated in the rule's data and shown beside the figure it
+    qualifies, never composed as prose in the engine.
+
+    Returns:
+        One note per factored rule that authored some, for a result's notes.
+    """
+    return [
+        f"{rule.name} ({source}): {rule.notes}"
+        for rule in rules
+        if rule.name in factored and rule.notes
+    ]
+
+
 def _compile(
     rule: Rule, context: GateContext, grants: "Mapping[str, Rule] | None" = None
 ) -> list[Modifier] | None:
