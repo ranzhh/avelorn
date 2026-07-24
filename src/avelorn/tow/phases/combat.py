@@ -16,7 +16,7 @@ the other strikes back — is composed on top of this, later.
 
 import logging
 from collections.abc import Callable, Collection, Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from itertools import product
 from math import isclose
 from typing import ClassVar, overload
@@ -500,12 +500,17 @@ def strike_unit(
 class FightResult:
     """Outcome of one round of close combat between two units.
 
-    ``losses`` is the *joint* distribution of models removed:
+    ``losses`` is the *joint* distribution of models removed **in the melee**:
     ``losses[j][k]`` = P(A lost j models and B lost k). The two sides are
     correlated whenever one strikes first — a side that lost heavily strikes
-    back with fewer models — so the joint, not the two marginals, is what a
-    combat-result margin must be computed from. ``a_casualties`` and
-    ``b_casualties`` are its marginals. ``first_striker`` is the
+    back with fewer models — so the joint, not the two marginals, is what the
+    scoring margin must be computed from. ``a_casualties`` and
+    ``b_casualties`` are its marginals (melee only — a Stand & Shoot volley's
+    casualties are reported on the volley itself). ``wound_margin`` is the
+    signed distribution combat-result scoring reads (see :attr:`scoring_wounds`):
+    the melee wound difference *plus* any Stand & Shoot wounds, which the
+    rulebook counts toward the shooting side's combat result. ``first_striker``
+    is the
     :class:`Contingent` that struck first by Initiative, or None when equal
     Initiative made the blows simultaneous. ``a_initiative`` and
     ``b_initiative`` are the effective Initiatives that ordering compared —
@@ -531,17 +536,47 @@ class FightResult:
     b_unit_strength: int = 0
     a_combat_result_bonus: int = 0
     b_combat_result_bonus: int = 0
+    # The signed distribution of (A's minus B's) combat-result wounds, populated by
+    # fight(); empty on a fixture-built result, which then scores off the melee
+    # joint alone (see scoring_wounds).
+    wound_margin: dict[int, float] = field(default_factory=dict)
 
     @property
     def a_casualties(self) -> list[float]:
-        """Marginal distribution of models A lost (index k = P(k removed))."""
+        """Marginal distribution of models A lost in the melee (index k = P(k removed))."""
         return [sum(row) for row in self.losses]
 
     @property
     def b_casualties(self) -> list[float]:
-        """Marginal distribution of models B lost (index k = P(k removed))."""
+        """Marginal distribution of models B lost in the melee (index k = P(k removed))."""
         columns = len(self.losses[0]) if self.losses else 0
         return [sum(row[k] for row in self.losses) for k in range(columns)]
+
+    @property
+    def scoring_wounds(self) -> dict[int, float]:
+        """The signed distribution of (A's minus B's) combat-result wounds.
+
+        Each side's wounds are the unsaved wounds it inflicted this round plus
+        any it caused by a Stand & Shoot charge reaction this turn — the Wounds
+        line of the combat-result score (a Stand & Shoot's wounds count for the
+        shooter). :func:`fight` populates ``wound_margin`` with this, since only
+        it holds the joint of the volley's thinning and the melee that thinning
+        shaped. A FightResult built without it (a scoring fixture) falls back to
+        the melee joint, scoring the round's wounds alone.
+
+        Returns:
+            The wound-difference pmf (A-positive), from ``wound_margin`` when
+            populated, else derived from the melee ``losses``.
+        """
+        if self.wound_margin:
+            return self.wound_margin
+        derived: dict[int, float] = {}
+        for a_lost, row in enumerate(self.losses):
+            for b_lost, mass in enumerate(row):
+                if mass:
+                    diff = b_lost - a_lost
+                    derived[diff] = derived.get(diff, 0.0) + mass
+        return derived
 
 
 def _unit_rule_notes(unit: Unit, claimed: Collection[str] = ()) -> list[str]:
@@ -717,7 +752,11 @@ def fight(
     resolved at each surviving strength and mixed over these two
     (independent) distributions, exactly; omitted, a side enters at full
     ``models``. The returned ``losses`` count only this round's melee
-    casualties, so pre-combat losses never inflate the combat result.
+    casualties (a Stand & Shoot volley's casualties are reported on the volley),
+    but its wounds *do* score: a Stand & Shoot's unsaved wounds count toward the
+    shooting side's combat result (rulebook), so ``fight`` credits a side's
+    pre-melee (prior) losses to its foe in ``wound_margin`` — the distribution
+    :func:`combat_result` scores — correlated with the same thinning they cause.
 
     Rule-granted characteristic modifiers apply to the striking order
     through the loadout of a contingent fielded with deploy(), gated on
@@ -787,7 +826,18 @@ def fight(
     # Each side may enter already thinned by pre-combat casualties (a Stand &
     # Shoot volley, say); the two are independent, so the round is the
     # fixed-count joint mixed over the product of the loss distributions.
+    # ``losses`` keeps the melee joint (for the casualty marginals);
+    # ``wound_margin`` accrues the combat-result wound difference, which counts
+    # a Stand & Shoot's wounds too: a side's pre-melee losses were the *other*
+    # side's volley, so they credit that other side (rulebook: unsaved wounds
+    # inflicted, including by a Stand & Shoot this turn). The credit is a
+    # per-branch constant (pre_a, pre_b) shifting the melee difference, so the
+    # thinning and the credit stay correlated — the same volley that felled
+    # ``pre_a`` of A both lightens A's return blows and scores for B. (Counts
+    # models removed, = wounds for the 1-Wound models the engine fields; a
+    # multi-Wound Stand & Shoot would credit wounds, not casualties.)
     losses = [[0.0] * (b.models + 1) for _ in range(a.models + 1)]
+    wound_margin: dict[int, float] = {}
     for pre_a, p_a in enumerate(a_lost_before):
         for pre_b, p_b in enumerate(b_lost_before):
             weight = p_a * p_b
@@ -796,7 +846,10 @@ def fight(
             joint = _round_joint(a_strikes, a.models - pre_a, b_strikes, b.models - pre_b, a_first)
             for a_lost, row in enumerate(joint):
                 for b_lost, mass in enumerate(row):
-                    losses[a_lost][b_lost] += weight * mass
+                    contribution = weight * mass
+                    losses[a_lost][b_lost] += contribution
+                    diff = (b_lost + pre_b) - (a_lost + pre_a)
+                    wound_margin[diff] = wound_margin.get(diff, 0.0) + contribution
 
     first_striker = None if a_first is None else (a if a_first else b)
     # A rule factored into the striking order, the fighting-rank depth, the
@@ -854,6 +907,7 @@ def fight(
         b_unit_strength=b.unit_strength(),
         a_combat_result_bonus=a_combat_result.value,
         b_combat_result_bonus=b_combat_result.value,
+        wound_margin=wound_margin,
     )
 
 
@@ -965,13 +1019,15 @@ class CombatResult:
 def combat_result(result: FightResult) -> CombatResult:
     """Score a fought round by unsaved wounds inflicted and name the winner.
 
-    Composes on a :class:`FightResult`'s joint loss distribution: A's score
-    is how many models (= wounds, for 1-Wound units) B lost plus A's Rank
-    Bonus and rule-granted combat-result points, B's the reverse. Those
-    per-side additions are fixed for the round, so they shift every lead by
-    the same constant. Because the two sides are correlated under Initiative
-    order, the win/draw/win split and the signed margin come from the joint,
-    not from differencing the marginals.
+    Composes on a :class:`FightResult`'s :attr:`~FightResult.scoring_wounds`:
+    A's score is the unsaved wounds it inflicted — this round's melee plus any
+    from a Stand & Shoot charge reaction this turn — plus A's Rank Bonus and
+    rule-granted combat-result points, B's the reverse. The Rank Bonus and
+    points are fixed for the round, so they shift every lead by the same
+    constant. Because the two sides are correlated (under Initiative order, and
+    through a volley that both thins a side and scores for its foe), the
+    win/draw/win split and signed margin come from the joint wound distribution,
+    not from differencing marginals.
 
     Returns:
         The exact win/draw/loss probabilities and signed margin distribution.
@@ -980,22 +1036,22 @@ def combat_result(result: FightResult) -> CombatResult:
     p_a_wins = p_draw = p_b_wins = 0.0
     # A's fixed edge over B: Rank Bonus plus the rule-granted combat-result
     # points (Massed Infantry, ...), each a signed per-side constant that
-    # shifts every lead alike. A scores B's losses + these; B the reverse.
+    # shifts every lead alike. The wound difference (melee + Stand & Shoot)
+    # carries the rest.
     static_delta = (result.a_rank_bonus - result.b_rank_bonus) + (
         result.a_combat_result_bonus - result.b_combat_result_bonus
     )
-    for a_lost, row in enumerate(result.losses):
-        for b_lost, mass in enumerate(row):
-            if mass == 0.0:
-                continue
-            lead = (b_lost - a_lost) + static_delta
-            margin[lead] = margin.get(lead, 0.0) + mass
-            if lead > 0:
-                p_a_wins += mass
-            elif lead < 0:
-                p_b_wins += mass
-            else:
-                p_draw += mass
+    for wound_diff, mass in result.scoring_wounds.items():
+        if mass == 0.0:
+            continue
+        lead = wound_diff + static_delta
+        margin[lead] = margin.get(lead, 0.0) + mass
+        if lead > 0:
+            p_a_wins += mass
+        elif lead < 0:
+            p_b_wins += mass
+        else:
+            p_draw += mass
     logger.debug("combat result: P(a)=%.3f draw=%.3f P(b)=%.3f", p_a_wins, p_draw, p_b_wins)
     return CombatResult(
         p_a_wins=p_a_wins,
