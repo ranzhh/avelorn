@@ -51,6 +51,7 @@ from avelorn.tow.engine.rules import (
     ShootingFacts,
     compile_rules,
     effective_armour_value,
+    factored_notes,
 )
 from avelorn.tow.schema.psychology import PanicCause
 from avelorn.tow.schema.rule import AttackKind, RerollEffect, Rule
@@ -413,6 +414,7 @@ def shoot_unit(
         for rule in shooter.special_rules
         if rule not in claimed
     )
+    notes.extend(factored_notes(attacker.loadout.rules, claimed, shooter.name))
     notes.extend(
         f"special rule not factored: {rule} ({target.name})"
         for rule in target.special_rules

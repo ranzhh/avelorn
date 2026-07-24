@@ -71,7 +71,7 @@ def main() -> None:
     assert reaction is not None  # a StandAndShoot reaction was declared
     melee = game.combat.fight(engagement)
     scored = game.combat.result(melee)
-    breaks = game.combat.break_test(scored, spearmen_unit, archers_unit)
+    breaks = game.combat.break_test(scored, spearmen, archers)
 
     movement = spearmen_unit.profiles[0][Characteristic.MOVEMENT]
     charged_init = melee.a_initiative.value

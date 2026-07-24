@@ -113,6 +113,8 @@ def rule_to_yaml(rule: Rule, source_url: str | None = None) -> str:
     if rule.flavour is not None:
         doc["flavour"] = rule.flavour
     doc["paragraphs"] = list(rule.paragraphs)
+    if rule.notes is not None:
+        doc["notes"] = rule.notes
     if rule.effects:
         doc["effects"] = [e.model_dump(mode="json", exclude_none=True) for e in rule.effects]
     text = _dump(doc, source_url)

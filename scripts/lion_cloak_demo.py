@@ -159,6 +159,20 @@ def main() -> None:
         f"  - P(Sisters win): {scored.p_b_wins:.3f}"
     )
 
+    # The Break test the loser takes. The Lions are Stubborn: on a lost round
+    # they Fall Back in Good Order rather than Break, so their Break column is
+    # zero. The Sisters, without it, roll the ordinary split.
+    breaks = game.combat.break_test(scored, engagement.a, engagement.b)
+    print(
+        "\n  break test (only the round's loser tests):\n"
+        f"  - Lions:   break {breaks.a.p_breaks:.3f}  "
+        f"fall back {breaks.a.p_falls_back:.3f}  give ground {breaks.a.p_gives_ground:.3f}\n"
+        f"  - Sisters: break {breaks.b.p_breaks:.3f}  "
+        f"fall back {breaks.b.p_falls_back:.3f}  give ground {breaks.b.p_gives_ground:.3f}"
+    )
+    for note in breaks.notes:
+        print(f"  - {note}")
+
     if melee.notes:
         print("\n  not factored into the melee math (no seam consumes them yet):")
         for note in melee.notes:

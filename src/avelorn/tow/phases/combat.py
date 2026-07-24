@@ -62,10 +62,13 @@ from avelorn.tow.engine.rules import (
     effective_characteristic,
     effective_combat_result_bonus,
     effective_rerolls,
+    factored_notes,
+    forced_outcome,
 )
 from avelorn.tow.phases.movement import Engagement
-from avelorn.tow.schema.rule import AttackKind, Rule
-from avelorn.tow.schema.unit import Characteristic, Unit
+from avelorn.tow.schema.psychology import BreakOutcome
+from avelorn.tow.schema.rule import AttackKind, Decision, Rule
+from avelorn.tow.schema.unit import Characteristic
 
 logger = logging.getLogger(__name__)
 
@@ -479,7 +482,7 @@ def strike_unit(
             # The round is unknown here, so a first-round rule like Martial
             # Prowess factors nothing and stays noted.
             *_unit_rule_notes(
-                striker.unit,
+                striker,
                 claimed={
                     *striker.fighting_ranks().factored,
                     *striker.effective_attacks().factored,
@@ -489,7 +492,7 @@ def strike_unit(
             ),
             # The target throws no blows here, but its save is resolved, so its
             # save-improving rules (Parry) are factored and claimed.
-            *_unit_rule_notes(target.unit, claimed=engagement.target_armour.factored),
+            *_unit_rule_notes(target, claimed=engagement.target_armour.factored),
             *engagement.notes,
         ),
         target_models=targets,
@@ -579,21 +582,23 @@ class FightResult:
         return derived
 
 
-def _unit_rule_notes(unit: Unit, claimed: Collection[str] = ()) -> list[str]:
-    # The one owner of a unit rule's disposition: noted unless a consumer
-    # claimed it (the initiative read claims what it factored, honoured
-    # no-ops included). Notes are built once, never parsed or matched. A
-    # rule printed on the datasheet is owned by the unit; a rule the troop
-    # type confers (Press of Battle, ...) is owned by the troop type.
+def _unit_rule_notes(side: Contingent, claimed: Collection[str] = ()) -> list[str]:
+    # The one owner of a unit rule's disposition: a rule the consumer could not
+    # claim is reported "not factored"; a claimed rule that authored notes has
+    # them relayed (Stubborn's scope caveats). Notes are built once, never
+    # parsed. A rule printed on the datasheet is owned by the unit; one the
+    # troop type confers (Press of Battle, ...) by the troop type.
+    unit = side.unit
     troop_type = unit.troop_type_profile
     owned = [(printed, unit.name) for printed in unit.special_rules]
     if troop_type is not None:
         owned += [(printed, troop_type.name) for printed in troop_type.special_rules]
-    return [
+    unfactored = [
         f"special rule not factored: {printed} ({owner})"
         for printed, owner in owned
         if printed not in claimed
     ]
+    return unfactored + factored_notes(side.loadout.rules, claimed, unit.name)
 
 
 def _combat_conditions(first_round: bool | None, side: Contingent, foe: Contingent) -> GateContext:
@@ -860,7 +865,7 @@ def fight(
         dict.fromkeys(
             [
                 *_unit_rule_notes(
-                    a.unit,
+                    a,
                     claimed={
                         *a_initiative.factored,
                         *a.fighting_ranks().factored,
@@ -873,7 +878,7 @@ def fight(
                     },
                 ),
                 *_unit_rule_notes(
-                    b.unit,
+                    b,
                     claimed={
                         *b_initiative.factored,
                         *b.fighting_ranks().factored,
@@ -1086,14 +1091,17 @@ class BreakResult:
     exclusive — each is non-zero only across the outcomes where that side
     lost. ``p_draw`` is the chance of a drawn combat, in which neither side
     tests. The two sides' six outcome probabilities and ``p_draw`` sum to 1.
+    ``notes`` surface what a rule that fixed an outcome (Stubborn) did and the
+    parts of it the current scope does not model.
     """
 
     a: SideBreak
     b: SideBreak
     p_draw: float
+    notes: tuple[str, ...] = ()
 
 
-def break_test(result: CombatResult, unit_a: Unit, unit_b: Unit) -> BreakResult:
+def break_test(result: CombatResult, a: Contingent, b: Contingent) -> BreakResult:
     """Resolve the Break test for a scored combat round, for each side.
 
     Only the losing side rolls: 2D6, add the winner's margin, compare to
@@ -1104,43 +1112,90 @@ def break_test(result: CombatResult, unit_a: Unit, unit_b: Unit) -> BreakResult:
     winner takes no Break test (its follow-up and pursuit choices are not
     modelled here), and a drawn combat tests neither side.
 
-    Composes on the signed margin distribution: ``unit_a`` is the
-    positive-margin side, matching :func:`fight`'s ``a``.
+    A side's resolved rules may force its outcome instead of rolling: Stubborn's
+    :class:`~avelorn.tow.schema.rule.ChoiceEffect` sends its whole losing mass to
+    Fall Back in Good Order (it never Breaks). What that model leaves out — the
+    once-per-battle limit, the option to decline, the forgone Give Ground — is
+    returned in :attr:`BreakResult.notes`, not silently applied.
+
+    Composes on the signed margin distribution: ``a`` is the positive-margin
+    side, matching :func:`fight`'s ``a``; each contingent supplies its
+    Leadership (highest in the unit) and its resolved rules.
 
     Returns:
-        Each side's Break-test outcomes for the rounds it loses, plus the
-        drawn-combat probability.
+        Each side's Break-test outcomes for the rounds it loses, the
+        drawn-combat probability, and the notes for any fixed-outcome rule.
     """
-    a_leadership = unit_a.highest(Characteristic.LEADERSHIP) or 0
-    b_leadership = unit_b.highest(Characteristic.LEADERSHIP) or 0
-    logger.debug("break test: Ld %d (a) vs Ld %d (b)", a_leadership, b_leadership)
+    a_leadership = a.unit.highest(Characteristic.LEADERSHIP) or 0
+    b_leadership = b.unit.highest(Characteristic.LEADERSHIP) or 0
+    # The break decision's outcomes are BreakOutcomes; narrow the base the seam
+    # returns to the set this test routes (a foreign outcome under break, a data
+    # slip, is left to roll).
+    a_outcome, a_rule = forced_outcome(a.loadout.rules, Decision.BREAK)
+    b_outcome, b_rule = forced_outcome(b.loadout.rules, Decision.BREAK)
+    a_forced = a_outcome if isinstance(a_outcome, BreakOutcome) else None
+    b_forced = b_outcome if isinstance(b_outcome, BreakOutcome) else None
+    logger.debug(
+        "break test: Ld %d (a, forced=%s) vs Ld %d (b, forced=%s)",
+        a_leadership,
+        a_forced,
+        b_leadership,
+        b_forced,
+    )
+    # Relay the fixed-outcome rule's own authored notes (its unmodelled scope),
+    # the same generic relay every seam shares — never engine-composed prose.
+    notes = tuple(
+        note
+        for side, rule in ((a, a_rule), (b, b_rule))
+        if rule is not None
+        for note in factored_notes(side.loadout.rules, {rule.name}, side.unit.name)
+    )
     return BreakResult(
         a=_side_break(
-            result.margin, a_leadership, deficit=lambda lead: -lead if lead < 0 else None
+            result.margin,
+            a_leadership,
+            deficit=lambda lead: -lead if lead < 0 else None,
+            forced=a_forced,
         ),
         b=_side_break(
-            result.margin, b_leadership, deficit=lambda lead: lead if lead > 0 else None
+            result.margin,
+            b_leadership,
+            deficit=lambda lead: lead if lead > 0 else None,
+            forced=b_forced,
         ),
         p_draw=sum(mass for lead, mass in result.margin.items() if lead == 0),
+        notes=notes,
     )
 
 
 def _side_break(
-    margin: Mapping[int, float], leadership: int, *, deficit: Callable[[int], int | None]
+    margin: Mapping[int, float],
+    leadership: int,
+    *,
+    deficit: Callable[[int], int | None],
+    forced: BreakOutcome | None = None,
 ) -> SideBreak:
     # Aggregate one side's Break-test outcomes over the rounds it loses.
     # ``deficit(lead)`` is this side's losing margin at signed lead ``lead``,
     # or None when it did not lose (it won, or the combat was drawn) and so
-    # takes no test.
+    # takes no test. ``forced`` fixes the outcome (Stubborn): the whole losing
+    # mass goes to that result rather than the rolled split.
     breaks = falls_back = gives_ground = 0.0
     for lead, mass in margin.items():
         loss = deficit(lead)
         if loss is None:
             continue
-        p_break, p_fall, p_give = _break_outcomes(leadership, loss)
-        breaks += mass * p_break
-        falls_back += mass * p_fall
-        gives_ground += mass * p_give
+        if forced is BreakOutcome.BREAKS:
+            breaks += mass
+        elif forced is BreakOutcome.FALLS_BACK:
+            falls_back += mass
+        elif forced is BreakOutcome.GIVES_GROUND:
+            gives_ground += mass
+        else:
+            p_break, p_fall, p_give = _break_outcomes(leadership, loss)
+            breaks += mass * p_break
+            falls_back += mass * p_fall
+            gives_ground += mass * p_give
     return SideBreak(p_gives_ground=gives_ground, p_falls_back=falls_back, p_breaks=breaks)
 
 
@@ -1242,10 +1297,13 @@ class CombatPhase(Phase):
         """
         return combat_result(fought)
 
-    def break_test(self, scored: CombatResult, a: Unit, b: Unit) -> BreakResult:
+    def break_test(self, scored: CombatResult, a: Contingent, b: Contingent) -> BreakResult:
         """The Break test for a scored round, for each side.
 
+        Each contingent supplies its Leadership and its resolved rules (a
+        fixed-outcome rule like Stubborn is read here).
+
         Returns:
-            Each side's break outcome distribution.
+            Each side's break outcome distribution, plus any fixed-outcome notes.
         """
         return break_test(scored, a, b)

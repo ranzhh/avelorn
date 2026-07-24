@@ -136,6 +136,27 @@ def test_rule_level_when_conjoins_with_an_effect_gate() -> None:
         )
 
 
+def test_choice_effect_forces_a_decision_outcome() -> None:
+    """``forces`` maps a decision to its forced outcome, keyed like a modifier's ``add``.
+
+    An effect carrying ``forces`` is a choice effect; it rejects a modifier's
+    keys, and both the decision key and the outcome value are closed vocabularies.
+    """
+    from avelorn.tow.schema.rule import ChoiceEffect
+
+    effect = _EFFECT.validate_python({"forces": {"break": "fall-back-in-good-order"}})
+    assert isinstance(effect, ChoiceEffect)
+    assert effect.forces == {"break": "fall-back-in-good-order"}
+    with pytest.raises(ValidationError):  # a choice effect is not a modifier
+        _EFFECT.validate_python(
+            {"forces": {"break": "fall-back-in-good-order"}, "add": {"to-hit": -1}}
+        )
+    with pytest.raises(ValidationError):  # decision outside the vocabulary
+        _EFFECT.validate_python({"forces": {"rally": "fall-back-in-good-order"}})
+    with pytest.raises(ValidationError):  # outcome outside the vocabulary
+        _EFFECT.validate_python({"forces": {"break": "hold-the-line"}})
+
+
 def test_when_is_optional() -> None:
     """Without a when, the modifier applies to every attack."""
     effect = _EFFECT.validate_python({"add": {"armour-piercing": 1}})

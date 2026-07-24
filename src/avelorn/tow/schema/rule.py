@@ -26,12 +26,20 @@ approximated.
 """
 
 from collections.abc import Mapping
+from contextlib import suppress
 from enum import StrEnum
 from typing import Annotated, Literal, assert_never
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
-from avelorn.tow.schema.psychology import PanicCause
+from avelorn.tow.schema.psychology import Outcome, PanicCause
 from avelorn.tow.schema.stage import ATTACK_ROLLS, Stage
 from avelorn.tow.schema.unit import Characteristic
 from avelorn.tow.schema.weapon import WeaponType
@@ -564,7 +572,67 @@ class GrantEffect(GatedEffect):
     grants: str  # the printed name of the rule conferred, e.g. "Armour Bane (1)"
 
 
-RuleEffect = ModifierEffect | RerollEffect | GrantEffect
+def _as_outcome(value: object) -> "Outcome":
+    # Resolve a slug to the one Outcome subclass that defines it: the base has no
+    # members, so a ChoiceEffect discovers the concrete set rather than naming it.
+    for outcomes in Outcome.__subclasses__():
+        with suppress(ValueError):
+            return outcomes(value)
+    raise ValueError(f"{value!r} is not a decision outcome")
+
+
+class Decision(StrEnum):
+    """A point where an outcome is rolled or chosen, that a rule may force.
+
+    The routing key of a :class:`ChoiceEffect` — the peer of :class:`Quantity`
+    for a modifier: the seam that owns a decision reads the effects forcing it.
+    Closed and append-only; a member joins when a rule forces a new decision (a
+    charge reaction, ...).
+    """
+
+    BREAK = "break"
+
+
+class ChoiceEffect(GatedEffect):
+    """Force the outcome of a decision that is otherwise rolled or chosen.
+
+    ``forces`` maps a :class:`Decision` to the :class:`~avelorn.tow.schema.psychology.Outcome`
+    it takes instead of rolling — ``{break: fall-back-in-good-order}``. Keyed by
+    the decision exactly as a modifier's ``add`` is keyed by the quantity, so the
+    seam that owns a decision reads its own key ("is ``break`` mine, and forced
+    to what?") with no per-rule handler. The value is typed as the ``Outcome``
+    base; each decision's own results are a subclass (a break's are
+    :class:`~avelorn.tow.schema.psychology.BreakOutcome`), resolved by slug, so
+    this generic effect names no decision. Self-naming by ``forces`` (the peer of
+    ``add`` / ``grants``); each model forbids the others' keys. Forbidding an
+    option rather than forcing one is the sibling (a ``forbids`` key) for when
+    one lands.
+    """
+
+    forces: dict[Decision, Outcome]
+
+    @field_validator("forces", mode="plain")
+    @classmethod
+    def _resolve_forced(cls, raw: object) -> dict["Decision", "Outcome"]:
+        # Resolve each entry: the key against the Decision vocabulary, the value
+        # against whichever Outcome subclass defines that slug — so the base is
+        # all this generic effect declares, the concrete set discovered.
+        if not isinstance(raw, dict) or not raw:
+            raise ValueError("forces maps at least one decision to the outcome it forces")
+        resolved: dict[Decision, Outcome] = {}
+        for decision, outcome in raw.items():
+            key = decision if isinstance(decision, Decision) else Decision(decision)
+            resolved[key] = outcome if isinstance(outcome, Outcome) else _as_outcome(outcome)
+        return resolved
+
+    @field_serializer("forces")
+    def _dump_forced(self, forces: dict["Decision", "Outcome"]) -> dict[str, str]:
+        # The values are Outcome subclasses, not the base the field is typed as,
+        # so serialise their slugs explicitly rather than let pydantic warn.
+        return {decision.value: outcome.value for decision, outcome in forces.items()}
+
+
+RuleEffect = ModifierEffect | RerollEffect | GrantEffect | ChoiceEffect
 
 
 def references_parameter(effect: RuleEffect) -> bool:
@@ -596,6 +664,12 @@ class Rule(BaseModel):
     flavour: str | None = None  # italic flavour line, if any
     paragraphs: list[str] = Field(min_length=1)  # rule text, as displayed
     effects: list[RuleEffect] = Field(default_factory=list)
+    # Hand-authored modelling notes: the scope this build covers and the parts
+    # of the printed rule it does not, in the author's words. A seam that
+    # factors the rule surfaces them (break_test does, for Stubborn), so a
+    # simplification is stated in data — maintainable, diffable against the
+    # paragraphs — never composed as prose in the engine.
+    notes: str | None = None
 
     @model_validator(mode="before")
     @classmethod
