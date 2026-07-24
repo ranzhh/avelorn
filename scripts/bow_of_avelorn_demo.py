@@ -27,12 +27,19 @@ That is a steady proportional edge (~23% more wounds), so its size in wounds
 tracks the number of shots: it is roughly twice as large in the full opening
 volley as in the five-shot Stand & Shoot, which fires the front rank alone.
 
-The Stand & Shoot casualties carry into the melee that follows — a felled Lion
-does not swing back, and its wounds count toward the Sisters' combat result —
-so the bow's shooting edge tilts the close combat too. The opening volley is a
-separate turn and is scored on its own: prior-turn shooting cannot count toward
-this combat's result, so the Lions charge at full strength (a continuous battle
-that carries casualties across turns is a later layer on top of the engine).
+The whole point is that the two volleys *combine*. The opening volley thins the
+unit that then charges, and the Stand & Shoot thins it again before it strikes,
+and together they can break its front rank — which is what turns a fight the
+Lions win into one the Sisters win. The Stand & Shoot's casualties carry into
+the melee for free (the engine enters the charger already thinned, and those
+wounds also count toward the Sisters' combat result). The opening volley's do
+not — it is a previous turn, and a prior turn's shooting must not score this
+combat — so this demo carries them across the turn **by hand**, removing the
+expected number of felled Lions before the charge. That is a deliberately ugly
+seam: it rounds a whole distribution down to one integer, where a proper
+version would carry the distribution intact. A continuous battle that tracks
+casualties across turns is a later layer on top of the engine; this is a
+stand-in for it, flagged in the code so no one mistakes it for the real thing.
 
 Usage: uv run python scripts/bow_of_avelorn_demo.py [models] [distance]
 
@@ -69,11 +76,13 @@ def resolve(game: TOWGame, sisters, lions_unit, models: int, distance: int):
 
     ``sisters`` is a datasheet (the printed one, or a rearmed copy); the Lions
     are fielded fresh so the two runs differ only by the Sisters' bow. The Lions
-    stand ``distance`` inches off when shot at, and charge that same gap.
+    stand ``distance`` inches off when shot at, and charge that same gap (so keep
+    ``distance`` within a charge's reach — a unit's Movement plus 6").
 
     Returns:
-        The Sisters' opening (stationary) volley, their Stand & Shoot reaction
-        as the Lions charge, the fought melee, and its scored result.
+        The Sisters' opening (stationary) volley, the number of Lions it fells,
+        their Stand & Shoot reaction as the survivors charge, the fought melee,
+        and its scored result.
     """
     lions = game.field(lions_unit, models)
     sisters_fielded = game.field(sisters, models)
@@ -84,14 +93,25 @@ def resolve(game: TOWGame, sisters, lions_unit, models: int, distance: int):
     with own_turn.shooting() as shooting:
         opening = shooting.volley(sisters_fielded, lions, distance=distance)
 
-    # The Lions' turn: they charge home with the great blade; the Sisters hold
-    # their hand weapon for the melee and Stand & Shoot (front rank only, no
-    # Volley Fire, and at a to-hit penalty) as the reaction. The reaction's
-    # casualties thin the chargers before they strike.
+    # UGLY SEAM — carry the opening volley's casualties across the turn by hand.
+    # The engine has no cross-turn casualty state (that is the future Battle
+    # layer), and we must NOT route these through the melee's prior-losses: that
+    # path credits them to the Sisters' combat result, but a *previous* turn's
+    # shooting cannot score *this* combat. So we just remove the expected number
+    # of felled Lions before they charge. Crude on purpose — it collapses a whole
+    # distribution to one integer. A proper version carries the distribution.
+    felled = round(opening.expected_casualties)
+    survivors = lions.remove_casualties(felled)
+
+    # The Lions' turn: the survivors charge home with the great blade; the
+    # Sisters hold their hand weapon for the melee and Stand & Shoot (front rank
+    # only, no Volley Fire, and at a to-hit penalty) as the reaction. That
+    # reaction's casualties thin the chargers again before they strike — the
+    # engine enters them already thinned — and its wounds score for the Sisters.
     lions_turn = game.turn()
     with lions_turn.movement() as movement:
         engagement = movement.charge(
-            lions.wielding("Chracian Great Blade"),
+            survivors.wielding("Chracian Great Blade"),
             sisters_fielded.wielding("Hand Weapon"),
             Charge(distance, ChargeArc.FRONT),
         )
@@ -99,14 +119,15 @@ def resolve(game: TOWGame, sisters, lions_unit, models: int, distance: int):
     with lions_turn.combat() as combat:
         melee = combat.fight(engagement)
         scored = combat.result(melee)
-    return opening, reaction, melee, scored
+    return opening, felled, reaction, melee, scored
 
 
-def _report(label: str, opening, reaction, melee, scored) -> None:
+def _report(label: str, opening, felled: int, reaction, melee, scored, models: int) -> None:
     print(f"  {label}:")
     print(
-        f"    opening volley (their turn):   {opening.shots} shots, Lions save "
-        f"{opening.save_target}+, {opening.expected_wounds:.2f} wounds"
+        f"    opening volley (their turn):    {opening.shots} shots, Lions save "
+        f"{opening.save_target}+, {opening.expected_wounds:.2f} wounds "
+        f"→ {felled} felled, {models - felled} charge"
     )
     if reaction is None:
         print("    Stand & Shoot (as they charge): no volley")
@@ -135,7 +156,7 @@ def main() -> None:
         "distance",
         nargs="?",
         type=int,
-        default=12,
+        default=10,
         help="inches the Lions stand off — the opening shot's range and the charge",
     )
     parser.add_argument(
@@ -156,27 +177,43 @@ def main() -> None:
 
     # The printed Sisters, and a counterfactual copy carrying an ordinary bow.
     ordinary = rearm(sisters, "Bow of Avelorn", "Warbow")
-    bow_open, bow_react, bow_melee, bow_scored = resolve(
+    bow_open, bow_felled, bow_react, bow_melee, bow_scored = resolve(
         game, sisters, lions, args.models, args.distance
     )
-    warbow_open, warbow_react, warbow_melee, warbow_scored = resolve(
+    warbow_open, warbow_felled, warbow_react, warbow_melee, warbow_scored = resolve(
         game, ordinary, lions, args.models, args.distance
     )
 
-    _report("Bow of Avelorn (as printed)", bow_open, bow_react, bow_melee, bow_scored)
+    _report(
+        "Bow of Avelorn (as printed)",
+        bow_open,
+        bow_felled,
+        bow_react,
+        bow_melee,
+        bow_scored,
+        args.models,
+    )
     print()
-    _report("an ordinary Warbow", warbow_open, warbow_react, warbow_melee, warbow_scored)
+    _report(
+        "an ordinary Warbow",
+        warbow_open,
+        warbow_felled,
+        warbow_react,
+        warbow_melee,
+        warbow_scored,
+        args.models,
+    )
 
-    lift = expected_value(bow_open.casualties) - expected_value(warbow_open.casualties)
     print(
-        "\n  verdict: the Bow of Avelorn is worth its name. Its Magical Attacks turn\n"
-        "  off Lion Cloak — the Lions weather it on 6+, not the 5+ an ordinary bow\n"
-        "  leaves them — and its printed Armour Bane stacks with Arrows of Isha. That\n"
-        f"  steady per-shot edge is +{lift:.2f} wounds across the full opening volley,\n"
-        "  about half that in the five-shot Stand & Shoot — whose felled Lions carry\n"
-        "  into the melee. So the Sisters win "
-        f"{bow_scored.p_b_wins:.3f} of the time with the bow, "
-        f"{warbow_scored.p_b_wins:.3f} without."
+        "\n  verdict: the Bow of Avelorn is worth its name — and it is the two volleys\n"
+        "  together that tell. Its Magical Attacks turn off Lion Cloak (the Lions save\n"
+        "  on 6+, not 5+) and its printed Armour Bane stacks with Arrows of Isha, so it\n"
+        f"  fells {bow_felled} Lions in the opening volley to the Warbow's {warbow_felled}. "
+        f"That one extra body,\n"
+        "  compounded by a deadlier Stand & Shoot, breaks the charge's front rank far\n"
+        f"  more often — so the Sisters win {bow_scored.p_b_wins:.3f} of the time with the "
+        f"bow, {warbow_scored.p_b_wins:.3f}\n"
+        "  without, from a melee the full-strength Lions would mostly have won."
     )
 
 
