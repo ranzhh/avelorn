@@ -26,7 +26,7 @@ from avelorn.tow.engine.rules import (
 )
 from avelorn.tow.muster import Complement
 from avelorn.tow.schema.armour import Armour
-from avelorn.tow.schema.rule import Rule
+from avelorn.tow.schema.rule import GrantEffect, Rule
 from avelorn.tow.schema.unit import Characteristic, Unit
 from avelorn.tow.schema.weapon import Weapon
 
@@ -61,6 +61,11 @@ class Loadout:
     # here instead of in a registry. Names without entries are simply
     # absent and compile to unfactored, as ever.
     weapon_rules: Mapping[str, Rule] = field(default_factory=dict)
+    # Every rule a resolved rule *grants* (Arrows of Isha grants Armour Bane
+    # (1)), resolved as printed by name — the lookup a GrantEffect expands
+    # through at compile time. A granted name without an entry is simply
+    # absent, so the granting rule compiles to unfactored, as ever.
+    granted_rules: Mapping[str, Rule] = field(default_factory=dict)
 
     def weapon(self, name: str) -> Weapon:
         """The carried weapon with the given printed name.
@@ -800,7 +805,25 @@ def _resolve_loadout(
             for printed in profile.special_rules:
                 if printed not in weapon_rules and (entry := printed_rule(printed, rules)):
                     weapon_rules[printed] = entry
+    # Rules a resolved rule grants (Arrows of Isha -> Armour Bane (1)): resolved
+    # by name, once, so a grant effect can expand through the loadout at compile
+    # time without threading the registry. A name without an entry is left out,
+    # so the granting rule compiles to unfactored, as any unmodelled rule does.
+    granted_rules: dict[str, Rule] = {}
+    for rule in resolved:
+        for effect in rule.effects:
+            if (
+                isinstance(effect, GrantEffect)
+                and effect.grants not in granted_rules
+                and (entry := printed_rule(effect.grants, rules))
+            ):
+                granted_rules[effect.grants] = entry
     loadout = Loadout(
-        tuple(wielded), tuple(worn), tuple(resolved), tuple(unresolved), weapon_rules
+        tuple(wielded),
+        tuple(worn),
+        tuple(resolved),
+        tuple(unresolved),
+        weapon_rules,
+        granted_rules,
     )
     return loadout, unknown

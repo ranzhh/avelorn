@@ -34,6 +34,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from avelorn.tow.schema.psychology import PanicCause
 from avelorn.tow.schema.stage import ATTACK_ROLLS, Stage
 from avelorn.tow.schema.unit import Characteristic
+from avelorn.tow.schema.weapon import WeaponType
 
 # The printed convention for a parameterised rule: the name is filed
 # under an "(X)" placeholder ("Armour Bane (X)"), and effects reference
@@ -256,6 +257,28 @@ class ShootingGate(Gate):
     at_long_range: bool | None = None
 
 
+class EquipmentGate(Gate):
+    """A gate on a piece of equipment a model has in use — by family or by name.
+
+    The typed home for "wielding a bow" / "wielding this weapon": ``type`` names a
+    weapon family (:class:`~avelorn.tow.schema.weapon.WeaponType`, the seam #107
+    added), ``name`` a specific printed name. Arrows of Isha asks
+    ``{type: bow}``; a rule about one named weapon asks ``{name: ...}``. Both may
+    be set (a specific weapon of a family). At least one must be, or the gate
+    constrains nothing (``extra=forbid`` keeps a stray property a load error). The
+    ``worn`` armour peer joins here when the first rule gates on armour in use.
+    """
+
+    type: WeaponType | None = None
+    name: str | None = None
+
+    @model_validator(mode="after")
+    def _asks_something(self) -> "EquipmentGate":
+        if self.type is None and self.name is None:
+            raise ValueError("an equipment gate must constrain type or name")
+        return self
+
+
 class AttackKind(StrEnum):
     """The kind of attack a model is the target of — a closed, append-only set.
 
@@ -295,8 +318,11 @@ class When(Gate):
     ``combat`` and ``target_of`` are presence entities: ``combat: true`` gates
     on being engaged in a close combat (Parry's "whilst engaged in close
     combat"), a nested gate on being engaged *and* a property (Elven Reflexes's
-    first round); ``target_of`` names the incoming attack. A subject or property
-    outside these models is a data error at load (``extra=forbid``) — the closed
+    first round); ``target_of`` names the incoming attack. ``wielding`` gates on
+    the weapon a model is acting with (Arrows of Isha's "any bow") — the
+    equipment-in-use axis, matched by family or name, that the dice walk and the
+    folds both read off the engagement context. A subject or property outside
+    these models is a data error at load (``extra=forbid``) — the closed
     vocabulary the flat Condition enum gave, now structural. Every set fact is
     conjoined; without a ``when`` the modifier applies to every attack.
     """
@@ -304,14 +330,25 @@ class When(Gate):
     combat: bool | CombatGate | None = None
     movement: MovementGate | None = None
     shooting: ShootingGate | None = None
+    wielding: EquipmentGate | None = None
     target_of: bool | AttackGate | None = None
     natural: NaturalRoll | None = None
 
     @model_validator(mode="after")
     def _gates_something(self) -> "When":
-        if not any((self.combat, self.movement, self.shooting, self.target_of, self.natural)):
+        if not any(
+            (
+                self.combat,
+                self.movement,
+                self.shooting,
+                self.wielding,
+                self.target_of,
+                self.natural,
+            )
+        ):
             raise ValueError(
-                "a when must gate on something: combat, movement, shooting, target_of, or natural"
+                "a when must gate on something: combat, movement, shooting, "
+                "wielding, target_of, or natural"
             )
         return self
 
@@ -507,7 +544,27 @@ class RerollEffect(GatedEffect):
         return self
 
 
-RuleEffect = ModifierEffect | RerollEffect
+class GrantEffect(GatedEffect):
+    """Confer a named special rule, gated like any other effect.
+
+    "gains the Armour Bane (1) special rule" — the rule is granted *by name*, not
+    copied: the consuming seam resolves ``grants`` to its entry (the one
+    resolution convention, parameter substituted) and applies that rule's own
+    effects under this grant's gate. So a change to the granted rule — or to how
+    its quantity resolves — is tracked automatically, and a rule granted on top of
+    one a model already carries stacks (two Armour Bane (1) → +2 on a natural 6),
+    because each instance is a separate effect. The grant's shared ``when`` /
+    ``requires`` is the *outer* gate; the granted rule keeps its *own* inner gate
+    (Armour Bane's natural-6 To Wound), the two conjoined at evaluation without
+    merging the gate trees. There is no discriminator field: an effect carrying
+    ``grants`` is one, exactly as one carrying ``add`` is a modifier (each model
+    forbids the others' keys).
+    """
+
+    grants: str  # the printed name of the rule conferred, e.g. "Armour Bane (1)"
+
+
+RuleEffect = ModifierEffect | RerollEffect | GrantEffect
 
 
 def references_parameter(effect: RuleEffect) -> bool:
@@ -539,6 +596,38 @@ class Rule(BaseModel):
     flavour: str | None = None  # italic flavour line, if any
     paragraphs: list[str] = Field(min_length=1)  # rule text, as displayed
     effects: list[RuleEffect] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _hoist_shared_when(cls, data: object) -> object:
+        # A rule-level ``when`` is the condition the whole rule reads — Arrows
+        # of Isha's "any bow" holds for every clause. Written once at the rule
+        # and conjoined into each effect's own gate here, so the data does not
+        # repeat it and the rest of the engine still reads one gate per effect.
+        # A subject constrained at both the rule and an effect is ambiguous —
+        # a data error, not a silent override — but the union of disjoint
+        # subjects (the rule's "wielding a bow" beside an effect's natural 6)
+        # is the ordinary conjunction.
+        if not isinstance(data, dict) or "when" not in data:
+            return data
+        data = dict(data)
+        shared = data.pop("when")
+        merged: list[object] = []
+        for effect in data.get("effects") or []:
+            if not isinstance(effect, dict):
+                raise TypeError("a rule-level `when` needs its effects written as mappings")
+            own = effect.get("when")
+            if own is None:
+                combined = shared
+            elif overlap := set(shared) & set(own):
+                raise ValueError(
+                    f"a subject is gated at both the rule and an effect: {sorted(overlap)}"
+                )
+            else:
+                combined = {**shared, **own}
+            merged.append({**effect, "when": combined})
+        data["effects"] = merged
+        return data
 
     @model_validator(mode="after")
     def _parameter_requires_placeholder_name(self) -> "Rule":

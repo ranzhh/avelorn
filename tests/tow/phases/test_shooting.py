@@ -10,6 +10,7 @@ from avelorn.tow.engine.attack import AttackProfile, Outcome, RollState, Transfo
 from avelorn.tow.phases.shooting import _engagement_conditions, shoot, shoot_unit
 from avelorn.tow.schema.stage import Stage
 from avelorn.tow.schema.unit import Characteristic, Unit
+from avelorn.tow.schema.weapon import WeaponType
 
 REPO = TOWRepository()
 
@@ -369,16 +370,38 @@ def test_engagement_conditions_build_the_shooting_facts() -> None:
     """The shooting producer sets the shooting facts and leaves the rest absent.
 
     A moved shooter at unknown range: ``moved`` true, ``at_long_range`` unknown
-    (no distance). The shooter is not engaged in close combat and is the
-    attacker, not a target, so ``combat`` and ``target_of`` are both absent
-    (the defender's incoming-attack facts are built separately for its save);
+    (no distance). The weapon in hand is the bow it fires, so ``wielding`` names
+    its family. The shooter is not engaged in close combat and is the attacker,
+    not a target, so ``combat`` and ``target_of`` are both absent (the
+    defender's incoming-attack facts are built separately for its save);
     ``charge`` is None because a shooter never charged.
     """
-    profile = REPO.weapons["longbow"].missile_profile
+    longbow = REPO.weapons["longbow"]
+    profile = longbow.missile_profile
     assert profile is not None
-    context = _engagement_conditions(profile, moved=True, distance=None, force_short_range=False)
+    context = _engagement_conditions(
+        longbow, profile, moved=True, distance=None, force_short_range=False
+    )
+    assert context.wielding.type is WeaponType.BOW
     assert context.movement.moved is True
     assert context.shooting.at_long_range is None  # no distance -> unknown band
     assert context.combat is None
     assert context.target_of is None
     assert context.movement.charge is None
+
+
+def test_arrows_of_isha_worsens_the_bow_save_and_is_claimed() -> None:
+    """The Sisters' unit rule reaches the bow: -1 save, and out of the notes.
+
+    Firing the Bow of Avelorn at White Lions, Arrows of Isha's Armour Piercing
+    worsens their Heavy Armour save from 5+ to 6+ (Lion Cloak is a magical-shot
+    no-op, so 5+ is the base). The rule is factored into the walk, so it drops
+    out of the "special rule not factored" notes — while the Sisters' rules the
+    volley cannot honour (Strike First) stay listed.
+    """
+    sisters = _fielded(REPO.units["sisters-of-avelorn"], 5).wielding("Bow of Avelorn")
+    lions = _fielded(REPO.units["white-lions-of-chrace"], 10)
+    result = shoot_unit(sisters, lions, force_short_range=True)
+    assert result.save_target == 6  # 5+ Heavy Armour, worsened one by the bow's AP
+    assert not any("Arrows of Isha" in note for note in result.notes)
+    assert any("Strike First" in note for note in result.notes)

@@ -45,6 +45,7 @@ from avelorn.tow.engine.charts import (
 from avelorn.tow.engine.rules import (
     AttackFacts,
     EffectiveValue,
+    EquipmentFacts,
     GateContext,
     MovementFacts,
     ShootingFacts,
@@ -55,7 +56,7 @@ from avelorn.tow.schema.psychology import PanicCause
 from avelorn.tow.schema.rule import AttackKind, RerollEffect, Rule
 from avelorn.tow.schema.stage import Stage
 from avelorn.tow.schema.unit import Characteristic
-from avelorn.tow.schema.weapon import WeaponProfile
+from avelorn.tow.schema.weapon import Weapon, WeaponProfile
 
 logger = logging.getLogger(__name__)
 
@@ -170,10 +171,19 @@ def shoot(
     )
     p_unsaved = float(resolution.p_unsaved)
     p_kill = float(resolution.p_of(Outcome.INSTANT_KILL))
-    # Report the walk's effective To Hit target (modifiers included) so
-    # the printed target matches the math; other stages keep chart values.
+    # Report the walk's effective targets (modifiers included) so the printed
+    # figures match the math. The To Hit target and the save target both carry
+    # their unconditional modifiers — the save's flat Armour Piercing from a
+    # unit rule (Arrows of Isha on a bow). A save worsened past 6+ is no save
+    # (None), matching the chart convention; a rollless target (no armour)
+    # likewise. A conditional bump (Armour Bane, on a natural 6) is not shown,
+    # as it applies only on that face.
     if isinstance(resolution.hit_target, int):
         hit = resolution.hit_target
+    if isinstance(resolution.save_target, int):
+        save = resolution.save_target if resolution.save_target <= 6 else None
+    else:
+        save = None
     p_hit = hit_probability(hit)
     p_wound = wound_probability(wound)
     logger.debug(
@@ -219,15 +229,21 @@ def _at_long_range(profile: WeaponProfile, distance: int | None) -> bool | None:
 
 
 def _engagement_conditions(
-    profile: WeaponProfile, moved: bool, distance: int | None, force_short_range: bool
+    weapon: Weapon,
+    profile: WeaponProfile,
+    moved: bool,
+    distance: int | None,
+    force_short_range: bool,
 ) -> GateContext:
-    # The gate facts for the shooter's volley: whether the model moved and
+    # The gate facts for the shooter's volley: the weapon it fires (its family
+    # and name, for Arrows of Isha's "any bow"), whether the model moved, and
     # whether the shot is at long range (a shot forced short, a Stand & Shoot
     # reaction, never is). ``combat`` is absent (a shooter is not engaged in
     # close combat) and ``target_of`` is absent (the shooter is the attacker,
     # not a target) — the defender's incoming-attack facts are built separately
     # for its armour save.
     return GateContext(
+        wielding=EquipmentFacts(type=weapon.weapon_type, name=weapon.name),
         movement=MovementFacts(moved=moved),  # a shooter never charged: charge stays None
         shooting=ShootingFacts(
             at_long_range=False if force_short_range else _at_long_range(profile, distance)
@@ -365,17 +381,8 @@ def shoot_unit(
             worn=[piece.name for piece in defender.loadout.armour],
         )
         armour_value = defender_armour_value.value
-    notes: list[str] = []
-    notes.extend(
-        f"special rule not factored: {rule} ({shooter.name})" for rule in shooter.special_rules
-    )
-    notes.extend(
-        f"special rule not factored: {rule} ({target.name})"
-        for rule in target.special_rules
-        if rule not in defender_armour_value.factored
-    )
     conditions = _engagement_conditions(
-        profile, attacker.movement.moved, distance, force_short_range
+        chosen, profile, attacker.movement.moved, distance, force_short_range
     )
 
     # Weapon rules with compiled effects join the dice walk; the rest are
@@ -386,6 +393,31 @@ def shoot_unit(
     )
     if volley_fire:
         unfactored = [rule for rule in unfactored if rule != "Volley Fire"]
+
+    # The attacker's own unit rules may also shape the volley — Arrows of Isha
+    # improves a bow's Armour Piercing and grants it Armour Bane (1) — gated on
+    # the weapon in hand's family and expanded through the loadout's granted
+    # rules. A rule the walk cannot factor (Strike First's Initiative set,
+    # Ithilmar Weapons' re-roll) stays unfactored and noted; the factored ones
+    # are claimed out of the "special rule not factored" notes below.
+    unit_index = {rule.name: rule for rule in attacker.loadout.rules}
+    unit_modifiers, unit_unfactored = compile_rules(
+        list(unit_index), unit_index, conditions, grants=attacker.loadout.granted_rules
+    )
+    modifiers.extend(unit_modifiers)
+    claimed = {name for name in unit_index if name not in unit_unfactored}
+
+    notes: list[str] = []
+    notes.extend(
+        f"special rule not factored: {rule} ({shooter.name})"
+        for rule in shooter.special_rules
+        if rule not in claimed
+    )
+    notes.extend(
+        f"special rule not factored: {rule} ({target.name})"
+        for rule in target.special_rules
+        if rule not in defender_armour_value.factored
+    )
     notes.extend(f"weapon rule not factored: {rule} ({chosen.name})" for rule in unfactored)
     phase_modifiers, phase_unfactored = compile_rules(sorted(phase_rules), phase_rules, conditions)
     modifiers.extend(phase_modifiers)
