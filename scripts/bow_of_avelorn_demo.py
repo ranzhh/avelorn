@@ -1,17 +1,18 @@
 """How much of the Sisters' edge is the Bow of Avelorn itself?
 
-White Lions of Chrace charge Sisters of Avelorn. The Sisters loose one volley
-of the Bow of Avelorn as a Stand & Shoot reaction as the Lions close, then the
-two lines meet in close combat. The turn is walked phase by phase, as the
-rulebook plays it: the charge and its reaction are a Movement-phase event; the
-melee is fought in the Combat phase.
+Two turns of a Sisters-of-Avelorn-versus-White-Lions fight, resolved exactly:
+
+- The **Sisters' turn**: standing still, they loose a full volley at the
+  approaching Lions — every rank fires, Volley Fire and all.
+- The **Lions' turn**: the Lions charge; the Sisters loose a second, smaller
+  volley as a Stand & Shoot reaction (only the front rank, and at a penalty),
+  then the two lines meet in close combat.
 
 Then the counterfactual: what if the Sisters carried an ordinary bow? The
 datasheet is the single source of truth, so the swap is a one-line edit — trade
-the printed Bow of Avelorn for a Warbow, re-field, and re-ask the same
-questions. The difference between the two runs is exactly what the Bow of
-Avelorn is worth, and it decomposes into two printed things the ordinary bow
-lacks:
+the printed Bow of Avelorn for a Warbow, re-field, and re-ask every question.
+The difference between the two runs is exactly what the Bow of Avelorn is
+worth, and it decomposes into two printed things the ordinary bow lacks:
 
 - **Magical Attacks.** The Bow of Avelorn's arrows are magical, so a White
   Lion's Lion Cloak — which betters its save by one against *non-magical*
@@ -22,10 +23,12 @@ lacks:
   a natural 6 To Wound improves Armour Piercing by two, not one. The Warbow
   keeps only the granted instance.
 
-Resolved exactly, no dice rolled. Prints each run's Stand & Shoot volley and
-melee odds, then the side-by-side verdict.
+That is a steady per-shot edge, so its size in wounds tracks the number of
+shots: it is roughly twice as large in the full opening volley as in the
+five-shot Stand & Shoot. (Casualties do not carry between the volleys — each is
+resolved at full strength; the engine is stateless across phases.)
 
-Usage: uv run python scripts/bow_of_avelorn_demo.py [models] [charge_inches]
+Usage: uv run python scripts/bow_of_avelorn_demo.py [models] [charge_inches] [shoot_distance]
 
 Pass -v/--verbose to also emit the DEBUG math trace to stderr.
 """
@@ -55,38 +58,53 @@ def rearm(unit: Unit, frm: str, to: str) -> Unit:
     return unit.model_copy(update={"equipment": equipment})
 
 
-def resolve(game: TOWGame, sisters, lions_unit, models: int, inches: int):
-    """Walk one Lions-into-Sisters turn and return the volley and scored melee.
+def resolve(game: TOWGame, sisters, lions_unit, models: int, inches: int, distance: int):
+    """Walk both turns and return the opening volley, the reaction, and the melee.
 
     ``sisters`` is a datasheet (the printed one, or a rearmed copy); the Lions
-    are fielded fresh each time so the two runs differ only by the Sisters' bow.
+    are fielded fresh so the two runs differ only by the Sisters' bow.
 
     Returns:
-        The Stand & Shoot volley (or None) and the scored combat result.
+        The Sisters' opening (stationary) volley, their Stand & Shoot reaction
+        as the Lions charge, and the scored combat result.
     """
-    lions = game.field(lions_unit, models).wielding("Chracian Great Blade")
-    defenders = game.field(sisters, models).wielding("Hand Weapon")
+    lions = game.field(lions_unit, models)
+    sisters_fielded = game.field(sisters, models)
 
-    turn = game.turn()
-    with turn.movement() as movement:
-        # The Lions charge; the Sisters hold their hand weapon for the melee to
-        # come and Stand & Shoot with their sole missile weapon as the reaction.
-        engagement = movement.charge(lions, defenders, Charge(inches, ChargeArc.FRONT))
-        volley = engagement.react(StandAndShoot())
-    with turn.combat() as combat:
+    # The Sisters' turn: standing still, they loose a full volley (every rank
+    # fires — Volley Fire) at the Lions closing at ``distance``.
+    own_turn = game.turn()
+    with own_turn.shooting() as shooting:
+        opening = shooting.volley(sisters_fielded, lions, distance=distance)
+
+    # The Lions' turn: they charge with the great blade; the Sisters hold their
+    # hand weapon for the melee and Stand & Shoot (front rank only, no Volley
+    # Fire, and at a to-hit penalty) as the reaction.
+    lions_turn = game.turn()
+    with lions_turn.movement() as movement:
+        engagement = movement.charge(
+            lions.wielding("Chracian Great Blade"),
+            sisters_fielded.wielding("Hand Weapon"),
+            Charge(inches, ChargeArc.FRONT),
+        )
+        reaction = engagement.react(StandAndShoot())
+    with lions_turn.combat() as combat:
         scored = combat.result(combat.fight(engagement))
-    return volley, scored
+    return opening, reaction, scored
 
 
-def _report(label: str, volley, scored, models: int) -> None:
+def _report(label: str, opening, reaction, scored, models: int) -> None:
     print(f"  {label}:")
-    if volley is None:
+    print(
+        f"    opening volley (stationary): {opening.shots} shots, Lions save "
+        f"{opening.save_target}+, {opening.expected_wounds:.2f} wounds"
+    )
+    if reaction is None:
         print("    Stand & Shoot: no volley")
     else:
-        felled = expected_value(volley.casualties)
         print(
-            f"    Stand & Shoot: Lions save on {volley.save_target}+, "
-            f"{felled:.2f} of {models} fall before contact"
+            f"    Stand & Shoot (reaction):    {reaction.shots} shots, Lions save "
+            f"{reaction.save_target}+, {reaction.expected_wounds:.2f} wounds"
         )
     print(
         f"    melee: P(Sisters win) {scored.p_b_wins:.3f}   "
@@ -104,6 +122,13 @@ def main() -> None:
         "charge_inches", nargs="?", type=int, default=8, help="inches the Lions charged"
     )
     parser.add_argument(
+        "shoot_distance",
+        nargs="?",
+        type=int,
+        default=12,
+        help="range of the Sisters' opening volley",
+    )
+    parser.add_argument(
         "-v", "--verbose", action="store_true", help="emit the DEBUG math trace to stderr"
     )
     args = parser.parse_args()
@@ -115,26 +140,31 @@ def main() -> None:
     lions = game.units["white-lions-of-chrace"]
 
     print(
-        f"{args.models} White Lions of Chrace charge {args.models} Sisters of Avelorn "
-        f'({args.charge_inches}")\n'
+        f"{args.models} Sisters of Avelorn shoot, then receive a charge from "
+        f'{args.models} White Lions of Chrace ({args.charge_inches}")\n'
     )
 
     # The printed Sisters, and a counterfactual copy carrying an ordinary bow.
-    bow_volley, bow_scored = resolve(game, sisters, lions, args.models, args.charge_inches)
     ordinary = rearm(sisters, "Bow of Avelorn", "Warbow")
-    warbow_volley, warbow_scored = resolve(game, ordinary, lions, args.models, args.charge_inches)
+    bow_open, bow_react, bow_scored = resolve(
+        game, sisters, lions, args.models, args.charge_inches, args.shoot_distance
+    )
+    warbow_open, warbow_react, warbow_scored = resolve(
+        game, ordinary, lions, args.models, args.charge_inches, args.shoot_distance
+    )
 
-    _report("Bow of Avelorn (as printed)", bow_volley, bow_scored, args.models)
+    _report("Bow of Avelorn (as printed)", bow_open, bow_react, bow_scored, args.models)
     print()
-    _report("an ordinary Warbow", warbow_volley, warbow_scored, args.models)
+    _report("an ordinary Warbow", warbow_open, warbow_react, warbow_scored, args.models)
 
-    lift = expected_value(bow_volley.casualties) - expected_value(warbow_volley.casualties)
+    lift = expected_value(bow_open.casualties) - expected_value(warbow_open.casualties)
     print(
         "\n  verdict: the Bow of Avelorn is worth its name. Its Magical Attacks turn\n"
         "  off Lion Cloak — the Lions weather it on 6+, not the 5+ an ordinary bow\n"
-        f"  leaves them — and its printed Armour Bane stacks with Arrows of Isha. Across\n"
-        f"  the volley that is +{lift:.2f} chargers felled, and it carries into the melee:\n"
-        f"  the Sisters win {bow_scored.p_b_wins:.3f} of the time with it, "
+        "  leaves them — and its printed Armour Bane stacks with Arrows of Isha. That\n"
+        f"  steady per-shot edge is +{lift:.2f} wounds across the full opening volley,\n"
+        "  about half that in the five-shot Stand & Shoot, and it carries into the\n"
+        f"  melee: the Sisters win {bow_scored.p_b_wins:.3f} of the time with it, "
         f"{warbow_scored.p_b_wins:.3f} without."
     )
 
