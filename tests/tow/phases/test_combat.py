@@ -555,6 +555,46 @@ def test_combat_result_adds_the_combat_result_bonus_to_the_score() -> None:
     assert {lead + 1: mass for lead, mass in plain.margin.items()} == bonused.margin
 
 
+def test_stand_and_shoot_wounds_score_for_the_shooting_side() -> None:
+    """A Stand & Shoot's wounds count toward the shooter's combat result.
+
+    The charger A enters melee having certainly lost its one model to the
+    defender B's volley (a prior loss). Those wounds credit B — the rulebook
+    counts a Stand & Shoot's unsaved wounds toward the shooting side — so B
+    wins the round outright by that one wound, though no melee blow is struck.
+    """
+    spearmen = REPO.units["elven-spearmen"]
+    a, b = _fielded(spearmen, 1), _fielded(spearmen, 1)
+    result = fight(
+        a.wielding("Thrusting Spear"), b.wielding("Thrusting Spear"), a_prior_losses=[0.0, 1.0]
+    )
+    cr = combat_result(result)
+    assert cr.p_b_wins == pytest.approx(1.0)
+    assert cr.p_a_wins == pytest.approx(0.0)
+    assert cr.margin[-1] == pytest.approx(1.0)  # B ahead by its one volley wound
+
+
+def test_stand_and_shoot_credit_tilts_the_result_toward_the_shooter() -> None:
+    """A chance of a volley wound tilts an otherwise symmetric round to the shooter.
+
+    Against the symmetric 1v1 baseline (each side wins 5/36), giving A a 50%
+    chance of having lost its model to B's Stand & Shoot lifts B's win chance
+    above A's — the volley's wounds score for B, correlated with the thinning.
+    """
+    spearmen = REPO.units["elven-spearmen"]
+    a, b = _fielded(spearmen, 1), _fielded(spearmen, 1)
+    baseline = combat_result(fight(a.wielding("Thrusting Spear"), b.wielding("Thrusting Spear")))
+    with_volley = combat_result(
+        fight(
+            a.wielding("Thrusting Spear"),
+            b.wielding("Thrusting Spear"),
+            a_prior_losses=[0.5, 0.5],
+        )
+    )
+    assert baseline.p_a_wins == pytest.approx(baseline.p_b_wins)
+    assert with_volley.p_b_wins > with_volley.p_a_wins
+
+
 # --- Massed Infantry: the outnumbering side's +1 combat result, from data/ ---
 
 
