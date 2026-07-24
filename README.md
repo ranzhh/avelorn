@@ -40,9 +40,11 @@ The rest is still to come, roughly in the order it matters.
 
 ## The kind of thing you can ask it
 
-The core tenet is that the engine models **distributions, not averages** — and the questions worth asking only pay off when you fold those distributions into each other. Here is one, and the answer turns on *which unit is asking*. A unit of **White Lions of Chrace** is 10" away and will charge next turn whatever you do; this turn your unit can loose its volley at those Lions, or at some other target. Either way the Lions charge, your unit Stand & Shoots as they come, and the lines fight. So: **does shooting the Lions first raise your chance of winning that combat, and by how much?** Ask it of two different units — elite **Sisters of Avelorn** and rank-and-file **Elven Archers** — and the same tactic gives opposite advice.
+The engine models **distributions, not averages**, and the good questions come from folding those distributions together. Here's one, with a twist: the answer depends on which unit is asking.
 
-The opening volley does not fell "about three" Lions — it fells a *spread*. Each outcome leads to a different charge and a different combat. The answer is every branch resolved exactly and mixed by how likely it is — a fold, `Σ_k P(volley fells k) · P(win | 10−k charge)` — not the average plugged in once. Walk it through the context-manager surface (`scripts/bow_of_avelorn_demo.py`):
+**White Lions of Chrace** are 10" away and will charge you next turn no matter what. This turn you can shoot them, or shoot something else. Either way they charge, you Stand & Shoot as they close, and you fight. So: **does shooting them first improve your odds in that combat?** Ask it for two units — elite **Sisters of Avelorn** and plain **Elven Archers** — and you get opposite answers.
+
+The volley doesn't fell "about three" Lions. It fells a *spread*, and each outcome is a different charge into a different combat. So the honest answer folds every branch, weighted by how likely it is: `Σ_k P(fell k) · P(win | 10−k charge)`. Here it is (`scripts/bow_of_avelorn_demo.py`):
 
 ```python
 from avelorn.tow.contingent import Charge, ChargeArc
@@ -93,9 +95,13 @@ The script prints the same two numbers per unit, with the volley's distribution 
     shoot the Lions first (volley folded in):         P(win) 0.179   (+0.135)
 ```
 
-Same board, same threat, opposite advice. For the **Sisters**, shooting first is decisive — it turns a combat they mostly lose (0.298) into one they mostly win (0.731). They can, because they both shoot well and hold the line: the Bow of Avelorn is magical, so a White Lion's **Lion Cloak** can't better its save (the Lions weather it on 6+), and in the melee Strike First, light armour, and a Stand & Shoot that scores for them let the thinned charge be beaten. For the **Archers**, shooting the Lions barely matters (0.044 → 0.179) — they lose the combat almost regardless. A plain longbow leaves the Lion Cloak up (Lions save 4+, so far fewer fall), and WS 4 with no armour and no Strike First loses the melee whatever charges in. Their arrows are better spent on a target they can actually break; these Lions will roll them either way.
+Same board, same threat, opposite advice.
 
-Notice both numbers are the *whole spread* folded in — for the Sisters, the 2% chance of felling none and the 3% chance of felling six both weighed, not a rounded mean standing in for them. And one thing the engine does *not* yet do shows exactly where: the Stand & Shoot chains into the melee for free — `fight` enters the charger already thinned by the reaction and scores its wounds toward the combat result — but that is the *same* combat. The opening volley is a *previous turn*, whose wounds must not score this combat, so it is folded here as the mixture above rather than handed to `fight` as prior losses. The missing primitive is a way to enter a combat thinned-but-unscored (a cross-turn battle layer); until then, the mixture is the honest fold, and it is exact.
+**Sisters:** shooting first flips the fight, 0.298 → 0.731. They can afford to, because they shoot well *and* fight well. The Bow of Avelorn is magical, so a White Lion's **Lion Cloak** can't help (the Lions save on 6+), and in the melee Strike First, armour, and a Stand & Shoot that scores for them beat the thinned charge.
+
+**Archers:** it barely matters, 0.044 → 0.179. A plain longbow leaves the Lion Cloak up (Lions save 4+, so far fewer fall), and WS 4 with no armour loses the melee regardless. Their arrows are better spent on a target they can actually break.
+
+Both numbers fold the whole spread, not a rounded mean. One caveat, honest about the engine: the Stand & Shoot chains into the melee for free — `fight` enters the charger already thinned and scores its wounds. The opening volley can't, because it's a previous turn and its wounds mustn't score *this* combat, so it's folded as the mixture above instead. Letting a unit enter a combat thinned-but-unscored is the one piece still missing.
 
 Run it via `make demo DEMO=bow_of_avelorn`, or drive it directly:
 
