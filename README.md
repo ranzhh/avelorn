@@ -2,79 +2,116 @@
 
 A toolkit for tabletop wargames, starting with **Warhammer: The Old World**.
 
-It comes down to three things, all built on one curated dataset. The first is a unit and army database you can query. The second is an army-list planner that knows the rules well enough to catch an illegal list. The third is a battler that works out combat odds, and rather than rolling dice thousands of times and averaging the results, it computes the exact distribution. That lets it answer the questions a game actually hinges on, like the odds a unit breaks and runs, instead of just handing back a mean.
+It comes down to three things, all built on one curated dataset:
+- a unit and army database you can query.
+- an army-list planner that knows the rules well enough to catch an illegal list.
+- a battler that works out combat odds, and rather than rolling dice thousands of times and averaging the results, it computes the exact distribution. That lets it answer the questions a game actually hinges on, like the odds a unit breaks and runs, instead of just handing back a mean.
 
-The data is hand-authored YAML under `data/`, and that is the single source of truth. Special rules are data too, so they compile into the dice walk instead of living as hard-coded special cases.
+The (unit, weapon...) data is YAML under `data/`, as the single source of truth. Special rules are data too, so they compile into the dice walk instead of living as hard-coded special cases. This is potentially subject to change, in case I encounter a harder rule which would force a structure too ugly / hard to parse.
+
+## What is this vibe coded bullshit?
+I am a big fan of writing clean and concise code. LLMs have proven to help me massively at work, but they definitely don't produce the best code on the first try without steering; maybe that will change in the future.
+
+This project is an attempt to write code for what I know to be a very hard endeavour - mapping a game with hooks and rules that interact with each other - using only LLMs. As of now, the only piece of the codebase I have touched by hand is this README, and even then just the parts until now.
+
+I believe that in order for me to get better at using LLMs, a project such as this - forcing me to wrestle with their inherent weaknesses - will massively help. I hope to become better at planning before prompting and properly steering these models.
+
+The tooling used so far is Claude Code + Claude Opus 4.8 and Claude Fable 5. If you're going to dive into this project, thanks for sticking it out so far! The fun part begins now.
+
 
 ## What's built so far
 
-The dice engine is the part that works today.
-
 - **Schema** (`tow/schema`) models units, weapons, armour, and rules as Pydantic types, validated as they load from YAML; `TOWRepository` (`tow/data`) is the one place that knows the `data/` tree's layout and hands back the loaded registries.
-- **Combat math** (`tow/combat`) resolves the shooting chain end to end, from to-hit through to-wound to the armour save, and returns an exact casualty distribution built on the hit/wound/save charts. Special-rule effects fold into the dice walk straight from the data, and an engagement context (did the unit move? how far to the target?) gates the situational modifiers.
-- **Close combat** resolves a full round on the same engine: both sides strike in Initiative order, casualties tally into a combat result, and the loser takes its break test. The **charge sequence** composes into it — a unit charges, the target reacts with Stand & Shoot, and the survivors fight — all as exact distributions.
+- **The game** (`tow/game`, `tow/turn`) is the corpus in play. `TOWGame.load_data()` assembles it from the data tree; a `Contingent` (`tow/contingent`) is a unit as fielded — a chosen model count, a resolved loadout, and the weapon it takes in hand. You walk a turn phase by phase (`with turn.movement() as movement:`), each phase a small surface over the maths.
+- **The maths engine** (`tow/engine`) resolves an attack exactly — from to-hit through to-wound to the armour and ward saves — and returns a casualty distribution built on the hit/wound/save charts. Special-rule effects fold into the dice walk straight from the data; the situational modifiers are gated on a typed picture of the action (did the unit move? how far to the target? is the incoming shot magical?).
+- **The phases** (`tow/phases`) are its callers. **Shooting** resolves a volley end to end. **Combat** resolves a full round: both sides strike in Initiative order, casualties tally into a combat result, and the loser takes its break test. **Movement** carries the **charge sequence** — a unit charges, the target reacts with Stand & Shoot, and the survivors fight — all as exact distributions.
 - **Panic tests** take a casualty distribution and return the exact chance the target is forced to test, then holds, falls back, flees, or is wiped out.
-- **Querying** lets you ask for a specific outcome, such as `at least`, `at most`, `exactly`, or `between` over a named variable, and hands back its probability.
-- **Army-list entries**: a `Complement` sizes and equips a datasheet — a chosen model count and options, validated against what the unit is allowed to take — and derives its points and effective loadout. It is the first piece of the list planner.
+- **Querying** (`tow/query`) lets you ask for a specific outcome, such as `at least`, `at most`, `exactly`, or `between` over a named variable, and hands back its probability.
+- **Army-list entries**: a `Complement` (`tow/muster`) sizes and equips a datasheet — a chosen model count and options, validated against what the unit is allowed to take — and derives its points and effective loadout. It is the first piece of the list planner.
 - **Importer** pulls units off tow.whfb.app into the `data/` tree (see credits).
 
 The rest is still to come, roughly in the order it matters.
 
-- **More army data.** Three High Elf units exist today, which is enough to exercise the engine but nowhere near a playable database. Filling this out is what the importer is for.
+- **More army data.** A handful of High Elf units exist today, which is enough to exercise the engine but nowhere near a playable database. Filling this out is what the importer is for.
 - **A backing store.** Everything loads from YAML on each run right now. The plan is to load that YAML into SQLite once and query it from there, so the database can grow past what you would want to parse from files every time.
 - **The query API.** This is an HTTP (and MCP) surface over that store, so the unit and army database becomes reachable from something other than a Python import. It is the queryable half of the goal.
 - **The list planner.** You build an army list and have it checked against the rules: points limits, army composition, and unit availability. The per-unit half exists as `Complement`; what is missing is the composition above it.
 - **The magic phase.** The exact dice walk underneath is generic — shooting and close combat are its first two callers — so what is missing is the phase resolver rather than the maths.
 
-## Demo: one unit shoots another
+## The kind of thing you can ask it
 
-`scripts/shooting_demo.py` wires the whole chain together end to end. Sketched out:
+The engine models **distributions, not averages**, and the good questions come from folding those distributions together. Here's one, with a twist: the answer depends on which unit is asking.
+
+**White Lions of Chrace** are 10" away and will charge you next turn no matter what. This turn you can shoot them, or shoot something else. Either way they charge, you Stand & Shoot as they close, and you fight. So: **does shooting them first improve your odds in that combat?** Ask it for two units — elite **Sisters of Avelorn** and plain **Elven Archers** — and you get opposite answers.
+
+The volley doesn't fell "about three" Lions. It fells a *spread*, and each outcome is a different charge into a different combat. So the honest answer folds every branch, weighted by how likely it is: `Σ_k P(fell k) · P(win | 10−k charge)`. Here it is (`scripts/bow_of_avelorn_demo.py`):
 
 ```python
-from avelorn.tow.combat.context import EngagementContext
-from avelorn.tow.combat.morale import make_panic_tests
-from avelorn.tow.combat.query import Comparator, Predicate, query_result
-from avelorn.tow.combat.shooting import shoot_unit
-from avelorn.tow.data import TOWRepository
+from avelorn.tow.contingent import Charge, ChargeArc
+from avelorn.tow.game import TOWGame
+from avelorn.tow.phases.movement import StandAndShoot
 
-# The repository knows the data/ tree, the YAML source of truth.
-repo = TOWRepository()
-archers  = repo.units["elven-archers"]
-spearmen = repo.units["elven-spearmen"]
-longbow  = repo.weapons["longbow"]
+game = TOWGame.load_data()
+lions = game.units["white-lions-of-chrace"]
 
-# 10 archers, moving, shoot a 20-strong unit at 18".
-result = shoot_unit(
-    archers, spearmen,
-    shooters=10, weapon=longbow,
-    armoury=repo.armoury, rules=repo.rules,
-    context=EngagementContext(moved=True, distance=18),
-    defenders=20,
-)
+def win_given_charge(defender, charging):
+    """P(defender wins) when `charging` Lions charge it — Stand & Shoot, then melee."""
+    if charging == 0:
+        return 1.0
+    lions_unit = game.field(lions, charging).wielding("Chracian Great Blade")
+    unit = game.field(defender, 10).wielding("Hand Weapon")
+    turn = game.turn()
+    with turn.movement() as movement:
+        engagement = movement.charge(lions_unit, unit, Charge(10, ChargeArc.FRONT))
+        engagement.react(StandAndShoot())   # thins the chargers AND scores — folded natively
+    with turn.combat() as combat:
+        return combat.result(combat.fight(engagement)).p_b_wins
 
-print(f"to hit {result.hit_target}+ / to wound {result.wound_target}+")
-print(f"expected casualties: {result.expected_casualties:.2f}")
+def win_if_shot(defender):
+    """Fold the opening volley's whole casualty distribution into P(defender wins)."""
+    with game.turn().shooting() as shooting:
+        opening = shooting.volley(game.field(defender, 10), game.field(lions, 10), distance=10)
+    return sum(p * win_given_charge(defender, 10 - k)      # mix over every outcome...
+               for k, p in enumerate(opening.casualties))  # ...weighted by its probability
 
-# Exact distributional queries: not the average, the actual odds.
-wiped    = query_result(result, "survivors", Predicate(Comparator.EXACTLY, 0))
-any_kill = query_result(result, "casualties", Predicate(Comparator.AT_LEAST, 1))
-print(f"P(at least one falls): {any_kill:.3f}   P(wiped out): {wiped:.3f}")
-
-# Does the shooting break them?
-panic = make_panic_tests(result, spearmen, rules=repo.rules)
-print(f"P(flees): {panic.p_flees:.3f}   P(holds): {panic.p_holds:.3f}")
+for slug in ("sisters-of-avelorn", "elven-archers"):
+    defender = game.units[slug]
+    print(defender.name,
+          win_given_charge(defender, 10),  # shoot elsewhere: Lions charge at full strength
+          win_if_shot(defender))           # shoot the Lions first: the volley folded in
 ```
 
-Run it as-is (with defaults) via `make demo`, or drive it directly:
+The script prints the same two numbers per unit, with the volley's distribution alongside:
+
+```
+  Sisters of Avelorn (BS 5, 8-shot volley, Lions save 6+):
+    opening volley fells (of 10):  0:2%  1:12%  2:24%  3:28%  4:21%  5:10%  6:3%
+    shoot elsewhere — Lions charge at full strength:  P(win) 0.298
+    shoot the Lions first (volley folded in):         P(win) 0.731   (+0.434)
+
+  Elven Archers (BS 4, 8-shot volley, Lions save 4+):
+    opening volley fells (of 10):  0:19%  1:35%  2:28%  3:13%  4:4%  5:1%
+    shoot elsewhere — Lions charge at full strength:  P(win) 0.044
+    shoot the Lions first (volley folded in):         P(win) 0.179   (+0.135)
+```
+
+Same board, same threat, opposite advice.
+
+**Sisters:** shooting first flips the fight, 0.298 → 0.731. They can afford to, because they shoot well *and* fight well. The Bow of Avelorn is magical, so a White Lion's **Lion Cloak** can't help (the Lions save on 6+), and in the melee Strike First, armour, and a Stand & Shoot that scores for them beat the thinned charge.
+
+**Archers:** it barely matters, 0.044 → 0.179. A plain longbow leaves the Lion Cloak up (Lions save 4+, so far fewer fall), and WS 4 with no armour loses the melee regardless. Their arrows are better spent on a target they can actually break.
+
+Both numbers fold the whole spread, not a rounded mean. One caveat, honest about the engine: the Stand & Shoot chains into the melee for free — `fight` enters the charger already thinned and scores its wounds. The opening volley can't, because it's a previous turn and its wounds mustn't score *this* combat, so it's folded as the mixture above instead. Letting a unit enter a combat thinned-but-unscored is the one piece still missing.
+
+Run it via `make demo DEMO=bow_of_avelorn`, or drive it directly:
 
 ```sh
-uv run python scripts/shooting_demo.py 10 elven-archers elven-spearmen 20 --moved --distance 18
+uv run python scripts/bow_of_avelorn_demo.py 10 10   # 10 a side, the Lions 10" off
 ```
 
 Add `-v` for the full DEBUG math trace on stderr.
 
-`scripts/melee_demo.py` and `scripts/charge_demo.py` do the same for a round
-of close combat and for the full charge sequence (Stand & Shoot included).
+Other demos exercise the rest of the engine: `shooting_demo.py` (one unit shoots another, with the panic tests), `melee_demo.py` (a round of close combat), `charge_demo.py` (the full charge sequence, Stand & Shoot included), `turn_demo.py` (walking a whole player-turn), and `lion_cloak_demo.py` and `receiving_a_charge_demo.py` (two more worked cautionary tales). Each is `scripts/<name>_demo.py`, runnable as `make demo DEMO=<name>`.
 
 ## Getting started
 
