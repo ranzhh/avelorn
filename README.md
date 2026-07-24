@@ -29,9 +29,9 @@ The rest is still to come, roughly in the order it matters.
 
 ## The kind of thing you can ask it
 
-Here is the sort of question the engine is built to answer exactly. Take two of the trickier High Elf units — **Sisters of Avelorn** and **White Lions of Chrace** — and play out a fight: the Lions stand 10" off, the Sisters loose a full volley in their own turn, then next turn the Lions charge that gap, the Sisters get a Stand & Shoot reaction, and the lines meet in melee. Then ask the question that actually decides how you'd build the list: *how much of the Sisters' edge is the Bow of Avelorn itself, rather than the elf holding it?* Swap the bow for an ordinary one and the engine re-answers everything — exactly, no dice rolled.
+The core tenet is that the engine models **distributions, not averages** — and the questions worth asking only pay off when you fold those distributions into each other. Here is one. You are the High Elf player. A unit of **White Lions of Chrace** is 10" from your **Sisters of Avelorn** and will charge next turn whatever you do; this turn you can loose the Sisters' volley at those Lions, or at some other target. Either way the Lions charge, the Sisters Stand & Shoot as they come, and the lines fight. So: **does shooting the Lions first raise your chance of winning that combat, and by how much?**
 
-You walk it as the rulebook plays it, phase by phase, through the context-manager surface (`scripts/bow_of_avelorn_demo.py`):
+The opening volley does not fell "about three" Lions — it fells a *spread* (most often two to four, sometimes none, sometimes six). Each outcome leads to a different charge and a different combat. The answer is every branch resolved exactly and mixed by how likely it is — a fold, `Σ_k P(volley fells k) · P(win | 10−k charge)` — not the average plugged in once. Walk it through the context-manager surface (`scripts/bow_of_avelorn_demo.py`):
 
 ```python
 from avelorn.tow.contingent import Charge, ChargeArc
@@ -42,72 +42,58 @@ game = TOWGame.load_data()
 sisters = game.units["sisters-of-avelorn"]
 lions = game.units["white-lions-of-chrace"]
 
-def resolve(sisters_sheet, distance=10):
-    lions_unit = game.field(lions, 10)
-    defenders = game.field(sisters_sheet, 10)
+def win_given_charge(sheet, charging):
+    """P(Sisters win) when `charging` Lions charge — Stand & Shoot, then melee."""
+    if charging == 0:
+        return 1.0
+    lions_unit = game.field(lions, charging).wielding("Chracian Great Blade")
+    defenders = game.field(sheet, 10).wielding("Hand Weapon")
+    turn = game.turn()
+    with turn.movement() as movement:
+        engagement = movement.charge(lions_unit, defenders, Charge(10, ChargeArc.FRONT))
+        engagement.react(StandAndShoot())   # thins the chargers AND scores — folded natively
+    with turn.combat() as combat:
+        return combat.result(combat.fight(engagement)).p_b_wins
 
-    # The Sisters' turn: standing still, they loose a full volley at the Lions
-    # `distance` off — every rank fires (Volley Fire) and there is no penalty.
+def win_if_shot(sheet):
+    """Fold the opening volley's whole casualty distribution into P(Sisters win)."""
     with game.turn().shooting() as shooting:
-        opening = shooting.volley(defenders, lions_unit, distance=distance)
-
-    # UGLY SEAM: carry the opening volley's casualties across the turn by hand.
-    # The engine has no cross-turn casualty state yet (see the roadmap), so we
-    # just remove the expected number of felled Lions before they charge. Crude
-    # — it rounds a whole distribution to one integer — but it lets the opening
-    # volley and the Stand & Shoot below actually combine, which is the point.
-    survivors = lions_unit.remove_casualties(round(opening.expected_casualties))
-
-    # The Lions' turn: the survivors charge; the Sisters Stand & Shoot (front
-    # rank only, at a penalty), then the two lines fight. This reaction's felled
-    # Lions the engine *does* carry in for free — they don't swing back, and
-    # their wounds score for the Sisters.
-    lions_turn = game.turn()
-    with lions_turn.movement() as movement:
-        engagement = movement.charge(
-            survivors.wielding("Chracian Great Blade"),
-            defenders.wielding("Hand Weapon"),
-            Charge(distance, ChargeArc.FRONT),
-        )
-        reaction = engagement.react(StandAndShoot())
-    with lions_turn.combat() as combat:
-        melee = combat.fight(engagement)
-        result = combat.result(melee)
-    return opening, reaction, melee, result
+        opening = shooting.volley(game.field(sheet, 10), game.field(lions, 10), distance=10)
+    return sum(p * win_given_charge(sheet, 10 - k)         # mix over every outcome...
+               for k, p in enumerate(opening.casualties))  # ...weighted by its probability
 ```
 
-The counterfactual is where the data-as-source-of-truth pays off: to ask "what if they had an ordinary bow?" you change one printed name on the datasheet and re-field. Everything downstream — the loadout, the rules that key off it, every probability — re-resolves from the new gear.
+The counterfactual is a one-line datasheet edit — swap the printed bow, re-field, and every downstream probability re-resolves from the new gear:
 
 ```python
 def rearm(unit, frm, to):
-    equipment = [to if item == frm else item for item in unit.equipment]
-    return unit.model_copy(update={"equipment": equipment})
+    return unit.model_copy(update={"equipment": [to if e == frm else e for e in unit.equipment]})
 
-bow = resolve(sisters)                                # the Bow of Avelorn, as printed
-warbow = resolve(rearm(sisters, "Bow of Avelorn", "Warbow"))   # an ordinary bow
+warbow = rearm(sisters, "Bow of Avelorn", "Warbow")
+for sheet in (sisters, warbow):
+    print(win_given_charge(sheet, 10),  # shoot elsewhere: Lions charge at full strength
+          win_if_shot(sheet))           # shoot the Lions first: the volley folded in
 ```
 
-Run as-is it prints the two runs side by side:
+Run as-is it prints:
 
 ```
-  Bow of Avelorn (as printed):
-    opening volley (their turn):    8 shots, Lions save 6+, 2.96 wounds → 3 felled, 7 charge
-    Stand & Shoot (as they charge): 5 shots, Lions save 6+, 1.48 wounds
-    melee casualties:  Lions lose 1.93, Sisters lose 2.88
-    combat result:     P(Sisters win) 0.730   P(draw) 0.102   P(Lions win) 0.168
+  with the Bow of Avelorn:
+    opening volley fells (of 10):  0:2%  1:12%  2:24%  3:28%  4:21%  5:10%  6:3%
+    shoot elsewhere — Lions charge at full strength:  P(Sisters win) 0.298
+    shoot the Lions first (volley folded in):         P(Sisters win) 0.731   (+0.434)
 
-  an ordinary Warbow:
-    opening volley (their turn):    8 shots, Lions save 5+, 2.41 wounds → 2 felled, 8 charge
-    Stand & Shoot (as they charge): 5 shots, Lions save 5+, 1.20 wounds
-    melee casualties:  Lions lose 1.94, Sisters lose 3.60
-    combat result:     P(Sisters win) 0.616   P(draw) 0.143   P(Lions win) 0.241
+  with the ordinary Warbow:
+    opening volley fells (of 10):  0:6%  1:20%  2:30%  3:25%  4:14%  5:5%  6:1%
+    shoot elsewhere — Lions charge at full strength:  P(Sisters win) 0.252
+    shoot the Lions first (volley folded in):         P(Sisters win) 0.640   (+0.389)
 ```
 
-The gap comes down to two printed things the ordinary bow lacks. The Bow of Avelorn has **Magical Attacks**, so a White Lion's **Lion Cloak** — which betters its save by one against *non-magical* shooting — is turned off, and the Lions weather it on 6+ instead of 5+. And its printed **Armour Bane (1)** stacks with the one the Sisters' **Arrows of Isha** already grants any bow, so a natural 6 To Wound improves Armour Piercing by two. That is a steady *proportional* edge — about a fifth (~23%) more wounds per volley, whatever its size.
+So shooting the Lions first is decisive: with the Bow of Avelorn it turns a combat the Sisters mostly lose (0.298) into one they mostly win (0.731). That number is the whole spread of volley outcomes folded in — the 2% chance of felling none and the 3% chance of felling six both weighed, not a rounded mean standing in for them.
 
-The interesting part is how the two volleys **combine**. On its own the bow's edge is small in absolute terms — +0.55 wounds across the eight-shot opening volley, only +0.28 in the five-shot Stand & Shoot (a charge reaction fires the front rank alone). But they stack: the deadlier opening volley fells 3 Lions to the Warbow's 2, and the deadlier Stand & Shoot thins them again, and together they far more often drop the charge below a full front rank of five — so the Lions arrive with fewer blows to throw. That is why the melee tips so hard: with the bow the Sisters win **0.730**, with the Warbow **0.616**, from a charge the full-strength Lions would mostly have won (~0.30). A one-model difference in the opening volley is worth a tenth of the whole combat.
+And the bow is worth its name. It leads the ordinary Warbow at both ends — 0.731 vs 0.640 when you shoot first — because of two printed things the Warbow lacks: **Magical Attacks**, which turn off a White Lion's **Lion Cloak** (so the Lions save on 6+, not 5+), and a printed **Armour Bane (1)** that stacks with the one the Sisters' **Arrows of Isha** already grants any bow. You can see it in the felled-Lions distribution above: the bow's mass sits a full model to the right.
 
-(One honest caveat, flagged in the code: the Stand & Shoot's casualties chain into the melee natively — the engine enters the charger already thinned and scores its wounds — but a *prior turn's* shooting has no home in the engine yet, so the opening volley's kills are carried across the turn by hand, rounding a distribution to a whole number. A continuous battle that tracks casualties across turns is a planned layer on top; this is a stand-in for it.)
+One thing the engine does *not* yet do, and the fold shows exactly where: the Stand & Shoot chains into the melee for free — `fight` enters the charger already thinned by the reaction and scores its wounds toward the Sisters' combat result — but that is the *same* combat. The opening volley is a *previous turn*, whose wounds must not score this combat, so it is folded here as the mixture above rather than handed to `fight` as prior losses. The missing primitive is a way to enter a combat thinned-but-unscored (a cross-turn battle layer); until then, the mixture is the honest fold, and it is exact.
 
 Run it via `make demo DEMO=bow_of_avelorn`, or drive it directly:
 
