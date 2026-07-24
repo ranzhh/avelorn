@@ -29,7 +29,7 @@ The rest is still to come, roughly in the order it matters.
 
 ## The kind of thing you can ask it
 
-Here is the sort of question the engine is built to answer exactly. Take two of the trickier High Elf units — **Sisters of Avelorn** and **White Lions of Chrace** — and play out two turns: the Sisters stand and loose a full volley at the approaching Lions, then next turn the Lions charge home, the Sisters get a Stand & Shoot reaction, and the lines meet in melee. Then ask the question that actually decides how you'd build the list: *how much of the Sisters' edge is the Bow of Avelorn itself, rather than the elf holding it?* Swap the bow for an ordinary one and the engine re-answers everything — exactly, no dice rolled.
+Here is the sort of question the engine is built to answer exactly. Take two of the trickier High Elf units — **Sisters of Avelorn** and **White Lions of Chrace** — and play out a fight: the Lions stand 12" off, the Sisters loose a full volley in their own turn, then next turn the Lions charge that gap, the Sisters get a Stand & Shoot reaction, and the lines meet in melee. Then ask the question that actually decides how you'd build the list: *how much of the Sisters' edge is the Bow of Avelorn itself, rather than the elf holding it?* Swap the bow for an ordinary one and the engine re-answers everything — exactly, no dice rolled.
 
 You walk it as the rulebook plays it, phase by phase, through the context-manager surface (`scripts/bow_of_avelorn_demo.py`):
 
@@ -38,32 +38,34 @@ from avelorn.tow.contingent import Charge, ChargeArc
 from avelorn.tow.game import TOWGame
 from avelorn.tow.phases.movement import StandAndShoot
 
-game = TOWGame.load_data()          # the data/ tree, the single source of truth
+game = TOWGame.load_data()
 sisters = game.units["sisters-of-avelorn"]
 lions = game.units["white-lions-of-chrace"]
 
-def resolve(sisters_sheet):
+def resolve(sisters_sheet, distance=12):
     lions_unit = game.field(lions, 10)
     defenders = game.field(sisters_sheet, 10)
 
     # The Sisters' turn: standing still, they loose a full volley at the Lions
-    # 12" off — every rank fires (Volley Fire) and there is no reaction penalty.
+    # `distance` off — every rank fires (Volley Fire) and there is no penalty.
     with game.turn().shooting() as shooting:
-        opening = shooting.volley(defenders, lions_unit, distance=12)
+        opening = shooting.volley(defenders, lions_unit, distance=distance)
 
-    # The Lions' turn: they charge; the Sisters Stand & Shoot (front rank only,
-    # at a penalty) as the reaction, then the two lines fight.
+    # The Lions' turn: they charge that gap; the Sisters Stand & Shoot (front
+    # rank only, at a penalty), then the two lines fight. The reaction's felled
+    # Lions carry into the melee — they don't swing back.
     lions_turn = game.turn()
     with lions_turn.movement() as movement:
         engagement = movement.charge(
             lions_unit.wielding("Chracian Great Blade"),
             defenders.wielding("Hand Weapon"),
-            Charge(8, ChargeArc.FRONT),
+            Charge(distance, ChargeArc.FRONT),
         )
         reaction = engagement.react(StandAndShoot())
     with lions_turn.combat() as combat:
-        result = combat.result(combat.fight(engagement))
-    return opening, reaction, result
+        melee = combat.fight(engagement)
+        result = combat.result(melee)
+    return opening, reaction, melee, result
 ```
 
 The counterfactual is where the data-as-source-of-truth pays off: to ask "what if they had an ordinary bow?" you change one printed name on the datasheet and re-field. Everything downstream — the loadout, the rules that key off it, every probability — re-resolves from the new gear.
@@ -73,32 +75,36 @@ def rearm(unit, frm, to):
     equipment = [to if item == frm else item for item in unit.equipment]
     return unit.model_copy(update={"equipment": equipment})
 
-bow = resolve(sisters)                                    # the Bow of Avelorn, as printed
-warbow = resolve(rearm(sisters, "Bow of Avelorn", "Warbow"))   # an ordinary bow instead
+bow = resolve(sisters)                                # the Bow of Avelorn, as printed
+warbow = resolve(rearm(sisters, "Bow of Avelorn", "Warbow"))   # an ordinary bow
 ```
 
 Run as-is it prints the two runs side by side:
 
 ```
   Bow of Avelorn (as printed):
-    opening volley (stationary): 8 shots, Lions save 6+, 2.96 wounds
-    Stand & Shoot (reaction):    5 shots, Lions save 6+, 1.48 wounds
-    melee: P(Sisters win) 0.298   P(draw) 0.158   P(Lions win) 0.544
+    opening volley (their turn):   8 shots, Lions save 6+, 2.96 wounds
+    Stand & Shoot (as they charge): 5 shots, Lions save 6+, 1.48 wounds
+    melee casualties:  Lions lose 1.94, Sisters lose 4.04
+    combat result:     P(Sisters win) 0.298   P(draw) 0.158   P(Lions win) 0.544
 
   an ordinary Warbow:
-    opening volley (stationary): 8 shots, Lions save 5+, 2.41 wounds
-    Stand & Shoot (reaction):    5 shots, Lions save 5+, 1.20 wounds
-    melee: P(Sisters win) 0.252   P(draw) 0.153   P(Lions win) 0.595
+    opening volley (their turn):   8 shots, Lions save 5+, 2.41 wounds
+    Stand & Shoot (as they charge): 5 shots, Lions save 5+, 1.20 wounds
+    melee casualties:  Lions lose 1.94, Sisters lose 4.08
+    combat result:     P(Sisters win) 0.252   P(draw) 0.153   P(Lions win) 0.595
 ```
 
 The gap comes down to two printed things the ordinary bow lacks. The Bow of Avelorn has **Magical Attacks**, so a White Lion's **Lion Cloak** — which betters its save by one against *non-magical* shooting — is turned off, and the Lions weather it on 6+ instead of 5+. And its printed **Armour Bane (1)** stacks with the one the Sisters' **Arrows of Isha** already grants any bow, so a natural 6 To Wound improves Armour Piercing by two.
 
-That is a steady *proportional* edge — about a fifth (~23%) more wounds inflicted per volley, whatever its size — which is the useful thing to notice: its size in **wounds** just tracks how many shots fly. It is +0.55 wounds across the eight-shot opening volley but only +0.28 in the five-shot Stand & Shoot, because a charge reaction fires the front rank alone. A small casualty gap isn't the bow being weak; it's the volley being small. And even that one-pip save swing is as big as it is only because Lion Cloak is in play — against a target without it, Magical Attacks would do nothing and only the second Armour Bane would separate the two bows. The engine gives you the exact numbers to reason from; the interpretation is the fun part.
+That is a steady *proportional* edge — about a fifth (~23%) more wounds inflicted per volley, whatever its size — which is the useful thing to notice: its size in **wounds** just tracks how many shots fly. It is +0.55 wounds across the eight-shot opening volley but only +0.28 in the five-shot Stand & Shoot, because a charge reaction fires the front rank alone. A small casualty gap isn't the bow being weak; it's the volley being small. And even that one-pip save swing is as big as it is only because Lion Cloak is in play — against a target without it, Magical Attacks would do nothing and only the second Armour Bane would separate the two bows.
+
+The Lions lose models at every step: to the opening volley, to the Stand & Shoot, and ~1.94 more in the melee. Two things are worth knowing about how those chain. The Stand & Shoot's casualties **do** carry into the melee — a felled Lion neither swings back (so the Sisters lose fewer, 4.04 vs 4.08) nor is missed by the combat result — which is why the bow's shooting edge tips the close combat too. The opening volley, though, is a separate turn, resolved on its own: the Lions charge at full strength. That is deliberate, not a rounding — a previous turn's shooting must not count toward *this* combat's result, and a continuous battle that carries casualties across turns is a later layer on top of the engine, not the engine itself. What you get today is each question answered exactly; the interpretation is the fun part.
 
 Run it via `make demo DEMO=bow_of_avelorn`, or drive it directly:
 
 ```sh
-uv run python scripts/bow_of_avelorn_demo.py 10 8 12   # 10 a side, an 8" charge, shot at 12"
+uv run python scripts/bow_of_avelorn_demo.py 10 12   # 10 a side, the Lions 12" off
 ```
 
 Add `-v` for the full DEBUG math trace on stderr.
