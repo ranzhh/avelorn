@@ -121,9 +121,7 @@ def test_fight_result_and_break_test_delegate() -> None:
     assert bound == direct
     scored = GAME.combat.result(bound)
     assert scored == combat_result(direct)
-    assert GAME.combat.break_test(scored, spearmen, spearmen) == break_test(
-        scored, spearmen, spearmen
-    )
+    assert GAME.combat.break_test(scored, a, b) == break_test(scored, a, b)
 
 
 def test_the_charge_is_a_movement_action() -> None:

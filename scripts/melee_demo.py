@@ -73,7 +73,7 @@ def main() -> None:
         phase_rules=game.in_play[Phase.COMBAT],
     )
     scored = game.combat.result(result)
-    breaks = game.combat.break_test(scored, unit_a, unit_b)
+    breaks = game.combat.break_test(scored, a, b)
 
     init_a = result.a_initiative.value
     init_b = result.b_initiative.value

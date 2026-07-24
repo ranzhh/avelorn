@@ -1,0 +1,23 @@
+# Source: https://tow.whfb.app/special-rules/stubborn
+id: stubborn
+name: Stubborn
+page: 178
+category: Special Rules
+paragraphs:
+  - The first time this unit is required to make a Break test it may choose not to and will
+    automatically Falling Back in Good Order instead, even if the Unit Strength of the winning side
+    is more than twice that of the losing side. A unit that is not Stubborn does not become Stubborn
+    when joined by a character that is. A Stubborn character cannot use this special rule whilst part
+    of a unit that is not Stubborn.
+# Hand-authored, modelled to our current single-round, no-player-choice scope (KISS); the gaps are
+# surfaced at resolution, in break_test's notes:
+#   - "automatically Fall Back in Good Order instead": a lost round's whole mass becomes Fall Back in
+#     Good Order — the unit never Breaks. A would-be Give Ground is folded in (the rule replaces the
+#     test, forgoing that branch), harmless in our model since neither Give Ground nor Fall Back
+#     removes the unit; only a Break risks that, through the pursuit we do not model yet.
+#   - "The first time ... may choose not to": the once-per-battle limit (we have no multi-turn state)
+#     and the option to decline (we always apply it) are not modelled — break_test notes both.
+#   - "even if ... more than twice ...": moot — the >2x Unit Strength auto-rout it overrides is not
+#     modelled either.
+effects:
+  - break_outcome: fall-back-in-good-order

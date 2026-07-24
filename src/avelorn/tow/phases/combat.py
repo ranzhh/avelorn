@@ -64,7 +64,8 @@ from avelorn.tow.engine.rules import (
     effective_rerolls,
 )
 from avelorn.tow.phases.movement import Engagement
-from avelorn.tow.schema.rule import AttackKind, Rule
+from avelorn.tow.schema.psychology import BreakOutcome
+from avelorn.tow.schema.rule import AttackKind, BreakEffect, Rule
 from avelorn.tow.schema.unit import Characteristic, Unit
 
 logger = logging.getLogger(__name__)
@@ -1086,14 +1087,17 @@ class BreakResult:
     exclusive — each is non-zero only across the outcomes where that side
     lost. ``p_draw`` is the chance of a drawn combat, in which neither side
     tests. The two sides' six outcome probabilities and ``p_draw`` sum to 1.
+    ``notes`` surface what a rule that fixed an outcome (Stubborn) did and the
+    parts of it the current scope does not model.
     """
 
     a: SideBreak
     b: SideBreak
     p_draw: float
+    notes: tuple[str, ...] = ()
 
 
-def break_test(result: CombatResult, unit_a: Unit, unit_b: Unit) -> BreakResult:
+def break_test(result: CombatResult, a: Contingent, b: Contingent) -> BreakResult:
     """Resolve the Break test for a scored combat round, for each side.
 
     Only the losing side rolls: 2D6, add the winner's margin, compare to
@@ -1104,43 +1108,105 @@ def break_test(result: CombatResult, unit_a: Unit, unit_b: Unit) -> BreakResult:
     winner takes no Break test (its follow-up and pursuit choices are not
     modelled here), and a drawn combat tests neither side.
 
-    Composes on the signed margin distribution: ``unit_a`` is the
-    positive-margin side, matching :func:`fight`'s ``a``.
+    A side's resolved rules may fix its outcome instead of rolling: Stubborn's
+    :class:`~avelorn.tow.schema.rule.BreakEffect` sends its whole losing mass to
+    Fall Back in Good Order (it never Breaks). What that model leaves out — the
+    once-per-battle limit, the option to decline, the forgone Give Ground — is
+    returned in :attr:`BreakResult.notes`, not silently applied.
+
+    Composes on the signed margin distribution: ``a`` is the positive-margin
+    side, matching :func:`fight`'s ``a``; each contingent supplies its
+    Leadership (highest in the unit) and its resolved rules.
 
     Returns:
-        Each side's Break-test outcomes for the rounds it loses, plus the
-        drawn-combat probability.
+        Each side's Break-test outcomes for the rounds it loses, the
+        drawn-combat probability, and the notes for any fixed-outcome rule.
     """
-    a_leadership = unit_a.highest(Characteristic.LEADERSHIP) or 0
-    b_leadership = unit_b.highest(Characteristic.LEADERSHIP) or 0
-    logger.debug("break test: Ld %d (a) vs Ld %d (b)", a_leadership, b_leadership)
+    a_leadership = a.unit.highest(Characteristic.LEADERSHIP) or 0
+    b_leadership = b.unit.highest(Characteristic.LEADERSHIP) or 0
+    a_forced, a_from = _forced_break_outcome(a.loadout.rules)
+    b_forced, b_from = _forced_break_outcome(b.loadout.rules)
+    logger.debug(
+        "break test: Ld %d (a, forced=%s) vs Ld %d (b, forced=%s)",
+        a_leadership,
+        a_forced,
+        b_leadership,
+        b_forced,
+    )
+    notes = tuple(
+        _break_note(contingent.unit.name, rule, forced)
+        for contingent, rule, forced in ((a, a_from, a_forced), (b, b_from, b_forced))
+        if forced is not None and rule is not None
+    )
     return BreakResult(
         a=_side_break(
-            result.margin, a_leadership, deficit=lambda lead: -lead if lead < 0 else None
+            result.margin,
+            a_leadership,
+            deficit=lambda lead: -lead if lead < 0 else None,
+            forced=a_forced,
         ),
         b=_side_break(
-            result.margin, b_leadership, deficit=lambda lead: lead if lead > 0 else None
+            result.margin,
+            b_leadership,
+            deficit=lambda lead: lead if lead > 0 else None,
+            forced=b_forced,
         ),
         p_draw=sum(mass for lead, mass in result.margin.items() if lead == 0),
+        notes=notes,
+    )
+
+
+def _forced_break_outcome(rules: Sequence[Rule]) -> tuple[BreakOutcome | None, str | None]:
+    # The Break-test outcome a contingent's rules fix, if any: the first
+    # ungated BreakEffect (Stubborn), with the rule that granted it (for the
+    # note). A gated one is another scope's — none exists yet — so it is left
+    # for the roll rather than applied blind.
+    for rule in rules:
+        for effect in rule.effects:
+            if isinstance(effect, BreakEffect) and effect.when is None:
+                return effect.break_outcome, rule.name
+    return None, None
+
+
+def _break_note(unit_name: str, rule_name: str, forced: BreakOutcome) -> str:
+    # Surface both what the fixed-outcome rule did and what the current scope
+    # does not model, so a reader never mistakes the simplification for the rule.
+    return (
+        f"{rule_name} ({unit_name}): a lost round is {forced.printed}, never a Break. "
+        "Not modelled (KISS): the 'first Break test of the battle' limit (no multi-turn state) "
+        "and the choice to decline it (always applied); a would-be Give Ground is folded into "
+        f"{forced.printed}; the >2x Unit Strength clause is moot (no auto-rout modelled)."
     )
 
 
 def _side_break(
-    margin: Mapping[int, float], leadership: int, *, deficit: Callable[[int], int | None]
+    margin: Mapping[int, float],
+    leadership: int,
+    *,
+    deficit: Callable[[int], int | None],
+    forced: BreakOutcome | None = None,
 ) -> SideBreak:
     # Aggregate one side's Break-test outcomes over the rounds it loses.
     # ``deficit(lead)`` is this side's losing margin at signed lead ``lead``,
     # or None when it did not lose (it won, or the combat was drawn) and so
-    # takes no test.
+    # takes no test. ``forced`` fixes the outcome (Stubborn): the whole losing
+    # mass goes to that result rather than the rolled split.
     breaks = falls_back = gives_ground = 0.0
     for lead, mass in margin.items():
         loss = deficit(lead)
         if loss is None:
             continue
-        p_break, p_fall, p_give = _break_outcomes(leadership, loss)
-        breaks += mass * p_break
-        falls_back += mass * p_fall
-        gives_ground += mass * p_give
+        if forced is BreakOutcome.BREAKS:
+            breaks += mass
+        elif forced is BreakOutcome.FALLS_BACK:
+            falls_back += mass
+        elif forced is BreakOutcome.GIVES_GROUND:
+            gives_ground += mass
+        else:
+            p_break, p_fall, p_give = _break_outcomes(leadership, loss)
+            breaks += mass * p_break
+            falls_back += mass * p_fall
+            gives_ground += mass * p_give
     return SideBreak(p_gives_ground=gives_ground, p_falls_back=falls_back, p_breaks=breaks)
 
 
@@ -1242,10 +1308,13 @@ class CombatPhase(Phase):
         """
         return combat_result(fought)
 
-    def break_test(self, scored: CombatResult, a: Unit, b: Unit) -> BreakResult:
+    def break_test(self, scored: CombatResult, a: Contingent, b: Contingent) -> BreakResult:
         """The Break test for a scored round, for each side.
 
+        Each contingent supplies its Leadership and its resolved rules (a
+        fixed-outcome rule like Stubborn is read here).
+
         Returns:
-            Each side's break outcome distribution.
+            Each side's break outcome distribution, plus any fixed-outcome notes.
         """
         return break_test(scored, a, b)

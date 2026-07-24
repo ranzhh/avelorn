@@ -14,6 +14,10 @@ from avelorn.tow.schema.stage import Stage
 
 REPO = TOWRepository()
 
+# A fielded body for the Break test, which now reads Leadership and rules off a
+# contingent; Elven Spearmen carry no fixed-outcome rule, so the roll stands.
+SPEARMEN = Contingent.field(REPO.units["elven-spearmen"], 1, data=REPO)
+
 # Elven Spearmen carry Ld 8: a Leadership test passes 26/36.
 P_PASS = float(Fraction(26, 36))
 
@@ -185,9 +189,7 @@ def test_break_test_three_outcomes_at_a_fixed_margin() -> None:
     natural+3 > 8, i.e. 6,7,8) = 16/36. Give Ground (the rest, incl. the
     double 1) = 10/36. A is the winner, so it takes no test at all.
     """
-    result = break_test(
-        _combat({3: 1.0}), REPO.units["elven-spearmen"], REPO.units["elven-spearmen"]
-    )
+    result = break_test(_combat({3: 1.0}), SPEARMEN, SPEARMEN)
     assert result.b.p_breaks == pytest.approx(10 / 36)
     assert result.b.p_falls_back == pytest.approx(16 / 36)
     assert result.b.p_gives_ground == pytest.approx(10 / 36)
@@ -202,9 +204,7 @@ def test_break_test_double_one_always_gives_ground() -> None:
     Back, so Give Ground is exactly the 1/36 double 1 — proof the override
     fires.
     """
-    result = break_test(
-        _combat({100: 1.0}), REPO.units["elven-spearmen"], REPO.units["elven-spearmen"]
-    )
+    result = break_test(_combat({100: 1.0}), SPEARMEN, SPEARMEN)
     assert result.b.p_gives_ground == pytest.approx(1 / 36)
     assert result.b.p_breaks == pytest.approx(10 / 36)
     assert result.b.p_falls_back == pytest.approx(25 / 36)
@@ -212,12 +212,41 @@ def test_break_test_double_one_always_gives_ground() -> None:
 
 def test_break_test_draw_takes_no_test() -> None:
     """A drawn combat: neither side tests."""
-    result = break_test(
-        _combat({0: 1.0}), REPO.units["elven-spearmen"], REPO.units["elven-spearmen"]
-    )
+    result = break_test(_combat({0: 1.0}), SPEARMEN, SPEARMEN)
     assert result.p_draw == pytest.approx(1.0)
     assert result.a == SideBreak(0.0, 0.0, 0.0)
     assert result.b == SideBreak(0.0, 0.0, 0.0)
+
+
+def test_stubborn_falls_back_instead_of_breaking() -> None:
+    """A Stubborn loser never Breaks — its whole losing mass Falls Back in Good Order.
+
+    White Lions (Stubborn) lose by 3: the ordinary 2D6 test would split Break /
+    Fall Back / Give Ground, but the rule sends all of it to Fall Back in Good
+    Order. A note surfaces what the current scope leaves unmodelled.
+    """
+    lions = Contingent.field(REPO.units["white-lions-of-chrace"], 5, data=REPO)
+    result = break_test(_combat({-3: 1.0}), lions, SPEARMEN)
+    assert result.a.p_breaks == pytest.approx(0.0)
+    assert result.a.p_gives_ground == pytest.approx(0.0)
+    assert result.a.p_falls_back == pytest.approx(1.0)  # the whole lost round
+    assert any("Stubborn" in note and "White Lions of Chrace" in note for note in result.notes)
+    # The non-Stubborn winner takes no test and earns no note.
+    assert result.b == SideBreak(0.0, 0.0, 0.0)
+    assert not any("Spearmen" in note for note in result.notes)
+
+
+def test_non_stubborn_unit_rolls_the_ordinary_break_test() -> None:
+    """Without a fixed-outcome rule the split is the rolled one, and no note.
+
+    Guards that the fixed-outcome path is gated on the rule: plain Spearmen
+    losing by 3 (Ld 8) get the same 10/16/10 split as before and no notes.
+    """
+    result = break_test(_combat({-3: 1.0}), SPEARMEN, SPEARMEN)
+    assert result.a.p_breaks == pytest.approx(10 / 36)
+    assert result.a.p_falls_back == pytest.approx(16 / 36)
+    assert result.a.p_gives_ground == pytest.approx(10 / 36)
+    assert result.notes == ()
 
 
 def test_break_test_scores_whichever_side_lost() -> None:
@@ -227,9 +256,7 @@ def test_break_test_scores_whichever_side_lost() -> None:
     each side's loser-outcomes are identical and each side loses half the
     time. The six outcome masses and the (zero) draw sum to 1.
     """
-    result = break_test(
-        _combat({2: 0.5, -2: 0.5}), REPO.units["elven-spearmen"], REPO.units["elven-spearmen"]
-    )
+    result = break_test(_combat({2: 0.5, -2: 0.5}), SPEARMEN, SPEARMEN)
     assert result.a == result.b
     a_lost = result.a.p_gives_ground + result.a.p_falls_back + result.a.p_breaks
     b_lost = result.b.p_gives_ground + result.b.p_falls_back + result.b.p_breaks

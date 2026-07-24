@@ -31,7 +31,7 @@ from typing import Annotated, Literal, assert_never
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from avelorn.tow.schema.psychology import PanicCause
+from avelorn.tow.schema.psychology import BreakOutcome, PanicCause
 from avelorn.tow.schema.stage import ATTACK_ROLLS, Stage
 from avelorn.tow.schema.unit import Characteristic
 from avelorn.tow.schema.weapon import WeaponType
@@ -564,7 +564,23 @@ class GrantEffect(GatedEffect):
     grants: str  # the printed name of the rule conferred, e.g. "Armour Bane (1)"
 
 
-RuleEffect = ModifierEffect | RerollEffect | GrantEffect
+class BreakEffect(GatedEffect):
+    """Fix a unit's Break-test result instead of rolling it.
+
+    Stubborn's "may choose not to [make the test] and will automatically Fall
+    Back in Good Order instead" — when the unit would take a Break test (a round
+    it lost), its result is the named :class:`BreakOutcome`, not the 2D6 split.
+    Self-naming by its ``break_outcome`` key, the peer of ``reroll`` and
+    ``grants`` (each model forbids the others' keys). Named after the mechanic —
+    a fixed Break-test result — so any rule that forces one shares it, never
+    after Stubborn itself. The Break test is the only seam that consumes it; a
+    round the unit did not lose is untouched.
+    """
+
+    break_outcome: BreakOutcome
+
+
+RuleEffect = ModifierEffect | RerollEffect | GrantEffect | BreakEffect
 
 
 def references_parameter(effect: RuleEffect) -> bool:

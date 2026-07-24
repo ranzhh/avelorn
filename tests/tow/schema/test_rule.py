@@ -136,6 +136,25 @@ def test_rule_level_when_conjoins_with_an_effect_gate() -> None:
         )
 
 
+def test_break_effect_parses_and_discriminates_by_its_key() -> None:
+    """``break_outcome`` names a fixed Break-test result and discriminates the effect.
+
+    An effect carrying ``break_outcome`` is a break effect; it rejects a
+    modifier's keys, and its value is the closed BreakOutcome vocabulary.
+    """
+    from avelorn.tow.schema.rule import BreakEffect
+
+    effect = _EFFECT.validate_python({"break_outcome": "fall-back-in-good-order"})
+    assert isinstance(effect, BreakEffect)
+    assert effect.break_outcome.printed == "Fall Back in Good Order"
+    with pytest.raises(ValidationError):  # a break effect is not a modifier
+        _EFFECT.validate_python(
+            {"break_outcome": "fall-back-in-good-order", "add": {"to-hit": -1}}
+        )
+    with pytest.raises(ValidationError):  # outside the outcome vocabulary
+        _EFFECT.validate_python({"break_outcome": "hold-the-line"})
+
+
 def test_when_is_optional() -> None:
     """Without a when, the modifier applies to every attack."""
     effect = _EFFECT.validate_python({"add": {"armour-piercing": 1}})
