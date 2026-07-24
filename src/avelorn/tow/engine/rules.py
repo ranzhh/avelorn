@@ -34,10 +34,13 @@ from pydantic.fields import FieldInfo
 
 from avelorn.core.registry import Registry, UnknownNameError
 from avelorn.tow.engine.attack import Modifier, Reroll
+from avelorn.tow.schema.psychology import BreakOutcome
 from avelorn.tow.schema.rule import (
     PARAMETER_SUFFIX,
     AttackKind,
+    ChoiceEffect,
     Comparison,
+    Decision,
     EquipmentUse,
     Gate,
     GatedEffect,
@@ -262,6 +265,31 @@ def factored_notes(rules: Sequence[Rule], factored: Collection[str], source: str
         for rule in rules
         if rule.name in factored and rule.notes
     ]
+
+
+def forced_outcome(
+    rules: Sequence[Rule], decision: Decision
+) -> tuple[BreakOutcome | None, Rule | None]:
+    """The outcome a contingent's rules force at ``decision``, and the rule forcing it.
+
+    The generic read a seam owning a decision makes — "is my decision forced,
+    and to what?" — over the ungated :class:`~avelorn.tow.schema.rule.ChoiceEffect`
+    that names it (Stubborn forces ``break``). A gated one needs a context the
+    seam here lacks, so it is left to roll rather than applied blind.
+
+    Returns:
+        The forced outcome and the rule that carries it, or ``(None, None)``
+        when nothing forces this decision.
+    """
+    for rule in rules:
+        for effect in rule.effects:
+            if (
+                isinstance(effect, ChoiceEffect)
+                and effect.when is None
+                and decision in effect.forces
+            ):
+                return effect.forces[decision], rule
+    return None, None
 
 
 def _compile(

@@ -18,4 +18,5 @@ notes: >-
   Ground is folded into the automatic Fall Back in Good Order; and the "more than twice the Unit
   Strength" clause is moot, since the auto-rout it overrides is not modelled.
 effects:
-  - forces: fall-back-in-good-order
+  - forces:
+      break: fall-back-in-good-order

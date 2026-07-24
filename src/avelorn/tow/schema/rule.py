@@ -564,21 +564,36 @@ class GrantEffect(GatedEffect):
     grants: str  # the printed name of the rule conferred, e.g. "Armour Bane (1)"
 
 
+class Decision(StrEnum):
+    """A point where an outcome is rolled or chosen, that a rule may force.
+
+    The routing key of a :class:`ChoiceEffect` — the peer of :class:`Quantity`
+    for a modifier: the seam that owns a decision reads the effects forcing it.
+    Closed and append-only; a member joins when a rule forces a new decision (a
+    charge reaction, ...).
+    """
+
+    BREAK = "break"
+
+
 class ChoiceEffect(GatedEffect):
     """Force the outcome of a decision that is otherwise rolled or chosen.
 
-    Stubborn's automatic Fall Back in Good Order — instead of the Break test's
-    2D6 split among its outcomes, the unit's result is the forced one. Self-
-    naming by its ``forces`` key, the peer of ``reroll`` / ``grants`` (each model
-    forbids the others' keys). The forced value's *type* names the decision it
-    belongs to — a :class:`BreakOutcome` is the Break test's — so the seam that
-    owns that decision consumes it, the way a :class:`Quantity` routes a modifier
-    to its seam. Named after the mechanic (a forced outcome), never after
-    Stubborn; a rule that *forbids* an option rather than forcing one is the
-    natural sibling (a ``forbids`` key) when the first such rule lands.
+    Stubborn's automatic Fall Back in Good Order: ``forces`` maps a
+    :class:`Decision` to the outcome it takes instead of rolling —
+    ``{break: fall-back-in-good-order}``. Keyed by the decision exactly as a
+    modifier's ``add`` is keyed by the quantity, so the seam that owns a
+    decision reads its own key ("is ``break`` mine, and forced to what?") with
+    no per-rule handler. Self-naming by ``forces`` (the peer of ``add`` /
+    ``grants``); each model forbids the others' keys. A rule that *forbids* an
+    option rather than forcing one is the sibling (a ``forbids`` key) for when
+    one lands.
     """
 
-    forces: BreakOutcome
+    # The value is the decision's own outcome vocabulary (a BreakOutcome for
+    # break); it widens to a union — paired to the key — when a second decision
+    # with a different outcome set lands.
+    forces: Annotated[dict[Decision, BreakOutcome], Field(min_length=1)]
 
 
 RuleEffect = ModifierEffect | RerollEffect | GrantEffect | ChoiceEffect

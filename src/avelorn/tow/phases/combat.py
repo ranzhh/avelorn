@@ -63,10 +63,11 @@ from avelorn.tow.engine.rules import (
     effective_combat_result_bonus,
     effective_rerolls,
     factored_notes,
+    forced_outcome,
 )
 from avelorn.tow.phases.movement import Engagement
 from avelorn.tow.schema.psychology import BreakOutcome
-from avelorn.tow.schema.rule import AttackKind, ChoiceEffect, Rule
+from avelorn.tow.schema.rule import AttackKind, Decision, Rule
 from avelorn.tow.schema.unit import Characteristic
 
 logger = logging.getLogger(__name__)
@@ -1127,8 +1128,8 @@ def break_test(result: CombatResult, a: Contingent, b: Contingent) -> BreakResul
     """
     a_leadership = a.unit.highest(Characteristic.LEADERSHIP) or 0
     b_leadership = b.unit.highest(Characteristic.LEADERSHIP) or 0
-    a_forced, a_rule = _forced_break_outcome(a.loadout.rules)
-    b_forced, b_rule = _forced_break_outcome(b.loadout.rules)
+    a_forced, a_rule = forced_outcome(a.loadout.rules, Decision.BREAK)
+    b_forced, b_rule = forced_outcome(b.loadout.rules, Decision.BREAK)
     logger.debug(
         "break test: Ld %d (a, forced=%s) vs Ld %d (b, forced=%s)",
         a_leadership,
@@ -1160,23 +1161,6 @@ def break_test(result: CombatResult, a: Contingent, b: Contingent) -> BreakResul
         p_draw=sum(mass for lead, mass in result.margin.items() if lead == 0),
         notes=notes,
     )
-
-
-def _forced_break_outcome(rules: Sequence[Rule]) -> tuple[BreakOutcome | None, Rule | None]:
-    # The Break-test outcome a contingent's rules force, if any: the first
-    # ungated ChoiceEffect forcing a BreakOutcome (Stubborn) — the outcome's
-    # type is what routes it here — with the rule that carries it (for its
-    # authored notes). A ChoiceEffect forcing another decision, or a gated one,
-    # is another scope's, so it is left for the roll rather than applied blind.
-    for rule in rules:
-        for effect in rule.effects:
-            if (
-                isinstance(effect, ChoiceEffect)
-                and isinstance(effect.forces, BreakOutcome)
-                and effect.when is None
-            ):
-                return effect.forces, rule
-    return None, None
 
 
 def _side_break(

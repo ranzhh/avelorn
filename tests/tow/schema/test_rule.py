@@ -136,21 +136,25 @@ def test_rule_level_when_conjoins_with_an_effect_gate() -> None:
         )
 
 
-def test_choice_effect_parses_and_discriminates_by_its_key() -> None:
-    """``forces`` names a forced outcome and discriminates the effect.
+def test_choice_effect_forces_a_decision_outcome() -> None:
+    """``forces`` maps a decision to its forced outcome, keyed like a modifier's ``add``.
 
     An effect carrying ``forces`` is a choice effect; it rejects a modifier's
-    keys, and its value is a closed outcome vocabulary (a BreakOutcome here).
+    keys, and both the decision key and the outcome value are closed vocabularies.
     """
     from avelorn.tow.schema.rule import ChoiceEffect
 
-    effect = _EFFECT.validate_python({"forces": "fall-back-in-good-order"})
+    effect = _EFFECT.validate_python({"forces": {"break": "fall-back-in-good-order"}})
     assert isinstance(effect, ChoiceEffect)
-    assert effect.forces == "fall-back-in-good-order"
+    assert effect.forces == {"break": "fall-back-in-good-order"}
     with pytest.raises(ValidationError):  # a choice effect is not a modifier
-        _EFFECT.validate_python({"forces": "fall-back-in-good-order", "add": {"to-hit": -1}})
-    with pytest.raises(ValidationError):  # outside the outcome vocabulary
-        _EFFECT.validate_python({"forces": "hold-the-line"})
+        _EFFECT.validate_python(
+            {"forces": {"break": "fall-back-in-good-order"}, "add": {"to-hit": -1}}
+        )
+    with pytest.raises(ValidationError):  # decision outside the vocabulary
+        _EFFECT.validate_python({"forces": {"rally": "fall-back-in-good-order"}})
+    with pytest.raises(ValidationError):  # outcome outside the vocabulary
+        _EFFECT.validate_python({"forces": {"break": "hold-the-line"}})
 
 
 def test_when_is_optional() -> None:
