@@ -32,14 +32,3 @@ class BreakOutcome(StrEnum):
     GIVES_GROUND = "gives-ground"
     FALLS_BACK = "fall-back-in-good-order"
     BREAKS = "breaks"
-
-    @property
-    def printed(self) -> str:
-        """The rulebook phrasing of this outcome."""
-        match self:
-            case BreakOutcome.GIVES_GROUND:
-                return "Give Ground"
-            case BreakOutcome.FALLS_BACK:
-                return "Fall Back in Good Order"
-            case BreakOutcome.BREAKS:
-                return "Break"

@@ -1124,8 +1124,8 @@ def break_test(result: CombatResult, a: Contingent, b: Contingent) -> BreakResul
     """
     a_leadership = a.unit.highest(Characteristic.LEADERSHIP) or 0
     b_leadership = b.unit.highest(Characteristic.LEADERSHIP) or 0
-    a_forced, a_from = _forced_break_outcome(a.loadout.rules)
-    b_forced, b_from = _forced_break_outcome(b.loadout.rules)
+    a_forced, a_rule = _forced_break_outcome(a.loadout.rules)
+    b_forced, b_rule = _forced_break_outcome(b.loadout.rules)
     logger.debug(
         "break test: Ld %d (a, forced=%s) vs Ld %d (b, forced=%s)",
         a_leadership,
@@ -1133,10 +1133,13 @@ def break_test(result: CombatResult, a: Contingent, b: Contingent) -> BreakResul
         b_leadership,
         b_forced,
     )
+    # Surface the fixed-outcome rule's own authored notes — the scope it does
+    # not cover — verbatim, labelled by rule and unit. The engine composes no
+    # prose of its own: a simplification is stated in the rule's data or nowhere.
     notes = tuple(
-        _break_note(contingent.unit.name, rule, forced)
-        for contingent, rule, forced in ((a, a_from, a_forced), (b, b_from, b_forced))
-        if forced is not None and rule is not None
+        f"{rule.name} ({contingent.unit.name}): {rule.notes}"
+        for contingent, rule in ((a, a_rule), (b, b_rule))
+        if rule is not None and rule.notes
     )
     return BreakResult(
         a=_side_break(
@@ -1156,27 +1159,16 @@ def break_test(result: CombatResult, a: Contingent, b: Contingent) -> BreakResul
     )
 
 
-def _forced_break_outcome(rules: Sequence[Rule]) -> tuple[BreakOutcome | None, str | None]:
+def _forced_break_outcome(rules: Sequence[Rule]) -> tuple[BreakOutcome | None, Rule | None]:
     # The Break-test outcome a contingent's rules fix, if any: the first
-    # ungated BreakEffect (Stubborn), with the rule that granted it (for the
-    # note). A gated one is another scope's — none exists yet — so it is left
-    # for the roll rather than applied blind.
+    # ungated BreakEffect (Stubborn), with the rule that carries it (for its
+    # authored notes). A gated one is another scope's — none exists yet — so it
+    # is left for the roll rather than applied blind.
     for rule in rules:
         for effect in rule.effects:
             if isinstance(effect, BreakEffect) and effect.when is None:
-                return effect.break_outcome, rule.name
+                return effect.break_outcome, rule
     return None, None
-
-
-def _break_note(unit_name: str, rule_name: str, forced: BreakOutcome) -> str:
-    # Surface both what the fixed-outcome rule did and what the current scope
-    # does not model, so a reader never mistakes the simplification for the rule.
-    return (
-        f"{rule_name} ({unit_name}): a lost round is {forced.printed}, never a Break. "
-        "Not modelled (KISS): the 'first Break test of the battle' limit (no multi-turn state) "
-        "and the choice to decline it (always applied); a would-be Give Ground is folded into "
-        f"{forced.printed}; the >2x Unit Strength clause is moot (no auto-rout modelled)."
-    )
 
 
 def _side_break(

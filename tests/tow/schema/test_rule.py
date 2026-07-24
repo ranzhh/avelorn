@@ -146,7 +146,7 @@ def test_break_effect_parses_and_discriminates_by_its_key() -> None:
 
     effect = _EFFECT.validate_python({"break_outcome": "fall-back-in-good-order"})
     assert isinstance(effect, BreakEffect)
-    assert effect.break_outcome.printed == "Fall Back in Good Order"
+    assert effect.break_outcome == "fall-back-in-good-order"
     with pytest.raises(ValidationError):  # a break effect is not a modifier
         _EFFECT.validate_python(
             {"break_outcome": "fall-back-in-good-order", "add": {"to-hit": -1}}
