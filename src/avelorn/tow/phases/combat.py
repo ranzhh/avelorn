@@ -66,7 +66,7 @@ from avelorn.tow.engine.rules import (
 )
 from avelorn.tow.phases.movement import Engagement
 from avelorn.tow.schema.psychology import BreakOutcome
-from avelorn.tow.schema.rule import AttackKind, BreakEffect, Rule
+from avelorn.tow.schema.rule import AttackKind, ChoiceEffect, Rule
 from avelorn.tow.schema.unit import Characteristic
 
 logger = logging.getLogger(__name__)
@@ -1111,8 +1111,8 @@ def break_test(result: CombatResult, a: Contingent, b: Contingent) -> BreakResul
     winner takes no Break test (its follow-up and pursuit choices are not
     modelled here), and a drawn combat tests neither side.
 
-    A side's resolved rules may fix its outcome instead of rolling: Stubborn's
-    :class:`~avelorn.tow.schema.rule.BreakEffect` sends its whole losing mass to
+    A side's resolved rules may force its outcome instead of rolling: Stubborn's
+    :class:`~avelorn.tow.schema.rule.ChoiceEffect` sends its whole losing mass to
     Fall Back in Good Order (it never Breaks). What that model leaves out — the
     once-per-battle limit, the option to decline, the forgone Give Ground — is
     returned in :attr:`BreakResult.notes`, not silently applied.
@@ -1163,14 +1163,19 @@ def break_test(result: CombatResult, a: Contingent, b: Contingent) -> BreakResul
 
 
 def _forced_break_outcome(rules: Sequence[Rule]) -> tuple[BreakOutcome | None, Rule | None]:
-    # The Break-test outcome a contingent's rules fix, if any: the first
-    # ungated BreakEffect (Stubborn), with the rule that carries it (for its
-    # authored notes). A gated one is another scope's — none exists yet — so it
-    # is left for the roll rather than applied blind.
+    # The Break-test outcome a contingent's rules force, if any: the first
+    # ungated ChoiceEffect forcing a BreakOutcome (Stubborn) — the outcome's
+    # type is what routes it here — with the rule that carries it (for its
+    # authored notes). A ChoiceEffect forcing another decision, or a gated one,
+    # is another scope's, so it is left for the roll rather than applied blind.
     for rule in rules:
         for effect in rule.effects:
-            if isinstance(effect, BreakEffect) and effect.when is None:
-                return effect.break_outcome, rule
+            if (
+                isinstance(effect, ChoiceEffect)
+                and isinstance(effect.forces, BreakOutcome)
+                and effect.when is None
+            ):
+                return effect.forces, rule
     return None, None
 
 

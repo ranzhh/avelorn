@@ -564,23 +564,24 @@ class GrantEffect(GatedEffect):
     grants: str  # the printed name of the rule conferred, e.g. "Armour Bane (1)"
 
 
-class BreakEffect(GatedEffect):
-    """Fix a unit's Break-test result instead of rolling it.
+class ChoiceEffect(GatedEffect):
+    """Force the outcome of a decision that is otherwise rolled or chosen.
 
-    Stubborn's "may choose not to [make the test] and will automatically Fall
-    Back in Good Order instead" — when the unit would take a Break test (a round
-    it lost), its result is the named :class:`BreakOutcome`, not the 2D6 split.
-    Self-naming by its ``break_outcome`` key, the peer of ``reroll`` and
-    ``grants`` (each model forbids the others' keys). Named after the mechanic —
-    a fixed Break-test result — so any rule that forces one shares it, never
-    after Stubborn itself. The Break test is the only seam that consumes it; a
-    round the unit did not lose is untouched.
+    Stubborn's automatic Fall Back in Good Order — instead of the Break test's
+    2D6 split among its outcomes, the unit's result is the forced one. Self-
+    naming by its ``forces`` key, the peer of ``reroll`` / ``grants`` (each model
+    forbids the others' keys). The forced value's *type* names the decision it
+    belongs to — a :class:`BreakOutcome` is the Break test's — so the seam that
+    owns that decision consumes it, the way a :class:`Quantity` routes a modifier
+    to its seam. Named after the mechanic (a forced outcome), never after
+    Stubborn; a rule that *forbids* an option rather than forcing one is the
+    natural sibling (a ``forbids`` key) when the first such rule lands.
     """
 
-    break_outcome: BreakOutcome
+    forces: BreakOutcome
 
 
-RuleEffect = ModifierEffect | RerollEffect | GrantEffect | BreakEffect
+RuleEffect = ModifierEffect | RerollEffect | GrantEffect | ChoiceEffect
 
 
 def references_parameter(effect: RuleEffect) -> bool:

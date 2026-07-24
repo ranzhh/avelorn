@@ -136,23 +136,21 @@ def test_rule_level_when_conjoins_with_an_effect_gate() -> None:
         )
 
 
-def test_break_effect_parses_and_discriminates_by_its_key() -> None:
-    """``break_outcome`` names a fixed Break-test result and discriminates the effect.
+def test_choice_effect_parses_and_discriminates_by_its_key() -> None:
+    """``forces`` names a forced outcome and discriminates the effect.
 
-    An effect carrying ``break_outcome`` is a break effect; it rejects a
-    modifier's keys, and its value is the closed BreakOutcome vocabulary.
+    An effect carrying ``forces`` is a choice effect; it rejects a modifier's
+    keys, and its value is a closed outcome vocabulary (a BreakOutcome here).
     """
-    from avelorn.tow.schema.rule import BreakEffect
+    from avelorn.tow.schema.rule import ChoiceEffect
 
-    effect = _EFFECT.validate_python({"break_outcome": "fall-back-in-good-order"})
-    assert isinstance(effect, BreakEffect)
-    assert effect.break_outcome == "fall-back-in-good-order"
-    with pytest.raises(ValidationError):  # a break effect is not a modifier
-        _EFFECT.validate_python(
-            {"break_outcome": "fall-back-in-good-order", "add": {"to-hit": -1}}
-        )
+    effect = _EFFECT.validate_python({"forces": "fall-back-in-good-order"})
+    assert isinstance(effect, ChoiceEffect)
+    assert effect.forces == "fall-back-in-good-order"
+    with pytest.raises(ValidationError):  # a choice effect is not a modifier
+        _EFFECT.validate_python({"forces": "fall-back-in-good-order", "add": {"to-hit": -1}})
     with pytest.raises(ValidationError):  # outside the outcome vocabulary
-        _EFFECT.validate_python({"break_outcome": "hold-the-line"})
+        _EFFECT.validate_python({"forces": "hold-the-line"})
 
 
 def test_when_is_optional() -> None:
