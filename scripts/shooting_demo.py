@@ -1,165 +1,47 @@
-"""End-to-end shooting demo: units shoot a target.
+"""Two units shoot one target — and their tolls compose in a single line.
 
-Loads units, weapons, and armour from the data/ YAML tree, resolves the
-shooting chain for one unit (the full chain, the exact queries, the panic
-test), then adds a second unit to the same target and composes their tolls.
-
+Elven Archers and Sisters of Avelorn both fire at a block of Elven Spearmen.
 Two units shooting one target resolve one after the other, casualties removed
-between — so the joining unit fires at the *survivors* of the first. That is a
-``bind``: the second toll folds onto the first's casualty distribution, giving
-one exact combined distribution with no manual convolution. Chain a third and
-it is another bind; the fold goes as deep as you like.
+between, so the Sisters shoot whatever the Archers leave standing. Composing the
+two is one ``bind`` — shoot the survivors of the first with the second. Chain a
+third unit and it is just another bind.
 
-Usage: uv run python scripts/shooting_demo.py [shooters] [attacker] [defender] [defenders]
-       (unit slugs default to elven-archers and elven-spearmen; with no
-       --weapon the attacker fires its sole missile weapon; --join adds the
-       second unit, default sisters-of-avelorn)
-
-Pass -v/--verbose to also emit the DEBUG math trace to stderr.
+Resolved exactly, no dice rolled, no arguments — run it and read the numbers.
 """
 
-import argparse
-import logging
-
 from avelorn.core.distribution import Distribution
-from avelorn.core.logging import configure_logging
-from avelorn.tow.contingent import Movement
 from avelorn.tow.game import TOWGame
 
 
 def main() -> None:
-    """Parse argv, resolve one unit shooting another, and print the kill distribution."""
-    parser = argparse.ArgumentParser(description="Shooting demo: one unit shoots another.")
-    parser.add_argument(
-        "shooters", nargs="?", type=int, default=3, help="number of shooting models"
-    )
-    parser.add_argument("attacker", nargs="?", default="elven-archers", help="attacker unit slug")
-    parser.add_argument("defender", nargs="?", default="elven-spearmen", help="defender unit slug")
-    parser.add_argument(
-        "defenders",
-        nargs="?",
-        type=int,
-        default=10,
-        help="models in the target unit; caps casualties",
-    )
-    parser.add_argument(
-        "--weapon",
-        default=None,
-        help="weapon slug to shoot with; defaults to the unit's sole missile weapon",
-    )
-    parser.add_argument(
-        "--distance", type=int, default=None, help="inches to the target (enables range rules)"
-    )
-    parser.add_argument(
-        "--moved",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-        help="whether the shooters moved this turn (default: stationary)",
-    )
-    parser.add_argument(
-        "--battle-strength",
-        type=int,
-        default=None,
-        help="defender models at the start of the battle (default: as fielded now)",
-    )
-    parser.add_argument(
-        "--join",
-        default="sisters-of-avelorn",
-        help="a second unit that joins the volley (slug); its fire composes onto the first's",
-    )
-    parser.add_argument(
-        "--join-shooters",
-        type=int,
-        default=None,
-        help="models in the joining unit (default: same as shooters)",
-    )
-    parser.add_argument(
-        "-v", "--verbose", action="store_true", help="emit the DEBUG math trace to stderr"
-    )
-    args = parser.parse_args()
-    if args.verbose:
-        configure_logging(logging.DEBUG)
-
+    """Field two shooters and a target, compose their volleys, print the toll."""
     game = TOWGame.load_data()
-    attacker = game.field(game.units[args.attacker], args.shooters)
-    if args.moved:
-        attacker = attacker.after(Movement.march())
-    defender = game.field(game.units[args.defender], args.defenders)
-    # With no --weapon the unit fires its sole missile weapon (shooting's
-    # default); a slug arms it explicitly, as a unit carrying several must.
-    if args.weapon is not None:
-        attacker = attacker.wielding(game.weapons[args.weapon].name)
-    result = game.shooting.volley(attacker, defender, distance=args.distance)
-    weapon_name = attacker.shooting_weapon().name
+    target = game.units["elven-spearmen"]
+    size = 20
+    archers = game.field(game.units["elven-archers"], 10)
+    sisters = game.field(game.units["sisters-of-avelorn"], 10)
 
-    def fmt_target(target: int | None) -> str:
-        return f"{target}+" if target is not None else "-"
+    def survivors(shooters, standing):
+        # Spearmen left standing after `shooters` fire at `standing` of them.
+        if standing == 0:
+            return Distribution.pure(0)
+        volley = game.shooting.volley(shooters, game.field(target, standing), distance=12)
+        return Distribution.from_counts(volley.casualties).map(lambda dead: standing - dead)
 
-    print(
-        f"{attacker.models} {attacker.unit.name} shoot "
-        f"{defender.models} {defender.unit.name} with {weapon_name}s\n"
-        f"  to hit:  {fmt_target(result.hit_target)}   (p = {result.p_hit:.3f})\n"
-        f"  to wound: {fmt_target(result.wound_target)}  (p = {result.p_wound:.3f})\n"
-        f"  armour:  {fmt_target(result.save_target)}\n"
-        f"  per-shot unsaved wound: p = {result.p_unsaved:.3f}\n"
-        f"  expected casualties: {result.expected_casualties:.2f} of {defender.models}\n"
-        f"\n  killed  probability"
-    )
-    for killed, p in enumerate(result.casualties):
-        print(f"  {killed:>6}  {p:>10.3f}  {'#' * round(p * 40)}")
+    # The whole point: two units' fire composes in one line — the Sisters shoot
+    # whatever the Archers leave standing.
+    left = survivors(archers, size).bind(lambda standing: survivors(sisters, standing))
+    casualties = left.map(lambda standing: size - standing)
 
-    # Exact distributional queries — the questions the game actually turns on,
-    # not the average: a predicate over the outcome, answered exactly. The
-    # casualty pmf lifts into a Distribution; survivors == 0 is casualties at
-    # the unit's full size.
-    casualties = Distribution.from_counts(result.casualties)
-    any_kill = casualties.prob(lambda k: k >= 1)
-    wiped = casualties.prob(lambda k: k == defender.models)
-    panic = game.shooting.make_panic_tests(result, defender, battle_strength=args.battle_strength)
-    print(
-        f"\n  exact queries:\n"
-        f"  - P(at least one falls):       {any_kill:.3f}\n"
-        f"  - P(unit wiped out):           {wiped:.3f}\n"
-        f"\n  make panic tests:\n"
-        f"  - P(test forced):              {panic.p_test:.3f}\n"
-        f"  - P(holds):                    {panic.p_holds:.3f}\n"
-        f"  - P(falls back in good order): {panic.p_falls_back:.3f}\n"
-        f"  - P(flees):                    {panic.p_flees:.3f}\n"
-        f"  - P(destroyed):                {panic.p_destroyed:.3f}"
-    )
-    if panic.reroll_from is not None:
-        print(f"  (failed tests re-rolled: {panic.reroll_from})")
+    def toll(shooters):  # one unit's casualties alone, for comparison
+        return survivors(shooters, size).map(lambda standing: size - standing)
 
-    if result.notes:
-        print("\n  not factored into the math:")
-        for note in result.notes:
-            print(f"  - {note}")
-
-    # A second unit joins the volley at the same target. It fires at the
-    # survivors of the first, so its toll binds onto the first's casualty
-    # distribution — one exact combined distribution, no manual convolution.
-    join_unit = game.units[args.join]
-    join_shooters = args.join_shooters if args.join_shooters is not None else args.shooters
-
-    def add_join(dead: int) -> Distribution[int]:
-        remaining = defender.models - dead
-        if remaining == 0:
-            return Distribution.pure(dead)  # target already wiped — nothing left to shoot
-        volley = game.shooting.volley(
-            game.field(join_unit, join_shooters),
-            game.field(defender.unit, remaining),
-            distance=args.distance,
-        )
-        return Distribution.from_counts(volley.casualties).map(lambda more: dead + more)
-
-    combined = Distribution.from_counts(result.casualties).bind(add_join)
-    print(
-        f"\n  {join_shooters} {join_unit.name} join the volley — their fire composes onto the "
-        f"{attacker.models} {attacker.unit.name}'\n  toll (bind over the survivors):\n"
-        f"  - combined expected casualties: {combined.expect(float):.2f} of {defender.models}\n"
-        f"  - P(at least one falls):        {combined.prob(lambda k: k >= 1):.3f}\n"
-        f"  - P(unit wiped out):            {combined.prob(lambda k: k == defender.models):.3f}"
-    )
+    print(f"{size} Elven Spearmen under fire — expected casualties:")
+    print(f"  Elven Archers alone:       {toll(archers).expect(float):.2f}")
+    print(f"  Sisters of Avelorn alone:  {toll(sisters).expect(float):.2f}")
+    print(f"  both, composed:            {casualties.expect(float):.2f}")
+    print(f"  P(at least one falls):     {casualties.prob(lambda k: k >= 1):.3f}")
+    print(f"  P(five or more fall):      {casualties.prob(lambda k: k >= 5):.3f}")
 
 
 if __name__ == "__main__":
