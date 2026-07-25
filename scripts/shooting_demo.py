@@ -1,11 +1,19 @@
-"""End-to-end shooting demo: one unit shoots another.
+"""End-to-end shooting demo: units shoot a target.
 
 Loads units, weapons, and armour from the data/ YAML tree, resolves the
-shooting chain, and prints the kill distribution.
+shooting chain for one unit (the full chain, the exact queries, the panic
+test), then adds a second unit to the same target and composes their tolls.
+
+Two units shooting one target resolve one after the other, casualties removed
+between — so the joining unit fires at the *survivors* of the first. That is a
+``bind``: the second toll folds onto the first's casualty distribution, giving
+one exact combined distribution with no manual convolution. Chain a third and
+it is another bind; the fold goes as deep as you like.
 
 Usage: uv run python scripts/shooting_demo.py [shooters] [attacker] [defender] [defenders]
        (unit slugs default to elven-archers and elven-spearmen; with no
-       --weapon the attacker fires its sole missile weapon)
+       --weapon the attacker fires its sole missile weapon; --join adds the
+       second unit, default sisters-of-avelorn)
 
 Pass -v/--verbose to also emit the DEBUG math trace to stderr.
 """
@@ -53,6 +61,17 @@ def main() -> None:
         type=int,
         default=None,
         help="defender models at the start of the battle (default: as fielded now)",
+    )
+    parser.add_argument(
+        "--join",
+        default="sisters-of-avelorn",
+        help="a second unit that joins the volley (slug); its fire composes onto the first's",
+    )
+    parser.add_argument(
+        "--join-shooters",
+        type=int,
+        default=None,
+        help="models in the joining unit (default: same as shooters)",
     )
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="emit the DEBUG math trace to stderr"
@@ -115,6 +134,32 @@ def main() -> None:
         print("\n  not factored into the math:")
         for note in result.notes:
             print(f"  - {note}")
+
+    # A second unit joins the volley at the same target. It fires at the
+    # survivors of the first, so its toll binds onto the first's casualty
+    # distribution — one exact combined distribution, no manual convolution.
+    join_unit = game.units[args.join]
+    join_shooters = args.join_shooters if args.join_shooters is not None else args.shooters
+
+    def add_join(dead: int) -> Distribution[int]:
+        remaining = defender.models - dead
+        if remaining == 0:
+            return Distribution.pure(dead)  # target already wiped — nothing left to shoot
+        volley = game.shooting.volley(
+            game.field(join_unit, join_shooters),
+            game.field(defender.unit, remaining),
+            distance=args.distance,
+        )
+        return Distribution.from_counts(volley.casualties).map(lambda more: dead + more)
+
+    combined = Distribution.from_counts(result.casualties).bind(add_join)
+    print(
+        f"\n  {join_shooters} {join_unit.name} join the volley — their fire composes onto the "
+        f"{attacker.models} {attacker.unit.name}'\n  toll (bind over the survivors):\n"
+        f"  - combined expected casualties: {combined.expect(float):.2f} of {defender.models}\n"
+        f"  - P(at least one falls):        {combined.prob(lambda k: k >= 1):.3f}\n"
+        f"  - P(unit wiped out):            {combined.prob(lambda k: k == defender.models):.3f}"
+    )
 
 
 if __name__ == "__main__":

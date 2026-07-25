@@ -120,7 +120,7 @@ uv run python scripts/soften_the_charge_demo.py 10 10   # 10 a side, the Lions 1
 
 Add `-v` for the full DEBUG math trace on stderr.
 
-Three more demos exercise the rest of the engine: `shooting_demo.py` (one unit shoots another, with the panic tests), `melee_demo.py` (a round of close combat, with the break tests), and `turn_demo.py` (walking a whole player-turn phase by phase). Each is `scripts/<name>_demo.py`, runnable as `make demo DEMO=<name>`.
+Three more demos exercise the rest of the engine: `shooting_demo.py` (units shoot a target — the full chain and panic test, then a second unit's fire composed onto the first), `melee_demo.py` (a round of close combat, with the break tests), and `turn_demo.py` (walking a whole player-turn phase by phase). Each is `scripts/<name>_demo.py`, runnable as `make demo DEMO=<name>`.
 
 ## Getting started
 
