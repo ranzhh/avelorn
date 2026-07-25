@@ -77,6 +77,20 @@ def test_prob_and_expect_over_counts() -> None:
     assert dist.expect(float) == pytest.approx(0.1 * 0 + 0.2 + 0.3 * 2 + 0.4 * 3)
 
 
+def _spread(k: int) -> Distribution[int]:
+    # One step of a random walk: k -> {k, k+1} with equal mass.
+    return Distribution({k: 0.5, k + 1: 0.5})
+
+
+def test_deep_chaining_stays_normalised_and_flat() -> None:
+    """Bind chains to any depth — mass stays 1.0 and outcomes never nest."""
+    chained = Distribution.pure(0).bind(_spread).bind(_spread).bind(_spread).bind(_spread)
+    assert chained.total() == pytest.approx(1.0)
+    assert all(isinstance(outcome, int) for outcome in chained.mass)  # flat, not nested
+    # Four chained steps of {+0, +1} from 0 is Binomial(4, 0.5): P(2) = 6/16.
+    assert chained.mass[2] == pytest.approx(0.375)
+
+
 def test_mass_is_a_mapping() -> None:
     """The carried mass is a plain mapping — no engine coupling."""
     assert isinstance(Distribution.pure("x").mass, Mapping)
