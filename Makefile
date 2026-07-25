@@ -1,7 +1,7 @@
 .PHONY: install test lint demo
 
-# Which end-to-end demo `make demo` runs — any scripts/<DEMO>_demo.py, e.g.
-# shooting, melee, charge, turn, bow_of_avelorn, lion_cloak, receiving_a_charge.
+# Which end-to-end demo `make demo` runs — any scripts/<DEMO>_demo.py:
+# shooting, melee, turn, or soften_the_charge.
 DEMO ?= shooting
 
 install: ## install dependencies and git hooks
