@@ -13,10 +13,10 @@ Pass -v/--verbose to also emit the DEBUG math trace to stderr.
 import argparse
 import logging
 
+from avelorn.core.distribution import Distribution
 from avelorn.core.logging import configure_logging
 from avelorn.tow.contingent import Movement
 from avelorn.tow.game import TOWGame
-from avelorn.tow.query import Comparator, Predicate, query_result
 
 
 def main() -> None:
@@ -89,11 +89,13 @@ def main() -> None:
     for killed, p in enumerate(result.casualties):
         print(f"  {killed:>6}  {p:>10.3f}  {'#' * round(p * 40)}")
 
-    # Exact distributional queries — the questions the game actually turns
-    # on, not the average: one structured predicate over a named variable,
-    # answered exactly by the querying layer.
-    any_kill = query_result(result, "casualties", Predicate(Comparator.AT_LEAST, 1))
-    wiped = query_result(result, "survivors", Predicate(Comparator.EXACTLY, 0))
+    # Exact distributional queries — the questions the game actually turns on,
+    # not the average: a predicate over the outcome, answered exactly. The
+    # casualty pmf lifts into a Distribution; survivors == 0 is casualties at
+    # the unit's full size.
+    casualties = Distribution.from_counts(result.casualties)
+    any_kill = casualties.prob(lambda k: k >= 1)
+    wiped = casualties.prob(lambda k: k == defender.models)
     panic = game.shooting.make_panic_tests(result, defender, battle_strength=args.battle_strength)
     print(
         f"\n  exact queries:\n"

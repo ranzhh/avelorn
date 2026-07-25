@@ -15,17 +15,16 @@ Pass -v/--verbose to also emit the DEBUG math trace to stderr.
 import argparse
 import logging
 
-from avelorn.core.dice import expected_value
+from avelorn.core.distribution import Distribution
 from avelorn.core.logging import configure_logging
 from avelorn.tow.game import TOWGame
 from avelorn.tow.phases.combat import fight
-from avelorn.tow.query import Comparator, Predicate, evaluate, fight_distributions
 from avelorn.tow.schema.phase import Phase
 
 
 def _print_casualties(label: str, casualties: list[float], fighters: int) -> None:
     print(f"  {label} casualties:")
-    print(f"    expected: {expected_value(casualties):.2f} of {fighters}")
+    print(f"    expected: {Distribution.from_counts(casualties).expect(float):.2f} of {fighters}")
     print("    killed  probability")
     for killed, p in enumerate(casualties):
         bar = "#" * round(p * 40)
@@ -106,10 +105,10 @@ def main() -> None:
         )
     print(f"  - draw, neither tests: {breaks.p_draw:.3f}")
 
-    # Exact distributional queries over the round, via the query layer.
-    dists = fight_distributions(result)
-    b_bloodied = evaluate(dists["b_casualties"], Predicate(Comparator.AT_LEAST, 1))
-    a_unscathed = evaluate(dists["a_survivors"], Predicate(Comparator.EXACTLY, args.a_fighters))
+    # Exact distributional queries over the round: a predicate over each side's
+    # casualty distribution. A comes through unscathed iff it loses zero.
+    b_bloodied = Distribution.from_counts(result.b_casualties).prob(lambda k: k >= 1)
+    a_unscathed = Distribution.from_counts(result.a_casualties).prob(lambda k: k == 0)
     print(
         f"\n  exact queries:\n"
         f"  - P(B loses at least one): {b_bloodied:.3f}\n"

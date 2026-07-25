@@ -15,7 +15,7 @@ Pass -v/--verbose to also emit the DEBUG math trace to stderr.
 import argparse
 import logging
 
-from avelorn.core.dice import expected_value
+from avelorn.core.distribution import Distribution
 from avelorn.core.logging import configure_logging
 from avelorn.tow.contingent import Charge, ChargeArc, Contingent
 from avelorn.tow.game import TOWGame
@@ -55,7 +55,7 @@ def main() -> None:
             f'Movement phase: {args.spearmen} Spearmen charge {args.archers} Archers ({inches}").'
         )
         if reaction is not None:
-            felled = expected_value(reaction.casualties)
+            felled = Distribution.from_counts(reaction.casualties).expect(float)
             print(f"  Archers Stand & Shoot: {felled:.2f} chargers felled on average.\n")
 
     with turn.shooting():

@@ -44,9 +44,12 @@ The engine models **distributions, not averages**, and the good questions come f
 
 **White Lions of Chrace** are 10" away and will charge you next turn no matter what. This turn you can shoot them, or shoot something else. Either way they charge, you Stand & Shoot as they close, and you fight. So: **does shooting them first improve your odds in that combat?** Ask it for two units — elite **Sisters of Avelorn** and plain **Elven Archers** — and you get opposite answers.
 
-The volley doesn't fell "about three" Lions. It fells a *spread*, and each outcome is a different charge into a different combat. So the honest answer folds every branch, weighted by how likely it is: `Σ_k P(fell k) · P(win | 10−k charge)`. Here it is (`scripts/bow_of_avelorn_demo.py`):
+The volley doesn't fell "about three" Lions. It fells a *spread*, and each outcome is a different charge into a different combat. So the honest answer folds every branch, weighted by how likely it is — that fold is `Distribution.bind`, not an enumerate-and-sum (`scripts/soften_the_charge_demo.py`):
 
 ```python
+from enum import Enum, auto
+
+from avelorn.core.distribution import Distribution
 from avelorn.tow.contingent import Charge, ChargeArc
 from avelorn.tow.game import TOWGame
 from avelorn.tow.phases.movement import StandAndShoot
@@ -54,10 +57,13 @@ from avelorn.tow.phases.movement import StandAndShoot
 game = TOWGame.load_data()
 lions = game.units["white-lions-of-chrace"]
 
-def win_given_charge(defender, charging):
-    """P(defender wins) when `charging` Lions charge it — Stand & Shoot, then melee."""
+class Side(Enum):
+    CHARGER, DRAW, DEFENDER = auto(), auto(), auto()
+
+def win(defender, charging):
+    """Who wins when `charging` Lions charge — a Distribution over the outcome."""
     if charging == 0:
-        return 1.0
+        return Distribution.pure(Side.DEFENDER)
     lions_unit = game.field(lions, charging).wielding("Chracian Great Blade")
     unit = game.field(defender, 10).wielding("Hand Weapon")
     turn = game.turn()
@@ -65,20 +71,23 @@ def win_given_charge(defender, charging):
         engagement = movement.charge(lions_unit, unit, Charge(10, ChargeArc.FRONT))
         engagement.react(StandAndShoot())   # thins the chargers AND scores — folded natively
     with turn.combat() as combat:
-        return combat.result(combat.fight(engagement)).p_b_wins
+        r = combat.result(combat.fight(engagement))
+        return Distribution({Side.CHARGER: r.p_a_wins, Side.DRAW: r.p_draw, Side.DEFENDER: r.p_b_wins})
 
 def win_if_shot(defender):
-    """Fold the opening volley's whole casualty distribution into P(defender wins)."""
+    """Fold the opening volley's whole casualty distribution into the combat."""
     with game.turn().shooting() as shooting:
         opening = shooting.volley(game.field(defender, 10), game.field(lions, 10), distance=10)
-    return sum(p * win_given_charge(defender, 10 - k)      # mix over every outcome...
-               for k, p in enumerate(opening.casualties))  # ...weighted by its probability
+    return (Distribution.from_counts(opening.casualties)   # felled
+            .map(lambda felled: 10 - felled)               # surviving chargers
+            .bind(lambda n: win(defender, n))              # the combat, folded onto each
+            .prob(lambda s: s is Side.DEFENDER))
 
 for slug in ("sisters-of-avelorn", "elven-archers"):
     defender = game.units[slug]
     print(defender.name,
-          win_given_charge(defender, 10),  # shoot elsewhere: Lions charge at full strength
-          win_if_shot(defender))           # shoot the Lions first: the volley folded in
+          win(defender, 10).prob(lambda s: s is Side.DEFENDER),  # shoot elsewhere: full strength
+          win_if_shot(defender))                                 # shoot the Lions: volley folded in
 ```
 
 The script prints the same two numbers per unit, with the volley's distribution alongside:
@@ -103,15 +112,15 @@ Same board, same threat, opposite advice.
 
 Both numbers fold the whole spread, not a rounded mean. One caveat, honest about the engine: the Stand & Shoot chains into the melee for free — `fight` enters the charger already thinned and scores its wounds. The opening volley can't, because it's a previous turn and its wounds mustn't score *this* combat, so it's folded as the mixture above instead. Letting a unit enter a combat thinned-but-unscored is the one piece still missing.
 
-Run it via `make demo DEMO=bow_of_avelorn`, or drive it directly:
+Run it via `make demo DEMO=soften_the_charge`, or drive it directly:
 
 ```sh
-uv run python scripts/bow_of_avelorn_demo.py 10 10   # 10 a side, the Lions 10" off
+uv run python scripts/soften_the_charge_demo.py 10 10   # 10 a side, the Lions 10" off
 ```
 
 Add `-v` for the full DEBUG math trace on stderr.
 
-Other demos exercise the rest of the engine: `shooting_demo.py` (one unit shoots another, with the panic tests), `melee_demo.py` (a round of close combat), `charge_demo.py` (the full charge sequence, Stand & Shoot included), `turn_demo.py` (walking a whole player-turn), and `lion_cloak_demo.py` and `receiving_a_charge_demo.py` (two more worked cautionary tales). Each is `scripts/<name>_demo.py`, runnable as `make demo DEMO=<name>`.
+Three more demos exercise the rest of the engine: `shooting_demo.py` (one unit shoots another, with the panic tests), `melee_demo.py` (a round of close combat, with the break tests), and `turn_demo.py` (walking a whole player-turn phase by phase). Each is `scripts/<name>_demo.py`, runnable as `make demo DEMO=<name>`.
 
 ## Getting started
 

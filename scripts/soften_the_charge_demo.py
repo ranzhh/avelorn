@@ -19,21 +19,20 @@ softer target.
 The point of the toolkit is that this is answered by folding **distributions**,
 not by rounding to an average. The opening volley does not fell "about three"
 Lions — it fells a whole spread. Each outcome leads to a different charge, and
-each charge to a different combat. The answer is every branch resolved exactly
-and mixed by how likely it is:
+each charge to a different combat. The answer folds every branch, weighted by
+how likely it is — :meth:`Distribution.bind` — instead of an enumerate-and-sum:
 
-    P(win | shoot them) = sum over k of  P(volley fells k) * P(win | 10-k charge)
+    win = felled.map(survivors).bind(combat).prob(defender_wins)
 
 The Stand & Shoot inside each branch is folded natively — ``fight`` enters the
 charger already thinned by the reaction and scores its wounds toward the combat
 result. The opening volley is a *previous* turn, so its wounds must not score
 this combat; it only changes how many Lions arrive. That is why it is folded
-here as the mixture above rather than handed to ``fight`` as prior losses (which
-would score it). The one thing the engine still lacks is a way to enter a combat
-thinned-but-unscored directly — until it grows one (a cross-turn battle layer),
-this mixture is the honest fold, and it is exact.
+here by ``bind`` over the surviving-charger count rather than handed to ``fight``
+as prior losses (which would score it). Letting a unit enter a combat
+thinned-but-unscored is the one piece the engine still lacks.
 
-Usage: uv run python scripts/bow_of_avelorn_demo.py [models] [distance]
+Usage: uv run python scripts/soften_the_charge_demo.py [models] [distance]
        (keep distance within a charge's reach — a unit's Movement plus 6")
 
 Pass -v/--verbose to also emit the DEBUG math trace to stderr.
@@ -41,7 +40,9 @@ Pass -v/--verbose to also emit the DEBUG math trace to stderr.
 
 import argparse
 import logging
+from enum import Enum, auto
 
+from avelorn.core.distribution import Distribution
 from avelorn.core.logging import configure_logging
 from avelorn.tow.contingent import Charge, ChargeArc
 from avelorn.tow.game import TOWGame
@@ -49,20 +50,35 @@ from avelorn.tow.phases.movement import StandAndShoot
 from avelorn.tow.schema.unit import Characteristic, Unit
 
 
-def win_given_charge(
-    game: TOWGame, defender: Unit, models: int, charging: int, distance: int
-) -> float:
-    """P(the defender wins the combat) when ``charging`` White Lions charge it.
+class Side(Enum):
+    """Who won the combat — the outcome the fold produces."""
 
-    Resolves the Lions' charge, the defender's Stand & Shoot reaction (which
-    thins the chargers and scores for the defender, folded natively), and the
-    melee, and returns the probability the defender wins the combat result.
+    CHARGER = auto()
+    DRAW = auto()
+    DEFENDER = auto()
+
+
+def _defender_wins(side: Side) -> bool:
+    return side is Side.DEFENDER
+
+
+def win_distribution(
+    game: TOWGame, defender: Unit, models: int, charging: int, distance: int
+) -> Distribution[Side]:
+    """Who wins when ``charging`` White Lions charge ``models`` defenders.
+
+    A stochastic step ``charging -> Distribution[Side]`` — exactly the arrow
+    :meth:`Distribution.bind` composes. Resolves the charge, the defender's
+    Stand & Shoot (which thins the chargers and scores for the defender, folded
+    natively), and the melee. Scoring stays inside this one combat; a prior
+    turn's opening volley is folded from outside.
 
     Returns:
-        P(defender wins); 1.0 for a charge of zero (nothing arrives to fight).
+        The distribution over who wins; a point mass on the defender when
+        nothing arrives to charge.
     """
     if charging == 0:
-        return 1.0
+        return Distribution.pure(Side.DEFENDER)
     lions = game.field(game.units["white-lions-of-chrace"], charging).wielding(
         "Chracian Great Blade"
     )
@@ -72,15 +88,18 @@ def win_given_charge(
         engagement = movement.charge(lions, unit, Charge(distance, ChargeArc.FRONT))
         engagement.react(StandAndShoot())
     with turn.combat() as combat:
-        return combat.result(combat.fight(engagement)).p_b_wins
+        scored = combat.result(combat.fight(engagement))
+    return Distribution(
+        {Side.CHARGER: scored.p_a_wins, Side.DRAW: scored.p_draw, Side.DEFENDER: scored.p_b_wins}
+    )
 
 
 def win_if_shot(game: TOWGame, defender: Unit, models: int, distance: int):
     """The defender's opening volley, and P(win) with its distribution folded in.
 
-    The unit looses a stationary volley at the full-strength Lions, then the
-    combat is resolved at *every* surviving Lion count the volley can leave and
-    mixed by how likely that count is — no averaging.
+    Lift the volley's casualty pmf, relabel felled -> surviving chargers, bind
+    the combat onto each survivor count, and read off P(defender wins). Every
+    branch is resolved exactly and mixed by likelihood — no averaging.
 
     Returns:
         The opening :class:`ShootingResult` and the folded P(defender wins).
@@ -90,14 +109,15 @@ def win_if_shot(game: TOWGame, defender: Unit, models: int, distance: int):
         opening = shooting.volley(
             game.field(defender, models), game.field(lions, models), distance=distance
         )
-    # Fold: P(win) = sum_k P(volley fells k) * P(win | models-k Lions charge).
-    win_by_survivors = {
-        models - k: win_given_charge(game, defender, models, models - k, distance)
-        for k, p in enumerate(opening.casualties)
-        if p > 0.0
-    }
-    folded = sum(
-        p * win_by_survivors[models - k] for k, p in enumerate(opening.casualties) if p > 0.0
+
+    def combat(charging: int) -> Distribution[Side]:
+        return win_distribution(game, defender, models, charging, distance)
+
+    folded = (
+        Distribution.from_counts(opening.casualties)
+        .map(lambda felled: models - felled)
+        .bind(combat)
+        .prob(_defender_wins)
     )
     return opening, folded
 
@@ -153,7 +173,9 @@ def main() -> None:
     for slug in ("sisters-of-avelorn", "elven-archers"):
         defender = game.units[slug]
         opening, shoot = win_if_shot(game, defender, args.models, args.distance)
-        dont = win_given_charge(game, defender, args.models, args.models, args.distance)
+        dont = win_distribution(game, defender, args.models, args.models, args.distance).prob(
+            _defender_wins
+        )
         _report(defender, opening, dont, shoot, args.models)
         print()
 
