@@ -93,15 +93,15 @@ for slug in ("sisters-of-avelorn", "elven-archers"):
 The script prints the same two numbers per unit, with the volley's distribution alongside:
 
 ```
-  Sisters of Avelorn (BS 5, 8-shot volley, Lions save 6+):
+  Sisters of Avelorn (BS 5, Lions save 6+):
     opening volley fells (of 10):  0:2%  1:12%  2:24%  3:28%  4:21%  5:10%  6:3%
-    shoot elsewhere — Lions charge at full strength:  P(win) 0.298
-    shoot the Lions first (volley folded in):         P(win) 0.731   (+0.434)
+    shoot elsewhere:       P(win) 0.298
+    shoot the Lions first: P(win) 0.731   (+0.434)
 
-  Elven Archers (BS 4, 8-shot volley, Lions save 4+):
+  Elven Archers (BS 4, Lions save 4+):
     opening volley fells (of 10):  0:19%  1:35%  2:28%  3:13%  4:4%  5:1%
-    shoot elsewhere — Lions charge at full strength:  P(win) 0.044
-    shoot the Lions first (volley folded in):         P(win) 0.179   (+0.135)
+    shoot elsewhere:       P(win) 0.044
+    shoot the Lions first: P(win) 0.179   (+0.135)
 ```
 
 Same board, same threat, opposite advice.
@@ -115,12 +115,12 @@ Both numbers fold the whole spread, not a rounded mean. One caveat, honest about
 Run it via `make demo DEMO=soften_the_charge`, or drive it directly:
 
 ```sh
-uv run python scripts/soften_the_charge_demo.py 10 10   # 10 a side, the Lions 10" off
+uv run python scripts/soften_the_charge_demo.py   # no arguments — run and read
 ```
 
 Add `-v` for the full DEBUG math trace on stderr.
 
-Three more demos exercise the rest of the engine: `shooting_demo.py` (two units shoot one target; their tolls compose in a single `bind`), `melee_demo.py` (a round of close combat, with the break tests), and `turn_demo.py` (walking a whole player-turn phase by phase). Each is `scripts/<name>_demo.py`, runnable as `make demo DEMO=<name>`.
+Three more demos, each a "did you know?" in a few lines: `shooting_demo.py` (two units shoot one target; their tolls compose in a single `bind`), `melee_demo.py` (charging can be worse than receiving — the charger's ranks lapse), and `turn_demo.py` (walk a whole player-turn phase by phase). Each is `scripts/<name>_demo.py`, runnable as `make demo DEMO=<name>`.
 
 ## Getting started
 
