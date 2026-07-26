@@ -68,6 +68,47 @@ def test_wielding_gate_rejects_an_unknown_family() -> None:
         )
 
 
+def test_when_parses_a_worn_gate_beside_a_wielding_one() -> None:
+    """Parry's gear reads as two subjects of one when: the weapon and the armour.
+
+    The equipment-in-use axis has both halves, gated exactly like any other fact
+    and conjoined with them.
+    """
+    effect = _EFFECT.validate_python(
+        {
+            "when": {
+                "combat": True,
+                "wielding": {"name": "Hand Weapon"},
+                "worn": {"name": "Shield"},
+            },
+            "add": {"armour-value": 1},
+        }
+    )
+    assert isinstance(effect, ModifierEffect)
+    assert effect.when is not None
+    assert effect.when.wielding is not None and effect.when.wielding.name == "Hand Weapon"
+    assert effect.when.worn is not None and effect.when.worn.name == "Shield"
+
+
+def test_worn_gate_must_constrain_a_name() -> None:
+    """An armour gate that asks nothing is a data error, not a no-op."""
+    with pytest.raises(ValidationError, match="armour gate must constrain name"):
+        _EFFECT.validate_python({"when": {"worn": {}}, "add": {"armour-value": 1}})
+
+
+def test_worn_gate_has_no_family_axis() -> None:
+    """Armour is only ever its printed name, so a ``type`` on it is a load error.
+
+    The asymmetry with the weapon gate is deliberate: weapons carry a modelled
+    family (a bow), armour does not, so asking for one is a data error rather
+    than a silently-ignored key.
+    """
+    with pytest.raises(ValidationError, match="worn"):
+        _EFFECT.validate_python(
+            {"when": {"worn": {"name": "Shield", "type": "bow"}}, "add": {"armour-value": 1}}
+        )
+
+
 def test_grant_effect_parses_and_discriminates_by_its_key() -> None:
     """``grants`` names a conferred rule and discriminates the effect, like ``add``.
 
@@ -369,14 +410,15 @@ def test_reroll_effect_parses_a_natural_face_on_an_attack_roll() -> None:
         {
             "reroll": "roll-to-hit",
             "on_natural": 1,
-            "when": {"combat": True},
-            "requires": {"wielding": "Hand Weapon"},
+            "when": {"combat": True, "wielding": {"name": "Hand Weapon"}},
         }
     )
     assert isinstance(effect, RerollEffect)
     assert effect.reroll == "roll-to-hit"
     assert effect.on_natural == 1
-    assert effect.requirements == {"wielding": "Hand Weapon"}
+    assert effect.when is not None
+    assert effect.when.wielding is not None
+    assert effect.when.wielding.name == "Hand Weapon"
 
 
 def test_reroll_effect_rejects_a_natural_face_on_a_panic_test() -> None:

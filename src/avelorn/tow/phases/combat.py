@@ -316,8 +316,6 @@ def _engage(
             armour_value,
             target.loadout.rules,
             target_conditions,
-            wielding=target.weapon.name if target.weapon is not None else None,
-            worn=[piece.name for piece in target.loadout.armour],
         )
         armour_value = target_armour.value
     notes: list[str] = []
@@ -356,14 +354,10 @@ def _engage(
     wound = wound_target(strength, toughness)
     save = armour_save_target(armour_value, profile.armour_piercing)
     # The striker's own rules may re-roll its dice (Ithilmar Weapons re-rolls
-    # rolls To Hit of a natural 1), gated on the engagement conditions and the
-    # weapon in hand, exactly as the armour fold gates the defender's save.
-    rerolls = effective_rerolls(
-        striker.loadout.rules,
-        conditions,
-        wielding=weapon.name,
-        worn=[piece.name for piece in striker.loadout.armour],
-    )
+    # rolls To Hit of a natural 1), gated on the same conditions the walk reads —
+    # the weapon in hand among them, exactly as the armour fold gates the
+    # defender's save.
+    rerolls = effective_rerolls(striker.loadout.rules, conditions)
     p_unsaved, p_kill, hit = _per_attack(
         hit, wound, save, None, modifiers, rerolls=rerolls.rerolls
     )
@@ -439,11 +433,18 @@ def strike_unit(
     # of this close-combat attack (magical if the striker's weapon in hand is),
     # the fact Parry (combat present) and Lion Cloak (an incoming attack) read
     # for its save; the striker throws the only blows, so it is not itself a
-    # target here.
+    # target here. Each side carries its own equipment in use, so Parry reads the
+    # target's shield and Ithilmar Weapons the striker's hand weapon.
     in_hand = striker.in_hand().combat_profile
-    striker_conditions = GateContext(combat=CombatFacts())
+    striker_conditions = GateContext(
+        combat=CombatFacts(),
+        wielding=striker.weapon_facts,
+        worn=striker.armour_facts,
+    )
     target_conditions = GateContext(
         combat=CombatFacts(),
+        wielding=target.weapon_facts,
+        worn=target.armour_facts,
         target_of=AttackFacts(
             kind=AttackKind.CLOSE_COMBAT,
             magical=in_hand is not None and "Magical Attacks" in in_hand.special_rules,
@@ -610,7 +611,10 @@ def _combat_conditions(first_round: bool | None, side: Contingent, foe: Continge
     # is taken in close combat, so the volley fact is settled False. The side
     # is engaged (``combat`` present) and is the target of the foe's close-combat
     # attack, magical if the foe's weapon in hand is — the facts Parry and Lion
-    # Cloak read from the defender's side.
+    # Cloak read from the defender's side. The side's own equipment in use rides
+    # along, so a rule gated on its gear (Parry's hand weapon and shield,
+    # Ithilmar Weapons' hand weapon) is answered from the one context whichever
+    # seam reads it — the dice walk, the armour fold, the re-roll fold.
     charge = side.movement.charge
     foe_weapon = foe.weapon
     foe_profile = foe_weapon.combat_profile if foe_weapon is not None else None
@@ -624,6 +628,8 @@ def _combat_conditions(first_round: bool | None, side: Contingent, foe: Continge
             charge=ChargeEvent(distance=charge.full_inches) if charge is not None else None,
         ),
         shooting=ShootingFacts(at_long_range=False),
+        wielding=side.weapon_facts,
+        worn=side.armour_facts,
         target_of=AttackFacts(
             kind=AttackKind.CLOSE_COMBAT,
             magical=foe_profile is not None and "Magical Attacks" in foe_profile.special_rules,

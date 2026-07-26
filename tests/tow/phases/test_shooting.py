@@ -371,18 +371,22 @@ def test_engagement_conditions_build_the_shooting_facts() -> None:
 
     A moved shooter at unknown range: ``moved`` true, ``at_long_range`` unknown
     (no distance). The weapon in hand is the bow it fires, so ``wielding`` names
-    its family. The shooter is not engaged in close combat and is the attacker,
-    not a target, so ``combat`` and ``target_of`` are both absent (the
-    defender's incoming-attack facts are built separately for its save);
-    ``charge`` is None because a shooter never charged.
+    its family, and the armour worn rides along — empty for archers at their
+    printed loadout, which is *known* to be nothing rather than unknown. The
+    shooter is not engaged in close combat and is the attacker, not a target, so
+    ``combat`` and ``target_of`` are both absent (the defender's incoming-attack
+    facts are built separately for its save); ``charge`` is None because a
+    shooter never charged.
     """
+    archers = _fielded(REPO.units["elven-archers"], 5, moved=True)
     longbow = REPO.weapons["longbow"]
     profile = longbow.missile_profile
     assert profile is not None
     context = _engagement_conditions(
-        longbow, profile, moved=True, distance=None, force_short_range=False
+        archers, longbow, profile, distance=None, force_short_range=False
     )
     assert context.wielding.type is WeaponType.BOW
+    assert context.worn == ()  # unarmoured, and known so — not left unknown
     assert context.movement.moved is True
     assert context.shooting.at_long_range is None  # no distance -> unknown band
     assert context.combat is None

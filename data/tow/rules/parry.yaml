@@ -10,15 +10,17 @@ paragraphs:
 # 3+, while a hand weapon and a shield are the equipment in use. "Whilst engaged
 # in close combat" is the `combat` presence gate — a state of the model, not a
 # property of the attack (a shot at a unit locked in combat would still benefit,
-# RAW), which is why it is not a `target_of` gate like Lion Cloak's. The printed
-# restriction to infantry is not expressed — the engine fields only infantry in
-# close combat today.
+# RAW), which is why it is not a `target_of` gate like Lion Cloak's. The gear is
+# gated the same way: `wielding` names the one weapon in hand, `worn` a piece
+# among all the armour worn. The printed restriction to infantry is not
+# expressed — the engine fields only infantry in close combat today.
 effects:
   - when:
       combat: true
-    requires:
-      wielding: Hand Weapon
-      worn: Shield
+      wielding:
+        name: Hand Weapon
+      worn:
+        name: Shield
     add:
       armour-value: 1
     maximum: 3

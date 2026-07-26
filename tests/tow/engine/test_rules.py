@@ -9,14 +9,15 @@ from avelorn.tow.contingent import Contingent, Movement
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.engine.attack import AttackProfile, RollState, resolve_attack
 from avelorn.tow.engine.rules import (
+    ArmourFacts,
     AttackFacts,
     ChargeEvent,
     CombatFacts,
     EffectiveValue,
-    EquipmentFacts,
     GateContext,
     MovementFacts,
     ShootingFacts,
+    WeaponFacts,
     _gate_applies,
     compile_rules,
     effective_armour_value,
@@ -32,7 +33,6 @@ from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.rule import (
     AttackKind,
     ChargeGate,
-    EquipmentUse,
     ModifierEffect,
     NaturalRoll,
     Quantity,
@@ -301,16 +301,39 @@ def test_wielding_gate_is_tri_state() -> None:
         when=When.model_validate({"wielding": {"type": "bow"}}),
         add={Quantity.ARMOUR_PIERCING: 1},
     )
-    bow = GateContext(wielding=EquipmentFacts(type=WeaponType.BOW))
-    unarmed = GateContext(wielding=EquipmentFacts())  # no family known
+    bow = GateContext(wielding=WeaponFacts(type=WeaponType.BOW))
+    unarmed = GateContext(wielding=WeaponFacts())  # no family known
     assert _gate_applies(by_family, bow) is True
     assert _gate_applies(by_family, unarmed) is None
     by_name = ModifierEffect(
         when=When.model_validate({"wielding": {"name": "Longbow"}}),
         add={Quantity.ARMOUR_PIERCING: 1},
     )
-    armed = GateContext(wielding=EquipmentFacts(type=WeaponType.BOW, name="Bow of Avelorn"))
+    armed = GateContext(wielding=WeaponFacts(type=WeaponType.BOW, name="Bow of Avelorn"))
     assert _gate_applies(by_name, armed) is False  # a different named weapon in hand
+
+
+def test_worn_gate_is_satisfied_by_any_piece_worn() -> None:
+    """The armour gate reads a collection: a match anywhere holds, and empty is known.
+
+    The one membership subject — a model wears several pieces at once, so the gate
+    describes one piece and any piece worn may satisfy it. A shield among the
+    pieces holds however many others there are; a collection without one is
+    honoured as a no-op, and so is an *empty* one: wearing nothing is a settled
+    fact, not an unanswered one. Only a collection the producer never offered is
+    unknown, and it is reported rather than read as "wears nothing".
+    """
+    effect = ModifierEffect(
+        when=When.model_validate({"worn": {"name": "Shield"}}),
+        add={Quantity.ARMOUR_VALUE: 1},
+    )
+    shield_among_others = GateContext(
+        worn=(ArmourFacts(name="Light Armour"), ArmourFacts(name="Shield"))
+    )
+    assert _gate_applies(effect, shield_among_others) is True
+    assert _gate_applies(effect, GateContext(worn=(ArmourFacts(name="Heavy Armour"),))) is False
+    assert _gate_applies(effect, GateContext(worn=())) is False  # wears nothing, known
+    assert _gate_applies(effect, GateContext()) is None  # never offered, unknown
 
 
 def test_compile_grant_confers_the_named_rule_and_stacks() -> None:
@@ -322,7 +345,7 @@ def test_compile_grant_confers_the_named_rule_and_stacks() -> None:
     instance from any the weapon prints, so two Armour Banes stack.
     """
     sisters = _fielded(REPO.units["sisters-of-avelorn"], 5).wielding("Bow of Avelorn")
-    bow = GateContext(wielding=EquipmentFacts(type=WeaponType.BOW))
+    bow = GateContext(wielding=WeaponFacts(type=WeaponType.BOW))
     index = {rule.name: rule for rule in sisters.loadout.rules}
     modifiers, unfactored = compile_rules(
         ["Arrows of Isha"], index, bow, grants=sisters.loadout.granted_rules
@@ -357,7 +380,7 @@ def test_compile_grant_unfactored_when_the_granted_rule_is_unresolvable() -> Non
     takes the whole rule down, reported rather than half-applied.
     """
     sisters = _fielded(REPO.units["sisters-of-avelorn"], 5).wielding("Bow of Avelorn")
-    bow = GateContext(wielding=EquipmentFacts(type=WeaponType.BOW))
+    bow = GateContext(wielding=WeaponFacts(type=WeaponType.BOW))
     index = {rule.name: rule for rule in sisters.loadout.rules}
     modifiers, unfactored = compile_rules(["Arrows of Isha"], index, bow, grants={})
     assert unfactored == ["Arrows of Isha"]
@@ -655,23 +678,26 @@ def test_gate_and_context_mirror_each_other() -> None:
     of the context (a subject's facts, or the charge event), so a property added
     to a gate model without the matching context field would evaluate against
     nothing. The When subjects, their gates, and the mirroring facts dataclasses
-    must stay in step — as must ChargeGate and ChargeEvent.
+    must stay in step — as must ChargeGate and ChargeEvent, and a membership
+    gate and the member behind it (ArmourGate against one piece worn).
     """
     from dataclasses import fields
 
     from avelorn.tow.schema.rule import (
+        ArmourGate,
         AttackGate,
         CombatGate,
-        EquipmentGate,
         MovementGate,
         ShootingGate,
+        WeaponGate,
     )
 
     pairs = [
         (CombatGate, CombatFacts),
         (MovementGate, MovementFacts),
         (ShootingGate, ShootingFacts),
-        (EquipmentGate, EquipmentFacts),
+        (WeaponGate, WeaponFacts),
+        (ArmourGate, ArmourFacts),
         (AttackGate, AttackFacts),
         (ChargeGate, ChargeEvent),
     ]
@@ -721,34 +747,47 @@ def test_effective_combat_result_bonus_sums_signed_points_under_the_conditions()
     assert unknown.unfactored == ("Massed Infantry",)
 
 
-def test_effective_armour_value_betters_the_save_with_the_gear_it_requires() -> None:
-    """Parry lowers the armour value by one, gated on the equipment it requires.
+def test_effective_armour_value_betters_the_save_with_the_gear_its_gate_names() -> None:
+    """Parry lowers the armour value by one, gated on the equipment in use.
 
-    Hand weapon and shield in use: the +1 lands (a save one better), floored
-    at the printed best of 3+. Without the shield: honoured, no change. With
-    the weapon in hand unknown (nothing armed): unfactored.
+    The real rule from the data, gated on the weapon in hand and on a shield
+    among the armour worn. Both in use: the +1 lands (a save one better),
+    floored at the printed best of 3+. Another piece worn, or nothing worn at
+    all: honoured, no change — the armour worn is settled either way. Nothing in
+    hand, or the armour never offered: unfactored, the fact unanswered.
     """
-    effect = ModifierEffect(
-        requires={EquipmentUse.WIELDING: "Hand Weapon", EquipmentUse.WORN: "Shield"},
-        add={Quantity.ARMOUR_VALUE: 1},
-        maximum=3,
-    )
-    rule = Rule(id="parry", name="Parry", paragraphs=["…"], effects=[effect])
+    rule = REPO.rules["parry"]
+    hand_weapon = WeaponFacts(name="Hand Weapon")
+    shield = (ArmourFacts(name="Shield"),)
 
-    equipped = effective_armour_value(5, [rule], wielding="Hand Weapon", worn=["Shield"])
+    def save(
+        base: int, wielding: WeaponFacts, worn: tuple[ArmourFacts, ...] | None
+    ) -> EffectiveValue:
+        conditions = GateContext(combat=CombatFacts(), wielding=wielding, worn=worn)
+        return effective_armour_value(base, [rule], conditions)
+
+    equipped = save(5, hand_weapon, shield)
     assert equipped.value == 4  # a 5+ save bettered to 4+
     assert equipped.factored == ("Parry",)
 
-    capped = effective_armour_value(3, [rule], wielding="Hand Weapon", worn=["Shield"])
+    capped = save(3, hand_weapon, shield)
     assert capped.value == 3  # cannot improve past the best save of 3+
 
-    no_shield = effective_armour_value(5, [rule], wielding="Hand Weapon", worn=["Light Armour"])
-    assert no_shield.value == 5  # honoured: the required gear is not in use
-    assert no_shield.factored == ("Parry",)
+    other_armour = save(5, hand_weapon, (ArmourFacts(name="Light Armour"),))
+    assert other_armour.value == 5  # honoured: no shield among the pieces worn
+    assert other_armour.factored == ("Parry",)
 
-    unarmed = effective_armour_value(5, [rule], wielding=None, worn=["Shield"])
+    unarmoured = save(5, hand_weapon, ())
+    assert unarmoured.value == 5  # honoured: wearing nothing is known, not unknown
+    assert unarmoured.factored == ("Parry",)
+
+    unarmed = save(5, WeaponFacts(), shield)
     assert unarmed.value == 5
     assert unarmed.unfactored == ("Parry",)  # the weapon in hand is unknown
+
+    no_loadout = save(5, hand_weapon, None)
+    assert no_loadout.value == 5
+    assert no_loadout.unfactored == ("Parry",)  # the armour worn was never offered
 
 
 def test_lion_cloak_betters_the_save_only_against_non_magical_shooting() -> None:
@@ -763,9 +802,7 @@ def test_lion_cloak_betters_the_save_only_against_non_magical_shooting() -> None
     rule = REPO.rules["lion-cloak"]
 
     def save(target_of: AttackFacts | None) -> EffectiveValue:
-        return effective_armour_value(
-            4, [rule], GateContext(target_of=target_of), wielding=None, worn=[]
-        )
+        return effective_armour_value(4, [rule], GateContext(target_of=target_of))
 
     plain_shot = save(AttackFacts(kind=AttackKind.SHOOTING, magical=False))
     assert plain_shot.value == 3  # a 4+ save bettered to 3+
@@ -775,8 +812,6 @@ def test_lion_cloak_betters_the_save_only_against_non_magical_shooting() -> None
         2,
         [rule],
         GateContext(target_of=AttackFacts(kind=AttackKind.SHOOTING, magical=False)),
-        wielding=None,
-        worn=[],
     )
     assert capped.value == 2  # cannot improve past the best save of 2+
 
@@ -789,7 +824,7 @@ def test_lion_cloak_betters_the_save_only_against_non_magical_shooting() -> None
     assert melee.factored == ("Lion Cloak",)
 
 
-def test_effective_rerolls_grants_ithilmar_weapons_with_the_gear_it_requires() -> None:
+def test_effective_rerolls_grants_ithilmar_weapons_with_the_gear_its_gate_names() -> None:
     """Ithilmar Weapons re-rolls To Hit natural 1s, gated on gear and engagement.
 
     Engaged and fighting with a hand weapon: the grant is a To Hit re-roll of
@@ -798,20 +833,23 @@ def test_effective_rerolls_grants_ithilmar_weapons_with_the_gear_it_requires() -
     no re-roll.
     """
     rule = REPO.rules["ithilmar-weapons"]
-    engaged = GateContext(combat=CombatFacts())
 
-    armed = effective_rerolls([rule], engaged, wielding="Hand Weapon", worn=[])
+    def engaged(wielding: WeaponFacts) -> GateContext:
+        return GateContext(combat=CombatFacts(), wielding=wielding)
+
+    armed = effective_rerolls([rule], engaged(WeaponFacts(name="Hand Weapon")))
     assert armed.factored == ("Ithilmar Weapons",)
     assert [(r.stage, r.on_natural) for r in armed.rerolls] == [(Stage.ROLL_TO_HIT, 1)]
 
-    great_blade = effective_rerolls([rule], engaged, wielding="Chracian Great Blade", worn=[])
+    great_blade = effective_rerolls([rule], engaged(WeaponFacts(name="Chracian Great Blade")))
     assert great_blade.factored == ("Ithilmar Weapons",)  # honoured: not a hand weapon
     assert great_blade.rerolls == ()
 
-    unarmed = effective_rerolls([rule], engaged, wielding=None, worn=[])
+    unarmed = effective_rerolls([rule], engaged(WeaponFacts()))
     assert unarmed.unfactored == ("Ithilmar Weapons",)  # the weapon in hand is unknown
     assert unarmed.rerolls == ()
 
-    not_in_combat = effective_rerolls([rule], GateContext(), wielding="Hand Weapon", worn=[])
+    hand_weapon = GateContext(wielding=WeaponFacts(name="Hand Weapon"))  # but no combat
+    not_in_combat = effective_rerolls([rule], hand_weapon)
     assert not_in_combat.factored == ("Ithilmar Weapons",)  # honoured: no combat
     assert not_in_combat.rerolls == ()

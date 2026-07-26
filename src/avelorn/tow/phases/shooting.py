@@ -45,10 +45,10 @@ from avelorn.tow.engine.charts import (
 from avelorn.tow.engine.rules import (
     AttackFacts,
     EffectiveValue,
-    EquipmentFacts,
     GateContext,
     MovementFacts,
     ShootingFacts,
+    WeaponFacts,
     compile_rules,
     effective_armour_value,
     factored_notes,
@@ -230,22 +230,26 @@ def _at_long_range(profile: WeaponProfile, distance: int | None) -> bool | None:
 
 
 def _engagement_conditions(
+    shooter: Contingent,
     weapon: Weapon,
     profile: WeaponProfile,
-    moved: bool,
     distance: int | None,
     force_short_range: bool,
 ) -> GateContext:
     # The gate facts for the shooter's volley: the weapon it fires (its family
-    # and name, for Arrows of Isha's "any bow"), whether the model moved, and
-    # whether the shot is at long range (a shot forced short, a Stand & Shoot
-    # reaction, never is). ``combat`` is absent (a shooter is not engaged in
-    # close combat) and ``target_of`` is absent (the shooter is the attacker,
-    # not a target) — the defender's incoming-attack facts are built separately
-    # for its armour save.
+    # and name, for Arrows of Isha's "any bow"), the armour it wears, whether the
+    # model moved, and whether the shot is at long range (a shot forced short, a
+    # Stand & Shoot reaction, never is). The weapon is the one *chosen* for the
+    # volley, which need not be the one in hand (an unarmed unit fires its sole
+    # missile weapon), so it is passed rather than read off the shooter.
+    # ``combat`` is absent (a shooter is not engaged in close combat) and
+    # ``target_of`` is absent (the shooter is the attacker, not a target) — the
+    # defender's incoming-attack facts are built separately for its armour save.
     return GateContext(
-        wielding=EquipmentFacts(type=weapon.weapon_type, name=weapon.name),
-        movement=MovementFacts(moved=moved),  # a shooter never charged: charge stays None
+        wielding=WeaponFacts(type=weapon.weapon_type, name=weapon.name),
+        worn=shooter.armour_facts,
+        # a shooter never charged: charge stays None
+        movement=MovementFacts(moved=shooter.movement.moved),
         shooting=ShootingFacts(
             at_long_range=False if force_short_range else _at_long_range(profile, distance)
         ),
@@ -366,10 +370,12 @@ def shoot_unit(
     # — it gates on being engaged in close combat, and a shot target is not.
     armour_value = defender_armour(defender.loadout.armour)
     incoming = GateContext(
+        wielding=defender.weapon_facts,
+        worn=defender.armour_facts,
         target_of=AttackFacts(
             kind=AttackKind.SHOOTING,
             magical="Magical Attacks" in profile.special_rules,
-        )
+        ),
     )
     if armour_value is None:
         defender_armour_value = EffectiveValue(0)
@@ -378,13 +384,9 @@ def shoot_unit(
             armour_value,
             defender.loadout.rules,
             incoming,
-            wielding=defender.weapon.name if defender.weapon is not None else None,
-            worn=[piece.name for piece in defender.loadout.armour],
         )
         armour_value = defender_armour_value.value
-    conditions = _engagement_conditions(
-        chosen, profile, attacker.movement.moved, distance, force_short_range
-    )
+    conditions = _engagement_conditions(attacker, chosen, profile, distance, force_short_range)
 
     # Weapon rules with compiled effects join the dice walk; the rest are
     # reported, exactly as before. Shooting-phase chapter rules (Firing
