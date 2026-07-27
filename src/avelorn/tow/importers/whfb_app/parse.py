@@ -196,9 +196,16 @@ def _rule_list(
 
 _COST_RE = re.compile(r"\s*\(\+([\d,]+)\s+points?\s+per\s+(unit|model)\)$")
 _PREFIX_RE = re.compile(r"^(?:Any|The entire)\s+unit(?:s)?(?:\s+of\s+.+?)?\s+may\s+", re.I)
-_HEADER_PLAIN_RE = re.compile(r"^(?:Any|The entire)\s+unit(?:s)?(?:\s+of\s+.+?)?\s+may:?$", re.I)
-_HEADER_LIMIT_RE = re.compile(
-    r"^(\d+-\d+)\s+units?(?:\s+of\s+.+?)?\s+per\s+([\d,]+)\s+points\s+may:?$", re.I
+# A group header reads "<subject> may:", optionally carrying the verb its
+# children omit: "The entire unit may take any of the following:".
+_HEADER_RE = re.compile(
+    r"^(?P<subject>.+?)\s+may"
+    r"(?:\s+(?P<verb>.+?)\s+(?P<quantifier>any|one)\s+of the following)?:?$",
+    re.I,
+)
+_SUBJECT_PLAIN_RE = re.compile(r"^(?:Any|The entire)\s+units?(?:\s+of\s+.+?)?$", re.I)
+_SUBJECT_LIMIT_RE = re.compile(
+    r"^(\d+-\d+)\s+units?(?:\s+of\s+.+?)?\s+per\s+([\d,]+)\s+points$", re.I
 )
 _UPGRADE_RE = re.compile(r"^upgrade one model to an?\s+(.+)$", re.I)
 _RULE_ADD_RE = re.compile(r"^have the\s+(.+?)\s+special rule$", re.I)
@@ -213,25 +220,40 @@ _MAGIC_ITEMS_RE = re.compile(
 )
 
 
+@dataclass
+class OptionGroup:
+    """What a group header says about the option lines nested under it.
+
+    Attributes:
+        limit: The availability restriction the header states, if any.
+        verb: The verb the header carries on its children's behalf, for a
+            header that states the action once ("The entire unit may take
+            any of the following:") and leaves each child a bare name.
+    """
+
+    limit: str | None = None
+    verb: str | None = None
+
+
 def _parse_options(slug: str, doc: Node | None, warnings: list[str]) -> list[UnitOption]:
     if doc is None:
         return []
     options: list[UnitOption] = []
     for header, children in richtext.option_lines(doc):
         if not children:
-            _append_option(options, slug, header, limit=None, warnings=warnings)
+            _append_option(options, slug, header, OptionGroup(), warnings)
             continue
-        limit = _parse_group_limit(slug, header.text, warnings)
+        group = _parse_group(slug, header.text, warnings)
         for child in children:
-            _append_option(options, slug, child, limit=limit, warnings=warnings)
+            _append_option(options, slug, child, group, warnings)
     return options
 
 
 def _append_option(
-    options: list[UnitOption], slug: str, line: OptionLine, limit: str | None, warnings: list[str]
+    options: list[UnitOption], slug: str, line: OptionLine, group: OptionGroup, warnings: list[str]
 ) -> None:
     try:
-        options.append(_parse_option_line(slug, line, limit=limit, warnings=warnings))
+        options.append(_parse_option_line(slug, line, group, warnings))
     except ValidationError:
         # e.g. a verbatim-fallback line with no parseable cost, which the
         # schema's points-xor-budget rule rejects. Dropping it silently
@@ -239,14 +261,40 @@ def _append_option(
         warnings.append(f"{slug}: option not representable by the schema, DROPPED: {line.text!r}")
 
 
-def _parse_group_limit(slug: str, header: str, warnings: list[str]) -> str | None:
-    if _HEADER_PLAIN_RE.fullmatch(header):
-        return None
-    if m := _HEADER_LIMIT_RE.fullmatch(header):
-        return f"{m.group(1)} unit per {m.group(2).replace(',', '')} points"
+def _subject_limit(subject: str) -> tuple[bool, str | None]:
+    """Read a group header's subject as an availability restriction.
+
+    Returns:
+        Whether the subject is one the grammar knows, and the limit it
+        states — None for an unrestricted "Any unit".
+    """
+    if _SUBJECT_PLAIN_RE.fullmatch(subject):
+        return True, None
+    if m := _SUBJECT_LIMIT_RE.fullmatch(subject):
+        return True, f"{m.group(1)} unit per {m.group(2).replace(',', '')} points"
+    return False, None
+
+
+def _parse_group(slug: str, header: str, warnings: list[str]) -> OptionGroup:
+    """Read a group header into what it says about its children.
+
+    Returns:
+        The header's restriction and the verb it carries for its
+        children. An unrecognised header is kept verbatim as the limit
+        rather than dropped.
+    """
+    if m := _HEADER_RE.fullmatch(header):
+        known, limit = _subject_limit(m.group("subject"))
+        if known:
+            if (m.group("quantifier") or "").lower() == "one":
+                warnings.append(
+                    f"{slug}: options under {header!r} are mutually exclusive; "
+                    "exclusivity not recorded"
+                )
+            return OptionGroup(limit=limit, verb=m.group("verb"))
     # Unrecognised restriction: keep it verbatim rather than dropping it.
     warnings.append(f"{slug}: unrecognised option group header {header!r}; kept as limit")
-    return header
+    return OptionGroup(limit=header)
 
 
 def _int(raw: str) -> int:
@@ -258,8 +306,9 @@ def _capitalized(name: str) -> str:
 
 
 def _parse_option_line(
-    slug: str, line: OptionLine, limit: str | None, warnings: list[str]
+    slug: str, line: OptionLine, group: OptionGroup, warnings: list[str]
 ) -> UnitOption:
+    limit = group.limit
     text = line.text
     if text.endswith(" Or:"):
         # Mutually exclusive alternatives; the schema cannot express that yet.
@@ -284,7 +333,37 @@ def _parse_option_line(
         )
 
     body = _PREFIX_RE.sub("", text)
+    option = _matched_option(slug, body, points, per_model, limit, warnings)
+    if option is None and group.verb:
+        # The header stated the action for the whole group, so this line is
+        # a bare name: "take" + "Great Weapon".
+        option = _matched_option(slug, f"{group.verb} {body}", points, per_model, limit, warnings)
+    if option is not None:
+        return option
 
+    warnings.append(f"{slug}: option line not understood, kept verbatim: {line.text!r}")
+    return UnitOption(
+        name=text,
+        kind=OptionKind.OTHER,
+        points=points,
+        per_model=per_model,
+        limit=limit,
+    )
+
+
+def _matched_option(
+    slug: str,
+    body: str,
+    points: int | None,
+    per_model: bool,
+    limit: str | None,
+    warnings: list[str],
+) -> UnitOption | None:
+    """Match one option line against the printed forms the grammar knows.
+
+    Returns:
+        The option, or None when the line matches no printed form.
+    """
     if m := _MAGIC_STANDARD_RE.fullmatch(body):
         return UnitOption(
             name="Magic standard",
@@ -336,15 +415,7 @@ def _parse_option_line(
             removes_equipment=[m.group(1)],
             limit=limit,
         )
-
-    warnings.append(f"{slug}: option line not understood, kept verbatim: {line.text!r}")
-    return UnitOption(
-        name=text,
-        kind=OptionKind.OTHER,
-        points=points,
-        per_model=per_model,
-        limit=limit,
-    )
+    return None
 
 
 def _upgrade_option(

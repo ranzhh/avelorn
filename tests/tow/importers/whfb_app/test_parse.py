@@ -7,11 +7,12 @@ strings directly — no fixture payloads.
 import pytest
 
 from avelorn.tow.importers.whfb_app.parse import (
+    OptionGroup,
     UnsupportedUnit,
     WhfbParseError,
     _append_option,
     _parse_base_size,
-    _parse_group_limit,
+    _parse_group,
     _parse_option_line,
     _parse_troop_type,
     _parse_unit_size,
@@ -25,10 +26,15 @@ def _line(text: str) -> OptionLine:
     return OptionLine(text=text, rules=[])
 
 
-def _option(text: str, limit: str | None = None) -> tuple[UnitOption, list[str]]:
+def _option(text: str, group: OptionGroup | None = None) -> tuple[UnitOption, list[str]]:
     warnings: list[str] = []
-    option = _parse_option_line("some-unit", _line(text), limit=limit, warnings=warnings)
+    option = _parse_option_line("some-unit", _line(text), group or OptionGroup(), warnings)
     return option, warnings
+
+
+def _group(header: str) -> tuple[OptionGroup, list[str]]:
+    warnings: list[str] = []
+    return _parse_group("some-unit", header, warnings), warnings
 
 
 # --- printed scalar fields ----------------------------------------------
@@ -118,23 +124,77 @@ def test_troop_type_multiple_keeps_first_with_warning() -> None:
 
 def test_plain_group_header_carries_no_limit() -> None:
     """The "Any unit may:" header restricts nothing."""
-    assert _parse_group_limit("some-unit", "Any unit may:", []) is None
+    group, warnings = _group("Any unit may:")
+    assert group == OptionGroup()
+    assert warnings == []
 
 
 def test_limited_group_header_becomes_a_limit_string() -> None:
     """A "0-1 units per 1,000 points may:" header normalises into the limit."""
-    warnings: list[str] = []
-    limit = _parse_group_limit("some-unit", "0-1 units per 1,000 points may:", warnings)
-    assert limit == "0-1 unit per 1000 points"
+    group, warnings = _group("0-1 units per 1,000 points may:")
+    assert group == OptionGroup(limit="0-1 unit per 1000 points")
     assert warnings == []
 
 
 def test_unrecognised_group_header_is_kept_verbatim() -> None:
     """An unknown restriction is preserved as the limit, with a warning."""
-    warnings: list[str] = []
     header = "Units joined by a character may:"
-    assert _parse_group_limit("some-unit", header, warnings) == header
+    group, warnings = _group(header)
+    assert group == OptionGroup(limit=header)
     assert any("unrecognised option group header" in w for w in warnings)
+
+
+def test_group_header_verb_is_not_a_limit() -> None:
+    """A header stating the action once yields a verb, not a restriction."""
+    group, warnings = _group("The entire unit may take any of the following:")
+    assert group == OptionGroup(limit=None, verb="take")
+    assert warnings == []
+
+
+def test_group_header_carries_both_a_limit_and_a_verb() -> None:
+    """The restriction and the verb are read from the same header."""
+    group, _ = _group("0-1 units per 1,000 points may take any of the following:")
+    assert group == OptionGroup(limit="0-1 unit per 1000 points", verb="take")
+
+
+def test_exclusive_group_header_warns_about_lost_exclusivity() -> None:
+    """A "one of the following" group is a choice the schema cannot express yet."""
+    group, warnings = _group("The entire unit may take one of the following:")
+    assert group.verb == "take"
+    assert any("mutually exclusive" in w for w in warnings)
+
+
+# --- option lines under a verb-carrying header ------------------------------
+
+
+def test_bare_line_takes_the_verb_from_its_header() -> None:
+    """A child line that is only a name is read through the group's verb."""
+    option, warnings = _option("Great Weapon (+1 point per model)", OptionGroup(verb="take"))
+    assert option == UnitOption(
+        name="Great Weapon",
+        kind=OptionKind.EQUIPMENT,
+        points=1,
+        per_model=True,
+        adds_equipment=["Great Weapon"],
+    )
+    assert warnings == []
+
+
+def test_line_with_its_own_verb_ignores_the_header_verb() -> None:
+    """A child that states its own action is parsed as written."""
+    option, warnings = _option(
+        "Replace Cavalry Spear with shortbows (+2 points per model)", OptionGroup(verb="take")
+    )
+    assert option.removes_equipment == ["Cavalry Spear"]
+    assert option.adds_equipment == ["Shortbows"]
+    assert warnings == []
+
+
+def test_bare_line_without_a_header_verb_stays_verbatim() -> None:
+    """Outside such a group there is no verb to supply: report, don't guess."""
+    option, warnings = _option("Great Weapon (+1 point per model)")
+    assert option.kind is OptionKind.OTHER
+    assert any("kept verbatim" in w for w in warnings)
 
 
 # --- option lines -----------------------------------------------------------
@@ -240,7 +300,8 @@ def test_magic_items_line_names_the_bearer() -> None:
 def test_group_limit_lands_on_the_option() -> None:
     """A limited group header's restriction reaches each child option."""
     option, _ = _option(
-        "Purchase a magic standard worth up to 50 points", limit="0-1 unit per 1000 points"
+        "Purchase a magic standard worth up to 50 points",
+        OptionGroup(limit="0-1 unit per 1000 points"),
     )
     assert option.limit == "0-1 unit per 1000 points"
 
@@ -265,7 +326,7 @@ def test_unrepresentable_line_is_dropped_loudly() -> None:
     options: list[UnitOption] = []
     warnings: list[str] = []
     _append_option(
-        options, "some-unit", _line("Fight with unusual valour"), limit=None, warnings=warnings
+        options, "some-unit", _line("Fight with unusual valour"), OptionGroup(), warnings
     )
     assert options == []
     assert any("DROPPED" in w for w in warnings)
