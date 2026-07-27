@@ -51,19 +51,6 @@ from avelorn.tow.schema.weapon import WeaponType
 PARAMETER_SUFFIX = " (X)"
 
 
-class EquipmentUse(StrEnum):
-    """How a model uses a piece of equipment — the ``requires`` vocabulary.
-
-    A rule can be gated on the gear a model has in use, beside the engagement
-    ``when``: ``wielding`` names the weapon in hand, ``worn`` a piece of armour
-    worn. A closed, append-only vocabulary like :class:`Quantity`; a member
-    joins when a rule needs a use the loadout can answer (a mount, later).
-    """
-
-    WIELDING = "wielding"
-    WORN = "worn"
-
-
 class Seam(StrEnum):
     """Where an operation's quantity is consumed.
 
@@ -207,6 +194,23 @@ class Gate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class MembershipGate(Gate):
+    """Base for a gate satisfied by any one member of the collection it names.
+
+    Most subjects are single — the combat a model is engaged in, the weapon in
+    its hand — and a gate on one describes that one thing. A few are plural:
+    armour is *several* pieces worn, and "equipped with a shield" asks whether
+    some piece among them is a shield. Such a gate still describes one member
+    (``worn: {name: Shield}``); what differs is the arity of the subject behind
+    it, so the gate tested against every member and satisfied by any.
+
+    The arity is declared here, in the schema, rather than read off the facts at
+    evaluation, because it is needed exactly when there are no facts to read: a
+    collection the producer never offered is unknown, and only the gate is left
+    to say whether the missing subject was one thing or many.
+    """
+
+
 class ChargeGate(Gate):
     """A gate on the charge event — the model's own charge this turn.
 
@@ -265,25 +269,45 @@ class ShootingGate(Gate):
     at_long_range: bool | None = None
 
 
-class EquipmentGate(Gate):
-    """A gate on a piece of equipment a model has in use — by family or by name.
+class WeaponGate(Gate):
+    """A gate on the weapon a model has in hand — by family or by name.
 
     The typed home for "wielding a bow" / "wielding this weapon": ``type`` names a
     weapon family (:class:`~avelorn.tow.schema.weapon.WeaponType`, the seam #107
     added), ``name`` a specific printed name. Arrows of Isha asks
-    ``{type: bow}``; a rule about one named weapon asks ``{name: ...}``. Both may
-    be set (a specific weapon of a family). At least one must be, or the gate
-    constrains nothing (``extra=forbid`` keeps a stray property a load error). The
-    ``worn`` armour peer joins here when the first rule gates on armour in use.
+    ``{type: bow}``; Parry's "a hand weapon" asks ``{name: Hand Weapon}``. Both
+    may be set (a specific weapon of a family). At least one must be, or the gate
+    constrains nothing (``extra=forbid`` keeps a stray property a load error).
     """
 
     type: WeaponType | None = None
     name: str | None = None
 
     @model_validator(mode="after")
-    def _asks_something(self) -> "EquipmentGate":
+    def _asks_something(self) -> "WeaponGate":
         if self.type is None and self.name is None:
-            raise ValueError("an equipment gate must constrain type or name")
+            raise ValueError("a weapon gate must constrain type or name")
+        return self
+
+
+class ArmourGate(MembershipGate):
+    """A gate on a piece of armour a model wears — by name, among all it wears.
+
+    The ``worn`` peer of :class:`WeaponGate`, and the armour half of the
+    equipment-in-use axis: Parry's "equipped with ... a shield" asks
+    ``{name: Shield}``. Two things separate it from the weapon gate, and both
+    come from the equipment itself. Armour has no family vocabulary — a piece is
+    only ever its printed name — so ``name`` is the sole property; and a model
+    wears *several* pieces at once where it holds one weapon, so this is a
+    :class:`MembershipGate`, satisfied by any piece worn that matches.
+    """
+
+    name: str | None = None
+
+    @model_validator(mode="after")
+    def _asks_something(self) -> "ArmourGate":
+        if self.name is None:
+            raise ValueError("an armour gate must constrain name")
         return self
 
 
@@ -326,10 +350,12 @@ class When(Gate):
     ``combat`` and ``target_of`` are presence entities: ``combat: true`` gates
     on being engaged in a close combat (Parry's "whilst engaged in close
     combat"), a nested gate on being engaged *and* a property (Elven Reflexes's
-    first round); ``target_of`` names the incoming attack. ``wielding`` gates on
-    the weapon a model is acting with (Arrows of Isha's "any bow") — the
-    equipment-in-use axis, matched by family or name, that the dice walk and the
-    folds both read off the engagement context. A subject or property outside
+    first round); ``target_of`` names the incoming attack. ``wielding`` and
+    ``worn`` are the equipment-in-use axis — the weapon a model is acting with
+    (Arrows of Isha's "any bow", matched by family or name) and the armour it
+    wears (Parry's shield, matched among every piece worn) — read off the
+    engagement context by the dice walk and the folds alike, so a rule gates on
+    its gear exactly as it gates on the engagement. A subject or property outside
     these models is a data error at load (``extra=forbid``) — the closed
     vocabulary the flat Condition enum gave, now structural. Every set fact is
     conjoined; without a ``when`` the modifier applies to every attack.
@@ -338,7 +364,8 @@ class When(Gate):
     combat: bool | CombatGate | None = None
     movement: MovementGate | None = None
     shooting: ShootingGate | None = None
-    wielding: EquipmentGate | None = None
+    wielding: WeaponGate | None = None
+    worn: ArmourGate | None = None
     target_of: bool | AttackGate | None = None
     natural: NaturalRoll | None = None
 
@@ -350,26 +377,28 @@ class When(Gate):
                 self.movement,
                 self.shooting,
                 self.wielding,
+                self.worn,
                 self.target_of,
                 self.natural,
             )
         ):
             raise ValueError(
                 "a when must gate on something: combat, movement, shooting, "
-                "wielding, target_of, or natural"
+                "wielding, worn, target_of, or natural"
             )
         return self
 
 
 class GatedEffect(BaseModel):
-    """The gating an effect carries whatever its consequence: when and requires.
+    """The gating an effect carries whatever its consequence: the ``when``.
 
-    A modifier and a re-roll grant apply under the same two gates — the
-    engagement ``when`` (a typed state tree, its ``natural`` die event apart)
-    and the equipment a model must have in use (``requires``) — evaluated the
-    same way wherever a seam consumes the effect. The consequence (a modifier's
-    operation, a re-roll's stage) is the subclass's own; the gate is shared here
-    so a new effect kind is gate-able and equipment-gate-able for free.
+    A modifier and a re-roll grant apply under one gate — the ``when``, a typed
+    tree of the facts that must hold (its ``natural`` die event apart) —
+    evaluated the same way wherever a seam consumes the effect. Engagement state
+    and equipment in use are both subjects of that one tree, so a seam that can
+    answer a gate can answer all of it. The consequence (a modifier's operation,
+    a re-roll's stage) is the subclass's own; the gate is shared here so a new
+    effect kind is gate-able for free.
     """
 
     # populate_by_name so a subclass's aliased operation (ModifierEffect's
@@ -377,7 +406,6 @@ class GatedEffect(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     when: When | None = None
-    requires: Annotated[dict[EquipmentUse, str], Field(min_length=1)] | None = None
 
     @property
     def natural(self) -> NaturalRoll | None:
@@ -387,16 +415,6 @@ class GatedEffect(BaseModel):
             The natural roll, or None for a state-only when.
         """
         return self.when.natural if self.when is not None else None
-
-    @property
-    def requirements(self) -> dict[EquipmentUse, str]:
-        """The equipment the effect needs in use, by how it is used.
-
-        Returns:
-            The required equipment name per use, empty when the effect names
-            none (it applies whatever the loadout).
-        """
-        return dict(self.requires or {})
 
 
 class ModifierEffect(GatedEffect):
@@ -436,13 +454,13 @@ class ModifierEffect(GatedEffect):
     parameter ("the amount shown in brackets after the name of this
     special rule").
     Where a change lands follows from its quantity, so no stage is spelled
-    out. ``requires`` gates the effect on equipment in use beside the
-    engagement ``when`` — Parry's "a hand weapon and a shield" is
-    ``{wielding: Hand Weapon, worn: Shield}`` — evaluated against the
-    contingent's loadout wherever the consuming seam has it. ``maximum`` is a
-    printed limit on the modified value ("to a maximum of 10" / "to a maximum
-    of 3+"): a ceiling on a characteristic, the best attainable save (a floor)
-    on an armour value.
+    out. Equipment in use is gated in the ``when`` like any other fact — Parry's
+    "a hand weapon and a shield" is
+    ``{wielding: {name: Hand Weapon}, worn: {name: Shield}}`` — evaluated against
+    the loadout the consuming seam has in its context. ``maximum`` is a printed
+    limit on the modified value ("to a maximum of 10" / "to a maximum of 3+"): a
+    ceiling on a characteristic, the best attainable save (a floor) on an armour
+    value.
     """
 
     add: (
@@ -561,8 +579,8 @@ class GrantEffect(GatedEffect):
     effects under this grant's gate. So a change to the granted rule — or to how
     its quantity resolves — is tracked automatically, and a rule granted on top of
     one a model already carries stacks (two Armour Bane (1) → +2 on a natural 6),
-    because each instance is a separate effect. The grant's shared ``when`` /
-    ``requires`` is the *outer* gate; the granted rule keeps its *own* inner gate
+    because each instance is a separate effect. The grant's shared ``when`` is the
+    *outer* gate; the granted rule keeps its *own* inner gate
     (Armour Bane's natural-6 To Wound), the two conjoined at evaluation without
     merging the gate trees. There is no discriminator field: an effect carrying
     ``grants`` is one, exactly as one carrying ``add`` is a modifier (each model

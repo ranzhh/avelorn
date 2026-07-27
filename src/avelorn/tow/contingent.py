@@ -15,10 +15,12 @@ from enum import StrEnum
 from avelorn.core.registry import Registry
 from avelorn.tow.data import TOWRepository, default_repository
 from avelorn.tow.engine.rules import (
+    ArmourFacts,
     ChargeEvent,
     EffectiveValue,
     GateContext,
     MovementFacts,
+    WeaponFacts,
     effective_characteristic,
     effective_fighting_ranks,
     effective_supporting_ranks,
@@ -416,15 +418,53 @@ class Contingent:
         ranks_behind_first = formation.full_ranks + rear - 1
         return min(max(ranks_behind_first, 0), profile.max_rank_bonus)
 
+    @property
+    def weapon_facts(self) -> WeaponFacts:
+        """The weapon in hand, as a gate on the weapon in hand reads it.
+
+        The equipment-in-use facts a producer puts on its
+        :class:`~avelorn.tow.engine.rules.GateContext` so a rule gated on the
+        weapon (Ithilmar Weapons' hand weapon, Arrows of Isha's bow) can be
+        answered. Unarmed reads as facts with nothing set — the choice has not
+        been made, so such a gate is unknown, not False.
+
+        Returns:
+            The weapon's family and name, both None while nothing is in hand.
+        """
+        if self.weapon is None:
+            return WeaponFacts()
+        return WeaponFacts(type=self.weapon.weapon_type, name=self.weapon.name)
+
+    @property
+    def armour_facts(self) -> tuple[ArmourFacts, ...]:
+        """The armour worn, as a gate on a piece worn reads it.
+
+        The ``worn`` peer of :attr:`weapon_facts`: every piece the contingent was
+        fielded in, so a membership gate (Parry's shield) can be answered against
+        the collection. Unlike the weapon in hand there is nothing to choose — the
+        loadout settles it — so this is always known, and a contingent in no
+        armour honestly reads as the empty collection rather than as unknown.
+
+        Returns:
+            One facts entry per piece of armour worn, empty if unarmoured.
+        """
+        return tuple(ArmourFacts(name=piece.name) for piece in self.loadout.armour)
+
     def _charge_context(self) -> GateContext:
         # The movement facts a charge-sensitive read is evaluated against: the
         # charge event (present with its distance when this contingent charged,
         # absent otherwise) and whether it moved. Both are always known, so a
         # rule gated on the model's movement is never left unfactored for want
-        # of the fact.
+        # of the fact. The equipment in use rides along for the same reason —
+        # this body knows its own gear, so a rank rule gated on the weapon it
+        # fights with is answerable here rather than reported unanswered.
         charge = self.movement.charge
         event = ChargeEvent(distance=charge.full_inches) if charge is not None else None
-        return GateContext(movement=MovementFacts(moved=self.movement.moved, charge=event))
+        return GateContext(
+            movement=MovementFacts(moved=self.movement.moved, charge=event),
+            wielding=self.weapon_facts,
+            worn=self.armour_facts,
+        )
 
     def fighting_ranks(self) -> EffectiveValue:
         """How many ranks fight at full Attacks, and the rules behind the count.

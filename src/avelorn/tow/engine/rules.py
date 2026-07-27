@@ -28,7 +28,7 @@ import re
 from collections.abc import Collection, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field
-from typing import assert_never, get_args
+from typing import get_args
 
 from pydantic.fields import FieldInfo
 
@@ -41,10 +41,10 @@ from avelorn.tow.schema.rule import (
     ChoiceEffect,
     Comparison,
     Decision,
-    EquipmentUse,
     Gate,
     GatedEffect,
     GrantEffect,
+    MembershipGate,
     ModifierEffect,
     NaturalRoll,
     Quantity,
@@ -108,8 +108,8 @@ class ShootingFacts:
 
 
 @dataclass(frozen=True)
-class EquipmentFacts:
-    """The evaluated facts of a piece of equipment in use — behind an EquipmentGate.
+class WeaponFacts:
+    """The evaluated facts of the weapon in hand — the values behind a WeaponGate.
 
     The weapon a model is acting with, as the walk and the folds see it: its
     ``type`` (the weapon family) and ``name``, either None when nothing is armed
@@ -117,6 +117,19 @@ class EquipmentFacts:
     """
 
     type: WeaponType | None = None
+    name: str | None = None
+
+
+@dataclass(frozen=True)
+class ArmourFacts:
+    """The evaluated facts of one piece of armour worn — behind an ArmourGate.
+
+    A single piece, by printed ``name`` (armour has no family axis). The pieces a
+    model wears are held as a collection on the context, and an
+    :class:`~avelorn.tow.schema.rule.ArmourGate` is satisfied by any one of them
+    that matches — so this is the *member*, not the subject.
+    """
+
     name: str | None = None
 
 
@@ -144,12 +157,23 @@ class GateContext:
     always-present subjects (``movement``, ``shooting``, ``wielding``) keep
     default facts a phase never sets — an unarmed ``wielding`` (both fields None)
     leaves a weapon-in-hand gate unevaluatable, reported, rather than False.
+
+    ``worn`` is the one collection subject (a model wears several pieces of
+    armour), and it reads its None the third way: **not offered**, so a gate on
+    the armour worn is unevaluatable and reported. The empty tuple is what "wears
+    nothing" looks like — known, settling such a gate False — which is precisely
+    why the None is free to mean unknown here where a presence entity's None
+    means known-absent: a collection can spell absence as ``()``, an entity has
+    no spare value to spell it with. A producer holding a loadout always passes
+    the pieces, empty or not; one that never looked leaves the None it cannot
+    honestly fill.
     """
 
     combat: CombatFacts | None = None
     movement: MovementFacts = field(default_factory=MovementFacts)
     shooting: ShootingFacts = field(default_factory=ShootingFacts)
-    wielding: EquipmentFacts = field(default_factory=EquipmentFacts)
+    wielding: WeaponFacts = field(default_factory=WeaponFacts)
+    worn: tuple[ArmourFacts, ...] | None = None
     target_of: AttackFacts | None = None
 
 
@@ -355,10 +379,6 @@ def _compile_effect(
         # adds below are. None is this compiler's "unfactored" signal (turned
         # into a visible "not factored" note by compile_rules), never an error.
         return None
-    if effect.requires is not None:
-        # The walk has no loadout, so it cannot answer an equipment gate;
-        # an equipment-gated effect is honestly unfactored here.
-        return None
     applies = _gate_applies(effect, context)
     if applies is None:
         return None  # the context cannot answer the condition
@@ -393,10 +413,6 @@ def _compile_grant(
     # effects keeping their *inner* gates (Armour Bane's natural-6 To Wound). The
     # two gates conjoin without merging the trees. The grant stacks with any
     # instance the model already carries, because each is compiled independently.
-    if effect.requires is not None:
-        # An equipment gate on the grant itself is the loadout's to answer, not
-        # the walk's — honestly unfactored here, as the modifier path is.
-        return None
     applies = _gate_applies(effect, context)
     if applies is None:
         return None  # the context cannot answer the grant's gate
@@ -519,20 +535,17 @@ def effective_armour_value(
     base: int,
     rules: Sequence[Rule],
     conditions: "GateContext | None" = None,
-    *,
-    wielding: str | None,
-    worn: Collection[str],
 ) -> EffectiveValue:
     """Improve a defender's armour value by the rules that better its save.
 
     The armour fold: every ``armour-value`` modifier a contingent's rules
     carry (Parry's +1 with a hand weapon and shield) betters the save by
     lowering the armour value — a lower value is a better save, so an
-    improvement subtracts — gated on the engagement ``conditions`` and the
-    equipment each rule ``requires`` in use (``wielding`` the weapon in hand,
-    ``worn`` the armour worn), and floored at the printed ``maximum`` (the
-    best save it may reach). All-or-nothing per rule; a rule whose facts the
-    conditions or the loadout cannot answer is reported unfactored.
+    improvement subtracts — gated on the ``conditions``, which carry the
+    equipment in use (the weapon in hand, the armour worn) beside the engagement
+    facts, and floored at the printed ``maximum`` (the best save it may reach).
+    All-or-nothing per rule; a rule whose facts the conditions cannot answer is
+    reported unfactored.
 
     Returns:
         The improved armour value with the factored and unfactored rule names.
@@ -549,23 +562,15 @@ def effective_armour_value(
         ]
         if not matching:
             continue
-        answers = [
-            (
-                effect,
-                amount,
-                _gate_applies(effect, context),
-                _equipment_applies(effect.requirements, wielding, worn),
-            )
-            for effect, amount in matching
-        ]
+        answers = [(effect, amount, _gate_applies(effect, context)) for effect, amount in matching]
         if any(
-            amount == "X" or when is None or gear is None or effect.natural is not None
-            for effect, amount, when, gear in answers
+            amount == "X" or when is None or effect.natural is not None
+            for effect, amount, when in answers
         ):
             unfactored.append(rule.name)
             continue
-        for effect, amount, when, gear in answers:
-            if not when or not gear or not isinstance(amount, int):
+        for effect, amount, when in answers:
+            if not when or not isinstance(amount, int):
                 continue
             value -= amount  # a lower armour value is a better save
             if effect.maximum is not None:
@@ -579,13 +584,13 @@ def effective_armour_value(
 class EffectiveRerolls:
     """The re-roll grants a contingent's rules confer on the attack it makes.
 
-    The re-roll seam's fold, the loadout-aware sibling of the armour fold:
-    every attack-roll re-roll a rule carries (Ithilmar Weapons' re-roll of To
-    Hit natural 1s), gated on the engagement conditions and the equipment it
-    requires in use, compiled into the records the dice walk applies.
-    ``factored`` names the rules evaluated in — including those honoured by not
-    applying (a condition False, or the required gear not in use) — and
-    ``unfactored`` those a fact could not answer; the caller reports the latter.
+    The re-roll seam's fold, the sibling of the armour fold: every attack-roll
+    re-roll a rule carries (Ithilmar Weapons' re-roll of To Hit natural 1s),
+    gated on the conditions — the engagement facts and the equipment in use
+    alike — and compiled into the records the dice walk applies. ``factored``
+    names the rules evaluated in — including those honoured by not applying (a
+    gate answered False, the gear it names not in use) — and ``unfactored`` those
+    a fact could not answer; the caller reports the latter.
     """
 
     rerolls: tuple[Reroll, ...] = ()
@@ -596,17 +601,14 @@ class EffectiveRerolls:
 def effective_rerolls(
     rules: Sequence[Rule],
     conditions: "GateContext | None" = None,
-    *,
-    wielding: str | None,
-    worn: Collection[str],
 ) -> EffectiveRerolls:
     """Compile the attack-roll re-rolls a contingent's rules grant.
 
     The re-roll seam: every :class:`RerollEffect` naming an attack roll (To
-    Hit, To Wound, a save) is gated on the engagement ``conditions`` and the
-    equipment it ``requires`` in use, exactly as the armour fold gates Parry —
-    a rule whose fact the conditions or the loadout cannot answer is reported
-    unfactored, one answered False (or whose gear is not in use) is honoured
+    Hit, To Wound, a save) is gated on the ``conditions``, which carry the
+    equipment in use beside the engagement facts, exactly as the armour fold
+    gates Parry — a rule whose fact the conditions cannot answer is reported
+    unfactored, one answered False (the weapon it names not in hand) is honoured
     with no grant. Panic-test re-rolls are another seam's and pass untouched.
 
     Returns:
@@ -625,19 +627,12 @@ def effective_rerolls(
         ]
         if not matching:
             continue
-        answers = [
-            (
-                effect,
-                _gate_applies(effect, context),
-                _equipment_applies(effect.requirements, wielding, worn),
-            )
-            for effect in matching
-        ]
-        if any(when is None or gear is None for _, when, gear in answers):
+        answers = [(effect, _gate_applies(effect, context)) for effect in matching]
+        if any(when is None for _, when in answers):
             unfactored.append(rule.name)
             continue
-        for effect, when, gear in answers:
-            if when and gear:
+        for effect, when in answers:
+            if when:
                 grants.append(Reroll(stage=effect.reroll, on_natural=effect.on_natural))
         factored.append(rule.name)
         logger.debug("re-roll grant factored: %s -> %d record(s)", rule.name, len(grants))
@@ -683,12 +678,12 @@ def _effective_quantity(
             (effect, op, amount, _gate_applies(effect, context)) for effect, op, amount in matching
         ]
         if any(
-            amount == "X" or answer is None or effect.natural is not None or effect.requires
+            amount == "X" or answer is None or effect.natural is not None
             for effect, op, amount, answer in answers
         ):
-            # An equipment gate (``requires``) is not answerable here — only
-            # the armour fold carries a loadout — so a rule that needs one is
-            # reported unfactored rather than applied blind.
+            # A rule gated on equipment the caller's conditions do not carry
+            # answers None, so it lands here — reported unfactored rather than
+            # applied blind, exactly as an unanswerable engagement fact does.
             unfactored.append(rule.name)
             continue
         for effect, op, amount, answer in answers:
@@ -748,11 +743,15 @@ def _walk(gate: Gate, facts: object) -> bool | None:
 
 
 def _node_applies(required: object, actual: object, is_branch: bool) -> bool | None:
-    # One gate node against its fact. A branch (a subject, or an event like the
-    # charge or a future incoming attack): a bool requires the entity's
-    # presence; a nested gate requires it present and recurses. A leaf: a
-    # Comparison tests a number, a bool tests a boolean — both tri-state, so a
-    # fact the context could not answer (None) leaves the rule unevaluatable.
+    # One gate node against its fact. A membership gate (the armour worn): the
+    # fact is the collection, and the gate is satisfied by any member matching.
+    # A branch (a subject, or an event like the charge or a future incoming
+    # attack): a bool requires the entity's presence; a nested gate requires it
+    # present and recurses. A leaf: a Comparison tests a number, a bool tests a
+    # boolean — both tri-state, so a fact the context could not answer (None)
+    # leaves the rule unevaluatable.
+    if isinstance(required, MembershipGate):
+        return _any_member_applies(required, actual)
     if is_branch:
         if isinstance(required, bool):
             return (actual is not None) == required
@@ -768,6 +767,25 @@ def _node_applies(required: object, actual: object, is_branch: bool) -> bool | N
     return None if actual is None else (actual == required)
 
 
+def _any_member_applies(gate: MembershipGate, members: object) -> bool | None:
+    # A membership gate against the collection behind it: walk the gate over each
+    # member and take the disjunction — "equipped with a shield" holds as soon as
+    # one piece worn is a shield. A collection the producer never offered (None)
+    # is unknown, so the rule is unevaluatable and reported; an *empty* one is
+    # known (the model wears nothing), and settles the gate False. A member the
+    # facts left unanswered can only withhold the answer, never supply a match,
+    # so an unknown decides only when nothing matched.
+    if members is None:
+        return None  # the collection was not offered — see GateContext.worn
+    assert isinstance(members, tuple)  # a membership fact is a tuple of members
+    outcomes = [_walk(gate, member) for member in members]
+    if any(outcome is True for outcome in outcomes):
+        return True
+    if any(outcome is None for outcome in outcomes):
+        return None
+    return False
+
+
 def _is_branch(info: FieldInfo) -> bool:
     # A branch slot's gate is a nested Gate — a subject or an event — so its
     # annotation admits a Gate; a leaf slot holds a bool or a Comparison (which
@@ -776,26 +794,3 @@ def _is_branch(info: FieldInfo) -> bool:
     return any(
         isinstance(arg, type) and issubclass(arg, Gate) for arg in get_args(info.annotation)
     )
-
-
-def _equipment_applies(
-    requires: Mapping[EquipmentUse, str], wielding: str | None, worn: Collection[str]
-) -> bool | None:
-    # Conjunction over the equipment a rule needs in use, mirroring
-    # _condition_applies: one known mismatch settles "does not apply"; an
-    # unknown (nothing armed, so the weapon in hand is undecided) decides only
-    # when nothing is known-False. The worn pieces are always known.
-    unknown = False
-    for use, name in requires.items():
-        match use:
-            case EquipmentUse.WIELDING:
-                if wielding is None:
-                    unknown = True
-                elif wielding != name:
-                    return False
-            case EquipmentUse.WORN:
-                if name not in worn:
-                    return False
-            case unhandled:
-                assert_never(unhandled)
-    return None if unknown else True

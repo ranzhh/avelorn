@@ -13,14 +13,14 @@ paragraphs:
 # Hand-authored, diffable against the paragraph above: a re-roll of the dice
 # showing a natural 1 To Hit, gated on being engaged in close combat (the
 # `combat` presence gate, as Parry is) and on fighting with a hand weapon (the
-# `requires` equipment gate — the weapon in hand). The re-roll seam re-rolls the
+# `wielding` gate — the weapon in hand). The re-roll seam re-rolls the
 # 1s only (`on_natural: 1`), not every miss. The "single, non-magical" and
 # "not a mount" restrictions are not expressed — the engine fields one weapon in
 # hand per rank-and-file model, none magical, no mounts, so they cannot arise.
 effects:
   - when:
       combat: true
-    requires:
-      wielding: Hand Weapon
+      wielding:
+        name: Hand Weapon
     reroll: roll-to-hit
     on_natural: 1
