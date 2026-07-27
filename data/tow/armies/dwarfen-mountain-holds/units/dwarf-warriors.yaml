@@ -22,15 +22,15 @@ special_rules:
   - Shieldwall
 options:
   - name: Great Weapon
-    kind: other
+    kind: equipment
     points: 1
     per_model: true
-    limit: 'The entire unit may take any of the following:'
+    adds_equipment: [Great Weapon]
   - name: Shield
-    kind: other
+    kind: equipment
     points: 1
     per_model: true
-    limit: 'The entire unit may take any of the following:'
+    adds_equipment: [Shield]
   - name: Veteran
     kind: champion
     points: 5
