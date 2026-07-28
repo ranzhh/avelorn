@@ -5,7 +5,7 @@ from pydantic import ValidationError
 
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.muster import Complement
-from avelorn.tow.schema.unit import Unit
+from avelorn.tow.schema.unit import OptionKind, Unit, UnitOption
 
 REPO = TOWRepository()
 
@@ -60,3 +60,36 @@ def test_complement_duplicate_option_rejected(spearmen_unit: Unit) -> None:
     """The same option chosen twice fails validation."""
     with pytest.raises(ValidationError, match="duplicates"):
         Complement(unit=spearmen_unit, size=10, options=["Musician", "Musician"])
+
+
+@pytest.fixture
+def spearmen_with_a_sentinel_option(spearmen_unit: Unit) -> Unit:
+    """Elven Spearmen with a blade bought for the Sentinel alone.
+
+    The shape Ironbreakers prints for the Ironbeard's wargear, on a
+    datasheet the rest of these tests already use.
+
+    Returns:
+        The datasheet with one model-scoped option added.
+    """
+    scoped = UnitOption(
+        name="Ithilmar Blade",
+        kind=OptionKind.EQUIPMENT,
+        applies_to="Sentinel",
+        points=5,
+        adds_equipment=["Ithilmar Blade"],
+    )
+    return spearmen_unit.model_copy(update={"options": [*spearmen_unit.options, scoped]})
+
+
+def test_complement_model_scoped_option_rejected(spearmen_with_a_sentinel_option: Unit) -> None:
+    """An option bought for one model has no part to fold into: refuse it."""
+    with pytest.raises(ValidationError, match="attach to a single model"):
+        Complement(unit=spearmen_with_a_sentinel_option, size=10, options=["Ithilmar Blade"])
+
+
+def test_complement_unit_wide_options_unaffected(spearmen_with_a_sentinel_option: Unit) -> None:
+    """The refusal is about the one option, not the datasheet that offers it."""
+    mustered = Complement(unit=spearmen_with_a_sentinel_option, size=10, options=["Shieldwall"])
+    assert "Shieldwall" in mustered.special_rules
+    assert "Ithilmar Blade" not in mustered.equipment
