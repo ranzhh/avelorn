@@ -6,15 +6,26 @@ uv run python scripts/import_whfb_app.py army high-elf-realms
 uv run python scripts/import_whfb_app.py weapon longbow
 uv run python scripts/import_whfb_app.py armour light-armour
 uv run python scripts/import_whfb_app.py rule armour-bane
+
+`check` re-imports what data/ already holds and reports which files a real
+import would change, writing nothing — the site moved underneath them, or
+the importer would not reproduce what is on disk:
+
+uv run python scripts/import_whfb_app.py check
+uv run python scripts/import_whfb_app.py check data/tow/armies/high-elf-realms
 """
 
 from __future__ import annotations
 
 import argparse
+import difflib
 import logging
+import re
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
+from avelorn.core.loading import load_yaml
 from avelorn.core.logging import configure_logging
 from avelorn.tow.importers.whfb_app.client import BASE_URL, WhfbAppClient, WhfbAppError
 from avelorn.tow.importers.whfb_app.equipment import parse_armour, parse_weapon
@@ -26,6 +37,10 @@ from avelorn.tow.importers.whfb_app.yamlout import (
     unit_to_yaml,
     weapon_to_yaml,
 )
+from avelorn.tow.schema.armour import Armour
+from avelorn.tow.schema.rule import Rule
+from avelorn.tow.schema.unit import Unit
+from avelorn.tow.schema.weapon import Weapon
 
 logger = logging.getLogger(__name__)
 
@@ -61,11 +76,22 @@ def main(argv: list[str] | None = None) -> int:
     rule_cmd = sub.add_parser("rule", parents=[common], help="import a special rule by slug")
     rule_cmd.add_argument("slug")
 
+    check_cmd = sub.add_parser("check", help="report which data/ files a re-import would change")
+    check_cmd.add_argument(
+        "paths",
+        nargs="*",
+        type=Path,
+        help="files or directories to check; the whole data/ tree by default",
+    )
+    check_cmd.add_argument("--data-dir", type=Path, default=Path("data"))
+
     args = parser.parse_args(argv)
     configure_logging()
     client = WhfbAppClient()
     try:
-        if args.command == "unit":
+        if args.command == "check":
+            ok = _check(client, args.paths or [args.data_dir])
+        elif args.command == "unit":
             ok = _import_unit(client, args.slug, args.army, args.data_dir, args.dry_run)
         elif args.command == "army":
             ok = _import_army(client, args.slug, args.data_dir, args.dry_run)
@@ -77,6 +103,136 @@ def main(argv: list[str] | None = None) -> int:
         logger.exception("import failed")
         return 1
     return 0 if ok else 1
+
+
+# Every generated file opens with the page it came from, so a file knows
+# where to re-read itself — including a rule whose page lives outside the
+# Special Rules chapter, whose path the flat filename does not record.
+_SOURCE_RE = re.compile(r"\A# Source: (\S+)")
+
+
+def _data_files(paths: Sequence[Path]) -> list[Path]:
+    """Expand the requested paths into the YAML files under them.
+
+    Returns:
+        Every named file, plus every ``.yaml`` under every named directory.
+    """
+    files: list[Path] = []
+    for path in paths:
+        files.extend([path] if path.is_file() else sorted(path.rglob("*.yaml")))
+    return files
+
+
+def _rerender(client: WhfbAppClient, path: Path, url: str) -> tuple[str, str, list[str]] | None:
+    """Render one data file both as held and as the site now states it.
+
+    The kind comes from where the file sits in the tree, and the page from
+    the file's own source header — so no slug is guessed and, unlike an
+    import, no army has to be resolved.
+
+    Both sides go through the same renderer, so the comparison is of what
+    the importer owns. Line wrapping, hand-authored comments and any field
+    the importer does not write cancel out instead of reading as drift.
+
+    Returns:
+        The held YAML, the site's YAML, and the warnings raised reading
+        the page — or None for a file whose kind no importer covers (the
+        troop-type table cites its page but is written by hand).
+    """
+    kind = path.parent.name
+    slug = url.rsplit("/", 1)[-1]
+    if kind == "units":
+        unit = parse_unit(client.unit_entry(slug))
+        held = unit_to_yaml(load_yaml(path, Unit), source_url=url)
+        return held, unit_to_yaml(unit.unit, source_url=url), unit.warnings
+    if kind == "weapons":
+        weapon = parse_weapon(client.weapons_of_war_entry(slug))
+        held = weapon_to_yaml(load_yaml(path, Weapon), source_url=url)
+        return held, weapon_to_yaml(weapon.weapon, source_url=url), weapon.warnings
+    if kind == "armour":
+        armour = parse_armour(client.weapons_of_war_entry(slug))
+        held = armour_to_yaml(load_yaml(path, Armour), source_url=url)
+        return held, armour_to_yaml(armour.armour, source_url=url), armour.warnings
+    if kind == "rules":
+        result = parse_special_rule(client.rule_entry(url.removeprefix(f"{BASE_URL}/")))
+        # Effects are hand-authored and live only in data/, so they are carried
+        # onto the fresh scrape exactly as a re-import would: their absence
+        # upstream is not drift. The merge also warns when the wording moved
+        # under effects that were written against it.
+        rule, merge_warnings = with_existing_effects(result.rule, path)
+        held = rule_to_yaml(load_yaml(path, Rule), source_url=url)
+        return held, rule_to_yaml(rule, source_url=url), [*result.warnings, *merge_warnings]
+    return None
+
+
+def _check(client: WhfbAppClient, paths: Sequence[Path]) -> bool:
+    """Report which files a re-import would change, writing nothing.
+
+    Each file is re-imported into memory and compared with what is on
+    disk. Files this importer does not generate are left alone: one with
+    no source header, and one whose kind no importer covers.
+
+    A difference means the site moved under the file, or the importer
+    would not reproduce it — a hand-authored field it does not carry over
+    reads as a removal in the diff. Both are reasons to look before
+    running the import. A page that no longer answers counts too: the
+    entry moved or went away, which is what a stale corpus looks like.
+
+    Returns:
+        Whether every file checked would survive a re-import unchanged.
+    """
+    checked = 0
+    skipped = 0
+    drifted: list[Path] = []
+    unreadable: list[Path] = []
+    for path in _data_files(paths):
+        current = path.read_text()
+        source = _SOURCE_RE.match(current)
+        if source is None:
+            skipped += 1
+            continue
+        url = source.group(1)
+        try:
+            rendered = _rerender(client, path, url)
+        except (WhfbAppError, WhfbParseError, UnsupportedUnit) as err:
+            # A finding, not a crash: one line rather than a traceback, since
+            # on a sweep the file and the reason are the whole report. The
+            # summary and the exit code carry how much it matters.
+            logger.warning("%s: %s", path, err)
+            unreadable.append(path)
+            continue
+        if rendered is None:
+            skipped += 1
+            continue
+        held, fresh, warnings = rendered
+        checked += 1
+        if fresh == held:
+            continue
+        drifted.append(path)
+        for warning in warnings:
+            logger.warning("%s: %s", path.name, warning)
+        # The diff is the payload -> stdout, like the generated YAML.
+        print(
+            "".join(
+                difflib.unified_diff(
+                    held.splitlines(keepends=True),
+                    fresh.splitlines(keepends=True),
+                    fromfile=f"{path} (held)",
+                    tofile=f"{url} (site)",
+                )
+            ),
+            end="",
+        )
+    logger.info(
+        "checked %d file(s): %d would change, %d unreadable, %d not imported from the site",
+        checked,
+        len(drifted),
+        len(unreadable),
+        skipped,
+    )
+    for path in drifted:
+        logger.info("would change: %s", path)
+    return not drifted and not unreadable
 
 
 def _import_equipment(
