@@ -150,6 +150,11 @@ class UnitOption(BaseModel):
 
     name: str
     kind: OptionKind = OptionKind.OTHER
+    # The model the option attaches to, named as its profile row prints it
+    # ("An Ironbeard may take Cinderblast Bombs" -> "Ironbeard"). None is
+    # the whole unit. The Unit validator checks the name against the
+    # profiles, so an option cannot attach to a model that is not there.
+    applies_to: str | None = None
     points: int | None = Field(default=None, ge=0)
     per_model: bool = False
     points_budget: int | None = Field(default=None, ge=1)
@@ -191,6 +196,23 @@ class Unit(BaseModel):
     equipment: list[str] = Field(default_factory=list)
     special_rules: list[str] = Field(default_factory=list)  # rule names, as printed
     options: list[UnitOption] = Field(default_factory=list)
+
+    # An option attached to a named model needs that model's profile row:
+    # "An Ironbeard may ..." is only meaningful on a datasheet printing an
+    # Ironbeard.
+    @model_validator(mode="after")
+    def _options_attach_to_a_printed_model(self) -> Self:
+        printed = {profile.name for profile in self.profiles}
+        unknown = sorted(
+            {
+                option.applies_to
+                for option in self.options
+                if option.applies_to is not None and option.applies_to not in printed
+            }
+        )
+        if unknown:
+            raise ValueError(f"options attach to models with no profile: {unknown}")
+        return self
 
     @property
     def rank_and_file(self) -> TroopTypeProfile:
