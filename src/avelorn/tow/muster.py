@@ -56,8 +56,12 @@ class Complement(BaseModel):
     Command and heterogeneous profiles (a champion, an embedded character —
     each its own profile) affect only ``points`` today: the fielded body is
     still homogeneous, so they are recorded, not yet resolved into distinct
-    parts (#46). Options priced by a ``points_budget`` (a magic standard)
-    contribute no fixed cost until magic items are modelled.
+    parts (#46). For the same reason an option bought for one model — one
+    carrying :attr:`~avelorn.tow.schema.unit.UnitOption.applies_to` — cannot
+    be mustered at all: there is no part to fold it into, and folding it
+    unit-wide would arm every model (#120). Options priced by a
+    ``points_budget`` (a magic standard) contribute no fixed cost until magic
+    items are modelled.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -79,6 +83,16 @@ class Complement(BaseModel):
         unknown = [name for name in self.options if name not in available]
         if unknown:
             raise ValueError(f"options not offered by {self.unit.name}: {unknown}")
+        # A datasheet may print an option bought for one model ("An Ironbeard
+        # may take Cinderblast Bombs"). The fielded body is homogeneous, so
+        # folding it would arm every model instead of the one that bought it:
+        # refuse the muster rather than field a loadout that is quietly wrong
+        # (#120).
+        scoped = [option.name for option in self._chosen if option.applies_to is not None]
+        if scoped:
+            raise ValueError(
+                f"options attach to a single model, which is not modelled yet: {scoped}"
+            )
         return self
 
     @property
