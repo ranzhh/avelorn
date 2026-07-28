@@ -155,7 +155,12 @@ def _weapon_profile_row(profile: WeaponProfile) -> _FlowMap:
 
 
 def _option_row(option: UnitOption) -> dict:
+    # Written key by key to keep the printed reading order rather than the
+    # model's; a drift guard in the tests fails if a field is added to
+    # UnitOption and not written here.
     row: dict = {"name": option.name, "kind": option.kind.value}
+    if option.applies_to is not None:
+        row["applies_to"] = option.applies_to
     if option.points is not None:
         row["points"] = option.points
     if option.per_model:

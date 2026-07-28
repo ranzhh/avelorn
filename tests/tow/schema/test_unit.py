@@ -75,6 +75,20 @@ def test_unknown_troop_type_rejected(elven_spearmen: dict) -> None:
         Unit.model_validate(bad)
 
 
+def test_option_attaches_to_a_printed_model(elven_spearmen: dict) -> None:
+    """An option may name a model the unit prints a profile for."""
+    option = {"name": "Shield", "kind": "equipment", "applies_to": "Sentinel", "points": 2}
+    unit = Unit.model_validate(dict(elven_spearmen, options=[option]))
+    assert unit.options[0].applies_to == "Sentinel"
+
+
+def test_option_attached_to_an_absent_model_rejected(elven_spearmen: dict) -> None:
+    """A model with no profile row cannot carry an option."""
+    option = {"name": "Shield", "kind": "equipment", "applies_to": "Sea Master", "points": 2}
+    with pytest.raises(ValidationError, match="no profile"):
+        Unit.model_validate(dict(elven_spearmen, options=[option]))
+
+
 def test_unit_size_max_below_min_rejected() -> None:
     """A unit size range with max below min fails validation."""
     with pytest.raises(ValidationError):

@@ -64,6 +64,10 @@ def parse_unit(entry: Node) -> ImportResult:
         raise WhfbParseError("entry has no slug")
     warnings: list[str] = []
 
+    # The options grammar reads a line's subject against the printed
+    # profiles, so the rows are parsed before the options that name them.
+    profiles = _parse_profiles(slug, _require(fields, slug, "unitProfile", list))
+
     unit = Unit(
         id=slug,
         name=_require(fields, slug, "name", str),
@@ -71,7 +75,7 @@ def parse_unit(entry: Node) -> ImportResult:
         unit_size=_parse_unit_size(slug, _require(fields, slug, "unitSize", object)),
         troop_type=_parse_troop_type(slug, fields, warnings),
         base_size=_parse_base_size(slug, fields.get("baseSize"), warnings),
-        profiles=_parse_profiles(slug, _require(fields, slug, "unitProfile", list)),
+        profiles=profiles,
         # Equipment is prose, so display text is unusable ("thrusting
         # spears"): use canonical entry names. The special-rules field is a
         # bare list whose display text is the rule name as printed, which
@@ -79,7 +83,7 @@ def parse_unit(entry: Node) -> ImportResult:
         # "Detachment Special Rules" section).
         equipment=_rule_list(slug, "equipment", fields, warnings),
         special_rules=_rule_list(slug, "specialRules", fields, warnings, as_displayed=True),
-        options=_parse_options(slug, fields.get("options"), warnings),
+        options=_parse_options(slug, fields.get("options"), profiles, warnings),
     )
     return ImportResult(unit=unit, warnings=warnings)
 
@@ -194,24 +198,37 @@ def _rule_list(
 
 # --- options grammar ---------------------------------------------------
 
-_COST_RE = re.compile(r"\s*\(\+([\d,]+)\s+points?\s+per\s+(unit|model)\)$")
-_PREFIX_RE = re.compile(r"^(?:Any|The entire)\s+unit(?:s)?(?:\s+of\s+.+?)?\s+may\s+", re.I)
-# A group header reads "<subject> may:", optionally carrying the verb its
-# children omit: "The entire unit may take any of the following:".
+# A printed cost is "+N points", optionally bracketed and optionally
+# scoped. The scope is omitted where only one model can take the option
+# ("Brace of Drakefire Pistols (+10 points)"), so an unscoped cost is a
+# one-off, the same shape as "per unit".
+_COST_BODY = r"\+(?P<points>[\d,]+)\s+points?(?:\s+per\s+(?P<scope>unit|model))?"
+_COST_RES = (
+    re.compile(rf"\s*\({_COST_BODY}\)$", re.I),
+    re.compile(rf"\s*{_COST_BODY}$", re.I),
+)
+# A page cross-reference, not part of the printed name: "Drakegun (see below)".
+_CROSS_REF_RE = re.compile(r"\s*\(see\s+[^)]+\)", re.I)
+# A line or group header reads "<subject> may ...". A header may also carry
+# the verb its children omit: "The entire unit may take any of the following:".
 _HEADER_RE = re.compile(
     r"^(?P<subject>.+?)\s+may"
     r"(?:\s+(?P<verb>.+?)\s+(?P<quantifier>any|one)\s+of the following)?:?$",
     re.I,
 )
+_LINE_SUBJECT_RE = re.compile(r"^(?P<subject>.+?)\s+may\s+(?P<body>.+)$", re.I)
 _SUBJECT_PLAIN_RE = re.compile(r"^(?:Any|The entire)\s+units?(?:\s+of\s+.+?)?$", re.I)
 _SUBJECT_LIMIT_RE = re.compile(
     r"^(\d+-\d+)\s+units?(?:\s+of\s+.+?)?\s+per\s+([\d,]+)\s+points$", re.I
 )
+_SUBJECT_MODEL_RE = re.compile(r"^an?\s+(.+)$", re.I)
 _UPGRADE_RE = re.compile(r"^upgrade one model to an?\s+(.+)$", re.I)
 _RULE_ADD_RE = re.compile(r"^have the\s+(.+?)\s+special rule$", re.I)
 _RULE_SWAP_RE = re.compile(r"^replace the\s+(.+?)\s+special rule with\s+(.+)$", re.I)
 _TAKE_RE = re.compile(r"^take\s+(.+)$", re.I)
-_EQUIP_SWAP_RE = re.compile(r"^replace\s+(.+?)\s+with\s+(.+)$", re.I)
+# The possessive belongs to the sentence, not to the equipment's name:
+# "replace their Shield with ..." removes "Shield".
+_EQUIP_SWAP_RE = re.compile(r"^replace\s+(?:their|its|his|her)?\s*(.+?)\s+with\s+(.+)$", re.I)
 _MAGIC_STANDARD_RE = re.compile(
     r"^purchase a magic standard worth up to\s+([\d,]+)\s+points$", re.I
 )
@@ -226,34 +243,48 @@ class OptionGroup:
 
     Attributes:
         limit: The availability restriction the header states, if any.
+        applies_to: The model the header names, when the options belong to
+            one model rather than the unit ("An Ironbeard may ...").
         verb: The verb the header carries on its children's behalf, for a
             header that states the action once ("The entire unit may take
             any of the following:") and leaves each child a bare name.
     """
 
     limit: str | None = None
+    applies_to: str | None = None
     verb: str | None = None
 
 
-def _parse_options(slug: str, doc: Node | None, warnings: list[str]) -> list[UnitOption]:
+def _parse_options(
+    slug: str, doc: Node | None, profiles: list[Profile], warnings: list[str]
+) -> list[UnitOption]:
     if doc is None:
         return []
+    # An option's subject is only read as a model when the unit prints that
+    # model's profile, so "An Ironbeard may ..." resolves against the
+    # datasheet rather than on the shape of the words.
+    printed = {profile.name for profile in profiles}
     options: list[UnitOption] = []
     for header, children in richtext.option_lines(doc):
         if not children:
-            _append_option(options, slug, header, OptionGroup(), warnings)
+            _append_option(options, slug, header, OptionGroup(), printed, warnings)
             continue
-        group = _parse_group(slug, header.text, warnings)
+        group = _parse_group(slug, header.text, printed, warnings)
         for child in children:
-            _append_option(options, slug, child, group, warnings)
+            _append_option(options, slug, child, group, printed, warnings)
     return options
 
 
 def _append_option(
-    options: list[UnitOption], slug: str, line: OptionLine, group: OptionGroup, warnings: list[str]
+    options: list[UnitOption],
+    slug: str,
+    line: OptionLine,
+    group: OptionGroup,
+    printed: set[str],
+    warnings: list[str],
 ) -> None:
     try:
-        options.append(_parse_option_line(slug, line, group, warnings))
+        options.append(_parse_option_line(slug, line, group, printed, warnings))
     except ValidationError:
         # e.g. a verbatim-fallback line with no parseable cost, which the
         # schema's points-xor-budget rule rejects. Dropping it silently
@@ -261,37 +292,40 @@ def _append_option(
         warnings.append(f"{slug}: option not representable by the schema, DROPPED: {line.text!r}")
 
 
-def _subject_limit(subject: str) -> tuple[bool, str | None]:
-    """Read a group header's subject as an availability restriction.
+def _parse_subject(subject: str, printed: set[str]) -> OptionGroup | None:
+    """Read who an option line or group header is about.
 
     Returns:
-        Whether the subject is one the grammar knows, and the limit it
-        states — None for an unrestricted "Any unit".
+        The restriction or model the subject names, or None when the
+        subject is outside the grammar.
     """
     if _SUBJECT_PLAIN_RE.fullmatch(subject):
-        return True, None
+        return OptionGroup()
     if m := _SUBJECT_LIMIT_RE.fullmatch(subject):
-        return True, f"{m.group(1)} unit per {m.group(2).replace(',', '')} points"
-    return False, None
+        return OptionGroup(limit=f"{m.group(1)} unit per {m.group(2).replace(',', '')} points")
+    if (m := _SUBJECT_MODEL_RE.fullmatch(subject)) and m.group(1) in printed:
+        return OptionGroup(applies_to=m.group(1))
+    return None
 
 
-def _parse_group(slug: str, header: str, warnings: list[str]) -> OptionGroup:
+def _parse_group(slug: str, header: str, printed: set[str], warnings: list[str]) -> OptionGroup:
     """Read a group header into what it says about its children.
 
     Returns:
-        The header's restriction and the verb it carries for its
-        children. An unrecognised header is kept verbatim as the limit
-        rather than dropped.
+        The header's restriction, the model it names, and the verb it
+        carries for its children. An unrecognised header is kept verbatim
+        as the limit rather than dropped.
     """
-    if m := _HEADER_RE.fullmatch(header):
-        known, limit = _subject_limit(m.group("subject"))
-        if known:
-            if (m.group("quantifier") or "").lower() == "one":
-                warnings.append(
-                    f"{slug}: options under {header!r} are mutually exclusive; "
-                    "exclusivity not recorded"
-                )
-            return OptionGroup(limit=limit, verb=m.group("verb"))
+    if (m := _HEADER_RE.fullmatch(header)) and (
+        group := _parse_subject(m.group("subject"), printed)
+    ) is not None:
+        if (m.group("quantifier") or "").lower() == "one":
+            warnings.append(
+                f"{slug}: options under {header!r} are mutually exclusive; "
+                "exclusivity not recorded"
+            )
+        group.verb = m.group("verb")
+        return group
     # Unrecognised restriction: keep it verbatim rather than dropping it.
     warnings.append(f"{slug}: unrecognised option group header {header!r}; kept as limit")
     return OptionGroup(limit=header)
@@ -306,9 +340,8 @@ def _capitalized(name: str) -> str:
 
 
 def _parse_option_line(
-    slug: str, line: OptionLine, group: OptionGroup, warnings: list[str]
+    slug: str, line: OptionLine, group: OptionGroup, printed: set[str], warnings: list[str]
 ) -> UnitOption:
-    limit = group.limit
     text = line.text
     if text.endswith(" Or:"):
         # Mutually exclusive alternatives; the schema cannot express that yet.
@@ -319,25 +352,41 @@ def _parse_option_line(
 
     points: int | None = None
     per_model = False
-    if m := _COST_RE.search(text):
-        points = _int(m.group(1))
-        per_model = m.group(2) == "model"
-        text = text[: m.start()].strip()
+    for pattern in _COST_RES:
+        if m := pattern.search(text):
+            points = _int(m.group("points"))
+            per_model = m.group("scope") == "model"
+            text = text[: m.start()].strip()
+            break
+    text = _CROSS_REF_RE.sub("", text).strip()
 
     if m := _MAGIC_ITEMS_RE.fullmatch(text):
         return UnitOption(
             name=f"{_capitalized(m.group(1))} magic items",
             kind=OptionKind.OTHER,
             points_budget=_int(m.group(2)),
-            limit=limit,
+            limit=group.limit,
         )
 
-    body = _PREFIX_RE.sub("", text)
-    option = _matched_option(slug, body, points, per_model, limit, warnings)
+    # A line may state its own subject ("An Ironbeard may take ...", "0-1
+    # units per 1,000 points may ..."); otherwise it inherits the group's.
+    body, scope = text, group
+    if (m := _LINE_SUBJECT_RE.fullmatch(text)) and (
+        stated := _parse_subject(m.group("subject"), printed)
+    ) is not None:
+        body = m.group("body")
+        # What the line states about itself wins; what it leaves unsaid
+        # still comes from the group it sits under.
+        scope = OptionGroup(
+            limit=stated.limit or group.limit,
+            applies_to=stated.applies_to or group.applies_to,
+        )
+
+    option = _matched_option(slug, body, points, per_model, scope, warnings)
     if option is None and group.verb:
         # The header stated the action for the whole group, so this line is
         # a bare name: "take" + "Great Weapon".
-        option = _matched_option(slug, f"{group.verb} {body}", points, per_model, limit, warnings)
+        option = _matched_option(slug, f"{group.verb} {body}", points, per_model, scope, warnings)
     if option is not None:
         return option
 
@@ -345,9 +394,10 @@ def _parse_option_line(
     return UnitOption(
         name=text,
         kind=OptionKind.OTHER,
+        applies_to=scope.applies_to,
         points=points,
         per_model=per_model,
-        limit=limit,
+        limit=scope.limit,
     )
 
 
@@ -356,7 +406,7 @@ def _matched_option(
     body: str,
     points: int | None,
     per_model: bool,
-    limit: str | None,
+    scope: OptionGroup,
     warnings: list[str],
 ) -> UnitOption | None:
     """Match one option line against the printed forms the grammar knows.
@@ -369,10 +419,11 @@ def _matched_option(
             name="Magic standard",
             kind=OptionKind.MAGIC_STANDARD,
             points_budget=_int(m.group(1)),
-            limit=limit,
+            applies_to=scope.applies_to,
+            limit=scope.limit,
         )
     if m := _UPGRADE_RE.fullmatch(body):
-        return _upgrade_option(slug, m.group(1), points, per_model, limit, warnings)
+        return _upgrade_option(slug, m.group(1), points, per_model, scope, warnings)
     if m := _RULE_SWAP_RE.fullmatch(body):
         return UnitOption(
             name=m.group(2),
@@ -381,7 +432,8 @@ def _matched_option(
             per_model=per_model,
             adds_rules=[m.group(2)],
             removes_rules=[m.group(1)],
-            limit=limit,
+            applies_to=scope.applies_to,
+            limit=scope.limit,
         )
     if m := _RULE_ADD_RE.fullmatch(body):
         return UnitOption(
@@ -390,7 +442,8 @@ def _matched_option(
             points=points,
             per_model=per_model,
             adds_rules=[m.group(1)],
-            limit=limit,
+            applies_to=scope.applies_to,
+            limit=scope.limit,
         )
     if m := _TAKE_RE.fullmatch(body):
         return UnitOption(
@@ -399,7 +452,8 @@ def _matched_option(
             points=points,
             per_model=per_model,
             adds_equipment=[m.group(1)],
-            limit=limit,
+            applies_to=scope.applies_to,
+            limit=scope.limit,
         )
     if m := _EQUIP_SWAP_RE.fullmatch(body):
         # The gained side is often plain text rather than a rule link
@@ -413,7 +467,8 @@ def _matched_option(
             per_model=per_model,
             adds_equipment=[gained],
             removes_equipment=[m.group(1)],
-            limit=limit,
+            applies_to=scope.applies_to,
+            limit=scope.limit,
         )
     return None
 
@@ -423,7 +478,7 @@ def _upgrade_option(
     raw_name: str,
     points: int | None,
     per_model: bool,
-    limit: str | None,
+    scope: OptionGroup,
     warnings: list[str],
 ) -> UnitOption:
     name = raw_name
@@ -443,5 +498,10 @@ def _upgrade_option(
         )
         kind = OptionKind.OTHER
     return UnitOption(
-        name=_capitalized(name), kind=kind, points=points, per_model=per_model, limit=limit
+        name=_capitalized(name),
+        kind=kind,
+        applies_to=scope.applies_to,
+        points=points,
+        per_model=per_model,
+        limit=scope.limit,
     )

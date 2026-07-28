@@ -26,15 +26,19 @@ def _line(text: str) -> OptionLine:
     return OptionLine(text=text, rules=[])
 
 
-def _option(text: str, group: OptionGroup | None = None) -> tuple[UnitOption, list[str]]:
+def _option(
+    text: str, group: OptionGroup | None = None, printed: set[str] | None = None
+) -> tuple[UnitOption, list[str]]:
     warnings: list[str] = []
-    option = _parse_option_line("some-unit", _line(text), group or OptionGroup(), warnings)
+    option = _parse_option_line(
+        "some-unit", _line(text), group or OptionGroup(), printed or set(), warnings
+    )
     return option, warnings
 
 
-def _group(header: str) -> tuple[OptionGroup, list[str]]:
+def _group(header: str, printed: set[str] | None = None) -> tuple[OptionGroup, list[str]]:
     warnings: list[str] = []
-    return _parse_group("some-unit", header, warnings), warnings
+    return _parse_group("some-unit", header, printed or set(), warnings), warnings
 
 
 # --- printed scalar fields ----------------------------------------------
@@ -197,6 +201,105 @@ def test_bare_line_without_a_header_verb_stays_verbatim() -> None:
     assert any("kept verbatim" in w for w in warnings)
 
 
+# --- printed cost forms -----------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("cost", "points", "per_model"),
+    [
+        ("(+1 point per model)", 1, True),
+        ("+1 point per model", 1, True),
+        ("(+10 points per unit)", 10, False),
+        ("+6 points per unit", 6, False),
+        # No scope clause: the printed form omits it where only one model
+        # can take the option, so the cost is paid once.
+        ("(+10 points)", 10, False),
+        ("+15 points", 15, False),
+    ],
+)
+def test_cost_is_read_bracketed_or_bare_scoped_or_not(
+    cost: str, points: int, per_model: bool
+) -> None:
+    """Every printed cost form maps onto the same two schema fields."""
+    option, warnings = _option(f"Any unit may take Shields {cost}")
+    assert (option.points, option.per_model) == (points, per_model)
+    assert option.adds_equipment == ["Shields"]
+    assert warnings == []
+
+
+def test_cross_reference_is_not_part_of_the_name() -> None:
+    """A "(see below)" pointer is page furniture, not the equipment's name."""
+    option, warnings = _option("Any unit may take Drakeguns (see below) (+10 points per model)")
+    assert option.name == "Drakeguns"
+    assert option.adds_equipment == ["Drakeguns"]
+    assert warnings == []
+
+
+# --- options attached to one model ------------------------------------------
+
+
+def test_line_attaches_the_option_to_the_model_it_names() -> None:
+    """A line reading "An Ironbeard may take X" buys X for that model, not the unit."""
+    option, warnings = _option(
+        "An Ironbeard may take Cinderblast Bombs (see opposite) (+15 points)",
+        printed={"Ironbreaker", "Ironbeard"},
+    )
+    assert option == UnitOption(
+        name="Cinderblast Bombs",
+        kind=OptionKind.EQUIPMENT,
+        applies_to="Ironbeard",
+        points=15,
+        adds_equipment=["Cinderblast Bombs"],
+    )
+    assert warnings == []
+
+
+def test_subject_is_only_a_model_when_the_unit_prints_its_profile() -> None:
+    """A named subject with no profile row is not silently taken as a model."""
+    option, warnings = _option(
+        "An Ironbeard may take Cinderblast Bombs (+15 points)", printed={"Ironbreaker"}
+    )
+    assert option.applies_to is None
+    assert option.kind is OptionKind.OTHER
+    assert any("kept verbatim" in w for w in warnings)
+
+
+def test_group_header_attaches_its_children_to_the_model() -> None:
+    """A header naming a model scopes every option nested under it."""
+    printed = {"Ironbreaker", "Ironbeard"}
+    group, warnings = _group(
+        "An Ironbeard may replace their Shield with one of the following:", printed
+    )
+    assert group == OptionGroup(applies_to="Ironbeard", verb="replace their Shield with")
+    assert any("mutually exclusive" in w for w in warnings)
+
+    option, _ = _option("Brace of Drakefire Pistols (+10 points)", group, printed)
+    assert option == UnitOption(
+        name="Brace of Drakefire Pistols",
+        kind=OptionKind.EQUIPMENT,
+        applies_to="Ironbeard",
+        points=10,
+        adds_equipment=["Brace of Drakefire Pistols"],
+        removes_equipment=["Shield"],
+    )
+
+
+def test_line_states_its_own_availability_limit() -> None:
+    """A restriction written into the line reads the same as in a header."""
+    option, warnings = _option(
+        "0-1 unit per 1,000 points may have the Drilled special rule +1 point per model"
+    )
+    assert option == UnitOption(
+        name="Drilled",
+        kind=OptionKind.SPECIAL_RULE,
+        points=1,
+        per_model=True,
+        adds_rules=["Drilled"],
+        limit="0-1 unit per 1000 points",
+    )
+    assert warnings == []
+
+
 # --- option lines -----------------------------------------------------------
 
 
@@ -326,7 +429,7 @@ def test_unrepresentable_line_is_dropped_loudly() -> None:
     options: list[UnitOption] = []
     warnings: list[str] = []
     _append_option(
-        options, "some-unit", _line("Fight with unusual valour"), OptionGroup(), warnings
+        options, "some-unit", _line("Fight with unusual valour"), OptionGroup(), set(), warnings
     )
     assert options == []
     assert any("DROPPED" in w for w in warnings)
