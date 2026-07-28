@@ -22,16 +22,18 @@ def spearmen_unit() -> Unit:
 
 def test_complement_points_sum_models_and_flat_options(spearmen_unit: Unit) -> None:
     """A complement's points are per-model cost plus flat per-unit options."""
-    # 10 Spearmen at 9 pts each, plus a Standard Bearer (5) and Musician (5).
+    # 10 Spearmen, plus a Standard Bearer (5) and Musician (5). The per-model
+    # cost is read from the datasheet: what is under test is the arithmetic,
+    # not what the army list charges this week.
     mustered = Complement(unit=spearmen_unit, size=10, options=["Standard Bearer", "Musician"])
-    assert mustered.points == 10 * 9 + 5 + 5
+    assert mustered.points == 10 * spearmen_unit.points + 5 + 5
 
 
 def test_complement_per_model_option_costs_once_per_model(spearmen_unit: Unit) -> None:
     """A per-model option is charged for every model, and folds its rules."""
     # Veteran: +1 pt/model, adds "Veteran", removes "Valour of Ages".
     mustered = Complement(unit=spearmen_unit, size=10, options=["Veteran"])
-    assert mustered.points == 10 * 9 + 10 * 1
+    assert mustered.points == 10 * spearmen_unit.points + 10 * 1
     assert "Veteran" in mustered.special_rules
     assert "Valour of Ages" not in mustered.special_rules
 

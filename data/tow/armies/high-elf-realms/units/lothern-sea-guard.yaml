@@ -1,7 +1,7 @@
 # Source: https://tow.whfb.app/unit/lothern-sea-guard
 id: lothern-sea-guard
 name: Lothern Sea Guard
-points: 11
+points: 10
 unit_size:
   min: 5
 troop_type: Regular Infantry
