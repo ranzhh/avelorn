@@ -30,7 +30,8 @@ from avelorn.core.logging import configure_logging
 from avelorn.tow.importers.whfb_app.client import BASE_URL, WhfbAppClient, WhfbAppError
 from avelorn.tow.importers.whfb_app.equipment import parse_armour, parse_weapon
 from avelorn.tow.importers.whfb_app.parse import UnsupportedUnit, WhfbParseError, parse_unit
-from avelorn.tow.importers.whfb_app.rules import parse_special_rule, with_existing_effects
+from avelorn.tow.importers.whfb_app.preserve import with_hand_authored
+from avelorn.tow.importers.whfb_app.rules import parse_special_rule
 from avelorn.tow.importers.whfb_app.yamlout import (
     armour_to_yaml,
     rule_to_yaml,
@@ -146,20 +147,19 @@ def _rerender(client: WhfbAppClient, path: Path, url: str) -> tuple[str, str, li
         held = unit_to_yaml(load_yaml(path, Unit), source_url=url)
         return held, unit_to_yaml(unit.unit, source_url=url), unit.warnings
     if kind == "weapons":
-        weapon = parse_weapon(client.weapons_of_war_entry(slug))
+        result = parse_weapon(client.weapons_of_war_entry(slug))
+        weapon, merge_warnings = with_hand_authored(result.weapon, path)
         held = weapon_to_yaml(load_yaml(path, Weapon), source_url=url)
-        return held, weapon_to_yaml(weapon.weapon, source_url=url), weapon.warnings
+        return held, weapon_to_yaml(weapon, source_url=url), [*result.warnings, *merge_warnings]
     if kind == "armour":
         armour = parse_armour(client.weapons_of_war_entry(slug))
         held = armour_to_yaml(load_yaml(path, Armour), source_url=url)
         return held, armour_to_yaml(armour.armour, source_url=url), armour.warnings
     if kind == "rules":
         result = parse_special_rule(client.rule_entry(url.removeprefix(f"{BASE_URL}/")))
-        # Effects are hand-authored and live only in data/, so they are carried
-        # onto the fresh scrape exactly as a re-import would: their absence
-        # upstream is not drift. The merge also warns when the wording moved
-        # under effects that were written against it.
-        rule, merge_warnings = with_existing_effects(result.rule, path)
+        # Merged exactly as a real import would merge, so what the check
+        # reports is what running the import would do.
+        rule, merge_warnings = with_hand_authored(result.rule, path)
         held = rule_to_yaml(load_yaml(path, Rule), source_url=url)
         return held, rule_to_yaml(rule, source_url=url), [*result.warnings, *merge_warnings]
     return None
@@ -172,11 +172,10 @@ def _check(client: WhfbAppClient, paths: Sequence[Path]) -> bool:
     disk. Files this importer does not generate are left alone: one with
     no source header, and one whose kind no importer covers.
 
-    A difference means the site moved under the file, or the importer
-    would not reproduce it — a hand-authored field it does not carry over
-    reads as a removal in the diff. Both are reasons to look before
-    running the import. A page that no longer answers counts too: the
-    entry moved or went away, which is what a stale corpus looks like.
+    Hand-authored fields are merged exactly as an import merges them, so
+    a difference is what running the import would actually do to the
+    file. A page that no longer answers counts too: the entry moved or
+    went away, which is what a stale corpus looks like.
 
     Returns:
         Whether every file checked would survive a re-import unchanged.
@@ -239,23 +238,26 @@ def _import_equipment(
     client: WhfbAppClient, kind: str, slug: str, data_dir: Path, dry_run: bool
 ) -> bool:
     entry = client.weapons_of_war_entry(slug)
+    subdir = "weapons" if kind == "weapon" else "armour"
+    path = data_dir / "tow" / subdir / f"{slug}.yaml"
+    url = f"{BASE_URL}/weapons-of-war/{slug}"
     try:
         if kind == "weapon":
             result = parse_weapon(entry)
-            text = weapon_to_yaml(result.weapon, source_url=f"{BASE_URL}/weapons-of-war/{slug}")
+            weapon, merge_warnings = with_hand_authored(result.weapon, path)
+            text = weapon_to_yaml(weapon, source_url=url)
         else:
             result = parse_armour(entry)
-            text = armour_to_yaml(result.armour, source_url=f"{BASE_URL}/weapons-of-war/{slug}")
+            armour, merge_warnings = with_hand_authored(result.armour, path)
+            text = armour_to_yaml(armour, source_url=url)
     except WhfbParseError:
         logger.exception("%s: parse failed", slug)
         return False
-    for warning in result.warnings:
+    for warning in (*result.warnings, *merge_warnings):
         logger.warning("%s: %s", slug, warning)
     if dry_run:
         print(text)  # generated YAML is the program's payload -> stdout
         return True
-    subdir = "weapons" if kind == "weapon" else "armour"
-    path = data_dir / "tow" / subdir / f"{slug}.yaml"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text)
     logger.info("wrote %s", path)
@@ -269,7 +271,7 @@ def _import_rule(client: WhfbAppClient, slug: str, data_dir: Path, dry_run: bool
     try:
         result = parse_special_rule(entry)
         path = data_dir / "tow" / "rules" / f"{result.rule.id}.yaml"
-        rule, merge_warnings = with_existing_effects(result.rule, path)
+        rule, merge_warnings = with_hand_authored(result.rule, path)
     except WhfbParseError:
         logger.exception("%s: import failed", slug)
         return False

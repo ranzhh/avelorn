@@ -12,12 +12,9 @@ reviewing human.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 
-import yaml
 from pydantic import ValidationError
 
-from avelorn.core.loading import load_yaml
 from avelorn.tow.schema.rule import Rule
 
 from .parse import WhfbParseError
@@ -100,39 +97,3 @@ def _category(rule_type: object, warnings: list[str]) -> str | None:
         return None
     name = fields.get("name")
     return name if isinstance(name, str) and name else None
-
-
-def with_existing_effects(rule: Rule, path: Path) -> tuple[Rule, list[str]]:
-    """Carry hand-authored effects from an existing file into a re-import.
-
-    Effects are authored by hand, not scraped, so a re-import must not
-    lose them. If the existing file does not validate, refuse rather
-    than clobber whatever a human wrote there. And because effects are
-    verified against the printed text, a re-import that changes the text
-    (an FAQ or errata reread) warns that the preserved effects need
-    re-verification against the new wording.
-
-    Returns:
-        The rule (with the existing file's effects, if it had any) and
-        the warnings raised while merging.
-
-    Raises:
-        WhfbParseError: The existing file cannot be read as a rule.
-    """
-    if not path.exists():
-        return rule, []
-    try:
-        existing = load_yaml(path, Rule)
-    except (ValidationError, yaml.YAMLError) as err:
-        raise WhfbParseError(
-            f"{rule.id}: existing file does not validate; refusing to overwrite: {err}"
-        ) from err
-    if not existing.effects:
-        return rule, []
-    warnings = []
-    if existing.paragraphs != rule.paragraphs or existing.name != rule.name:
-        warnings.append(
-            "rule text changed since effects were authored; "
-            "re-verify the preserved effects against the new wording"
-        )
-    return rule.model_copy(update={"effects": existing.effects}), warnings
