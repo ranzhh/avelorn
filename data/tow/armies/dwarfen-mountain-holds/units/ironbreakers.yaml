@@ -36,6 +36,23 @@ options:
   - name: Musician
     kind: musician
     points: 7
+  - name: Brace of Drakefire Pistols
+    kind: equipment
+    applies_to: Ironbeard
+    points: 10
+    adds_equipment: [Brace of Drakefire Pistols]
+    removes_equipment: [Shield]
+  - name: Drakegun
+    kind: equipment
+    applies_to: Ironbeard
+    points: 10
+    adds_equipment: [Drakegun]
+    removes_equipment: [Shield]
+  - name: Cinderblast Bombs
+    kind: equipment
+    applies_to: Ironbeard
+    points: 15
+    adds_equipment: [Cinderblast Bombs]
   - name: Drilled
     kind: special_rule
     points: 1

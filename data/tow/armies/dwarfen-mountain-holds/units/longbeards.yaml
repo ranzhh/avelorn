@@ -23,3 +23,29 @@ special_rules:
   - Shieldwall
   - Venerable
   - Veteran
+options:
+  - name: Great Weapon
+    kind: equipment
+    points: 1
+    per_model: true
+    adds_equipment: [Great Weapon]
+  - name: Shield
+    kind: equipment
+    points: 1
+    per_model: true
+    adds_equipment: [Shield]
+  - name: Elder
+    kind: champion
+    points: 6
+  - name: Standard Bearer
+    kind: standard_bearer
+    points: 6
+  - name: Musician
+    kind: musician
+    points: 6
+  - name: Drilled
+    kind: special_rule
+    points: 1
+    per_model: true
+    adds_rules: [Drilled]
+    limit: 0-1 unit per 1000 points
