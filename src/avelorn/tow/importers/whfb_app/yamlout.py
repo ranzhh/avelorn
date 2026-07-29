@@ -77,6 +77,9 @@ def weapon_to_yaml(weapon: Weapon, source_url: str | None = None) -> str:
         The YAML document text.
     """
     doc: dict = {"id": weapon.id, "name": weapon.name}
+    # Hand-set, never scraped: written back so a re-import does not drop it.
+    if weapon.weapon_type is not None:
+        doc["weapon_type"] = weapon.weapon_type.value
     doc["profiles"] = [_weapon_profile_row(p) for p in weapon.profiles]
     if weapon.notes is not None:
         doc["notes"] = weapon.notes
@@ -116,7 +119,12 @@ def rule_to_yaml(rule: Rule, source_url: str | None = None) -> str:
     if rule.notes is not None:
         doc["notes"] = rule.notes
     if rule.effects:
-        doc["effects"] = [e.model_dump(mode="json", exclude_none=True) for e in rule.effects]
+        # by_alias so an operation prints as the rulebook names it: a
+        # ModifierEffect's `set` is `set_` on the model only to clear the
+        # keyword.
+        doc["effects"] = [
+            e.model_dump(mode="json", exclude_none=True, by_alias=True) for e in rule.effects
+        ]
     text = _dump(doc, source_url)
     # Effects are hand-authored, not scraped; mark them as such in the file.
     return text.replace(
