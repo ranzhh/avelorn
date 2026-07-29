@@ -1,0 +1,20 @@
+# Source: https://tow.whfb.app/special-rules/gromril-weapons
+id: gromril-weapons
+name: Gromril Weapons
+page: 39
+category: Special Rules
+flavour: Many Dwarf warriors bear weapons forged of gromril. Such fine weapons, family heirlooms passed down through many
+  generations, possess remarkable sharpness and durability.
+paragraphs:
+  - A hand weapon carried by a model with this special rule has an Armour Piercing characteristic of -1.
+  - Note that this special rule only applies to a single, ordinary hand weapon. If the model is using two hand weapons or
+    any other sort of weapon, or if their hand weapon is inscribed with any Weapon runes, this special rule ceases to apply.
+notes: 'Not modelled: the exclusions for two hand weapons, or a hand weapon bearing
+  Weapon runes.'
+# Hand-authored, diffable against the paragraphs above.
+effects:
+  - when:
+      wielding:
+        name: Hand Weapon
+    add:
+      armour-piercing: 1
