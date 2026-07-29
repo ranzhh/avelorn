@@ -240,6 +240,9 @@ class _Engagement:
     weapon_skill: EffectiveValue
     target_armour: EffectiveValue
     rerolls: EffectiveRerolls
+    # The striker's unit rules the dice walk factored, claimed by the callers
+    # so a rule in the math is never also reported as not factored.
+    walk_rules: frozenset[str]
     p_unsaved: float
     p_kill: float
     target_wounds: int
@@ -327,6 +330,18 @@ def _engage(
     modifiers, unfactored = compile_rules(
         profile.special_rules, striker.loadout.weapon_rules, conditions
     )
+    # The striker's own unit rules move the same dice — Gromril Weapons gives
+    # its hand weapon an Armour Piercing characteristic of -1 — gated on the
+    # weapon in hand, exactly as a volley reads Arrows of Isha. What the walk
+    # factors is claimed, so the "special rule not factored" notes stay true;
+    # what it cannot (Strike First's Initiative set, Ithilmar Weapons'
+    # re-roll) belongs to another seam and is claimed by that one.
+    unit_index = {rule.name: rule for rule in striker.loadout.rules}
+    unit_modifiers, unit_unfactored = compile_rules(
+        list(unit_index), unit_index, conditions, grants=striker.loadout.granted_rules
+    )
+    modifiers.extend(unit_modifiers)
+    walk_rules = frozenset(name for name in unit_index if name not in unit_unfactored)
     # A weapon rule the walk cannot factor may still be consumed by another
     # seam: the supporting-rank query (Fight in Extra Rank, folded into the
     # attack count) or the striking-order Initiative read (a great weapon's
@@ -379,6 +394,7 @@ def _engage(
         weapon_skill=striker_ws,
         target_armour=target_armour,
         rerolls=rerolls,
+        walk_rules=walk_rules,
         p_unsaved=p_unsaved,
         p_kill=p_kill,
         target_wounds=target_wounds,
@@ -489,6 +505,7 @@ def strike_unit(
                     *striker.effective_attacks().factored,
                     *engagement.weapon_skill.factored,
                     *engagement.rerolls.factored,
+                    *engagement.walk_rules,
                 },
             ),
             # The target throws no blows here, but its save is resolved, so its
@@ -878,6 +895,7 @@ def fight(
                         *a.effective_attacks().factored,
                         *a_strikes.weapon_skill.factored,
                         *a_strikes.rerolls.factored,
+                        *a_strikes.walk_rules,
                         *a_combat_result.factored,
                         # a's save-improving rules are read while it is b's target
                         *b_strikes.target_armour.factored,
@@ -891,6 +909,7 @@ def fight(
                         *b.effective_attacks().factored,
                         *b_strikes.weapon_skill.factored,
                         *b_strikes.rerolls.factored,
+                        *b_strikes.walk_rules,
                         *b_combat_result.factored,
                         *a_strikes.target_armour.factored,
                     },
