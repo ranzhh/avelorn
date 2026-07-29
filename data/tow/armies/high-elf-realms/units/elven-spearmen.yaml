@@ -1,7 +1,7 @@
 # Source: https://tow.whfb.app/unit/elven-spearmen
 id: elven-spearmen
 name: Elven Spearmen
-points: 9
+points: 8
 unit_size:
   min: 5
 troop_type: Regular Infantry
