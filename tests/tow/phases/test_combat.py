@@ -17,7 +17,7 @@ from avelorn.tow.phases.combat import (
     strike_unit,
 )
 from avelorn.tow.schema.phase import Phase
-from avelorn.tow.schema.rule import ModifierEffect, Quantity, Rule, When
+from avelorn.tow.schema.rule import ModifierEffect, Quantity, Rule, WeaponGate, When
 from avelorn.tow.schema.unit import Characteristic, Unit
 from avelorn.tow.schema.weapon import Weapon
 
@@ -1100,3 +1100,55 @@ def test_fight_leaves_an_unanswerable_combat_rule_noted() -> None:
     assert noted.a_casualties == plain.a_casualties
     assert noted.b_casualties == plain.b_casualties
     assert any("core rule not factored: Doctored First-Round Rule" in n for n in noted.notes)
+
+
+def _piercing_swordsman(models: int = 1) -> Contingent:
+    # A unit rule that worsens its foe's save by 1 while a hand weapon is in
+    # hand — the Gromril Weapons shape, built here so the test does not depend
+    # on which army's data carries it.
+    rule = Rule(
+        id="doctored-gromril",
+        name="Doctored Gromril",
+        paragraphs=["A hand weapon carried by this model has an Armour Piercing of -1."],
+        effects=[
+            ModifierEffect(
+                when=When(wielding=WeaponGate(name="Hand Weapon")),
+                add={Quantity.ARMOUR_PIERCING: 1},
+            )
+        ],
+    )
+    unit = REPO.units["elven-spearmen"].model_copy(
+        update={"special_rules": [rule.name], "equipment": ["Hand Weapon"]}
+    )
+    hand_weapon = REPO.weapons["hand-weapon"]
+    contingent = Contingent(unit, models, Loadout((hand_weapon,), (), (rule,), ()), frontage=1)
+    return contingent.wielding("Hand Weapon")
+
+
+def test_unit_rule_armour_piercing_reaches_the_melee_walk() -> None:
+    """A striker's own rule worsens the target's save, as it does in a volley.
+
+    The melee walk compiled the weapon's rules only, so a unit rule moving
+    Armour Piercing was reported unfactored and changed nothing. Striking
+    White Lions (5+ Heavy Armour; Lion Cloak is a shooting rule and no-ops
+    here), the rule worsens the save to 6+ and is claimed out of the notes.
+    """
+    lions = _fielded(REPO.units["white-lions-of-chrace"], 10)
+    result = strike_unit(_piercing_swordsman(), lions)
+    assert result.save_target == 5  # the printed target, before the walk's modifier
+    # 1/2 to hit (WS4 vs WS4), 1/2 to wound (S3 vs T3), 5/6 failing a 6+ save
+    assert result.p_unsaved == pytest.approx(0.5 * 0.5 * 5 / 6)
+    assert not any("Doctored Gromril" in note for note in result.notes)
+
+
+def test_unit_rule_not_in_the_walk_is_still_reported() -> None:
+    """Claiming only covers what the walk factored, not every unit rule.
+
+    Martial Prowess moves Weapon Skill in the combat's first round — a
+    characteristic the walk does not own, and a round a single strike does
+    not know. It stays listed, so the new claim cannot hide it.
+    """
+    spearmen = _fielded(REPO.units["elven-spearmen"], 10).wielding("Hand Weapon")
+    lions = _fielded(REPO.units["white-lions-of-chrace"], 10)
+    result = strike_unit(spearmen, lions)
+    assert any("Martial Prowess" in note for note in result.notes)
