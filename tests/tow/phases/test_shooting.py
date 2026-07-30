@@ -4,10 +4,11 @@ from dataclasses import replace
 
 import pytest
 
-from avelorn.tow.contingent import Contingent, Movement
+from avelorn.tow.contingent import Contingent, Loadout, Movement
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.engine.attack import AttackProfile, Outcome, RollState, Transform
 from avelorn.tow.phases.shooting import _engagement_conditions, shoot, shoot_unit
+from avelorn.tow.schema.rule import RerollEffect, Rule
 from avelorn.tow.schema.stage import Stage
 from avelorn.tow.schema.unit import Characteristic, Unit
 from avelorn.tow.schema.weapon import WeaponType
@@ -409,3 +410,28 @@ def test_arrows_of_isha_worsens_the_bow_save_and_is_claimed() -> None:
     assert result.save_target == 6  # 5+ Heavy Armour, worsened one by the bow's AP
     assert not any("Arrows of Isha" in note for note in result.notes)
     assert any("Strike First" in note for note in result.notes)
+
+
+def test_target_rerolls_its_own_save_against_a_volley() -> None:
+    """A defender's save re-roll applies to shots too, not only to blows.
+
+    The warbow carries no conditional Armour Piercing, so the 5+ save of
+    Light Armour and a Shield holds on every branch and the arithmetic is
+    exact: 1/3 saved, plus the 1 in 6 re-rolled and then saved.
+    """
+    reroll = Rule(
+        id="doctored-gromril-armour",
+        name="Doctored Gromril Armour",
+        paragraphs=["This model may re-roll a natural 1 when making an Armour Save."],
+        effects=[RerollEffect(reroll=Stage.MAKE_ARMOUR_SAVES, on_natural=1)],
+    )
+    archers = _fielded(REPO.units["lothern-sea-guard"], 10).wielding("Warbow")
+    unit = REPO.units["elven-spearmen"].model_copy(update={"special_rules": [reroll.name]})
+    armour = tuple(REPO.armoury[slug] for slug in ("light-armour", "shield"))
+    target = Contingent(unit, 10, Loadout((), armour, (reroll,), ()), frontage=10)
+
+    result = shoot_unit(archers, target, distance=6)
+    saved = 1 / 3 + (1 / 6) * (1 / 3)
+    assert result.save_target == 5
+    assert result.p_unsaved == pytest.approx(result.p_hit * result.p_wound * (1 - saved))
+    assert not any("Doctored Gromril Armour" in note for note in result.notes)

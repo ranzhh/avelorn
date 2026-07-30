@@ -37,3 +37,13 @@ class Stage(StrEnum):
 ATTACK_ROLLS = frozenset(
     {Stage.ROLL_TO_HIT, Stage.ROLL_TO_WOUND, Stage.MAKE_ARMOUR_SAVES, Stage.WARD_SAVES}
 )
+
+# Whose dice each stage is. The attacker rolls To Hit and To Wound; the
+# defender rolls its own saves and its own panic test. A rule granting a
+# re-roll speaks about the model rolling the die it names — "may re-roll any
+# roll of a natural 1 made when making an Armour Save roll" is the saving
+# model's, never its attacker's — so the seam collecting re-rolls reads the
+# rules of whichever side owns the stage.
+DEFENDER_ROLLS = frozenset({Stage.MAKE_ARMOUR_SAVES, Stage.WARD_SAVES, Stage.MAKE_PANIC_TESTS})
+ATTACKER_ATTACK_ROLLS = frozenset(ATTACK_ROLLS - DEFENDER_ROLLS)
+DEFENDER_ATTACK_ROLLS = frozenset(ATTACK_ROLLS & DEFENDER_ROLLS)

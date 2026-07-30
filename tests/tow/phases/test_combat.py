@@ -17,7 +17,15 @@ from avelorn.tow.phases.combat import (
     strike_unit,
 )
 from avelorn.tow.schema.phase import Phase
-from avelorn.tow.schema.rule import ModifierEffect, Quantity, Rule, WeaponGate, When
+from avelorn.tow.schema.rule import (
+    ModifierEffect,
+    Quantity,
+    RerollEffect,
+    Rule,
+    WeaponGate,
+    When,
+)
+from avelorn.tow.schema.stage import Stage
 from avelorn.tow.schema.unit import Characteristic, Unit
 from avelorn.tow.schema.weapon import Weapon
 
@@ -1152,3 +1160,59 @@ def test_unit_rule_not_in_the_walk_is_still_reported() -> None:
     lions = _fielded(REPO.units["white-lions-of-chrace"], 10)
     result = strike_unit(spearmen, lions)
     assert any("Martial Prowess" in note for note in result.notes)
+
+
+_SAVE_REROLL = Rule(
+    id="doctored-gromril-armour",
+    name="Doctored Gromril Armour",
+    paragraphs=["This model may re-roll a natural 1 when making an Armour Save."],
+    effects=[RerollEffect(reroll=Stage.MAKE_ARMOUR_SAVES, on_natural=1)],
+)
+# A 5+ save re-rolling natural 1s: 1/3 saved outright, plus the 1 in 6 that
+# re-rolls and then saves on 1/3 of those.
+_REROLLED_5_UP = 1 / 3 + (1 / 6) * (1 / 3)
+
+
+def _armoured_defender(*rules: Rule) -> Contingent:
+    # Elven Spearmen wear Light Armour and a Shield: a 5+ save before any
+    # Armour Piercing, the target the golden values below are computed from.
+    unit = REPO.units["elven-spearmen"].model_copy(
+        update={"special_rules": [r.name for r in rules]}
+    )
+    armour = tuple(REPO.armoury[slug] for slug in ("light-armour", "shield"))
+    return Contingent(unit, 10, Loadout((), armour, rules, ()), frontage=10)
+
+
+def test_defender_rerolls_its_own_save() -> None:
+    """A save re-roll belongs to the model saving, and improves its save.
+
+    The striker's weapon is a plain hand weapon, so the 5+ save survives to
+    be rolled. The rule is the defender's, so it is claimed on the defender's
+    side and drops out of the notes.
+    """
+    striker = _fielded(REPO.units["white-lions-of-chrace"], 10).wielding("Hand Weapon")
+    result = strike_unit(striker, _armoured_defender(_SAVE_REROLL))
+    assert result.save_target == 5
+    assert result.p_unsaved == pytest.approx(result.p_hit * result.p_wound * (1 - _REROLLED_5_UP))
+    assert not any("Doctored Gromril Armour" in note for note in result.notes)
+
+
+def test_a_strikers_save_reroll_does_not_reach_its_foe() -> None:
+    """The striker's own save re-roll must not improve the save it is attacking.
+
+    The regression this seam was added for: re-rolls were compiled from the
+    striker and applied to whichever die the stage named, so a rule about the
+    striker's *own* armour save re-rolled its victim's.
+    """
+    striker = _fielded(REPO.units["white-lions-of-chrace"], 10).wielding("Hand Weapon")
+    plain = _armoured_defender()
+    baseline = strike_unit(striker, plain)
+
+    unit = striker.unit.model_copy(update={"special_rules": [_SAVE_REROLL.name]})
+    with_rule = Contingent(
+        unit,
+        10,
+        Loadout((REPO.weapons["hand-weapon"],), (), (_SAVE_REROLL,), ()),
+        frontage=10,
+    ).wielding("Hand Weapon")
+    assert strike_unit(with_rule, plain).p_unsaved == pytest.approx(baseline.p_unsaved)

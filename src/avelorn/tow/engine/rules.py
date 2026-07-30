@@ -601,15 +601,22 @@ class EffectiveRerolls:
 def effective_rerolls(
     rules: Sequence[Rule],
     conditions: "GateContext | None" = None,
+    *,
+    stages: Collection[Stage] = ATTACK_ROLLS,
 ) -> EffectiveRerolls:
-    """Compile the attack-roll re-rolls a contingent's rules grant.
+    """Compile the re-rolls a contingent's rules grant at ``stages``.
 
-    The re-roll seam: every :class:`RerollEffect` naming an attack roll (To
-    Hit, To Wound, a save) is gated on the ``conditions``, which carry the
-    equipment in use beside the engagement facts, exactly as the armour fold
-    gates Parry — a rule whose fact the conditions cannot answer is reported
-    unfactored, one answered False (the weapon it names not in hand) is honoured
-    with no grant. Panic-test re-rolls are another seam's and pass untouched.
+    The re-roll seam: every :class:`RerollEffect` naming one of ``stages`` is
+    gated on the ``conditions``, which carry the equipment in use beside the
+    engagement facts, exactly as the armour fold gates Parry — a rule whose
+    fact the conditions cannot answer is reported unfactored, one answered
+    False (the weapon it names not in hand) is honoured with no grant.
+
+    ``stages`` is how a caller asks for its own dice: a striker reads
+    :data:`~avelorn.tow.schema.stage.ATTACKER_ATTACK_ROLLS`, the model saving
+    reads :data:`~avelorn.tow.schema.stage.DEFENDER_ATTACK_ROLLS`. A re-roll
+    naming a stage outside them belongs to another seam and passes untouched,
+    neither factored nor reported — the way a panic-test re-roll always has.
 
     Returns:
         The re-roll records the dice walk applies, with factored and
@@ -623,7 +630,7 @@ def effective_rerolls(
         matching = [
             effect
             for effect in rule.effects
-            if isinstance(effect, RerollEffect) and effect.reroll in ATTACK_ROLLS
+            if isinstance(effect, RerollEffect) and effect.reroll in stages
         ]
         if not matching:
             continue

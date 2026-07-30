@@ -68,6 +68,7 @@ from avelorn.tow.engine.rules import (
 from avelorn.tow.phases.movement import Engagement
 from avelorn.tow.schema.psychology import BreakOutcome
 from avelorn.tow.schema.rule import AttackKind, Decision, Rule
+from avelorn.tow.schema.stage import ATTACKER_ATTACK_ROLLS, DEFENDER_ATTACK_ROLLS
 from avelorn.tow.schema.unit import Characteristic
 
 logger = logging.getLogger(__name__)
@@ -240,6 +241,9 @@ class _Engagement:
     weapon_skill: EffectiveValue
     target_armour: EffectiveValue
     rerolls: EffectiveRerolls
+    # The target's re-rolls of its own saves, claimed on the target's side the
+    # way its armour fold is.
+    target_rerolls: EffectiveRerolls
     # The striker's unit rules the dice walk factored, claimed by the callers
     # so a rule in the math is never also reported as not factored.
     walk_rules: frozenset[str]
@@ -372,9 +376,21 @@ def _engage(
     # rolls To Hit of a natural 1), gated on the same conditions the walk reads —
     # the weapon in hand among them, exactly as the armour fold gates the
     # defender's save.
-    rerolls = effective_rerolls(striker.loadout.rules, conditions)
+    rerolls = effective_rerolls(striker.loadout.rules, conditions, stages=ATTACKER_ATTACK_ROLLS)
+    # A save is the defender's die, so a re-roll of one comes from the target's
+    # own rules (Gromril Armour re-rolls a natural 1 on its Armour Save), gated
+    # on the target's conditions — the same asymmetry the armour fold already
+    # has, where Parry improves the target's save and not the striker's.
+    target_rerolls = effective_rerolls(
+        target.loadout.rules, target_conditions, stages=DEFENDER_ATTACK_ROLLS
+    )
     p_unsaved, p_kill, hit = _per_attack(
-        hit, wound, save, None, modifiers, rerolls=rerolls.rerolls
+        hit,
+        wound,
+        save,
+        None,
+        modifiers,
+        rerolls=(*rerolls.rerolls, *target_rerolls.rerolls),
     )
     # Wounds accumulate into whole slain models; a profile with no printed
     # Wounds ("-") is treated as a single-Wound model.
@@ -394,6 +410,7 @@ def _engage(
         weapon_skill=striker_ws,
         target_armour=target_armour,
         rerolls=rerolls,
+        target_rerolls=target_rerolls,
         walk_rules=walk_rules,
         p_unsaved=p_unsaved,
         p_kill=p_kill,
@@ -510,7 +527,13 @@ def strike_unit(
             ),
             # The target throws no blows here, but its save is resolved, so its
             # save-improving rules (Parry) are factored and claimed.
-            *_unit_rule_notes(target, claimed=engagement.target_armour.factored),
+            *_unit_rule_notes(
+                target,
+                claimed={
+                    *engagement.target_armour.factored,
+                    *engagement.target_rerolls.factored,
+                },
+            ),
             *engagement.notes,
         ),
         target_models=targets,
@@ -897,8 +920,9 @@ def fight(
                         *a_strikes.rerolls.factored,
                         *a_strikes.walk_rules,
                         *a_combat_result.factored,
-                        # a's save-improving rules are read while it is b's target
+                        # a's save rules are read while it is b's target
                         *b_strikes.target_armour.factored,
+                        *b_strikes.target_rerolls.factored,
                     },
                 ),
                 *_unit_rule_notes(
@@ -912,6 +936,7 @@ def fight(
                         *b_strikes.walk_rules,
                         *b_combat_result.factored,
                         *a_strikes.target_armour.factored,
+                        *a_strikes.target_rerolls.factored,
                     },
                 ),
                 *a_strikes.notes,

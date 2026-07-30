@@ -24,6 +24,7 @@ from avelorn.tow.engine.attack import (
     AttackProfile,
     Modifier,
     Outcome,
+    Reroll,
     Roll,
     RollToHitShooting,
     RollToWound,
@@ -51,11 +52,12 @@ from avelorn.tow.engine.rules import (
     WeaponFacts,
     compile_rules,
     effective_armour_value,
+    effective_rerolls,
     factored_notes,
 )
 from avelorn.tow.schema.psychology import PanicCause
 from avelorn.tow.schema.rule import AttackKind, RerollEffect, Rule
-from avelorn.tow.schema.stage import Stage
+from avelorn.tow.schema.stage import DEFENDER_ATTACK_ROLLS, Stage
 from avelorn.tow.schema.unit import Characteristic
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile
 
@@ -121,6 +123,7 @@ def shoot(
     targets: int | None = None,
     modifiers: Sequence[Modifier] = (),
     transforms: Sequence[Transform] = (),
+    rerolls: Sequence[Reroll] = (),
     notes: tuple[str, ...] = (),
 ) -> ShootingResult:
     """Resolve a volley of identical shooting attacks probabilistically.
@@ -169,6 +172,7 @@ def shoot(
         ),
         modifiers,
         transforms,
+        rerolls,
     )
     p_unsaved = float(resolution.p_unsaved)
     p_kill = float(resolution.p_of(Outcome.INSTANT_KILL))
@@ -386,6 +390,12 @@ def shoot_unit(
             incoming,
         )
         armour_value = defender_armour_value.value
+    # The saves are the defender's dice, so a re-roll of one comes from the
+    # defender's own rules (Gromril Armour re-rolls a natural 1 on its Armour
+    # Save), gated on the same incoming-attack facts its armour fold reads.
+    defender_rerolls = effective_rerolls(
+        defender.loadout.rules, incoming, stages=DEFENDER_ATTACK_ROLLS
+    )
     conditions = _engagement_conditions(attacker, chosen, profile, distance, force_short_range)
 
     # Weapon rules with compiled effects join the dice walk; the rest are
@@ -420,7 +430,7 @@ def shoot_unit(
     notes.extend(
         f"special rule not factored: {rule} ({target.name})"
         for rule in target.special_rules
-        if rule not in defender_armour_value.factored
+        if rule not in {*defender_armour_value.factored, *defender_rerolls.factored}
     )
     notes.extend(f"weapon rule not factored: {rule} ({chosen.name})" for rule in unfactored)
     phase_modifiers, phase_unfactored = compile_rules(sorted(phase_rules), phase_rules, conditions)
@@ -444,6 +454,7 @@ def shoot_unit(
         wounds_per_model=defender_wounds,
         targets=defenders,
         modifiers=modifiers,
+        rerolls=defender_rerolls.rerolls,
         notes=tuple(notes),
     )
 
