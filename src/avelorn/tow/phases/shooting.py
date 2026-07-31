@@ -447,16 +447,17 @@ def shoot_unit(
         if rule not in claimed
     )
     notes.extend(factored_notes(attacker.loadout.rules, claimed, shooter.name))
+    defender_claimed = {
+        *defender_armour_value.factored,
+        *defender_rerolls.factored,
+        *defender_walk_rules,
+    }
     notes.extend(
         f"special rule not factored: {rule} ({target.name})"
         for rule in target.special_rules
-        if rule
-        not in {
-            *defender_armour_value.factored,
-            *defender_rerolls.factored,
-            *defender_walk_rules,
-        }
+        if rule not in defender_claimed
     )
+    notes.extend(factored_notes(defender.loadout.rules, defender_claimed, target.name))
     notes.extend(f"weapon rule not factored: {rule} ({chosen.name})" for rule in unfactored)
     phase_modifiers, phase_unfactored = compile_rules(sorted(phase_rules), phase_rules, conditions)
     modifiers.extend(phase_modifiers)
