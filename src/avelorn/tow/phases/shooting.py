@@ -24,6 +24,7 @@ from avelorn.tow.engine.attack import (
     AttackProfile,
     Modifier,
     Outcome,
+    Reroll,
     Roll,
     RollToHitShooting,
     RollToWound,
@@ -51,11 +52,12 @@ from avelorn.tow.engine.rules import (
     WeaponFacts,
     compile_rules,
     effective_armour_value,
+    effective_rerolls,
     factored_notes,
 )
 from avelorn.tow.schema.psychology import PanicCause
 from avelorn.tow.schema.rule import AttackKind, RerollEffect, Rule
-from avelorn.tow.schema.stage import Stage
+from avelorn.tow.schema.stage import Side, Stage
 from avelorn.tow.schema.unit import Characteristic
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile
 
@@ -121,6 +123,7 @@ def shoot(
     targets: int | None = None,
     modifiers: Sequence[Modifier] = (),
     transforms: Sequence[Transform] = (),
+    rerolls: Sequence[Reroll] = (),
     notes: tuple[str, ...] = (),
 ) -> ShootingResult:
     """Resolve a volley of identical shooting attacks probabilistically.
@@ -135,7 +138,9 @@ def shoot(
 
     ``modifiers`` are the compiled records of printed conditional
     modifiers, applied to each attack's dice walk; ``transforms`` are
-    bespoke code hooks — the escape hatch for what a record cannot say.
+    bespoke code hooks — the escape hatch for what a record cannot say;
+    ``rerolls`` are the re-roll grants the walk applies to the dice they
+    cover, whichever side's rules granted them.
 
     Returns:
         The per-shot probabilities, the distribution of unsaved wounds, and
@@ -169,6 +174,7 @@ def shoot(
         ),
         modifiers,
         transforms,
+        rerolls,
     )
     p_unsaved = float(resolution.p_unsaved)
     p_kill = float(resolution.p_of(Outcome.INSTANT_KILL))
@@ -408,7 +414,31 @@ def shoot_unit(
         list(unit_index), unit_index, conditions, grants=attacker.loadout.granted_rules
     )
     modifiers.extend(unit_modifiers)
-    claimed = {name for name in unit_index if name not in unit_unfactored}
+
+    # The defender's own rules reach the same walk from the target seat: an
+    # enemy-subject rule of the defender's ("enemy units shooting at this
+    # unit suffer -1 To Hit") lands on this volley's Roll to Hit, gated on
+    # the defender's facts — the incoming attack among them. Its
+    # armour-value rules stay the armour fold's (claimed there).
+    defender_index = {rule.name: rule for rule in defender.loadout.rules}
+    defender_modifiers, defender_unfactored = compile_rules(
+        list(defender_index),
+        defender_index,
+        incoming,
+        seat=Side.TARGET,
+        grants=defender.loadout.granted_rules,
+    )
+    modifiers.extend(defender_modifiers)
+    defender_walk_rules = {name for name in defender_index if name not in defender_unfactored}
+
+    # Each side's re-roll grants, from its own seat: the attacker's
+    # enemy-subject grants re-roll the defender's dice (a forced re-roll of
+    # successful saves), the defender's own grants its own (a save re-roll
+    # while shot at). The attacker's own-dice grants gate on the volley's
+    # facts like any weapon rule (a combat-only grant is honoured inert).
+    rerolls = effective_rerolls(attacker.loadout.rules, conditions, seat=Side.ATTACKER)
+    defender_rerolls = effective_rerolls(defender.loadout.rules, incoming, seat=Side.TARGET)
+    claimed = {name for name in unit_index if name not in unit_unfactored} | {*rerolls.factored}
 
     notes: list[str] = []
     notes.extend(
@@ -420,7 +450,12 @@ def shoot_unit(
     notes.extend(
         f"special rule not factored: {rule} ({target.name})"
         for rule in target.special_rules
-        if rule not in defender_armour_value.factored
+        if rule
+        not in {
+            *defender_armour_value.factored,
+            *defender_rerolls.factored,
+            *defender_walk_rules,
+        }
     )
     notes.extend(f"weapon rule not factored: {rule} ({chosen.name})" for rule in unfactored)
     phase_modifiers, phase_unfactored = compile_rules(sorted(phase_rules), phase_rules, conditions)
@@ -444,6 +479,7 @@ def shoot_unit(
         wounds_per_model=defender_wounds,
         targets=defenders,
         modifiers=modifiers,
+        rerolls=(*rerolls.rerolls, *defender_rerolls.rerolls),
         notes=tuple(notes),
     )
 

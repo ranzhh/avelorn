@@ -68,6 +68,7 @@ from avelorn.tow.engine.rules import (
 from avelorn.tow.phases.movement import Engagement
 from avelorn.tow.schema.psychology import BreakOutcome
 from avelorn.tow.schema.rule import AttackKind, Decision, Rule
+from avelorn.tow.schema.stage import Side
 from avelorn.tow.schema.unit import Characteristic
 
 logger = logging.getLogger(__name__)
@@ -240,9 +241,13 @@ class _Engagement:
     weapon_skill: EffectiveValue
     target_armour: EffectiveValue
     rerolls: EffectiveRerolls
-    # The striker's unit rules the dice walk factored, claimed by the callers
+    # The target's rules read from its seat of this walk — its own save
+    # re-rolls, its enemy-subject maluses on the striker's dice.
+    target_rerolls: EffectiveRerolls
+    # Each side's unit rules the dice walk factored, claimed by the callers
     # so a rule in the math is never also reported as not factored.
     walk_rules: frozenset[str]
+    target_walk_rules: frozenset[str]
     p_unsaved: float
     p_kill: float
     target_wounds: int
@@ -342,6 +347,22 @@ def _engage(
     )
     modifiers.extend(unit_modifiers)
     walk_rules = frozenset(name for name in unit_index if name not in unit_unfactored)
+    # The target's own rules reach the same walk from the other seat: an
+    # enemy-subject rule of the target's ("-1 to hit this unit") lands on
+    # this striker's Roll to Hit, gated on the target's own facts — the
+    # incoming attack among them. Rules whose quantities belong to the
+    # striker's seat, or to another seam (Parry's armour value, claimed by
+    # the armour fold), compile to nothing here and are claimed elsewhere.
+    target_index = {rule.name: rule for rule in target.loadout.rules}
+    target_modifiers, target_unfactored = compile_rules(
+        list(target_index),
+        target_index,
+        target_conditions,
+        seat=Side.TARGET,
+        grants=target.loadout.granted_rules,
+    )
+    modifiers.extend(target_modifiers)
+    target_walk_rules = frozenset(name for name in target_index if name not in target_unfactored)
     # A weapon rule the walk cannot factor may still be consumed by another
     # seam: the supporting-rank query (Fight in Extra Rank, folded into the
     # attack count) or the striking-order Initiative read (a great weapon's
@@ -368,13 +389,16 @@ def _engage(
     hit = melee_hit_target(striker_ws.value, target_ws.value, hit_modifier)
     wound = wound_target(strength, toughness)
     save = armour_save_target(armour_value, profile.armour_piercing)
-    # The striker's own rules may re-roll its dice (Ithilmar Weapons re-rolls
-    # rolls To Hit of a natural 1), gated on the same conditions the walk reads —
-    # the weapon in hand among them, exactly as the armour fold gates the
-    # defender's save.
-    rerolls = effective_rerolls(striker.loadout.rules, conditions)
+    # Each side's rules may re-roll the walk's dice, from its own seat: the
+    # striker its own To Hit (Ithilmar Weapons' natural 1s) or, with an
+    # enemy-subject grant, the target's save; the target its own save (a
+    # re-roll of natural 1s while defending). Each is gated on that side's
+    # conditions — the weapon in hand among them, exactly as the armour
+    # fold gates the defender's save.
+    rerolls = effective_rerolls(striker.loadout.rules, conditions, seat=Side.ATTACKER)
+    target_rerolls = effective_rerolls(target.loadout.rules, target_conditions, seat=Side.TARGET)
     p_unsaved, p_kill, hit = _per_attack(
-        hit, wound, save, None, modifiers, rerolls=rerolls.rerolls
+        hit, wound, save, None, modifiers, rerolls=(*rerolls.rerolls, *target_rerolls.rerolls)
     )
     # Wounds accumulate into whole slain models; a profile with no printed
     # Wounds ("-") is treated as a single-Wound model.
@@ -394,7 +418,9 @@ def _engage(
         weapon_skill=striker_ws,
         target_armour=target_armour,
         rerolls=rerolls,
+        target_rerolls=target_rerolls,
         walk_rules=walk_rules,
+        target_walk_rules=target_walk_rules,
         p_unsaved=p_unsaved,
         p_kill=p_kill,
         target_wounds=target_wounds,
@@ -508,9 +534,18 @@ def strike_unit(
                     *engagement.walk_rules,
                 },
             ),
-            # The target throws no blows here, but its save is resolved, so its
-            # save-improving rules (Parry) are factored and claimed.
-            *_unit_rule_notes(target, claimed=engagement.target_armour.factored),
+            # The target throws no blows here, but its save is resolved and its
+            # rules read from its seat of the walk, so its save-improving rules
+            # (Parry), its own re-rolls, and its enemy-subject maluses are all
+            # factored and claimed.
+            *_unit_rule_notes(
+                target,
+                claimed={
+                    *engagement.target_armour.factored,
+                    *engagement.target_rerolls.factored,
+                    *engagement.target_walk_rules,
+                },
+            ),
             *engagement.notes,
         ),
         target_models=targets,
@@ -897,8 +932,10 @@ def fight(
                         *a_strikes.rerolls.factored,
                         *a_strikes.walk_rules,
                         *a_combat_result.factored,
-                        # a's save-improving rules are read while it is b's target
+                        # a's defensive rules are read while it is b's target
                         *b_strikes.target_armour.factored,
+                        *b_strikes.target_rerolls.factored,
+                        *b_strikes.target_walk_rules,
                     },
                 ),
                 *_unit_rule_notes(
@@ -912,6 +949,8 @@ def fight(
                         *b_strikes.walk_rules,
                         *b_combat_result.factored,
                         *a_strikes.target_armour.factored,
+                        *a_strikes.target_rerolls.factored,
+                        *a_strikes.target_walk_rules,
                     },
                 ),
                 *a_strikes.notes,
