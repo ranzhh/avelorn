@@ -1,0 +1,5 @@
+# Source: https://tow.whfb.app/weapons-of-war/drakegun
+id: drakegun
+name: Drakegun
+profiles:
+  - { R: 18, S: 5, AP: -1, special_rules: [Armour Bane (2), Dwarf Crafted, Flaming Attacks, Quick Shot] }

@@ -1,0 +1,18 @@
+# Source: https://tow.whfb.app/special-rules/gromril-armour
+id: gromril-armour
+name: Gromril Armour
+page: 39
+category: Special Rules
+flavour: The metal the Dwarfs call gromril is the toughest and sturdiest in the known world, able to turn aside any blow.
+  Armour forged of gromril is highly coveted for its protective value and full suits of gromril armour are treasured and valued
+  heirlooms.
+paragraphs:
+  - A model with this special rule may re-roll any roll of a natural 1 made when making an Armour Save roll.
+# Hand-authored, diffable against the paragraph above: a re-roll of the
+# bearer's own Armour Save dice showing a natural 1. The sentence speaks
+# of the bearer, so nothing more is authored: Make Armour Saves is the
+# target's die, and the grant reaches only the attacks the bearer
+# suffers — carried into a strike, it never touches the enemy's saves.
+effects:
+  - reroll: make-armour-saves
+    on_natural: 1

@@ -1,0 +1,6 @@
+# Source: https://tow.whfb.app/weapons-of-war/cinderblast-bombs
+id: cinderblast-bombs
+name: Cinderblast Bombs
+profiles:
+  - { R: 8, S: 5, AP: -1, special_rules: [Flaming Attacks, Quick Shot] }
+notes: A unit hit by a cinderblast bomb suffers D6+1 hits (rather than the usual one).

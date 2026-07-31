@@ -1154,40 +1154,46 @@ def test_unit_rule_not_in_the_walk_is_still_reported() -> None:
     assert any("Martial Prowess" in note for note in result.notes)
 
 
-def test_strike_unit_runeplate_re_rolls_the_dwarfs_own_save_natural_ones() -> None:
-    """Demo Runeplate betters the dwarfs' save while they defend.
+def test_strike_unit_gromril_armour_re_rolls_the_dwarfs_own_save_natural_ones() -> None:
+    """Gromril Armour betters the Ironbreakers' save while they defend.
 
-    Spearmen (WS4, S3) strike Dwarf Warriors (WS4, T4, Heavy Armour): hit 4+,
-    wound 5+, save 5+, so p_unsaved = 1/2 * 1/3 * 2/3 = 1/9 plain. Re-rolling
-    the save's natural 1s lifts P(save) to 2/6 + 1/6 * 2/6 = 7/18, so
-    p_unsaved = 1/2 * 1/3 * 11/18 = 11/108 — and the rule is claimed, not noted.
+    Spearmen (WS4, S3) strike Ironbreakers (WS5, T4, Full Plate and Shield):
+    hit 4+, wound 5+, save 3+, so p_unsaved = 1/2 * 1/3 * 1/3 = 1/18 with the
+    rule stripped. Re-rolling the save's natural 1s lifts P(save) to
+    4/6 + 1/6 * 4/6 = 7/9, so p_unsaved = 1/2 * 1/3 * 2/9 = 1/27 — read
+    straight from the unit's printed rules, claimed rather than noted.
     """
-    spearmen, dwarfs = REPO.units["elven-spearmen"], REPO.units["dwarf-warriors"]
-    plated = dwarfs.model_copy(update={"special_rules": [*dwarfs.special_rules, "Demo Runeplate"]})
+    spearmen, ironbreakers = REPO.units["elven-spearmen"], REPO.units["ironbreakers"]
+    stripped = ironbreakers.model_copy(
+        update={"special_rules": [r for r in ironbreakers.special_rules if r != "Gromril Armour"]}
+    )
     attacker = _fielded(spearmen, 5).wielding("Thrusting Spear")
 
-    plain = strike_unit(attacker, _fielded(dwarfs, 10).wielding("Hand Weapon"))
-    plate = strike_unit(attacker, _fielded(plated, 10).wielding("Hand Weapon"))
-    assert plain.p_unsaved == pytest.approx(1 / 9)
-    assert plate.p_unsaved == pytest.approx(11 / 108)
-    assert not any("Demo Runeplate" in note for note in plate.notes)
+    plain = strike_unit(attacker, _fielded(stripped, 10).wielding("Hand Weapon"))
+    gromril = strike_unit(attacker, _fielded(ironbreakers, 10).wielding("Hand Weapon"))
+    assert plain.p_unsaved == pytest.approx(1 / 18)
+    assert gromril.p_unsaved == pytest.approx(1 / 27)
+    assert not any("Gromril Armour" in note for note in gromril.notes)
 
 
-def test_strike_unit_runeplate_never_re_rolls_the_enemys_save() -> None:
-    """The wrong-way case: a Runeplate unit strikes and the target's save stands.
+def test_strike_unit_gromril_armour_never_re_rolls_the_enemys_save() -> None:
+    """The wrong-way case: a Gromril unit strikes and the target's save stands.
 
-    Dwarf Warriors (S3) strike spearmen (T3, Light Armour and Shield): hit 4+,
-    wound 4+, save 5+, so p_unsaved = 1/2 * 1/2 * 2/3 = 1/6 — identical with
-    and without the dwarfs' own save re-roll, which names the other seat's die.
+    Ironbreakers (WS5, S4) strike spearmen (T3, Light Armour and Shield):
+    hit 3+, wound 3+, save 5+, so p_unsaved = 2/3 * 2/3 * 2/3 = 8/27 —
+    identical with and without the dwarfs' own save re-roll, which names
+    the other seat's die.
     """
-    spearmen, dwarfs = REPO.units["elven-spearmen"], REPO.units["dwarf-warriors"]
-    plated = dwarfs.model_copy(update={"special_rules": [*dwarfs.special_rules, "Demo Runeplate"]})
+    spearmen, ironbreakers = REPO.units["elven-spearmen"], REPO.units["ironbreakers"]
+    stripped = ironbreakers.model_copy(
+        update={"special_rules": [r for r in ironbreakers.special_rules if r != "Gromril Armour"]}
+    )
     target = _fielded(spearmen, 10).wielding("Thrusting Spear")
 
-    plain = strike_unit(_fielded(dwarfs, 5).wielding("Hand Weapon"), target)
-    plate = strike_unit(_fielded(plated, 5).wielding("Hand Weapon"), target)
-    assert plain.p_unsaved == pytest.approx(1 / 6)
-    assert plate.p_unsaved == pytest.approx(plain.p_unsaved)
+    plain = strike_unit(_fielded(stripped, 5).wielding("Hand Weapon"), target)
+    gromril = strike_unit(_fielded(ironbreakers, 5).wielding("Hand Weapon"), target)
+    assert plain.p_unsaved == pytest.approx(8 / 27)
+    assert gromril.p_unsaved == pytest.approx(plain.p_unsaved)
 
 
 def test_strike_unit_sundering_re_rolls_the_targets_successful_saves() -> None:

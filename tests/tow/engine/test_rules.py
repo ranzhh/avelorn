@@ -857,23 +857,23 @@ def test_effective_rerolls_grants_ithilmar_weapons_with_the_gear_its_gate_names(
 
 
 def test_effective_rerolls_route_a_bearers_save_re_roll_to_the_target_seat() -> None:
-    """Demo Runeplate re-rolls the bearer's own save: only the attacks it suffers.
+    """Gromril Armour re-rolls the bearer's own save: only the attacks it suffers.
 
     Make Armour Saves is the target's die and the sentence speaks of the
     bearer, so the grant fires at the target seat and is honoured inert at
-    the attacker seat — a Runeplate unit strikes without touching the
+    the attacker seat — a Gromril unit strikes without touching the
     enemy's saves (the case that used to compile off the attacker).
     """
-    rule = REPO.rules["demo-runeplate"]
+    rule = REPO.rules["gromril-armour"]
 
     defending = effective_rerolls([rule], seat=Side.TARGET)
-    assert defending.factored == ("Demo Runeplate",)
+    assert defending.factored == ("Gromril Armour",)
     assert [(r.stage, r.on_natural, r.of) for r in defending.rerolls] == [
         (Stage.MAKE_ARMOUR_SAVES, 1, RollResult.FAILED)
     ]
 
     attacking = effective_rerolls([rule], seat=Side.ATTACKER)
-    assert attacking.factored == ("Demo Runeplate",)  # honoured: the other seat's die
+    assert attacking.factored == ("Gromril Armour",)  # honoured: the other seat's die
     assert attacking.rerolls == ()
 
 
