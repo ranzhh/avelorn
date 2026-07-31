@@ -391,18 +391,18 @@ def test_wound_modifier_cannot_defeat_the_natural_one() -> None:
     assert resolve_attack(profile, transforms=[plus_one]).p_unsaved == Fraction(5, 6)
 
 
-def test_profile_targets_cover_exactly_the_attack_rolls() -> None:
-    """The profile carries a target for each attack roll, and no other stage.
+def test_profile_targets_cover_exactly_the_per_attack_dice() -> None:
+    """The profile carries a target for each per-attack die, and no other stage.
 
-    Drift guard: the schema's ATTACK_ROLLS (the rolls a natural-face
-    event may name) and the profile's stage-addressed targets are one
-    set — a roll joining either side must join both.
+    Drift guard: the stage rows' ``dice`` (the rolls a natural-face event
+    may name) and the profile's stage-addressed targets are one set — a
+    roll joining either side must join both.
     """
-    from avelorn.tow.schema.stage import ATTACK_ROLLS
+    from avelorn.tow.schema.stage import Dice
 
     profile = AttackProfile.shooting(hit_target=3, wound_target=4, save_target=5, ward_target=6)
     for stage in Stage:
-        if stage in ATTACK_ROLLS:
+        if stage.dice is Dice.D6_PER_ATTACK:
             assert profile.with_target(stage, 2).target(stage) == 2
         else:
             with pytest.raises(KeyError):

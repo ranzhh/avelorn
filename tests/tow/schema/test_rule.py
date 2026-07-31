@@ -235,7 +235,7 @@ def test_natural_rejects_a_rollless_stage() -> None:
     whole unit — no single natural face exists there, so naming it is a
     data error at load, not a quiet unfactored note at compile.
     """
-    with pytest.raises(ValidationError, match="not an attack roll"):
+    with pytest.raises(ValidationError, match="no natural face is shown there"):
         _EFFECT.validate_python(
             {
                 "when": {"natural": {"face": 6, "roll": "make-panic-tests"}},

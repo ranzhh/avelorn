@@ -24,7 +24,7 @@ from enum import StrEnum
 from fractions import Fraction
 from typing import ClassVar
 
-from avelorn.tow.schema.rule import NaturalRoll
+from avelorn.tow.schema.rule import NaturalRoll, RollResult
 from avelorn.tow.schema.stage import Stage
 
 logger = logging.getLogger(__name__)
@@ -428,18 +428,23 @@ class Transform:
 class Reroll:
     """Re-roll one of an attack's dice, once, per the printed re-roll rules.
 
-    The declarative form of a re-roll grant the walk interprets:
-    ``stage`` is the roll re-rolled, and ``on_natural`` restricts it to the
-    dice showing that natural face (Ithilmar Weapons re-rolls rolls To Hit
-    of a natural 1) — None re-rolls every failing die at the stage. Only a
-    failing die is re-rolled (a re-roll of a success is never to a model's
-    benefit and the rulebook grants none), and a die re-rolled is never
-    re-rolled again ("no single dice can be re-rolled more than once"), so
-    the fresh die's own natural 1 stands as a miss.
+    The declarative form of a re-roll grant the walk interprets: ``stage``
+    is the roll re-rolled; ``of`` is the printed result the grant covers
+    (failed dice — "may re-roll failed rolls To Hit" — or successful ones,
+    a re-roll imposed on the roller: "must re-roll successful Armour
+    Saves"); ``on_natural`` restricts it further to the dice showing that
+    natural face (Ithilmar Weapons re-rolls rolls To Hit of a natural 1).
+    The walk assumes nothing about whom a re-roll serves — it re-rolls
+    exactly the dice the record covers. A die re-rolled is never re-rolled
+    again ("no single dice can be re-rolled more than once"), so the fresh
+    die stands as thrown; grants covering failed and successful dice at
+    one stage touch disjoint dice, so the once-only rule composes with no
+    further machinery.
     """
 
     stage: Stage
     on_natural: int | None = None
+    of: RollResult = RollResult.FAILED
 
 
 @dataclass(frozen=True)
@@ -591,23 +596,29 @@ def _rerolls_by_stage(rerolls: Sequence[Reroll]) -> dict[Stage, list[Reroll]]:
 
 
 def _branches(roll: AttackRoll, rerolls: Sequence[Reroll]) -> Iterator[tuple[Fraction, int, bool]]:
-    # Enumerate a roll's die, re-rolling each failing branch a grant covers:
-    # its mass is spread over a fresh roll of the same die, whose branches
-    # stand as thrown (a re-rolled die is never re-rolled again, so its own
-    # natural 1 stays a miss). A success, or a face no grant names, stands.
+    # Enumerate a roll's die, re-rolling each branch a grant covers: its
+    # mass is spread over a fresh roll of the same die, whose branches
+    # stand as thrown (a re-rolled die is never re-rolled again, so a
+    # success re-rolled into a natural 1 stays a miss, and a forced
+    # re-roll of a success cannot itself be re-rolled back). A die no
+    # grant covers stands.
     for probability, face, success in roll.branches():
-        if success or not _rerolls_face(rerolls, face):
+        if not _covered(rerolls, face, success):
             yield probability, face, success
             continue
         for p_again, face_again, success_again in roll.branches():
             yield probability * p_again, face_again, success_again
 
 
-def _rerolls_face(rerolls: Sequence[Reroll], face: int) -> bool:
-    # A grant re-rolls this failing face if it names it (or names no face,
-    # re-rolling every failing die at the stage). Face 0 is a rollless
+def _covered(rerolls: Sequence[Reroll], face: int, success: bool) -> bool:
+    # A grant re-rolls this die if its result matches the grant's printed
+    # restriction (failed / successful) and its face is named (or no face
+    # is, covering every matching die at the stage). Face 0 is a rollless
     # target (a RollState), which shows no die to re-roll.
-    return face != 0 and any(r.on_natural in (None, face) for r in rerolls)
+    return face != 0 and any(
+        (r.of is RollResult.SUCCESSFUL) == success and r.on_natural in (None, face)
+        for r in rerolls
+    )
 
 
 def _plan(
