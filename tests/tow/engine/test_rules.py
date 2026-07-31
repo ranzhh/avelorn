@@ -36,11 +36,12 @@ from avelorn.tow.schema.rule import (
     ModifierEffect,
     NaturalRoll,
     Quantity,
+    RollResult,
     Rule,
     RuleEffect,
     When,
 )
-from avelorn.tow.schema.stage import Stage
+from avelorn.tow.schema.stage import Side, Stage
 from avelorn.tow.schema.unit import Characteristic, Unit
 from avelorn.tow.schema.weapon import WeaponType
 
@@ -853,3 +854,63 @@ def test_effective_rerolls_grants_ithilmar_weapons_with_the_gear_its_gate_names(
     not_in_combat = effective_rerolls([rule], hand_weapon)
     assert not_in_combat.factored == ("Ithilmar Weapons",)  # honoured: no combat
     assert not_in_combat.rerolls == ()
+
+
+def test_effective_rerolls_route_a_bearers_save_re_roll_to_the_target_seat() -> None:
+    """Demo Runeplate re-rolls the bearer's own save: only the attacks it suffers.
+
+    Make Armour Saves is the target's die and the sentence speaks of the
+    bearer, so the grant fires at the target seat and is honoured inert at
+    the attacker seat — a Runeplate unit strikes without touching the
+    enemy's saves (the case that used to compile off the attacker).
+    """
+    rule = REPO.rules["demo-runeplate"]
+
+    defending = effective_rerolls([rule], seat=Side.TARGET)
+    assert defending.factored == ("Demo Runeplate",)
+    assert [(r.stage, r.on_natural, r.of) for r in defending.rerolls] == [
+        (Stage.MAKE_ARMOUR_SAVES, 1, RollResult.FAILED)
+    ]
+
+    attacking = effective_rerolls([rule], seat=Side.ATTACKER)
+    assert attacking.factored == ("Demo Runeplate",)  # honoured: the other seat's die
+    assert attacking.rerolls == ()
+
+
+def test_effective_rerolls_route_an_enemy_save_re_roll_to_the_attacker_seat() -> None:
+    """Demo Sundering re-rolls the enemy's successful saves: only the attacks it makes.
+
+    The printed subject is the enemy, so the target-rolled die flips to the
+    attacker seat; while the bearer defends, the grant is honoured inert.
+    """
+    rule = REPO.rules["demo-sundering"]
+
+    attacking = effective_rerolls([rule], seat=Side.ATTACKER)
+    assert attacking.factored == ("Demo Sundering",)
+    assert [(r.stage, r.on_natural, r.of) for r in attacking.rerolls] == [
+        (Stage.MAKE_ARMOUR_SAVES, None, RollResult.SUCCESSFUL)
+    ]
+
+    defending = effective_rerolls([rule], seat=Side.TARGET)
+    assert defending.factored == ("Demo Sundering",)  # honoured: its own saves stand
+    assert defending.rerolls == ()
+
+
+def test_enemy_fire_compiles_off_the_target_against_the_shooters_roll() -> None:
+    """Enemy Fire (Skirmishers): the defender's rule, the attacker's die.
+
+    Compiled off the skirmishers — the target of a shooting attack — the
+    enemy-subject -1 To Hit raises the walk's Roll to Hit target by one.
+    Compiled off the same unit as an attacker (no incoming attack), it is
+    honoured inert, not unfactored.
+    """
+    rule = REPO.rules["enemy-fire-skirmishers"]
+    index = {rule.name: rule}
+    shot_at = GateContext(target_of=AttackFacts(kind=AttackKind.SHOOTING))
+
+    modifiers, unfactored = compile_rules([rule.name], index, shot_at, seat=Side.TARGET)
+    assert unfactored == []
+    assert [(m.lands_on, m.move, m.trigger) for m in modifiers] == [(Stage.ROLL_TO_HIT, 1, None)]
+
+    as_attacker = compile_rules([rule.name], index, GateContext(), seat=Side.ATTACKER)
+    assert as_attacker == ([], [])

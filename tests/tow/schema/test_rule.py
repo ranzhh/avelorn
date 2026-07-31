@@ -522,3 +522,30 @@ def test_every_quantity_routes_to_a_seam() -> None:
         Seam.COMBAT_RESULT,
         Seam.ARMOUR,
     }
+
+
+def test_enemy_flips_only_a_roll_quantity() -> None:
+    """The enemy subject flips a quantity to the other seat, which only the walk resolves.
+
+    An enemy-subject armour-value operation has no consumer (the armour fold
+    folds a side's own save), so it is a data error at load, not a silent
+    unfactored note forever.
+    """
+    with pytest.raises(ValidationError, match="enemy flips a roll quantity"):
+        _EFFECT.validate_python({"enemy": True, "add": {"armour-value": 1}})
+
+
+def test_successful_dice_re_roll_names_a_per_attack_die() -> None:
+    """The successful/failed restriction reads a single die's result.
+
+    Make Panic Tests rolls 2D6 for the whole unit — no single die succeeds
+    or fails on its own, so a successful-dice re-roll there is a data error.
+    """
+    with pytest.raises(ValidationError, match="successful-dice re-roll"):
+        _EFFECT.validate_python({"reroll": "make-panic-tests", "of": "successful"})
+
+
+def test_enemy_re_roll_names_a_per_attack_die() -> None:
+    """The enemy subject flips a per-attack die; the panic seam folds a side's own tests."""
+    with pytest.raises(ValidationError, match="enemy flips a per-attack die"):
+        _EFFECT.validate_python({"reroll": "make-panic-tests", "enemy": True})

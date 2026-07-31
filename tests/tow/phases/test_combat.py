@@ -1152,3 +1152,56 @@ def test_unit_rule_not_in_the_walk_is_still_reported() -> None:
     lions = _fielded(REPO.units["white-lions-of-chrace"], 10)
     result = strike_unit(spearmen, lions)
     assert any("Martial Prowess" in note for note in result.notes)
+
+
+def test_strike_unit_runeplate_re_rolls_the_dwarfs_own_save_natural_ones() -> None:
+    """Demo Runeplate betters the dwarfs' save while they defend.
+
+    Spearmen (WS4, S3) strike Dwarf Warriors (WS4, T4, Heavy Armour): hit 4+,
+    wound 5+, save 5+, so p_unsaved = 1/2 * 1/3 * 2/3 = 1/9 plain. Re-rolling
+    the save's natural 1s lifts P(save) to 2/6 + 1/6 * 2/6 = 7/18, so
+    p_unsaved = 1/2 * 1/3 * 11/18 = 11/108 — and the rule is claimed, not noted.
+    """
+    spearmen, dwarfs = REPO.units["elven-spearmen"], REPO.units["dwarf-warriors"]
+    plated = dwarfs.model_copy(update={"special_rules": [*dwarfs.special_rules, "Demo Runeplate"]})
+    attacker = _fielded(spearmen, 5).wielding("Thrusting Spear")
+
+    plain = strike_unit(attacker, _fielded(dwarfs, 10).wielding("Hand Weapon"))
+    plate = strike_unit(attacker, _fielded(plated, 10).wielding("Hand Weapon"))
+    assert plain.p_unsaved == pytest.approx(1 / 9)
+    assert plate.p_unsaved == pytest.approx(11 / 108)
+    assert not any("Demo Runeplate" in note for note in plate.notes)
+
+
+def test_strike_unit_runeplate_never_re_rolls_the_enemys_save() -> None:
+    """The wrong-way case: a Runeplate unit strikes and the target's save stands.
+
+    Dwarf Warriors (S3) strike spearmen (T3, Light Armour and Shield): hit 4+,
+    wound 4+, save 5+, so p_unsaved = 1/2 * 1/2 * 2/3 = 1/6 — identical with
+    and without the dwarfs' own save re-roll, which names the other seat's die.
+    """
+    spearmen, dwarfs = REPO.units["elven-spearmen"], REPO.units["dwarf-warriors"]
+    plated = dwarfs.model_copy(update={"special_rules": [*dwarfs.special_rules, "Demo Runeplate"]})
+    target = _fielded(spearmen, 10).wielding("Thrusting Spear")
+
+    plain = strike_unit(_fielded(dwarfs, 5).wielding("Hand Weapon"), target)
+    plate = strike_unit(_fielded(plated, 5).wielding("Hand Weapon"), target)
+    assert plain.p_unsaved == pytest.approx(1 / 6)
+    assert plate.p_unsaved == pytest.approx(plain.p_unsaved)
+
+
+def test_strike_unit_sundering_re_rolls_the_targets_successful_saves() -> None:
+    """Demo Sundering: the striker's rule, the target's die, the passes re-rolled.
+
+    Dwarf Warriors with the rule strike spearmen (save 5+): the target's
+    P(save) drops to 1/3 * 1/3 = 1/9, so p_unsaved = 1/2 * 1/2 * 8/9 = 2/9.
+    """
+    spearmen, dwarfs = REPO.units["elven-spearmen"], REPO.units["dwarf-warriors"]
+    sundering = dwarfs.model_copy(
+        update={"special_rules": [*dwarfs.special_rules, "Demo Sundering"]}
+    )
+    target = _fielded(spearmen, 10).wielding("Thrusting Spear")
+
+    result = strike_unit(_fielded(sundering, 5).wielding("Hand Weapon"), target)
+    assert result.p_unsaved == pytest.approx(2 / 9)
+    assert not any("Demo Sundering" in note for note in result.notes)
