@@ -1,0 +1,22 @@
+# Source: https://tow.whfb.app/unusual-formations/enemy-fire-skirmishers
+id: enemy-fire-skirmishers
+name: Enemy Fire (Skirmishers)
+page: 185
+category: Unusual Formations
+paragraphs:
+  - Due to their comparatively small size and ability to make use of all available cover, enemy units shooting at a unit of
+    Skirmishers that consists entirely of models with a Unit Strength of 1 suffer a -1 To Hit modifier.
+# Hand-authored, diffable against the paragraph above: the sentence's subject
+# is the enemy ("enemy units ... suffer a -1 To Hit modifier"), so the
+# modifier moves the enemy's To Hit (`enemy: true`) and fires on the attacks
+# this unit is the target of, when they are shooting (the `target_of` gate,
+# as Lion Cloak reads the incoming attack).
+effects:
+  - enemy: true
+    when:
+      target_of:
+        kind: shooting
+    add:
+      to-hit: -1
+notes: the Unit Strength 1 restriction is not expressed — the engine fields
+  US-1 infantry only, so it cannot yet fail.
