@@ -363,14 +363,31 @@ def _engage(
     )
     modifiers.extend(target_modifiers)
     target_walk_rules = frozenset(name for name in target_index if name not in target_unfactored)
+    # Each side's rules may re-roll the walk's dice, from its own seat: the
+    # striker its own To Hit (Ithilmar Weapons' natural 1s) or, with an
+    # enemy-subject grant, the target's save (Daith's Reaper's forced
+    # re-roll of its passes); the target its own save (Gromril Armour's
+    # natural 1s while defending). The striker's grants come from its unit
+    # rules and from the rules of the profile in use — a magic weapon's
+    # rule is scoped by wielding it — each gated on that side's conditions,
+    # exactly as the armour fold gates the defender's save.
+    in_use = [
+        striker.loadout.weapon_rules[name]
+        for name in profile.special_rules
+        if name in striker.loadout.weapon_rules
+    ]
+    rerolls = effective_rerolls([*striker.loadout.rules, *in_use], conditions, seat=Side.ATTACKER)
+    target_rerolls = effective_rerolls(target.loadout.rules, target_conditions, seat=Side.TARGET)
     # A weapon rule the walk cannot factor may still be consumed by another
     # seam: the supporting-rank query (Fight in Extra Rank, folded into the
-    # attack count) or the striking-order Initiative read (a great weapon's
-    # Strike Last, which sets Initiative). Claim both out of the walk's
-    # unfactored notes, the way shooting claims Volley Fire off a volley.
+    # attack count), the striking-order Initiative read (a great weapon's
+    # Strike Last, which sets Initiative), or the re-roll seam (Daith's
+    # Reaper). Claim all three out of the walk's unfactored notes, the way
+    # shooting claims Volley Fire off a volley.
     claimed = {
         *striker.supporting_ranks().factored,
         *effective_initiative(striker, conditions=conditions).factored,
+        *rerolls.factored,
     }
     unfactored = [rule for rule in unfactored if rule not in claimed]
     notes.extend(f"weapon rule not factored: {rule} ({weapon.name})" for rule in unfactored)
@@ -389,14 +406,6 @@ def _engage(
     hit = melee_hit_target(striker_ws.value, target_ws.value, hit_modifier)
     wound = wound_target(strength, toughness)
     save = armour_save_target(armour_value, profile.armour_piercing)
-    # Each side's rules may re-roll the walk's dice, from its own seat: the
-    # striker its own To Hit (Ithilmar Weapons' natural 1s) or, with an
-    # enemy-subject grant, the target's save; the target its own save (a
-    # re-roll of natural 1s while defending). Each is gated on that side's
-    # conditions — the weapon in hand among them, exactly as the armour
-    # fold gates the defender's save.
-    rerolls = effective_rerolls(striker.loadout.rules, conditions, seat=Side.ATTACKER)
-    target_rerolls = effective_rerolls(target.loadout.rules, target_conditions, seat=Side.TARGET)
     p_unsaved, p_kill, hit = _per_attack(
         hit, wound, save, None, modifiers, rerolls=(*rerolls.rerolls, *target_rerolls.rerolls)
     )

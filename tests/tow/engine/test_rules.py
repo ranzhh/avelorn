@@ -878,21 +878,21 @@ def test_effective_rerolls_route_a_bearers_save_re_roll_to_the_target_seat() -> 
 
 
 def test_effective_rerolls_route_an_enemy_save_re_roll_to_the_attacker_seat() -> None:
-    """Demo Sundering re-rolls the enemy's successful saves: only the attacks it makes.
+    """Daith's Reaper re-rolls the enemy's successful saves: only the attacks it makes.
 
     The printed subject is the enemy, so the target-rolled die flips to the
     attacker seat; while the bearer defends, the grant is honoured inert.
     """
-    rule = REPO.rules["demo-sundering"]
+    rule = REPO.rules["daiths-reaper"]
 
     attacking = effective_rerolls([rule], seat=Side.ATTACKER)
-    assert attacking.factored == ("Demo Sundering",)
+    assert attacking.factored == ("Daith's Reaper",)
     assert [(r.stage, r.on_natural, r.of) for r in attacking.rerolls] == [
         (Stage.MAKE_ARMOUR_SAVES, None, RollResult.SUCCESSFUL)
     ]
 
     defending = effective_rerolls([rule], seat=Side.TARGET)
-    assert defending.factored == ("Demo Sundering",)  # honoured: its own saves stand
+    assert defending.factored == ("Daith's Reaper",)  # honoured: its own saves stand
     assert defending.rerolls == ()
 
 

@@ -1,0 +1,11 @@
+# Hand-written from https://tow.whfb.app/magic-item/daiths-reaper — a magic
+# weapon (Wood Elf Realms, 40 points), which the equipment importer does not
+# cover (weapons-of-war pages only), so no "# Source:" header is claimed and
+# the re-import check skips this file. The printed profile's special rules
+# name only Magical Attacks; the item's Notes are its own rule, filed under
+# the item's name in data/tow/rules/ and referenced here so the one
+# weapon-rules path compiles it exactly when the Reaper is in use.
+id: daiths-reaper
+name: Daith's Reaper
+profiles:
+  - { R: Combat, S: S+1, AP: -1, special_rules: [Magical Attacks, Daith's Reaper] }

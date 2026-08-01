@@ -1197,18 +1197,20 @@ def test_strike_unit_gromril_armour_never_re_rolls_the_enemys_save() -> None:
     assert gromril.p_unsaved == pytest.approx(plain.p_unsaved)
 
 
-def test_strike_unit_sundering_re_rolls_the_targets_successful_saves() -> None:
-    """Demo Sundering: the striker's rule, the target's die, the passes re-rolled.
+def test_strike_unit_daiths_reaper_re_rolls_the_targets_successful_saves() -> None:
+    """Daith's Reaper: the wielder's weapon, the target's die, the passes re-rolled.
 
-    Dwarf Warriors with the rule strike spearmen (save 5+): the target's
-    P(save) drops to 1/3 * 1/3 = 1/9, so p_unsaved = 1/2 * 1/2 * 8/9 = 2/9.
+    Spearmen given the Reaper (S+1, AP -1) strike Dwarf Warriors (T4,
+    Heavy Armour): hit 4+, wound 4+, and the save worsens to 6+ — which
+    must then be re-rolled, so P(save) = 1/6 * 1/6 = 1/36 and
+    p_unsaved = 1/2 * 1/2 * 35/36 = 35/144. The item's rule rides the
+    weapon in use, so it is claimed off the weapon-rule notes.
     """
     spearmen, dwarfs = REPO.units["elven-spearmen"], REPO.units["dwarf-warriors"]
-    sundering = dwarfs.model_copy(
-        update={"special_rules": [*dwarfs.special_rules, "Demo Sundering"]}
-    )
-    target = _fielded(spearmen, 10).wielding("Thrusting Spear")
+    armed = spearmen.model_copy(update={"equipment": [*spearmen.equipment, "Daith's Reaper"]})
+    target = _fielded(dwarfs, 10).wielding("Hand Weapon")
 
-    result = strike_unit(_fielded(sundering, 5).wielding("Hand Weapon"), target)
-    assert result.p_unsaved == pytest.approx(2 / 9)
-    assert not any("Demo Sundering" in note for note in result.notes)
+    result = strike_unit(_fielded(armed, 5).wielding("Daith's Reaper"), target)
+    assert result.save_target == 6
+    assert result.p_unsaved == pytest.approx(35 / 144)
+    assert not any("not factored: Daith's Reaper" in note for note in result.notes)
