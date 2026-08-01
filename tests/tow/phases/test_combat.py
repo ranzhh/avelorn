@@ -1180,9 +1180,10 @@ def test_strike_unit_gromril_armour_never_re_rolls_the_enemys_save() -> None:
     """The wrong-way case: a Gromril unit strikes and the target's save stands.
 
     Ironbreakers (WS5, S4) strike spearmen (T3, Light Armour and Shield):
-    hit 3+, wound 3+, save 5+, so p_unsaved = 2/3 * 2/3 * 2/3 = 8/27 —
-    identical with and without the dwarfs' own save re-roll, which names
-    the other seat's die.
+    hit 3+, wound 3+, and Gromril Weapons' Armour Piercing worsens the 5+
+    save to 6+, so p_unsaved = 2/3 * 2/3 * 5/6 = 10/27 — identical with
+    and without the dwarfs' own save re-roll, which names the other
+    seat's die.
     """
     spearmen, ironbreakers = REPO.units["elven-spearmen"], REPO.units["ironbreakers"]
     stripped = ironbreakers.model_copy(
@@ -1192,7 +1193,7 @@ def test_strike_unit_gromril_armour_never_re_rolls_the_enemys_save() -> None:
 
     plain = strike_unit(_fielded(stripped, 5).wielding("Hand Weapon"), target)
     gromril = strike_unit(_fielded(ironbreakers, 5).wielding("Hand Weapon"), target)
-    assert plain.p_unsaved == pytest.approx(8 / 27)
+    assert plain.p_unsaved == pytest.approx(10 / 27)
     assert gromril.p_unsaved == pytest.approx(plain.p_unsaved)
 
 
