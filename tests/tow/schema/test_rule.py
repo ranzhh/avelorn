@@ -6,13 +6,13 @@ import pytest
 from pydantic import TypeAdapter, ValidationError
 
 from avelorn.core.loading import load_yaml
-from avelorn.tow.data import DATA_DIR
+from avelorn.tow.data import rule_paths
 from avelorn.tow.schema.rule import ModifierEffect, Quantity, RerollEffect, Rule, RuleEffect
 from avelorn.tow.schema.unit import Characteristic
 
 _EFFECT = TypeAdapter(RuleEffect)
 
-RULE_FILES = sorted(DATA_DIR.glob("tow/rules/*.yaml"))
+RULE_FILES = rule_paths()
 
 
 def test_data_glob_finds_files() -> None:
