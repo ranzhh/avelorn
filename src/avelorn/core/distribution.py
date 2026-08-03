@@ -10,6 +10,10 @@ maps each outcome to its probability and gives the engine one shared way to
   by probability. ``bind`` is the fold ("weight each branch, sum") written
   once, here, so no caller spells it out again.
 
+``dist >> step`` is :meth:`bind` spelled as an operator, and a :class:`Step`
+wraps such a step as a value so a whole sequence composes before any
+distribution reaches it (``to_hit >> to_wound >> saves``).
+
 Formally this is the discrete probability monad: :meth:`pure` is a point mass,
 :meth:`bind` is the mix, and the two obey the monad laws (checked in the tests).
 Everything the engine passes around as a bare ``list[float]`` count-pmf is
@@ -100,6 +104,18 @@ class Distribution[T: Hashable]:
                 folded[downstream] += p * q
         return Distribution(dict(folded))
 
+    def __rshift__[U: Hashable](self, step: Callable[[T], "Distribution[U]"]) -> "Distribution[U]":
+        """``dist >> step`` is :meth:`bind` — feed this distribution into ``step``.
+
+        Reads left to right in the order the engine resolves: a distribution,
+        then the step it flows into. ``step`` is any callable of that shape, so
+        a plain function and a :class:`Step` both chain.
+
+        Returns:
+            The mixed distribution over the downstream outcomes.
+        """
+        return self.bind(step)
+
     def prob(self, predicate: Callable[[T], bool]) -> float:
         """The probability that ``predicate`` holds of the outcome.
 
@@ -130,3 +146,48 @@ class Distribution[T: Hashable]:
             The sum of all outcome probabilities.
         """
         return sum(self.mass.values())
+
+
+@dataclass(frozen=True)
+class Step[T: Hashable, U: Hashable]:
+    """One stochastic step, ``T -> Distribution[U]``, as a value.
+
+    A :meth:`Distribution.bind` argument that can be named, stored, and
+    composed *before* any distribution reaches it: ``a >> b`` builds the
+    two-step chain, and applying it to a distribution runs the whole thing.
+    That makes a resolution sequence assemblable as data — one edge per step —
+    rather than only spellable as nested calls.
+    """
+
+    resolve: Callable[[T], Distribution[U]]
+
+    @classmethod
+    def certain(cls, relabel: Callable[[T], U]) -> "Step[T, U]":
+        """Lift a deterministic ``relabel`` into a step that mixes nothing.
+
+        How a plain change of variable joins a chain of stochastic steps, so
+        :meth:`Distribution.map` needs no operator of its own.
+
+        Returns:
+            The step whose every outcome is a point mass on ``relabel``'s image.
+        """
+        return cls(lambda outcome: Distribution.pure(relabel(outcome)))
+
+    def __call__(self, outcome: T) -> Distribution[U]:
+        """Resolve the step at one outcome.
+
+        Returns:
+            The distribution this step reaches from ``outcome``.
+        """
+        return self.resolve(outcome)
+
+    def __rshift__[V: Hashable](self, then: Callable[[U], Distribution[V]]) -> "Step[T, V]":
+        """``a >> b`` composes two steps into the single step "a, then b".
+
+        Associative, so a chain of any length composes in any grouping and
+        resolves the same (checked in the tests).
+
+        Returns:
+            The composed step from this one's input to ``then``'s output.
+        """
+        return Step(lambda outcome: self.resolve(outcome).bind(then))
