@@ -794,6 +794,27 @@ def test_effective_armour_value_betters_the_save_with_the_gear_its_gate_names() 
     assert no_loadout.unfactored == ("Parry",)  # the armour worn was never offered
 
 
+def test_effective_armour_value_speaks_for_an_unarmoured_defenders_rules() -> None:
+    """No printed value to improve, and the rules still get their disposition read.
+
+    A defender wearing nothing passes a None base. Parry names a shield, which a
+    model wearing nothing cannot have, so it is honoured and factored — the fold
+    has spoken for it, and no caller need report it as though no seam looked. A
+    rule that *would* improve the value is reported instead: the engine will not
+    invent a save out of a value the defender does not have.
+    """
+    bare = GateContext(combat=CombatFacts(), wielding=WeaponFacts(name="Hand Weapon"), worn=())
+
+    honoured = effective_armour_value(None, [REPO.rules["parry"]], bare)
+    assert honoured.value == 0  # the caller's "no save"
+    assert honoured.factored == ("Parry",)
+
+    ungated = _one_rule(ModifierEffect(add={Quantity.ARMOUR_VALUE: 1}))["Doctored"]
+    would_apply = effective_armour_value(None, [ungated], bare)
+    assert would_apply.value == 0
+    assert would_apply.unfactored == ("Doctored",)
+
+
 def test_lion_cloak_betters_the_save_only_against_non_magical_shooting() -> None:
     """Lion Cloak reads the incoming attack, not the model's state.
 

@@ -45,7 +45,6 @@ from avelorn.tow.engine.charts import (
 )
 from avelorn.tow.engine.rules import (
     AttackFacts,
-    EffectiveValue,
     GateContext,
     MovementFacts,
     ShootingFacts,
@@ -383,14 +382,11 @@ def shoot_unit(
             magical="Magical Attacks" in profile.special_rules,
         ),
     )
-    if armour_value is None:
-        defender_armour_value = EffectiveValue(0)
-    else:
-        defender_armour_value = effective_armour_value(
-            armour_value,
-            defender.loadout.rules,
-            incoming,
-        )
+    # An unarmoured defender has nothing to improve, but the fold still runs: it
+    # owns an armour rule's disposition, and skipping it would leave the rule
+    # unspoken for in the notes.
+    defender_armour_value = effective_armour_value(armour_value, defender.loadout.rules, incoming)
+    if armour_value is not None:
         armour_value = defender_armour_value.value
     conditions = _engagement_conditions(attacker, chosen, profile, distance, force_short_range)
 

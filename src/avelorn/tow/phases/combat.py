@@ -318,19 +318,14 @@ def _engage(
         )
     strength = profile.strength.resolve(wielder_strength or 0)
 
-    armour_value = defender_armour(target.loadout.armour)
     # The defender's own rules may better its save (Parry's +1 with a hand
     # weapon and shield in use), gated on its equipment and engagement facts;
-    # a lower armour value is a better save. Nothing to improve unarmoured.
-    if armour_value is None:
-        target_armour = EffectiveValue(0)
-    else:
-        target_armour = effective_armour_value(
-            armour_value,
-            target.loadout.rules,
-            target_conditions,
-        )
-        armour_value = target_armour.value
+    # a lower armour value is a better save. An unarmoured defender has nothing
+    # to improve, but the fold still runs — it is the seam that owns an armour
+    # rule's disposition, and skipping it would leave the rule unspoken for.
+    printed_armour = defender_armour(target.loadout.armour)
+    target_armour = effective_armour_value(printed_armour, target.loadout.rules, target_conditions)
+    armour_value = None if printed_armour is None else target_armour.value
     notes: list[str] = []
     # This striker's engagement conditions gate its rules, exactly as a
     # volley's do: a weapon rule whose condition the facts answer is

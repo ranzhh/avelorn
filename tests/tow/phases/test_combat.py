@@ -143,6 +143,22 @@ def test_fight_parry_is_claimed_when_both_sides_use_hand_weapon_and_shield() -> 
     assert not any("Parry" in note for note in result.notes)
 
 
+def test_fight_claims_parry_for_an_unarmoured_side_too() -> None:
+    """An unarmoured side's Parry is spoken for by the armour fold, not reported.
+
+    Elven Archers wear nothing, so there is no save for their troop type's Parry
+    to better — but the fold still reads its disposition (it names a shield they
+    cannot be wearing), so a fight leaves no "not factored" note. Skipping the
+    fold for want of a base would leave the rule unclaimed by any seam.
+    """
+    archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
+    result = fight(
+        _fielded(archers, 5).wielding("Hand Weapon"),
+        _fielded(spearmen, 5).wielding("Hand Weapon"),
+    )
+    assert not any("Parry" in note for note in result.notes)
+
+
 def test_strike_unit_ithilmar_weapons_re_rolls_to_hit_ones() -> None:
     """Ithilmar Weapons re-rolls the striker's To Hit natural 1s, and is claimed.
 

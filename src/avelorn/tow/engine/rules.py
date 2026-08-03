@@ -673,7 +673,7 @@ def effective_combat_result_bonus(
 
 
 def effective_armour_value(
-    base: int,
+    base: int | None,
     rules: Sequence[Rule],
     conditions: "GateContext | None" = None,
 ) -> EffectiveValue:
@@ -688,11 +688,20 @@ def effective_armour_value(
     All-or-nothing per rule; a rule whose facts the conditions cannot answer is
     reported unfactored.
 
+    ``base`` is None when the defender wears nothing — there is no printed value
+    to improve — and the fold still runs, because the rules still need their
+    disposition read. One honoured by not applying is factored as ever (Parry
+    names a shield, and a model wearing nothing wears none), while one that
+    *would* improve the value is reported unfactored rather than applied to a
+    base that does not exist. The value returned is then 0, the caller's "no
+    save"; this is the seam that owns the question either way, so no armour rule
+    goes unspoken for just because its bearer is unarmoured.
+
     Returns:
         The improved armour value with the factored and unfactored rule names.
     """
     context = _as_context(conditions)
-    value = base
+    value = base if base is not None else 0
     factored: list[str] = []
     unfactored: list[str] = []
     for rule in rules:
@@ -708,6 +717,11 @@ def effective_armour_value(
             amount == "X" or when is None or effect.natural is not None
             for effect, amount, when in answers
         ):
+            unfactored.append(rule.name)
+            continue
+        if base is None and any(when for _, _, when in answers):
+            # Nothing printed to improve: applying it would invent a save out of
+            # a value the defender does not have. Reported, never assumed.
             unfactored.append(rule.name)
             continue
         for effect, amount, when in answers:
