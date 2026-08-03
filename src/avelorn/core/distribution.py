@@ -159,11 +159,15 @@ class Distribution[T: Hashable]:
     def __radd__(self, other: T) -> "Distribution[T]":
         """``value + dist`` — the sum with a constant on the left.
 
+        Python only reaches a reflected operator when the left operand is of
+        another type, so ``other`` is always a bare outcome here, never a
+        distribution. The constant stays on the left so a non-commutative ``+``
+        still means what it reads as.
+
         Returns:
-            The distribution of the sum, the constant kept on the left so a
-            non-commutative ``+`` still means what it reads as.
+            The distribution of the sum.
         """
-        return self._lifted(other).combine(self, operator.add)
+        return self.pure(other).combine(self, operator.add)
 
     def __sub__(self, other: "Distribution[T] | T") -> "Distribution[T]":
         """``a - b`` — the signed difference of independent draws, or a shift down.
@@ -180,10 +184,13 @@ class Distribution[T: Hashable]:
     def __rsub__(self, other: T) -> "Distribution[T]":
         """``value - dist`` — a constant less this distribution.
 
+        As with :meth:`__radd__`, ``other`` is always a bare outcome. The
+        operands stay in written order.
+
         Returns:
-            The distribution of the difference, taken in written order.
+            The distribution of the difference.
         """
-        return self._lifted(other).combine(self, operator.sub)
+        return self.pure(other).combine(self, operator.sub)
 
     def __floordiv__(self, other: "Distribution[T] | T") -> "Distribution[T]":
         """``dist // n`` — floor-divide every outcome, merging those that land together.
