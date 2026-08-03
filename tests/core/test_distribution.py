@@ -119,6 +119,33 @@ def test_combine_keeps_operand_order() -> None:
     assert _same(left.combine(right, lambda a, b: a + b), Distribution.pure("ab"))
 
 
+def test_add_convolves_two_distributions() -> None:
+    """Two independent coins summed: the count of heads over two throws."""
+    assert _same(_coin + _coin, Distribution({0: 0.25, 1: 0.5, 2: 0.25}))
+
+
+def test_add_is_combine_with_addition() -> None:
+    """The operator is the lift, not a second implementation."""
+    assert _same(_coin + _coin, _coin.combine(_coin, lambda a, b: a + b))
+
+
+def test_add_shifts_every_outcome_by_a_constant() -> None:
+    """A bare outcome on either side moves the whole distribution."""
+    shifted = Distribution({0: 0.25, 1: 0.75}) + 3
+    assert _same(shifted, Distribution({3: 0.25, 4: 0.75}))
+    assert _same(3 + Distribution({0: 0.25, 1: 0.75}), shifted)
+
+
+def test_radd_keeps_the_constant_on_the_left() -> None:
+    """``value + dist`` puts the constant first, for a non-commutative ``+``."""
+    assert _same("<" + Distribution.pure("x"), Distribution.pure("<x"))
+
+
+def test_add_conserves_mass() -> None:
+    """Convolution is still a distribution."""
+    assert (_coin + _coin + _coin).total() == pytest.approx(1.0)
+
+
 def test_rshift_is_bind() -> None:
     """``dist >> step`` is spelling for bind, not a second fold."""
     assert _same(_coin >> _step, _coin.bind(_step))

@@ -22,6 +22,7 @@ Everything the engine passes around as a bare ``list[float]`` count-pmf is
 queries) that this subsumes.
 """
 
+import operator
 from collections import defaultdict
 from collections.abc import Callable, Hashable, Mapping, Sequence
 from dataclasses import dataclass
@@ -135,6 +136,34 @@ class Distribution[T: Hashable]:
             The distribution of ``op(x, y)`` over independent ``x``, ``y``.
         """
         return self.bind(lambda outcome: other.map(lambda downstream: op(outcome, downstream)))
+
+    @classmethod
+    def _lifted(cls, value: "Distribution[T] | T") -> "Distribution[T]":
+        # An arithmetic operand either way: a distribution stands, a bare
+        # outcome becomes the certainty of itself.
+        return value if isinstance(value, Distribution) else cls.pure(value)
+
+    def __add__(self, other: "Distribution[T] | T") -> "Distribution[T]":
+        """``a + b`` — the sum of independent draws, or a constant shift.
+
+        With a distribution on the right this is the convolution: the total of
+        two unrelated quantities, a second volley's casualties on top of the
+        first. With a bare outcome it shifts every value by that constant, which
+        is how a fixed edge (a Rank Bonus) enters a distribution of leads.
+
+        Returns:
+            The distribution of the sum.
+        """
+        return self.combine(self._lifted(other), operator.add)
+
+    def __radd__(self, other: T) -> "Distribution[T]":
+        """``value + dist`` — the sum with a constant on the left.
+
+        Returns:
+            The distribution of the sum, the constant kept on the left so a
+            non-commutative ``+`` still means what it reads as.
+        """
+        return self._lifted(other).combine(self, operator.add)
 
     def prob(self, predicate: Callable[[T], bool]) -> float:
         """The probability that ``predicate`` holds of the outcome.
