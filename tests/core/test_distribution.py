@@ -96,6 +96,29 @@ def test_mass_is_a_mapping() -> None:
     assert isinstance(Distribution.pure("x").mass, Mapping)
 
 
+def test_combine_takes_the_joint_of_two_independent_variables() -> None:
+    """Two coins paired give four equally likely ordered pairs."""
+    paired = _coin.combine(_coin, lambda a, b: (a, b))
+    assert paired.total() == pytest.approx(1.0)
+    assert all(
+        paired.mass[pair] == pytest.approx(0.25) for pair in ((0, 0), (0, 1), (1, 0), (1, 1))
+    )
+
+
+def test_combine_merges_pairs_its_op_cannot_tell_apart() -> None:
+    """Summing two coins collapses the two one-each pairs into a single outcome."""
+    assert _same(
+        _coin.combine(_coin, lambda a, b: a + b), Distribution({0: 0.25, 1: 0.5, 2: 0.25})
+    )
+
+
+def test_combine_keeps_operand_order() -> None:
+    """``op`` sees this distribution's draw first, so a non-commutative op is safe."""
+    left = Distribution.pure("a")
+    right = Distribution.pure("b")
+    assert _same(left.combine(right, lambda a, b: a + b), Distribution.pure("ab"))
+
+
 def test_rshift_is_bind() -> None:
     """``dist >> step`` is spelling for bind, not a second fold."""
     assert _same(_coin >> _step, _coin.bind(_step))

@@ -116,6 +116,26 @@ class Distribution[T: Hashable]:
         """
         return self.bind(step)
 
+    def combine[U: Hashable, V: Hashable](
+        self, other: "Distribution[U]", op: Callable[[T, U], V]
+    ) -> "Distribution[V]":
+        """Apply ``op`` to **independent** draws from this distribution and ``other``.
+
+        The lift every arithmetic operator below is written in terms of: it takes
+        the joint of two unrelated variables and relabels each pair by ``op``.
+        Being built on :meth:`bind` and :meth:`map`, it adds no second fold.
+
+        Independence is an assumption about the two arguments that this cannot
+        check. Where two quantities are correlated — two sides of one combat,
+        where the same volley thins one and scores for the other — the joint has
+        to be built where the correlation is known, not recovered from marginals
+        here.
+
+        Returns:
+            The distribution of ``op(x, y)`` over independent ``x``, ``y``.
+        """
+        return self.bind(lambda outcome: other.map(lambda downstream: op(outcome, downstream)))
+
     def prob(self, predicate: Callable[[T], bool]) -> float:
         """The probability that ``predicate`` holds of the outcome.
 
