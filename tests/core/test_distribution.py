@@ -6,7 +6,7 @@ from fractions import Fraction
 import pytest
 
 from avelorn.core.dice import binomial_distribution, cap_distribution, group_distribution
-from avelorn.core.distribution import Distribution, Step
+from avelorn.core.distribution import Distribution, Probability, Step
 
 
 def _same[T: Hashable](a: Distribution[T], b: Distribution[T]) -> bool:
@@ -406,3 +406,23 @@ def test_expect_can_take_an_exact_mean() -> None:
     mean = _exact.expect(Fraction)
     assert mean == _SIXTH  # 0 * 5/6 + 1 * 1/6
     assert isinstance(mean, Fraction)
+
+
+def test_every_kind_the_union_names_really_occurs() -> None:
+    """All three of int, float and Fraction are masses the module actually stores.
+
+    `int` is the one worth pinning: `pure` is the integer 1 and the folds seed
+    from the integer 0, so anything dispatching on a mass's type at a boundary
+    has three cases, not two.
+    """
+    assert type(Distribution.pure("x").mass["x"]) is int
+    assert type(Distribution({}).total()) is int
+    assert type(_coin.mass[0]) is float
+    assert type(_exact.mass[1]) is Fraction
+
+
+def test_probability_is_an_alias_not_a_runtime_type() -> None:
+    """It cannot be used with isinstance; check the concrete types instead."""
+    with pytest.raises(TypeError):
+        isinstance(1.0, Probability)  # ty: ignore[invalid-argument-type]
+    assert isinstance(1, int | float | Fraction)

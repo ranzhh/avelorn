@@ -49,24 +49,35 @@ from fractions import Fraction
 # design is ours to build regardless of which Distribution we stand on.
 
 
-# How likely an outcome is: an inexact ``float`` or an exact ``Fraction``. Both,
-# because the two halves of the engine want different things. The aggregations
-# work in float (a binomial over a wide volley in exact rationals would blow up
-# in denominator size for no benefit), while the per-attack dice walk in
-# tow.engine.attack resolves in exact Fraction and converts at the caller's edge.
-# One distribution type serves both.
+# How likely an outcome is. Three numeric types, because the module stores all
+# three:
+#   - ``float`` for the inexact aggregations, which is what every caller in the
+#     engine hands them today;
+#   - ``Fraction`` for the per-attack dice walk in tow.engine.attack, which
+#     resolves exactly on purpose and converts at the caller's edge;
+#   - ``int`` for the fold identities. ``pure`` is the integer ``1`` and the folds
+#     accumulate from the integer ``0``, deliberately, because those coerce
+#     neither of the other two. So an integer mass is a real runtime value, not a
+#     theoretical one: ``Distribution.pure(x).mass[x]`` is ``1`` and an empty
+#     distribution's ``total()`` is ``0``.
+#
+# ``int`` is listed even though a checker already promotes it to ``float``,
+# because the alias is meant to describe the runtime domain honestly. Anything
+# dispatching on a mass's type at a boundary has three cases to handle, not two.
+# Note this is a PEP 695 alias, so it cannot be used with ``isinstance`` --
+# check against ``(int, float, Fraction)`` directly.
 #
 # A checker cannot accept Fraction under a float annotation: int widens to float
 # but Fraction does not, and the numbers ABCs it registers with are invisible to
 # type checkers. Hence the explicit union.
 #
 # Chosen over parameterising the class as Distribution[T, P], which would let the
-# checker prove a chain never mixes the two. That costs a type parameter on every
-# signature and call site, including Step, and it fights the integer-seeded folds
-# below (sum starts at 0, so an exactly-typed total would not check). The union
-# documents the intent instead; see Distribution for the invariant it cannot
+# checker prove a chain never mixes the kinds. That costs a type parameter on
+# every signature and call site, including Step, and it fights the integer-seeded
+# folds below (sum starts at 0, so an exactly-typed total would not check). The
+# union documents the intent instead; see Distribution for the invariant it cannot
 # enforce.
-type Probability = float | Fraction
+type Probability = int | float | Fraction
 
 
 @dataclass(frozen=True)
@@ -76,8 +87,9 @@ class Distribution[T: Hashable]:
     Outcomes are any hashable value — an integer count, an enum member, a whole
     game state — so the same type carries a volley's casualties, a combat's
     winner, or a unit's surviving strength. Outcomes absent from ``mass`` have
-    probability zero. A well-formed distribution's masses sum to 1.0
-    (:meth:`total`); :meth:`bind` and :meth:`map` preserve that.
+    probability zero. A well-formed distribution's masses sum to 1
+    (:meth:`total`) — exactly, for exact masses, and to within floating error
+    otherwise; :meth:`bind` and :meth:`map` preserve that.
 
     The folds carry whatever numeric type the masses are, rather than forcing
     ``float``: they accumulate from the integer ``0`` and :meth:`pure` is the
