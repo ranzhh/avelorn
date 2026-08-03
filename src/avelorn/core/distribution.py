@@ -192,17 +192,27 @@ class Distribution[T: Hashable]:
         """
         return self.pure(other).combine(self, operator.sub)
 
-    def __floordiv__(self, other: "Distribution[T] | T") -> "Distribution[T]":
+    def __floordiv__(self, group_size: int) -> "Distribution[T]":
         """``dist // n`` — floor-divide every outcome, merging those that land together.
 
-        How a count collapses into whole groups of ``n``: unsaved wounds
-        accumulating into slain multi-Wound models, where the remainder sits on a
-        survivor and several wound counts therefore mean the same casualty count.
+        A count collapses into whole groups of ``n``. Unsaved wounds accumulate
+        into slain multi-Wound models this way, the remainder sitting on a
+        survivor, so several wound counts mean the same casualty count.
+
+        The divisor is a fixed group size, not a distribution: dividing by a
+        random quantity has no meaning here, and ``n`` of zero or less has no
+        group to count. Both are rejected rather than left to fail inside the
+        fold, matching :func:`avelorn.core.dice.group_distribution`.
 
         Returns:
             The distribution of the quotient.
+
+        Raises:
+            ValueError: ``group_size`` is less than 1.
         """
-        return self.combine(self._lifted(other), operator.floordiv)
+        if group_size < 1:
+            raise ValueError("group_size must be >= 1")
+        return self.map(lambda outcome: operator.floordiv(outcome, group_size))
 
     def __rmatmul__(self, copies: int) -> "Distribution[T]":
         """``n @ dist`` — the sum of ``n`` independent copies of this distribution.

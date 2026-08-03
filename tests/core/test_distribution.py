@@ -187,6 +187,20 @@ def test_floordiv_matches_the_count_pmf_grouping(group_size: int) -> None:
     )
 
 
+def test_floordiv_conserves_mass() -> None:
+    """Grouping redistributes mass, it does not lose any."""
+    assert (Distribution.from_counts([0.05, 0.1, 0.15, 0.2, 0.25, 0.15, 0.1]) // 3).total() == (
+        pytest.approx(1.0)
+    )
+
+
+@pytest.mark.parametrize("group_size", [0, -1])
+def test_floordiv_rejects_a_group_size_below_one(group_size: int) -> None:
+    """No group to count, and the same refusal ``group_distribution`` makes."""
+    with pytest.raises(ValueError, match="group_size must be >= 1"):
+        _ = _coin // group_size
+
+
 def test_matmul_sums_independent_copies() -> None:
     """``4 @ coin`` is Binomial(4, 0.5) — four throws totalled."""
     assert _same(4 @ _coin, Distribution.from_counts(binomial_distribution(4, 0.5)))
