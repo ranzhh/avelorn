@@ -82,10 +82,14 @@ def _remove_casualties(
     # multinomial. A kill removes a model outright; plain wounds accumulate
     # by Wounds-per-model. The unsaved-wound distribution counts both
     # classes (a Killing Blow is still an unsaved wound).
-    # Integer seeds, so an exact mass is not coerced by the first addition.
-    distribution: list[float] = [0] * (n + 1)
+    # Seed with a zero of the callers' own numeric type: multiplying by 0 gives
+    # 0.0 from a float and Fraction(0) from a Fraction, so an exact mass is
+    # neither coerced on the first addition nor left as a bare int at an index no
+    # outcome reaches (a volley too small to fill every casualty count).
+    zero = (p_wound_only + p_kill) * 0
+    distribution: list[float] = [zero] * (n + 1)
     size = n if targets is None else targets
-    casualties: list[float] = [0] * (size + 1)
+    casualties: list[float] = [zero] * (size + 1)
     for (n_wound, n_kill), mass in multinomial_outcomes(n, (p_wound_only, p_kill)):
         distribution[n_wound + n_kill] += mass
         killed = min(n_kill + n_wound // wounds_per_model, size)

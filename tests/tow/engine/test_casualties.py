@@ -59,3 +59,28 @@ def test_exact_probabilities_survive_both_aggregation_paths() -> None:
         assert all(isinstance(p, Fraction) for p in casualties)
         assert sum(wounds) == 1
         assert sum(casualties) == 1
+
+
+@pytest.mark.parametrize(
+    ("p_wound_only", "p_kill", "kind"),
+    [(0.5, 0.25, float), (Fraction(1, 2), Fraction(1, 4), Fraction)],
+)
+def test_casualty_masses_are_all_one_numeric_type(
+    p_wound_only: float, p_kill: float, kind: type
+) -> None:
+    """Every index carries the callers' own kind of zero, including unreached ones.
+
+    A volley of one cannot fill five casualty counts, so the upper indices are
+    never added to. Seeding them with a bare integer would leave a `list[float]`
+    holding ints, which anything dispatching on a mass's type would mishandle.
+    """
+    wounds, casualties = _remove_casualties(
+        1,
+        p_wound_only=p_wound_only,
+        p_kill=p_kill,
+        wounds_per_model=1,
+        targets=5,
+    )
+    assert all(isinstance(p, kind) for p in wounds)
+    assert all(isinstance(p, kind) for p in casualties)
+    assert sum(casualties) == 1
