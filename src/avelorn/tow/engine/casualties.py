@@ -43,7 +43,7 @@ def wound_and_casualties(
         wounds)) and the casualty distribution (index k = P(k models
         removed)).
     """
-    if p_kill == 0.0:
+    if p_kill == 0:
         # Single outcome class: the multinomial degenerates to the binomial,
         # so keep the established path. Fold unsaved wounds into slain
         # models by Wounds-per-model, then cap at the unit's size; for
@@ -82,9 +82,10 @@ def _remove_casualties(
     # multinomial. A kill removes a model outright; plain wounds accumulate
     # by Wounds-per-model. The unsaved-wound distribution counts both
     # classes (a Killing Blow is still an unsaved wound).
-    distribution = [0.0] * (n + 1)
+    # Integer seeds, so an exact mass is not coerced by the first addition.
+    distribution: list[float] = [0] * (n + 1)
     size = n if targets is None else targets
-    casualties = [0.0] * (size + 1)
+    casualties: list[float] = [0] * (size + 1)
     for (n_wound, n_kill), mass in multinomial_outcomes(n, (p_wound_only, p_kill)):
         distribution[n_wound + n_kill] += mass
         killed = min(n_kill + n_wound // wounds_per_model, size)

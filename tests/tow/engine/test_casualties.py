@@ -1,5 +1,7 @@
 """Remove Casualties tests: per-attack probabilities to distributions."""
 
+from fractions import Fraction
+
 import pytest
 
 from avelorn.core.dice import binomial_distribution, cap_distribution, group_distribution
@@ -36,3 +38,24 @@ def test_uncapped_casualties_when_no_target_size() -> None:
     )
     assert len(casualties) == 6  # 0..5, uncapped
     assert sum(casualties) == pytest.approx(1.0)
+
+
+def test_exact_probabilities_survive_both_aggregation_paths() -> None:
+    """An exact per-attack probability aggregates exactly, kills or no kills.
+
+    Both branches: the binomial path when nothing instant-kills, and the
+    multinomial one when something does. The `ty: ignore`s are the annotation
+    gap — these signatures still say `float`.
+    """
+    for p_kill in (Fraction(0), Fraction(1, 6)):
+        wounds, casualties = wound_and_casualties(
+            4,
+            p_unsaved=Fraction(1, 3),  # ty: ignore[invalid-argument-type]
+            p_kill=p_kill,  # ty: ignore[invalid-argument-type]
+            wounds_per_model=2,
+            targets=4,
+        )
+        assert all(isinstance(p, Fraction) for p in wounds)
+        assert all(isinstance(p, Fraction) for p in casualties)
+        assert sum(wounds) == 1
+        assert sum(casualties) == 1
