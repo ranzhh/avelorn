@@ -259,6 +259,31 @@ def test_matmul_rejects_no_copies() -> None:
         _ = 0 @ _coin
 
 
+def test_only_count_at_distribution_is_defined() -> None:
+    """The other spellings stay TypeErrors, so repeat cannot be read as scaling.
+
+    ``dist @ n`` has no meaning, ``dist @ dist`` no obvious one, and ``*`` is
+    left undefined rather than guessing which of the two it should be. ``ty``
+    rejects all three statically; these assert the runtime refusal too, so
+    defining one of them later cannot pass silently.
+    """
+    for operand in (3, _coin):
+        with pytest.raises(TypeError):
+            _ = _coin @ operand  # ty: ignore[unsupported-operator]
+    with pytest.raises(TypeError):
+        _ = _coin * 3  # ty: ignore[unsupported-operator]
+
+
+def test_matmul_conserves_mass() -> None:
+    """Repeated convolution is still a distribution."""
+    assert (6 @ _coin).total() == pytest.approx(1.0)
+
+
+def test_matmul_matches_the_binomial_it_should_defer_to() -> None:
+    """The closed form and the repeat agree, which is what makes preferring it safe."""
+    assert _same(12 @ _coin, Distribution.from_counts(binomial_distribution(12, 0.5)))
+
+
 def test_rshift_is_bind() -> None:
     """``dist >> step`` is spelling for bind, not a second fold."""
     assert _same(_coin >> _step, _coin.bind(_step))

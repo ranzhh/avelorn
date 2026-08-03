@@ -252,6 +252,14 @@ class Distribution[T: Hashable]:
         Being repeated ``+``, this inherits its meaning of "sum" from the outcome
         type, and the tuple-concatenation trap in :meth:`__add__` with it.
 
+        It is also repeated ``+`` in cost: ``copies`` convolutions, each over a
+        support that grows as it goes, so the work is quadratic in ``copies``.
+        For the one case with a closed form — n independent successes, where the
+        answer is the binomial — :func:`avelorn.core.dice.binomial_distribution`
+        gives the same masses far more cheaply (identical to floating error;
+        measured at 33x faster at n=10 and 190x at n=80). Prefer it on the wide
+        volleys, where the count is large and reached inside a loop.
+
         Returns:
             The distribution of the total over ``copies`` draws.
 
