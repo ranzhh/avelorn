@@ -51,8 +51,11 @@ from fractions import Fraction
 
 # How likely an outcome is. Three numeric types, because the module stores all
 # three:
-#   - ``float`` for the inexact aggregations, which is what every caller in the
-#     engine hands them today;
+#   - ``float`` for the aggregations, because that is what every caller in the
+#     engine hands them today, not because exactness would not work there. An
+#     exact binomial at p=1/6 reaches 63-digit denominators at 80 trials in
+#     0.2ms, summing to exactly 1: slower than float by ~19x, but no kind of
+#     blow-up. Widening those signatures is a separate change;
 #   - ``Fraction`` for the per-attack dice walk in tow.engine.attack, which
 #     resolves exactly on purpose and converts at the caller's edge;
 #   - ``int`` for the fold identities. ``pure`` is the integer ``1`` and the folds
