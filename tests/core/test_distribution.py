@@ -146,6 +146,24 @@ def test_add_conserves_mass() -> None:
     assert (_coin + _coin + _coin).total() == pytest.approx(1.0)
 
 
+def test_sub_gives_a_signed_difference() -> None:
+    """Two coins differenced span -1 to 1, the middle carrying both ties."""
+    assert _same(_coin - _coin, Distribution({-1: 0.25, 0: 0.5, 1: 0.25}))
+
+
+def test_sub_takes_operands_in_written_order() -> None:
+    """``a - b`` and ``b - a`` are mirror images, not the same distribution."""
+    ahead = Distribution({2: 1.0}) - _coin
+    behind = _coin - Distribution({2: 1.0})
+    assert _same(ahead, Distribution({1: 0.5, 2: 0.5}))
+    assert _same(behind, Distribution({-2: 0.5, -1: 0.5}))
+
+
+def test_rsub_subtracts_the_distribution_from_the_constant() -> None:
+    """``value - dist`` reads as written, not reversed."""
+    assert _same(10 - _coin, Distribution({9: 0.5, 10: 0.5}))
+
+
 def test_rshift_is_bind() -> None:
     """``dist >> step`` is spelling for bind, not a second fold."""
     assert _same(_coin >> _step, _coin.bind(_step))

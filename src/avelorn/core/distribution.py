@@ -165,6 +165,26 @@ class Distribution[T: Hashable]:
         """
         return self._lifted(other).combine(self, operator.add)
 
+    def __sub__(self, other: "Distribution[T] | T") -> "Distribution[T]":
+        """``a - b`` — the signed difference of independent draws, or a shift down.
+
+        The distribution of a lead: how far one quantity is ahead of an unrelated
+        other, negative where it is behind. Two *correlated* quantities cannot be
+        differenced this way — see :meth:`combine`.
+
+        Returns:
+            The distribution of the difference.
+        """
+        return self.combine(self._lifted(other), operator.sub)
+
+    def __rsub__(self, other: T) -> "Distribution[T]":
+        """``value - dist`` — a constant less this distribution.
+
+        Returns:
+            The distribution of the difference, taken in written order.
+        """
+        return self._lifted(other).combine(self, operator.sub)
+
     def prob(self, predicate: Callable[[T], bool]) -> float:
         """The probability that ``predicate`` holds of the outcome.
 
