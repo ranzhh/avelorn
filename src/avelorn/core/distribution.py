@@ -115,11 +115,11 @@ class Distribution[T: Hashable]:
         return Distribution(dict(folded))
 
     def __rshift__[U: Hashable](self, step: Callable[[T], "Distribution[U]"]) -> "Distribution[U]":
-        """``dist >> step`` is :meth:`bind` — feed this distribution into ``step``.
+        """Feed this distribution into ``step``, which is :meth:`bind`.
 
-        Reads left to right in the order the engine resolves: a distribution,
-        then the step it flows into. ``step`` is any callable of that shape, so
-        a plain function and a :class:`Step` both chain.
+        It reads left to right, in the order the engine resolves: a distribution,
+        then the step it flows into. ``step`` is any callable of that shape, so a
+        plain function and a :class:`Step` both chain.
 
         Returns:
             The mixed distribution over the downstream outcomes.
@@ -131,15 +131,14 @@ class Distribution[T: Hashable]:
     ) -> "Distribution[V]":
         """Apply ``op`` to **independent** draws from this distribution and ``other``.
 
-        The lift every arithmetic operator below is written in terms of: it takes
-        the joint of two unrelated variables and relabels each pair by ``op``.
-        Being built on :meth:`bind` and :meth:`map`, it adds no second fold.
+        Every arithmetic operator below is written in terms of this. It takes the
+        joint of two unrelated variables and relabels each pair by ``op``. It is
+        built on :meth:`bind` and :meth:`map`, so it adds no second fold.
 
-        Independence is an assumption about the two arguments that this cannot
-        check. Where two quantities are correlated — two sides of one combat,
-        where the same volley thins one and scores for the other — the joint has
-        to be built where the correlation is known, not recovered from marginals
-        here.
+        Independence is an assumption about the two arguments, and this cannot
+        check it. Two sides of one combat are correlated, because the volley that
+        thins one of them scores for the other. Build that joint where the
+        correlation is known. It cannot be recovered from marginals here.
 
         Returns:
             The distribution of ``op(x, y)`` over independent ``x``, ``y``.
@@ -153,19 +152,19 @@ class Distribution[T: Hashable]:
         return value if isinstance(value, Distribution) else cls.pure(value)
 
     def __add__(self, other: "Distribution[T] | T") -> "Distribution[T]":
-        """``a + b`` — the sum of independent draws, or a constant shift.
+        """Sum independent draws, or shift every outcome by a constant.
 
-        With a distribution on the right this is the convolution: the total of
-        two unrelated quantities, a second volley's casualties on top of the
-        first. With a bare outcome it shifts every value by that constant, which
-        is how a fixed edge (a Rank Bonus) enters a distribution of leads.
+        A distribution on the right gives the convolution: the total of two
+        unrelated quantities, a second volley's casualties on top of the first. A
+        bare outcome on the right shifts every value by that constant, which is
+        how a fixed edge such as a Rank Bonus enters a distribution of leads.
 
-        The sum is whatever ``+`` means for the outcome type, which is a total
-        only for numbers. On a tuple outcome — a vector of per-class counts, as
-        the multinomial aggregation produces — ``+`` concatenates and the result
-        is longer tuples, not component sums. Nothing raises. Adding such
-        outcomes component-wise needs :meth:`combine` with an explicit
-        operation; see the module docstring.
+        The sum is whatever ``+`` means for the outcome type, so it is a total
+        only for numbers. On a tuple outcome, such as the vector of per-class
+        counts the multinomial aggregation produces, ``+`` concatenates instead.
+        The result is longer tuples, not component sums, and nothing raises. Use
+        :meth:`combine` with an explicit component-wise operation for those; the
+        module docstring has the detail.
 
         Returns:
             The distribution of the sum.
@@ -173,12 +172,12 @@ class Distribution[T: Hashable]:
         return self.combine(self._lifted(other), operator.add)
 
     def __radd__(self, other: T) -> "Distribution[T]":
-        """``value + dist`` — the sum with a constant on the left.
+        """Sum a constant on the left with this distribution.
 
         Python only reaches a reflected operator when the left operand is of
         another type, so ``other`` is always a bare outcome here, never a
-        distribution. The constant stays on the left so a non-commutative ``+``
-        still means what it reads as.
+        distribution. The constant stays on the left, so a ``+`` that does not
+        commute still means what it reads as.
 
         Returns:
             The distribution of the sum.
@@ -186,15 +185,15 @@ class Distribution[T: Hashable]:
         return self.pure(other).combine(self, operator.add)
 
     def __sub__(self, other: "Distribution[T] | T") -> "Distribution[T]":
-        """``a - b`` — the signed difference of independent draws, or a shift down.
+        """Take the signed difference of independent draws, or shift down by a constant.
 
-        The everyday use is a constant less a distribution: survivors are
-        ``size - casualties``, one quantity read off the other with nothing
+        The everyday use is a constant less a distribution. Survivors are
+        ``size - casualties``, one quantity read off the other, with nothing
         random on the left.
 
-        Differencing two *distributions* is the narrower case, and it is only a
-        lead when the two are genuinely unrelated. It is the wrong tool for the
-        score of a combat, where the sides are correlated: the volley that thins
+        Differencing two *distributions* is the narrower case, and it is a lead
+        only when the two are genuinely unrelated. It is the wrong tool for the
+        score of a combat. There the sides are correlated: the volley that thins
         one of them scores for the other, so the two counts move together and
         their joint cannot be recovered from the marginals. Build that joint
         where the correlation is known. See :meth:`combine`.
@@ -205,7 +204,7 @@ class Distribution[T: Hashable]:
         return self.combine(self._lifted(other), operator.sub)
 
     def __rsub__(self, other: T) -> "Distribution[T]":
-        """``value - dist`` — a constant less this distribution.
+        """Subtract this distribution from a constant.
 
         As with :meth:`__radd__`, ``other`` is always a bare outcome. The
         operands stay in written order.
@@ -216,16 +215,16 @@ class Distribution[T: Hashable]:
         return self.pure(other).combine(self, operator.sub)
 
     def __floordiv__(self, group_size: int) -> "Distribution[T]":
-        """``dist // n`` — floor-divide every outcome, merging those that land together.
+        """Floor-divide every outcome, merging those that land together.
 
-        A count collapses into whole groups of ``n``. Unsaved wounds accumulate
-        into slain multi-Wound models this way, the remainder sitting on a
-        survivor, so several wound counts mean the same casualty count.
+        A count collapses into whole groups of ``group_size``. Unsaved wounds
+        accumulate into slain multi-Wound models this way, the remainder sitting
+        on a survivor, so several wound counts mean the same casualty count.
 
-        The divisor is a fixed group size, not a distribution: dividing by a
-        random quantity has no meaning here, and ``n`` of zero or less has no
-        group to count. Both are rejected rather than left to fail inside the
-        fold, matching :func:`avelorn.core.dice.group_distribution`.
+        The divisor is a fixed group size, not a distribution. Dividing by a
+        random quantity has no meaning here, and a size below 1 has no group to
+        count. Both are rejected up front rather than left to fail inside the
+        fold, which matches :func:`avelorn.core.dice.group_distribution`.
 
         Returns:
             The distribution of the quotient.
@@ -238,27 +237,27 @@ class Distribution[T: Hashable]:
         return self.map(lambda outcome: operator.floordiv(outcome, group_size))
 
     def __rmatmul__(self, copies: int) -> "Distribution[T]":
-        """``n @ dist`` — the sum of ``n`` independent copies of this distribution.
+        """Sum ``copies`` independent copies of this distribution.
 
-        The repeat, kept distinct from any scaling of the outcomes themselves:
-        ``3 @ dist`` resolves the same quantity three times over and totals it,
-        which is not the same distribution as tripling one draw. Only this
+        This is the repeat, and it is kept distinct from any scaling of the
+        outcomes. ``3 @ dist`` resolves the same quantity three times and totals
+        it, which is a different distribution from tripling one draw. Only this
         direction is defined, so the two cannot be confused.
 
-        Zero copies has no answer for a general outcome type — there is no
-        outcome meaning "nothing yet" to start from — so a caller wanting it
-        names the identity itself with :meth:`pure`.
+        Zero copies has no answer for a general outcome type, because there is no
+        outcome meaning "nothing yet" to start from. A caller wanting one names
+        that identity itself with :meth:`pure`.
 
-        Being repeated ``+``, this inherits its meaning of "sum" from the outcome
+        Being repeated ``+``, this takes its meaning of "sum" from the outcome
         type, and the tuple-concatenation trap in :meth:`__add__` with it.
 
-        It is also repeated ``+`` in cost: ``copies`` convolutions, each over a
+        It is repeated ``+`` in cost too: one convolution per copy, each over a
         support that grows as it goes, so the work is quadratic in ``copies``.
-        For the one case with a closed form — n independent successes, where the
-        answer is the binomial — :func:`avelorn.core.dice.binomial_distribution`
-        gives the same masses far more cheaply (identical to floating error;
-        measured at 33x faster at n=10 and 190x at n=80). Prefer it on the wide
-        volleys, where the count is large and reached inside a loop.
+        One case has a closed form. For n independent successes the answer is the
+        binomial, and :func:`avelorn.core.dice.binomial_distribution` gives the
+        same masses far more cheaply, identical to floating error and measured at
+        33x faster at n=10 and 190x at n=80. Prefer it on the wide volleys, where
+        the count is large and reached inside a loop.
 
         Returns:
             The distribution of the total over ``copies`` draws.
@@ -307,13 +306,13 @@ class Distribution[T: Hashable]:
 
 @dataclass(frozen=True)
 class Step[T: Hashable, U: Hashable]:
-    """One stochastic step, ``T -> Distribution[U]``, as a value.
+    """Hold one stochastic step, ``T -> Distribution[U]``, as a value.
 
-    A :meth:`Distribution.bind` argument that can be named, stored, and
-    composed *before* any distribution reaches it: ``a >> b`` builds the
-    two-step chain, and applying it to a distribution runs the whole thing.
-    That makes a resolution sequence assemblable as data — one edge per step —
-    rather than only spellable as nested calls.
+    This is a :meth:`Distribution.bind` argument that can be named, stored, and
+    composed *before* any distribution reaches it. ``a >> b`` builds the two-step
+    chain, and applying it to a distribution runs the whole thing. A resolution
+    sequence can then be assembled as data, one edge per step, instead of only
+    being spellable as nested calls.
     """
 
     resolve: Callable[[T], Distribution[U]]
@@ -322,8 +321,8 @@ class Step[T: Hashable, U: Hashable]:
     def certain(cls, relabel: Callable[[T], U]) -> "Step[T, U]":
         """Lift a deterministic ``relabel`` into a step that mixes nothing.
 
-        How a plain change of variable joins a chain of stochastic steps, so
-        :meth:`Distribution.map` needs no operator of its own.
+        This is how a plain change of variable joins a chain of stochastic steps,
+        which is why :meth:`Distribution.map` needs no operator of its own.
 
         Returns:
             The step whose every outcome is a point mass on ``relabel``'s image.
@@ -339,10 +338,10 @@ class Step[T: Hashable, U: Hashable]:
         return self.resolve(outcome)
 
     def __rshift__[V: Hashable](self, then: Callable[[U], Distribution[V]]) -> "Step[T, V]":
-        """``a >> b`` composes two steps into the single step "a, then b".
+        """Compose two steps into the single step "this one, then ``then``".
 
-        Associative, so a chain of any length composes in any grouping and
-        resolves the same (checked in the tests).
+        Composition is associative, so a chain of any length groups any way and
+        resolves the same. The tests check that.
 
         Returns:
             The composed step from this one's input to ``then``'s output.
