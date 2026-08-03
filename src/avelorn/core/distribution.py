@@ -172,9 +172,16 @@ class Distribution[T: Hashable]:
     def __sub__(self, other: "Distribution[T] | T") -> "Distribution[T]":
         """``a - b`` — the signed difference of independent draws, or a shift down.
 
-        The distribution of a lead: how far one quantity is ahead of an unrelated
-        other, negative where it is behind. Two *correlated* quantities cannot be
-        differenced this way — see :meth:`combine`.
+        The everyday use is a constant less a distribution: survivors are
+        ``size - casualties``, one quantity read off the other with nothing
+        random on the left.
+
+        Differencing two *distributions* is the narrower case, and it is only a
+        lead when the two are genuinely unrelated. It is the wrong tool for the
+        score of a combat, where the sides are correlated: the volley that thins
+        one of them scores for the other, so the two counts move together and
+        their joint cannot be recovered from the marginals. Build that joint
+        where the correlation is known. See :meth:`combine`.
 
         Returns:
             The distribution of the difference.

@@ -165,6 +165,14 @@ def test_rsub_subtracts_the_distribution_from_the_constant() -> None:
     assert _same(10 - _coin, Distribution({9: 0.5, 10: 0.5}))
 
 
+def test_rsub_mirrors_casualties_into_survivors() -> None:
+    """``size - casualties`` is the operator's plainest use, and correlation-free."""
+    casualties = Distribution.from_counts([0.1, 0.2, 0.3, 0.4])
+    survivors = 5 - casualties
+    assert _same(survivors, Distribution({5: 0.1, 4: 0.2, 3: 0.3, 2: 0.4}))
+    assert survivors.expect(float) == pytest.approx(5 - casualties.expect(float))
+
+
 def test_floordiv_groups_outcomes_into_whole_units() -> None:
     """Wounds into 3-Wound models: 0-2 leave none dead, 3-5 leave one."""
     wounds = Distribution({0: 0.1, 1: 0.2, 2: 0.1, 3: 0.3, 4: 0.2, 6: 0.1})
