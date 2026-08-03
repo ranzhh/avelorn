@@ -60,7 +60,7 @@ def win_if_shot(game: TOWGame, defender: Unit):
         .bind(lambda standing: win(game, defender, standing))
         .prob(_defender_wins)
     )
-    return opening, folded
+    return opening, float(folded)
 
 
 def _report(defender: Unit, opening, dont: float, shoot: float) -> None:
@@ -79,7 +79,7 @@ def main() -> None:
     for slug in ("sisters-of-avelorn", "elven-archers"):
         defender = game.units[slug]
         opening, shoot = win_if_shot(game, defender)
-        dont = win(game, defender, 10).prob(_defender_wins)
+        dont = float(win(game, defender, 10).prob(_defender_wins))
         _report(defender, opening, dont, shoot)
         print()
 

@@ -34,6 +34,7 @@ queries) that this subsumes.
 import operator
 from collections.abc import Callable, Hashable, Mapping, Sequence
 from dataclasses import dataclass
+from fractions import Fraction
 
 # Alternatives, if we ever outgrow this hand-roll — noted so we remember them:
 #   - icepool (https://github.com/HighDiceRoller/icepool): exact dice-pool
@@ -46,16 +47,26 @@ from dataclasses import dataclass
 # the existing list[float] / Fraction pmfs. Neither library solves the part that
 # actually matters — engine steps typed as T -> Distribution[T] arrows — so that
 # design is ours to build regardless of which Distribution we stand on.
+
+
+# How likely an outcome is: an inexact ``float`` or an exact ``Fraction``. Both,
+# because the two halves of the engine want different things. The aggregations
+# work in float (a binomial over a wide volley in exact rationals would blow up
+# in denominator size for no benefit), while the per-attack dice walk in
+# tow.engine.attack resolves in exact Fraction and converts at the caller's edge.
+# One distribution type serves both.
 #
-# Open: `mass` is annotated Mapping[T, float], so `ty` rejects the Fraction
-# masses the folds now carry correctly at runtime. Widening it is a schema
-# decision, deliberately not taken here: the choice is between a
-# `Probability = float | Fraction` alias (small diff, homogeneity only
-# documented) and a second type parameter `Distribution[T, P]` (checker enforces
-# that exact and inexact distributions never mix, at the cost of a parameter on
-# every annotation and call site). The per-attack dice walk in
-# tow.engine.attack is the consumer that needs it: it resolves in exact
-# Fractions on purpose and converts at the caller's edge.
+# A checker cannot accept Fraction under a float annotation: int widens to float
+# but Fraction does not, and the numbers ABCs it registers with are invisible to
+# type checkers. Hence the explicit union.
+#
+# Chosen over parameterising the class as Distribution[T, P], which would let the
+# checker prove a chain never mixes the two. That costs a type parameter on every
+# signature and call site, including Step, and it fights the integer-seeded folds
+# below (sum starts at 0, so an exactly-typed total would not check). The union
+# documents the intent instead; see Distribution for the invariant it cannot
+# enforce.
+type Probability = float | Fraction
 
 
 @dataclass(frozen=True)
@@ -72,11 +83,18 @@ class Distribution[T: Hashable]:
     ``float``: they accumulate from the integer ``0`` and :meth:`pure` is the
     integer ``1``, both identities that coerce nothing. Hand a distribution exact
     ``Fraction`` masses and a step that returns them, and the result is still
-    exact. ``mass`` is still annotated ``float``, so that is not yet a *typed*
-    capability — see the note at the foot of this module.
+    exact.
+
+    **One distribution's masses should all be the same numeric type.** Nothing
+    checks this — the :data:`Probability` union permits a mixed mapping, and
+    mixing one into a fold quietly yields ``float``, because ``Fraction * float``
+    is a ``float``. Exactness is lost at the first inexact value and cannot come
+    back. Build a distribution from one kind of number and keep a chain in that
+    kind; convert deliberately at a boundary, the way the engine's phases already
+    do when they take the walk's exact per-attack probabilities into ``float``.
     """
 
-    mass: Mapping[T, float]
+    mass: Mapping[T, Probability]
 
     @classmethod
     def pure(cls, outcome: T) -> "Distribution[T]":
@@ -92,7 +110,7 @@ class Distribution[T: Hashable]:
         return cls({outcome: 1})
 
     @staticmethod
-    def from_counts(pmf: Sequence[float]) -> "Distribution[int]":
+    def from_counts(pmf: Sequence[Probability]) -> "Distribution[int]":
         """Lift a count-pmf (index ``k`` = P(value == ``k``)) into a distribution.
 
         The adapter for the engine's existing ``list[float]`` distributions —
@@ -112,7 +130,7 @@ class Distribution[T: Hashable]:
         Returns:
             The distribution over the relabelled outcomes.
         """
-        folded: dict[U, float] = {}
+        folded: dict[U, Probability] = {}
         for outcome, p in self.mass.items():
             image = relabel(outcome)
             folded[image] = folded.get(image, 0) + p
@@ -129,7 +147,7 @@ class Distribution[T: Hashable]:
         Returns:
             The mixed distribution over the downstream outcomes.
         """
-        folded: dict[U, float] = {}
+        folded: dict[U, Probability] = {}
         for outcome, p in self.mass.items():
             for downstream, q in step(outcome).mass.items():
                 folded[downstream] = folded.get(downstream, 0) + p * q
@@ -293,18 +311,19 @@ class Distribution[T: Hashable]:
             total = total + self
         return total
 
-    def prob(self, predicate: Callable[[T], bool]) -> float:
+    def prob(self, predicate: Callable[[T], bool]) -> Probability:
         """The probability that ``predicate`` holds of the outcome.
 
         Subsumes the count queries (``at least``, ``exactly``, …) — each is a
         predicate: ``prob(lambda k: k >= 1)``, ``prob(lambda k: k == 0)``.
 
         Returns:
-            The summed mass of outcomes satisfying ``predicate``, in [0, 1].
+            The summed mass of outcomes satisfying ``predicate``, in [0, 1], in
+            whatever numeric type the masses carry.
         """
         return sum(p for outcome, p in self.mass.items() if predicate(outcome))
 
-    def expect(self, value: Callable[[T], float]) -> float:
+    def expect(self, value: Callable[[T], Probability]) -> Probability:
         """The expectation of ``value`` over the distribution: ``E[value(X)]``.
 
         With the identity for a count distribution this is the mean number of
@@ -316,8 +335,11 @@ class Distribution[T: Hashable]:
         """
         return sum(value(outcome) * p for outcome, p in self.mass.items())
 
-    def total(self) -> float:
-        """The total mass — 1.0 for a well-formed distribution.
+    def total(self) -> Probability:
+        """The total mass — 1 for a well-formed distribution.
+
+        Exactly ``1`` for exact masses; ``1.0`` give or take floating error for
+        inexact ones, which is why tests compare it to a tolerance.
 
         Returns:
             The sum of all outcome probabilities.

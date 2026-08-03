@@ -336,15 +336,14 @@ def test_certain_step_lifts_a_relabel() -> None:
 
 
 # The folds accumulate from the integer 0 and `pure` is the integer 1, so they
-# carry whatever numeric type the masses are. These pin that: the `ty: ignore`s
-# are the annotation gap (`mass` still says float), not a runtime one.
+# carry whatever numeric type the masses are, and `Probability` types that.
 _SIXTH = Fraction(1, 6)
-_exact: Distribution[int] = Distribution({0: _SIXTH * 5, 1: _SIXTH})  # ty: ignore[invalid-argument-type, invalid-assignment]
+_exact: Distribution[int] = Distribution({0: _SIXTH * 5, 1: _SIXTH})
 
 
 def _halves(k: int) -> Distribution[int]:
     # An exact step: a fair split, in Fractions.
-    return Distribution({k: Fraction(1, 2), k + 1: Fraction(1, 2)})  # ty: ignore[invalid-argument-type, invalid-return-type]
+    return Distribution({k: Fraction(1, 2), k + 1: Fraction(1, 2)})
 
 
 def test_bind_keeps_exact_masses_exact() -> None:
@@ -385,3 +384,25 @@ def test_operators_keep_exact_masses_exact() -> None:
 def test_pure_carries_an_integer_one() -> None:
     """The identity is int 1, so it coerces neither float nor Fraction masses."""
     assert type(Distribution.pure("x").mass["x"]) is int
+
+
+def test_a_mixed_chain_falls_back_to_float() -> None:
+    """One inexact value ends exactness for the rest of the chain.
+
+    The `Probability` union permits this and cannot reject it, so it is pinned
+    here: the class docstring asks for homogeneous masses, and this is the cost
+    of ignoring that. `Fraction * float` is a `float`, and no later exact step
+    recovers it.
+    """
+    lapsed = _exact.bind(lambda k: Distribution({k: 0.5, k + 1: 0.5}))
+    assert all(isinstance(p, float) for p in lapsed.mass.values())
+    assert not any(isinstance(p, Fraction) for p in lapsed.mass.values())
+    # And it stays float even back inside an exact step.
+    assert all(isinstance(p, float) for p in lapsed.bind(_halves).mass.values())
+
+
+def test_expect_can_take_an_exact_mean() -> None:
+    """`expect` carries the probability type too, so an exact mean is reachable."""
+    mean = _exact.expect(Fraction)
+    assert mean == _SIXTH  # 0 * 5/6 + 1 * 1/6
+    assert isinstance(mean, Fraction)
