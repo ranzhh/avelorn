@@ -33,18 +33,22 @@ def p_d6_at_least(target: int) -> float:
 def binomial_pmf(successes: int, trials: int, p: float) -> float:
     """Probability of exactly ``successes`` hits in ``trials`` independent attempts.
 
+    Carries ``p``'s numeric type: the complement is ``1 - p`` with an integer
+    ``1``, so an exact ``p`` gives an exact answer.
+
     Returns:
         P(X = successes) for X ~ Binomial(trials, p).
     """
     misses = trials - successes
-    return comb(trials, successes) * p**successes * (1.0 - p) ** misses
+    return comb(trials, successes) * p**successes * (1 - p) ** misses
 
 
 def binomial_distribution(trials: int, p: float) -> list[float]:
     """Full probability mass function for a binomial outcome.
 
     Returns:
-        A list of length ``trials + 1`` where index ``k`` is P(k successes).
+        A list of length ``trials + 1`` where index ``k`` is P(k successes), in
+        whatever numeric type ``p`` carries.
     """
     logger.debug("binomial distribution over %d trials, p=%.3f", trials, p)
     return [binomial_pmf(k, trials, p) for k in range(trials + 1)]
@@ -57,7 +61,9 @@ def multinomial_outcomes(
 
     ``probabilities`` are the per-trial probabilities of each class; any
     remaining mass is an implicit "nothing" class whose count is not
-    reported. With one class this reduces to the binomial.
+    reported. With one class this reduces to the binomial. The walk carries the
+    numeric type given: the leftover class and the recursion's seed are integer
+    ``1``, so exact per-class probabilities enumerate exactly.
 
     Yields:
         ``(counts, probability)`` per distinct count vector, where
@@ -69,7 +75,7 @@ def multinomial_outcomes(
     """
     if trials < 0:
         raise ValueError("trials must be >= 0")
-    p_rest = 1.0 - sum(probabilities)
+    p_rest = 1 - sum(probabilities)
 
     def _vectors(
         remaining: int, index: int, counts: tuple[int, ...], mass: float
@@ -83,7 +89,7 @@ def multinomial_outcomes(
                 remaining - k, index + 1, (*counts, k), mass * comb(remaining, k) * p**k
             )
 
-    yield from _vectors(trials, 0, (), 1.0)
+    yield from _vectors(trials, 0, (), 1)
 
 
 def cap_distribution(distribution: list[float], cap: int) -> list[float]:
@@ -126,7 +132,8 @@ def group_distribution(distribution: list[float], group_size: int) -> list[float
         raise ValueError("group_size must be >= 1")
     if group_size == 1:
         return list(distribution)
-    buckets = [0.0] * ((len(distribution) - 1) // group_size + 1)
+    # Integer seeds, so an exact mass is not coerced by the first addition.
+    buckets: list[float] = [0] * ((len(distribution) - 1) // group_size + 1)
     for outcome, mass in enumerate(distribution):
         buckets[outcome // group_size] += mass
     logger.debug("grouping distribution by %d into %d buckets", group_size, len(buckets))
@@ -138,7 +145,9 @@ def sample(distribution: list[float], rng: random.Random | None = None) -> int:
 
     Sampling the computed distribution is statistically identical to
     rolling the dice, which makes this the building block for "roll it
-    for me" actions. Pass a seeded ``rng`` for reproducible draws.
+    for me" actions. Pass a seeded ``rng`` for reproducible draws. Exact masses
+    need no conversion — ``random.choices`` weighs ``Fraction`` as readily as
+    ``float``.
 
     Returns:
         The sampled outcome index, in 0..len(distribution) - 1.
@@ -154,6 +163,7 @@ def expected_value(distribution: Sequence[float]) -> float:
 
     Returns:
         The index-weighted mean (e.g. the mean number of successes or
-        casualties, whichever the distribution counts).
+        casualties, whichever the distribution counts), in whatever numeric type
+        the masses carry.
     """
     return sum(k * p for k, p in enumerate(distribution))
