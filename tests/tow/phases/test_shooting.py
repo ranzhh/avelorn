@@ -430,6 +430,10 @@ def test_shoot_unit_skirmishers_impose_minus_one_to_hit_on_the_shooter() -> None
     assert skirmishing.hit_target == formed_up.hit_target + 1
     assert not any("not factored: Skirmishers" in note for note in skirmishing.notes)
     assert any("Skirmish formation is not modelled" in note for note in skirmishing.notes)
+    # The granted rule's own caveat surfaces too: Enemy Fire (Skirmishers)
+    # lives only in granted_rules, and its Unit Strength scope is authored
+    # there, not on the granting rule.
+    assert any("Unit Strength 1" in note for note in skirmishing.notes)
 
 
 def test_shoot_unit_gromril_armour_re_rolls_the_targets_save_against_arrows() -> None:

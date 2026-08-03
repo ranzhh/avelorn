@@ -280,7 +280,12 @@ def compile_rules(
     return modifiers, unfactored
 
 
-def factored_notes(rules: Sequence[Rule], factored: Collection[str], source: str) -> list[str]:
+def factored_notes(
+    rules: Sequence[Rule],
+    factored: Collection[str],
+    source: str,
+    granted: "Mapping[str, Rule] | None" = None,
+) -> list[str]:
     """The authored ``notes`` of the factored rules that carry them.
 
     A rule's hand-authored :attr:`~avelorn.tow.schema.rule.Rule.notes` (its
@@ -289,14 +294,29 @@ def factored_notes(rules: Sequence[Rule], factored: Collection[str], source: str
     caveat is stated in the rule's data and shown beside the figure it
     qualifies, never composed as prose in the engine.
 
+    ``granted`` extends the sweep to conferred rules (a loadout's
+    ``granted_rules``): a factored rule's grants are looked up and their own
+    notes relayed too, so a caveat authored on a grant-only entry (Enemy
+    Fire (Skirmishers)'s Unit Strength scope) is not silenced by living
+    outside the unit's printed list. The granting rule's factoring is the
+    proxy for the grant's — a grant honoured as not firing still surfaces
+    its caveat, which errs on the side of saying it.
+
     Returns:
-        One note per factored rule that authored some, for a result's notes.
+        One note per factored rule (or rule it grants) that authored some.
     """
-    return [
-        f"{rule.name} ({source}): {rule.notes}"
-        for rule in rules
-        if rule.name in factored and rule.notes
-    ]
+    notes: dict[str, None] = {}  # insertion-ordered dedup: two grants, one note
+    for rule in rules:
+        if rule.name not in factored:
+            continue
+        if rule.notes:
+            notes[f"{rule.name} ({source}): {rule.notes}"] = None
+        for effect in rule.effects:
+            if isinstance(effect, GrantEffect):
+                conferred = (granted or {}).get(effect.grants)
+                if conferred is not None and conferred.notes:
+                    notes[f"{conferred.name} ({source}): {conferred.notes}"] = None
+    return list(notes)
 
 
 def forced_outcome(

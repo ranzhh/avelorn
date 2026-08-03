@@ -436,6 +436,10 @@ def shoot_unit(
     # successful saves), the defender's own grants its own (a save re-roll
     # while shot at). The attacker's own-dice grants gate on the volley's
     # facts like any weapon rule (a combat-only grant is honoured inert).
+    # not yet: the volley profile's weapon-borne grants (a magic bow's own
+    # re-roll) are not read here, where _engage reads the profile in use —
+    # nothing in the corpus prints one; a magic missile weapon joins by
+    # compiling its profile rules into this call, as combat does.
     rerolls = effective_rerolls(attacker.loadout.rules, conditions, seat=Side.ATTACKER)
     defender_rerolls = effective_rerolls(defender.loadout.rules, incoming, seat=Side.TARGET)
     claimed = {name for name in unit_index if name not in unit_unfactored} | {*rerolls.factored}
@@ -446,7 +450,11 @@ def shoot_unit(
         for rule in shooter.special_rules
         if rule not in claimed
     )
-    notes.extend(factored_notes(attacker.loadout.rules, claimed, shooter.name))
+    notes.extend(
+        factored_notes(
+            attacker.loadout.rules, claimed, shooter.name, attacker.loadout.granted_rules
+        )
+    )
     defender_claimed = {
         *defender_armour_value.factored,
         *defender_rerolls.factored,
@@ -457,7 +465,11 @@ def shoot_unit(
         for rule in target.special_rules
         if rule not in defender_claimed
     )
-    notes.extend(factored_notes(defender.loadout.rules, defender_claimed, target.name))
+    notes.extend(
+        factored_notes(
+            defender.loadout.rules, defender_claimed, target.name, defender.loadout.granted_rules
+        )
+    )
     notes.extend(f"weapon rule not factored: {rule} ({chosen.name})" for rule in unfactored)
     phase_modifiers, phase_unfactored = compile_rules(sorted(phase_rules), phase_rules, conditions)
     modifiers.extend(phase_modifiers)

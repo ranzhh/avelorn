@@ -376,7 +376,11 @@ def _engage(
         for name in profile.special_rules
         if name in striker.loadout.weapon_rules
     ]
-    rerolls = effective_rerolls([*striker.loadout.rules, *in_use], conditions, seat=Side.ATTACKER)
+    # Compiled per source, not as one pool: unit-rule names claim unit-rule
+    # notes and weapon-rule names claim weapon-rule notes, so a printed name
+    # shared across the two namespaces cannot claim the other's note.
+    rerolls = effective_rerolls(striker.loadout.rules, conditions, seat=Side.ATTACKER)
+    weapon_rerolls = effective_rerolls(in_use, conditions, seat=Side.ATTACKER)
     target_rerolls = effective_rerolls(target.loadout.rules, target_conditions, seat=Side.TARGET)
     # A weapon rule the walk cannot factor may still be consumed by another
     # seam: the supporting-rank query (Fight in Extra Rank, folded into the
@@ -387,7 +391,7 @@ def _engage(
     claimed = {
         *striker.supporting_ranks().factored,
         *effective_initiative(striker, conditions=conditions).factored,
-        *rerolls.factored,
+        *weapon_rerolls.factored,
     }
     unfactored = [rule for rule in unfactored if rule not in claimed]
     notes.extend(f"weapon rule not factored: {rule} ({weapon.name})" for rule in unfactored)
@@ -407,7 +411,12 @@ def _engage(
     wound = wound_target(strength, toughness)
     save = armour_save_target(armour_value, profile.armour_piercing)
     p_unsaved, p_kill, hit = _per_attack(
-        hit, wound, save, None, modifiers, rerolls=(*rerolls.rerolls, *target_rerolls.rerolls)
+        hit,
+        wound,
+        save,
+        None,
+        modifiers,
+        rerolls=(*rerolls.rerolls, *weapon_rerolls.rerolls, *target_rerolls.rerolls),
     )
     # Wounds accumulate into whole slain models; a profile with no printed
     # Wounds ("-") is treated as a single-Wound model.
@@ -660,7 +669,9 @@ def _unit_rule_notes(side: Contingent, claimed: Collection[str] = ()) -> list[st
         for printed, owner in owned
         if printed not in claimed
     ]
-    return unfactored + factored_notes(side.loadout.rules, claimed, unit.name)
+    return unfactored + factored_notes(
+        side.loadout.rules, claimed, unit.name, side.loadout.granted_rules
+    )
 
 
 def _combat_conditions(first_round: bool | None, side: Contingent, foe: Contingent) -> GateContext:
@@ -1221,7 +1232,9 @@ def break_test(result: CombatResult, a: Contingent, b: Contingent) -> BreakResul
         note
         for side, rule in ((a, a_rule), (b, b_rule))
         if rule is not None
-        for note in factored_notes(side.loadout.rules, {rule.name}, side.unit.name)
+        for note in factored_notes(
+            side.loadout.rules, {rule.name}, side.unit.name, side.loadout.granted_rules
+        )
     )
     return BreakResult(
         a=_side_break(
