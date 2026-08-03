@@ -197,6 +197,31 @@ class Distribution[T: Hashable]:
         """
         return self.combine(self._lifted(other), operator.floordiv)
 
+    def __rmatmul__(self, copies: int) -> "Distribution[T]":
+        """``n @ dist`` — the sum of ``n`` independent copies of this distribution.
+
+        The repeat, kept distinct from any scaling of the outcomes themselves:
+        ``3 @ dist`` resolves the same quantity three times over and totals it,
+        which is not the same distribution as tripling one draw. Only this
+        direction is defined, so the two cannot be confused.
+
+        Zero copies has no answer for a general outcome type — there is no
+        outcome meaning "nothing yet" to start from — so a caller wanting it
+        names the identity itself with :meth:`pure`.
+
+        Returns:
+            The distribution of the total over ``copies`` draws.
+
+        Raises:
+            ValueError: ``copies`` is less than 1.
+        """
+        if copies < 1:
+            raise ValueError("copies must be >= 1")
+        total = self
+        for _ in range(copies - 1):
+            total = total + self
+        return total
+
     def prob(self, predicate: Callable[[T], bool]) -> float:
         """The probability that ``predicate`` holds of the outcome.
 

@@ -4,7 +4,7 @@ from collections.abc import Hashable, Mapping
 
 import pytest
 
-from avelorn.core.dice import group_distribution
+from avelorn.core.dice import binomial_distribution, group_distribution
 from avelorn.core.distribution import Distribution, Step
 
 
@@ -185,6 +185,32 @@ def test_floordiv_matches_the_count_pmf_grouping(group_size: int) -> None:
         Distribution.from_counts(pmf) // group_size,
         Distribution.from_counts(group_distribution(pmf, group_size)),
     )
+
+
+def test_matmul_sums_independent_copies() -> None:
+    """``4 @ coin`` is Binomial(4, 0.5) — four throws totalled."""
+    assert _same(4 @ _coin, Distribution.from_counts(binomial_distribution(4, 0.5)))
+
+
+def test_matmul_of_one_copy_is_the_distribution() -> None:
+    """One copy adds nothing to sum."""
+    assert _same(1 @ _coin, _coin)
+
+
+def test_matmul_is_repeated_addition() -> None:
+    """The repeat is the operator it is built from, applied n - 1 times."""
+    assert _same(3 @ _coin, _coin + _coin + _coin)
+
+
+def test_matmul_is_not_scaling_the_outcomes() -> None:
+    """Three draws totalled is not one draw tripled — the trap ``*`` would set."""
+    assert not _same(3 @ _coin, _coin.map(lambda k: k * 3))
+
+
+def test_matmul_rejects_no_copies() -> None:
+    """Zero copies has no identity to return for a general outcome type."""
+    with pytest.raises(ValueError, match="copies must be >= 1"):
+        _ = 0 @ _coin
 
 
 def test_rshift_is_bind() -> None:
