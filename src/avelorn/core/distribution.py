@@ -185,6 +185,18 @@ class Distribution[T: Hashable]:
         """
         return self._lifted(other).combine(self, operator.sub)
 
+    def __floordiv__(self, other: "Distribution[T] | T") -> "Distribution[T]":
+        """``dist // n`` — floor-divide every outcome, merging those that land together.
+
+        How a count collapses into whole groups of ``n``: unsaved wounds
+        accumulating into slain multi-Wound models, where the remainder sits on a
+        survivor and several wound counts therefore mean the same casualty count.
+
+        Returns:
+            The distribution of the quotient.
+        """
+        return self.combine(self._lifted(other), operator.floordiv)
+
     def prob(self, predicate: Callable[[T], bool]) -> float:
         """The probability that ``predicate`` holds of the outcome.
 

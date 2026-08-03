@@ -4,6 +4,7 @@ from collections.abc import Hashable, Mapping
 
 import pytest
 
+from avelorn.core.dice import group_distribution
 from avelorn.core.distribution import Distribution, Step
 
 
@@ -162,6 +163,28 @@ def test_sub_takes_operands_in_written_order() -> None:
 def test_rsub_subtracts_the_distribution_from_the_constant() -> None:
     """``value - dist`` reads as written, not reversed."""
     assert _same(10 - _coin, Distribution({9: 0.5, 10: 0.5}))
+
+
+def test_floordiv_groups_outcomes_into_whole_units() -> None:
+    """Wounds into 3-Wound models: 0-2 leave none dead, 3-5 leave one."""
+    wounds = Distribution({0: 0.1, 1: 0.2, 2: 0.1, 3: 0.3, 4: 0.2, 6: 0.1})
+    assert _same(wounds // 3, Distribution({0: 0.4, 1: 0.5, 2: 0.1}))
+
+
+def test_floordiv_by_one_changes_nothing() -> None:
+    """1-Wound models are the degenerate case, as they are in the engine."""
+    wounds = Distribution({0: 0.25, 1: 0.5, 2: 0.25})
+    assert _same(wounds // 1, wounds)
+
+
+@pytest.mark.parametrize("group_size", [1, 2, 3, 4])
+def test_floordiv_matches_the_count_pmf_grouping(group_size: int) -> None:
+    """The operator agrees with ``group_distribution`` on the same fold."""
+    pmf = [0.05, 0.1, 0.15, 0.2, 0.25, 0.15, 0.1]
+    assert _same(
+        Distribution.from_counts(pmf) // group_size,
+        Distribution.from_counts(group_distribution(pmf, group_size)),
+    )
 
 
 def test_rshift_is_bind() -> None:
