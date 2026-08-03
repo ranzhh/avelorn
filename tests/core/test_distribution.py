@@ -1,6 +1,7 @@
 """Tests for the Distribution monad: the laws, the operators, and the reductions."""
 
 from collections.abc import Hashable, Mapping
+from fractions import Fraction
 
 import pytest
 
@@ -332,3 +333,55 @@ def test_certain_step_lifts_a_relabel() -> None:
     parity: Step[int, int] = Step.certain(lambda k: k % 2)
     dist = Distribution({0: 0.2, 1: 0.3, 2: 0.5})
     assert _same(dist >> parity, dist.map(lambda k: k % 2))
+
+
+# The folds accumulate from the integer 0 and `pure` is the integer 1, so they
+# carry whatever numeric type the masses are. These pin that: the `ty: ignore`s
+# are the annotation gap (`mass` still says float), not a runtime one.
+_SIXTH = Fraction(1, 6)
+_exact: Distribution[int] = Distribution({0: _SIXTH * 5, 1: _SIXTH})  # ty: ignore[invalid-argument-type, invalid-assignment]
+
+
+def _halves(k: int) -> Distribution[int]:
+    # An exact step: a fair split, in Fractions.
+    return Distribution({k: Fraction(1, 2), k + 1: Fraction(1, 2)})  # ty: ignore[invalid-argument-type, invalid-return-type]
+
+
+def test_bind_keeps_exact_masses_exact() -> None:
+    """An exact distribution through an exact step stays exact, and sums to exactly 1."""
+    folded = _exact.bind(_halves)
+    assert all(isinstance(p, Fraction) for p in folded.mass.values())
+    assert folded.mass == {0: Fraction(5, 12), 1: Fraction(1, 2), 2: Fraction(1, 12)}
+    assert folded.total() == 1  # exactly, not to tolerance
+
+
+def test_map_keeps_exact_masses_exact() -> None:
+    """Relabelling merges exact masses without rounding them."""
+    merged = _exact.map(lambda k: k % 2)
+    assert merged.mass == {0: Fraction(5, 6), 1: _SIXTH}
+
+
+def test_pure_is_the_identity_for_exact_masses() -> None:
+    """Right identity holds exactly, which the old float seed broke."""
+    assert _exact.bind(Distribution.pure).mass == _exact.mass
+
+
+def test_deep_exact_chain_never_drifts() -> None:
+    """Ten folds deep, the total is still exactly 1 rather than 1.0000000000000002."""
+    walked = _exact
+    for _ in range(10):
+        walked = walked.bind(_halves)
+    assert walked.total() == 1
+    assert all(isinstance(p, Fraction) for p in walked.mass.values())
+
+
+def test_operators_keep_exact_masses_exact() -> None:
+    """The arithmetic operators inherit the fix, being written on bind and map."""
+    assert all(isinstance(p, Fraction) for p in (_exact + _exact).mass.values())
+    assert (3 @ _exact).total() == 1  # exactly; the float seed gave 1.0000000000000002
+    assert ((_exact + 2) // 2).total() == 1
+
+
+def test_pure_carries_an_integer_one() -> None:
+    """The identity is int 1, so it coerces neither float nor Fraction masses."""
+    assert type(Distribution.pure("x").mass["x"]) is int

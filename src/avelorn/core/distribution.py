@@ -32,7 +32,6 @@ queries) that this subsumes.
 """
 
 import operator
-from collections import defaultdict
 from collections.abc import Callable, Hashable, Mapping, Sequence
 from dataclasses import dataclass
 
@@ -47,6 +46,16 @@ from dataclasses import dataclass
 # the existing list[float] / Fraction pmfs. Neither library solves the part that
 # actually matters — engine steps typed as T -> Distribution[T] arrows — so that
 # design is ours to build regardless of which Distribution we stand on.
+#
+# Open: `mass` is annotated Mapping[T, float], so `ty` rejects the Fraction
+# masses the folds now carry correctly at runtime. Widening it is a schema
+# decision, deliberately not taken here: the choice is between a
+# `Probability = float | Fraction` alias (small diff, homogeneity only
+# documented) and a second type parameter `Distribution[T, P]` (checker enforces
+# that exact and inexact distributions never mix, at the cost of a parameter on
+# every annotation and call site). The per-attack dice walk in
+# tow.engine.attack is the consumer that needs it: it resolves in exact
+# Fractions on purpose and converts at the caller's edge.
 
 
 @dataclass(frozen=True)
@@ -58,6 +67,13 @@ class Distribution[T: Hashable]:
     winner, or a unit's surviving strength. Outcomes absent from ``mass`` have
     probability zero. A well-formed distribution's masses sum to 1.0
     (:meth:`total`); :meth:`bind` and :meth:`map` preserve that.
+
+    The folds carry whatever numeric type the masses are, rather than forcing
+    ``float``: they accumulate from the integer ``0`` and :meth:`pure` is the
+    integer ``1``, both identities that coerce nothing. Hand a distribution exact
+    ``Fraction`` masses and a step that returns them, and the result is still
+    exact. ``mass`` is still annotated ``float``, so that is not yet a *typed*
+    capability — see the note at the foot of this module.
     """
 
     mass: Mapping[T, float]
@@ -66,10 +82,14 @@ class Distribution[T: Hashable]:
     def pure(cls, outcome: T) -> "Distribution[T]":
         """The point mass on ``outcome`` — the monad's ``return``.
 
+        The mass is the integer ``1``, not ``1.0``. It is the multiplicative
+        identity for every numeric type a caller might carry, so binding through
+        :meth:`pure` returns the masses it was given rather than coercing them.
+
         Returns:
             A distribution certain to yield ``outcome``.
         """
-        return cls({outcome: 1.0})
+        return cls({outcome: 1})
 
     @staticmethod
     def from_counts(pmf: Sequence[float]) -> "Distribution[int]":
@@ -92,10 +112,11 @@ class Distribution[T: Hashable]:
         Returns:
             The distribution over the relabelled outcomes.
         """
-        folded: dict[U, float] = defaultdict(float)
+        folded: dict[U, float] = {}
         for outcome, p in self.mass.items():
-            folded[relabel(outcome)] += p
-        return Distribution(dict(folded))
+            image = relabel(outcome)
+            folded[image] = folded.get(image, 0) + p
+        return Distribution(folded)
 
     def bind[U: Hashable](self, step: Callable[[T], "Distribution[U]"]) -> "Distribution[U]":
         """Chain a stochastic ``step`` onto this distribution and mix — the fold.
@@ -108,11 +129,11 @@ class Distribution[T: Hashable]:
         Returns:
             The mixed distribution over the downstream outcomes.
         """
-        folded: dict[U, float] = defaultdict(float)
+        folded: dict[U, float] = {}
         for outcome, p in self.mass.items():
             for downstream, q in step(outcome).mass.items():
-                folded[downstream] += p * q
-        return Distribution(dict(folded))
+                folded[downstream] = folded.get(downstream, 0) + p * q
+        return Distribution(folded)
 
     def __rshift__[U: Hashable](self, step: Callable[[T], "Distribution[U]"]) -> "Distribution[U]":
         """Feed this distribution into ``step``, which is :meth:`bind`.
