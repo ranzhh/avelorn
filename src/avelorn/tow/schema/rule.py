@@ -40,7 +40,7 @@ from pydantic import (
 )
 
 from avelorn.tow.schema.psychology import Outcome, PanicCause
-from avelorn.tow.schema.stage import ATTACK_ROLLS, Stage
+from avelorn.tow.schema.stage import Dice, Stage
 from avelorn.tow.schema.unit import Characteristic
 from avelorn.tow.schema.weapon import WeaponType
 
@@ -126,9 +126,9 @@ class NaturalRoll(BaseModel):
     when making a roll To Wound". Where ``when`` gates on engagement
     state, known once before any die is cast (and possibly unknown),
     an event is decided branch by branch during resolution and is never
-    unknown. ``roll`` must name one of the attack sequence's rolls —
-    the closed :data:`~avelorn.tow.schema.stage.ATTACK_ROLLS`
-    vocabulary, checked at data load.
+    unknown. ``roll`` must name a stage that rolls one die per attack —
+    the stage's own :attr:`~avelorn.tow.schema.stage.Stage.dice` row,
+    checked at data load.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -139,8 +139,8 @@ class NaturalRoll(BaseModel):
     @field_validator("roll")
     @classmethod
     def _a_die_is_rolled_there(cls, roll: Stage) -> Stage:
-        if roll not in ATTACK_ROLLS:
-            raise ValueError(f"{roll} is not an attack roll; no natural face is shown there")
+        if roll.dice is not Dice.D6_PER_ATTACK:
+            raise ValueError(f"{roll} rolls no die per attack; no natural face is shown there")
         return roll
 
 
@@ -461,6 +461,17 @@ class ModifierEffect(GatedEffect):
     limit on the modified value ("to a maximum of 10" / "to a maximum of 3+"): a
     ceiling on a characteristic, the best attainable save (a floor) on an armour
     value.
+
+    ``enemy`` transcribes the printed sentence's subject when it is the
+    other party: "enemy units ... suffer a -1 To Hit modifier" moves the
+    *enemy's* To Hit, where the default (the page speaks of the bearer)
+    moves the bearer's own. Whose quantity it then is in a given attack
+    follows from the quantity's owner side — the rulebook's constant,
+    never authored — flipped by this word: a bearer's ``to-hit`` shapes
+    the attacks it makes, an enemy's the attacks it suffers. Only roll
+    quantities can be flipped today; every other seam folds a side's own
+    values, so ``enemy`` there is a data error until a printed rule
+    needs it.
     """
 
     add: (
@@ -470,6 +481,7 @@ class ModifierEffect(GatedEffect):
         Annotated[dict[Quantity | Characteristic, int | Literal["X"]], Field(min_length=1)] | None
     ) = Field(default=None, alias="set")
     maximum: int | None = None
+    enemy: bool = False
 
     @property
     def quantities(self) -> set["Quantity | Characteristic"]:
@@ -516,6 +528,20 @@ class ModifierEffect(GatedEffect):
         return self
 
     @model_validator(mode="after")
+    def _enemy_flips_a_roll_quantity(self) -> "ModifierEffect":
+        # The enemy subject flips a quantity to the other seat of the attack,
+        # which only the dice walk resolves; the value folds (a characteristic,
+        # the armour value, ranks, combat-result points) each fold one side's
+        # own values, so an enemy-subject operation there has no consumer yet.
+        # Forbidden loudly at load until a printed rule needs one, rather than
+        # left to go silently unfactored forever.
+        if self.enemy:
+            offending = sorted(str(q) for q in self.quantities if seam_of(q) is not Seam.ROLL)
+            if offending:
+                raise ValueError(f"enemy flips a roll quantity only, not: {offending}")
+        return self
+
+    @model_validator(mode="after")
     def _ops_speak_to_one_seam(self) -> "ModifierEffect":
         # Each seam (the dice walk, the characteristic query, the fighting-rank
         # query, the combat-result fold) consumes its quantities all-or-nothing,
@@ -530,6 +556,20 @@ class ModifierEffect(GatedEffect):
                 f"(roll / characteristic / rank / combat-result / armour): {sorted(seams)}"
             )
         return self
+
+
+class RollResult(StrEnum):
+    """One die's result, in the printed re-roll vocabulary.
+
+    The rulebook restricts a re-roll by the result of the dice it names:
+    "may re-roll *failed* rolls To Hit", "must re-roll *successful*
+    Armour Saves". Transcribed as printed; the walk re-rolls exactly the
+    dice the word covers, with no assumption about whom the re-roll
+    serves.
+    """
+
+    FAILED = "failed"
+    SUCCESSFUL = "successful"
 
 
 class RerollEffect(GatedEffect):
@@ -552,21 +592,41 @@ class RerollEffect(GatedEffect):
     only heavy casualties and fled through); empty means any cause.
     ``on_natural`` restricts an attack-roll re-roll to the dice showing that
     natural face (Ithilmar Weapons re-rolls rolls To Hit of a natural 1);
-    None re-rolls every failing die at the stage. The two restrictions are
+    None re-rolls every covered die at the stage. The two restrictions are
     mutually exclusive — a panic test shows no natural face, an attack roll
     has no panic cause — so each belongs to its own seam's stages.
+
+    ``of`` is the printed result restriction: which dice the grant covers,
+    ``failed`` (the default — "may re-roll failed rolls To Hit", and the
+    only re-roll a rational bearer takes of its own dice) or ``successful``
+    ("must re-roll successful Armour Saves" — a re-roll imposed on the
+    roller). ``enemy`` transcribes the sentence's subject when the roller
+    is the other party: "*Enemy units* must re-roll ..." names the enemy's
+    die, where the default names the bearer's own. Whose die a stage rolls
+    is the sequence's constant (:attr:`~avelorn.tow.schema.stage.Stage.rolled_by`),
+    so the seat a grant applies from follows — an enemy-subject save
+    re-roll fires on the attacks the bearer *makes*, a bearer-subject one
+    on the attacks it suffers. Both restrictions name a single die's
+    result or face, so they cover only stages rolling one die per attack.
     """
 
     reroll: Stage
     causes: list[PanicCause] = Field(default_factory=list)
     on_natural: int | None = Field(default=None, ge=1, le=6)
+    of: RollResult = RollResult.FAILED
+    enemy: bool = False
 
     @model_validator(mode="after")
     def _restriction_matches_the_stage(self) -> "RerollEffect":
-        if self.on_natural is not None and self.reroll not in ATTACK_ROLLS:
-            raise ValueError(f"on_natural restricts an attack roll, not {self.reroll}")
-        if self.causes and self.reroll in ATTACK_ROLLS:
+        per_attack = self.reroll.dice is Dice.D6_PER_ATTACK
+        if self.on_natural is not None and not per_attack:
+            raise ValueError(f"on_natural restricts a per-attack die, not {self.reroll}")
+        if self.causes and per_attack:
             raise ValueError(f"causes restricts a panic test, not the attack roll {self.reroll}")
+        if self.of is RollResult.SUCCESSFUL and not per_attack:
+            raise ValueError(f"a successful-dice re-roll names a per-attack die: {self.reroll}")
+        if self.enemy and not per_attack:
+            raise ValueError(f"enemy flips a per-attack die, not {self.reroll}")
         return self
 
 

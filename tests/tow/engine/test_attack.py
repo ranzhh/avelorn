@@ -21,7 +21,7 @@ from avelorn.tow.engine.attack import (
     walk,
 )
 from avelorn.tow.engine.charts import hit_probability, save_probability, wound_probability
-from avelorn.tow.schema.rule import NaturalRoll
+from avelorn.tow.schema.rule import NaturalRoll, RollResult
 from avelorn.tow.schema.stage import Stage
 
 # Every shape the charts can hand the resolver: impossible (0, 10+) and
@@ -185,7 +185,7 @@ def test_unrestricted_reroll_re_rolls_every_miss() -> None:
 
 
 def test_reroll_leaves_a_successful_die_alone() -> None:
-    """Only failing dice are re-rolled; naming a hitting face changes nothing.
+    """A failed-dice grant re-rolls only failures; naming a hitting face changes nothing.
 
     On a 4+ target the natural 6 hits, so a (contrived) re-roll of natural 6s
     finds no failing die to re-roll — the chance is the unmodified 1/2.
@@ -193,6 +193,39 @@ def test_reroll_leaves_a_successful_die_alone() -> None:
     assert resolve_attack(_hit_only(4), rerolls=[Reroll(Stage.ROLL_TO_HIT, 6)]).p_unsaved == (
         Fraction(1, 2)
     )
+
+
+def test_reroll_of_successful_dice_re_rolls_only_the_passes() -> None:
+    """A successful-dice grant re-rolls the passes once; failures stand.
+
+    Hit 4+, wound 4+, save 4+: forcing successful saves to re-roll leaves the
+    save passing only 1/2 * 1/2 = 1/4 of the time, so
+    p_unsaved = 1/2 * 1/2 * 3/4 = 3/16.
+    """
+    profile = AttackProfile.melee(
+        hit_target=4, wound_target=4, save_target=4, ward_target=RollState.IMPOSSIBLE
+    )
+    forced = [Reroll(stage=Stage.MAKE_ARMOUR_SAVES, of=RollResult.SUCCESSFUL)]
+    assert resolve_attack(profile).p_unsaved == Fraction(1, 8)
+    assert resolve_attack(profile, rerolls=forced).p_unsaved == Fraction(3, 16)
+
+
+def test_opposed_rerolls_at_one_stage_cover_disjoint_dice() -> None:
+    """A forced re-roll of passes composes with the roller's own re-roll of 1s.
+
+    Save 4+: passes (1/2) re-roll to pass 1/4; the natural 1 (1/6) re-rolls
+    to pass 1/12; the 2 and 3 stand as failures. P(save) = 1/4 + 1/12 = 1/3,
+    and no die is re-rolled twice — a pass re-rolled into a natural 1 stays
+    a failure. p_unsaved = 1/2 * 1/2 * 2/3 = 1/6.
+    """
+    profile = AttackProfile.melee(
+        hit_target=4, wound_target=4, save_target=4, ward_target=RollState.IMPOSSIBLE
+    )
+    opposed = [
+        Reroll(stage=Stage.MAKE_ARMOUR_SAVES, of=RollResult.SUCCESSFUL),
+        Reroll(stage=Stage.MAKE_ARMOUR_SAVES, on_natural=1),
+    ]
+    assert resolve_attack(profile, rerolls=opposed).p_unsaved == Fraction(1, 6)
 
 
 @pytest.mark.parametrize("hit_target", range(2, 7))
@@ -391,18 +424,18 @@ def test_wound_modifier_cannot_defeat_the_natural_one() -> None:
     assert resolve_attack(profile, transforms=[plus_one]).p_unsaved == Fraction(5, 6)
 
 
-def test_profile_targets_cover_exactly_the_attack_rolls() -> None:
-    """The profile carries a target for each attack roll, and no other stage.
+def test_profile_targets_cover_exactly_the_per_attack_dice() -> None:
+    """The profile carries a target for each per-attack die, and no other stage.
 
-    Drift guard: the schema's ATTACK_ROLLS (the rolls a natural-face
-    event may name) and the profile's stage-addressed targets are one
-    set — a roll joining either side must join both.
+    Drift guard: the stage rows' ``dice`` (the rolls a natural-face event
+    may name) and the profile's stage-addressed targets are one set — a
+    roll joining either side must join both.
     """
-    from avelorn.tow.schema.stage import ATTACK_ROLLS
+    from avelorn.tow.schema.stage import Dice
 
     profile = AttackProfile.shooting(hit_target=3, wound_target=4, save_target=5, ward_target=6)
     for stage in Stage:
-        if stage in ATTACK_ROLLS:
+        if stage.dice is Dice.D6_PER_ATTACK:
             assert profile.with_target(stage, 2).target(stage) == 2
         else:
             with pytest.raises(KeyError):

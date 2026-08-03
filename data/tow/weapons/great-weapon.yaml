@@ -1,0 +1,5 @@
+# Source: https://tow.whfb.app/weapons-of-war/great-weapon
+id: great-weapon
+name: Great Weapon
+profiles:
+  - { R: Combat, S: S+2, AP: -2, special_rules: [Armour Bane (1), Requires Two Hands, Strike Last] }

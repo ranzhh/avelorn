@@ -1,0 +1,8 @@
+# Source: https://tow.whfb.app/weapons-of-war/brace-of-drakefire-pistols
+id: brace-of-drakefire-pistols
+name: Brace of Drakefire Pistols
+profiles:
+  - {name: Ranged, R: 12, S: 5, AP: -1, special_rules: [Armour Bane (2), Dwarf Crafted, Flaming Attacks, Multiple Shots (2),
+      Quick Shot]}
+  - { name: Combat, R: Combat, S: S, AP: '-', special_rules: [Extra Attacks (+1), Flaming Attacks, Requires Two Hands] }
+notes: A brace of drakefire pistols has two profiles, representing how the weapons are used in combat.

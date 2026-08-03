@@ -7,7 +7,7 @@ import yaml
 from pydantic import BaseModel
 
 from avelorn.core.loading import load_yaml
-from avelorn.tow.data import DATA_DIR, TOWRepository
+from avelorn.tow.data import TOWRepository, rule_paths
 from avelorn.tow.importers.whfb_app.parse import WhfbParseError
 from avelorn.tow.importers.whfb_app.preserve import HAND_AUTHORED, with_hand_authored
 from avelorn.tow.importers.whfb_app.yamlout import rule_to_yaml, weapon_to_yaml
@@ -15,7 +15,7 @@ from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.weapon import Weapon
 
-RULE_FILES = sorted(DATA_DIR.glob("tow/rules/*.yaml"))
+RULE_FILES = rule_paths()
 REPO = TOWRepository()
 
 _REIMPORTED = Rule(id="armour-bane", name="Armour Bane (X)", paragraphs=["Fresh text."])

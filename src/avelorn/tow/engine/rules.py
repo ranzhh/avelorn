@@ -54,7 +54,7 @@ from avelorn.tow.schema.rule import (
     Seam,
     seam_of,
 )
-from avelorn.tow.schema.stage import ATTACK_ROLLS, Stage
+from avelorn.tow.schema.stage import Dice, Side, Stage
 from avelorn.tow.schema.unit import Characteristic
 from avelorn.tow.schema.weapon import WeaponType
 
@@ -236,6 +236,7 @@ def compile_rules(
     resolved: Mapping[str, Rule],
     conditions: "GateContext | None" = None,
     *,
+    seat: Side = Side.ATTACKER,
     grants: "Mapping[str, Rule] | None" = None,
 ) -> tuple[list[Modifier], list[str]]:
     """Compile printed rule names into modifier records.
@@ -243,7 +244,14 @@ def compile_rules(
     ``resolved`` maps printed names to their rules as printed — built at
     the muster boundary (a loadout's ``weapon_rules``) or from a registry
     scan; a name absent from it is not modelled. ``conditions`` is the
-    evaluated :class:`GateContext` (or None for all-unknown). ``grants`` maps
+    evaluated :class:`GateContext` (or None for all-unknown). ``seat`` is
+    the side of the attack the rules' bearer occupies in the walk being
+    compiled — the attacker's rules compile at ``ATTACKER``, the target's
+    at ``TARGET``, both into the same walk. An effect reaches the walk iff
+    its quantity's owner side (flipped by the effect's printed ``enemy``
+    subject) matches the seat; one for the other seat is honoured by not
+    applying, exactly as a gate answered False — the same rule compiles
+    from its proper seat in the walks where it matters. ``grants`` maps
     the printed names of rules *conferred* by a grant effect to their resolved
     entries (a loadout's ``granted_rules``) — the lookup a
     :class:`~avelorn.tow.schema.rule.GrantEffect` expands through; a granted
@@ -262,7 +270,7 @@ def compile_rules(
     unfactored: list[str] = []
     for printed in printed_rules:
         rule = resolved.get(printed)
-        compiled = _compile(rule, context, grants) if rule is not None else None
+        compiled = _compile(rule, context, grants, seat) if rule is not None else None
         if compiled is None:
             unfactored.append(printed)
         else:
@@ -272,7 +280,12 @@ def compile_rules(
     return modifiers, unfactored
 
 
-def factored_notes(rules: Sequence[Rule], factored: Collection[str], source: str) -> list[str]:
+def factored_notes(
+    rules: Sequence[Rule],
+    factored: Collection[str],
+    source: str,
+    granted: "Mapping[str, Rule] | None" = None,
+) -> list[str]:
     """The authored ``notes`` of the factored rules that carry them.
 
     A rule's hand-authored :attr:`~avelorn.tow.schema.rule.Rule.notes` (its
@@ -281,14 +294,29 @@ def factored_notes(rules: Sequence[Rule], factored: Collection[str], source: str
     caveat is stated in the rule's data and shown beside the figure it
     qualifies, never composed as prose in the engine.
 
+    ``granted`` extends the sweep to conferred rules (a loadout's
+    ``granted_rules``): a factored rule's grants are looked up and their own
+    notes relayed too, so a caveat authored on a grant-only entry (Enemy
+    Fire (Skirmishers)'s Unit Strength scope) is not silenced by living
+    outside the unit's printed list. The granting rule's factoring is the
+    proxy for the grant's — a grant honoured as not firing still surfaces
+    its caveat, which errs on the side of saying it.
+
     Returns:
-        One note per factored rule that authored some, for a result's notes.
+        One note per factored rule (or rule it grants) that authored some.
     """
-    return [
-        f"{rule.name} ({source}): {rule.notes}"
-        for rule in rules
-        if rule.name in factored and rule.notes
-    ]
+    notes: dict[str, None] = {}  # insertion-ordered dedup: two grants, one note
+    for rule in rules:
+        if rule.name not in factored:
+            continue
+        if rule.notes:
+            notes[f"{rule.name} ({source}): {rule.notes}"] = None
+        for effect in rule.effects:
+            if isinstance(effect, GrantEffect):
+                conferred = (granted or {}).get(effect.grants)
+                if conferred is not None and conferred.notes:
+                    notes[f"{conferred.name} ({source}): {conferred.notes}"] = None
+    return list(notes)
 
 
 def forced_outcome(
@@ -318,7 +346,10 @@ def forced_outcome(
 
 
 def _compile(
-    rule: Rule, context: GateContext, grants: "Mapping[str, Rule] | None" = None
+    rule: Rule,
+    context: GateContext,
+    grants: "Mapping[str, Rule] | None" = None,
+    seat: Side = Side.ATTACKER,
 ) -> list[Modifier] | None:
     # All-or-nothing: every effect must compile, or the rule is
     # unfactored. An effect whose condition evaluates False compiles to
@@ -327,7 +358,7 @@ def _compile(
         return None
     modifiers: list[Modifier] = []
     for effect in rule.effects:
-        compiled = _compile_effect(effect, context, grants)
+        compiled = _compile_effect(effect, context, grants, seat)
         if compiled is None:
             return None
         modifiers.extend(compiled)
@@ -336,10 +367,11 @@ def _compile(
 
 @dataclass(frozen=True)
 class _Roll:
-    """The roll a modifier kind changes: where it happens, how its target moves."""
+    """The roll a modifier kind changes: where it happens, how its target moves, whose it is."""
 
     stage: Stage  # the stage whose roll the kind's quantity decides
     sign: int  # multiplies the printed amount into target movement
+    side: Side  # whose quantity it is — not always whose die it lands on
 
 
 # What each roll-seam quantity means, declared once; a drift-guard test keeps
@@ -349,15 +381,23 @@ class _Roll:
 # Armour Piercing speaks piercing-side (a +1 improvement worsens the save
 # target by the same amount). What a moved target *means* — a 7+ that
 # confirms, a save that cannot be attempted — is each roll's own knowledge,
-# in the walk, never stated here.
+# in the walk, never stated here. ``side`` is the quantity's owner: both are
+# characteristics of the *attack* (Armour Piercing is the attacker's even
+# though it lands on the target's save die); a target-owned roll quantity
+# (a ward-save modifier, say) would join with ``Side.TARGET``. An effect
+# reaches the walks where its bearer sits on that side — flipped when the
+# printed sentence's subject is the enemy.
 _ROLLS: Mapping[Quantity, _Roll] = {
-    Quantity.TO_HIT: _Roll(Stage.ROLL_TO_HIT, sign=-1),
-    Quantity.ARMOUR_PIERCING: _Roll(Stage.MAKE_ARMOUR_SAVES, sign=+1),
+    Quantity.TO_HIT: _Roll(Stage.ROLL_TO_HIT, sign=-1, side=Side.ATTACKER),
+    Quantity.ARMOUR_PIERCING: _Roll(Stage.MAKE_ARMOUR_SAVES, sign=+1, side=Side.ATTACKER),
 }
 
 
 def _compile_effect(
-    effect: RuleEffect, context: GateContext, grants: "Mapping[str, Rule] | None" = None
+    effect: RuleEffect,
+    context: GateContext,
+    grants: "Mapping[str, Rule] | None" = None,
+    seat: Side = Side.ATTACKER,
 ) -> list[Modifier] | None:
     # One effect, top to bottom: bail where the walk cannot honour it,
     # gate on the when's state, then record each additive entry as data —
@@ -365,7 +405,7 @@ def _compile_effect(
     if isinstance(effect, GrantEffect):
         # A grant confers a named rule under its own outer gate; the granted
         # rule's own effects (kept with their inner gates) compile in its place.
-        return _compile_grant(effect, context, grants)
+        return _compile_grant(effect, context, grants, seat)
     if not isinstance(effect, ModifierEffect):
         # Effects for other seams (e.g. re-rolls on make-panic-tests)
         # are not attack modifiers; their seams consume them directly.
@@ -379,6 +419,21 @@ def _compile_effect(
         # adds below are. None is this compiler's "unfactored" signal (turned
         # into a visible "not factored" note by compile_rules), never an error.
         return None
+    adds = effect.add or {}
+    rolls = [_ROLLS[q] for q in adds if isinstance(q, Quantity) and q in _ROLLS]
+    if adds and len(rolls) == len(adds):
+        # The seat gate, before the state gate: an effect whose quantity
+        # belongs to the other seat of this walk (its owner side, flipped
+        # when the printed subject is the enemy) is no business of this
+        # compile whatever its facts say — honoured, never unfactored. It
+        # compiles from its proper seat in the walks where it applies.
+        # One effect speaks to one seam, so the sides agree; non-roll
+        # quantities fall through to the gate and stay another seam's.
+        sides = {roll.side for roll in rolls}
+        if effect.enemy:
+            sides = {side.other for side in sides}
+        if sides != {seat}:
+            return []
     applies = _gate_applies(effect, context)
     if applies is None:
         return None  # the context cannot answer the condition
@@ -406,13 +461,18 @@ def _compile_effect(
 
 
 def _compile_grant(
-    effect: GrantEffect, context: GateContext, grants: "Mapping[str, Rule] | None"
+    effect: GrantEffect,
+    context: GateContext,
+    grants: "Mapping[str, Rule] | None",
+    seat: Side = Side.ATTACKER,
 ) -> list[Modifier] | None:
     # A grant confers a named rule under its own *outer* gate: evaluate that gate,
     # then — when it holds — compile the granted rule in its place, its own
     # effects keeping their *inner* gates (Armour Bane's natural-6 To Wound). The
     # two gates conjoin without merging the trees. The grant stacks with any
     # instance the model already carries, because each is compiled independently.
+    # The granted rule compiles at the grantee's seat: its effects carry their
+    # own subjects, so a granted enemy-subject rule still reaches the right dice.
     applies = _gate_applies(effect, context)
     if applies is None:
         return None  # the context cannot answer the grant's gate
@@ -421,7 +481,7 @@ def _compile_grant(
     granted = (grants or {}).get(effect.grants)
     if granted is None:
         return None  # the granted rule is not resolvable/modelled — unfactored
-    return _compile(granted, context, grants)
+    return _compile(granted, context, grants, seat)
 
 
 @dataclass(frozen=True)
@@ -601,15 +661,23 @@ class EffectiveRerolls:
 def effective_rerolls(
     rules: Sequence[Rule],
     conditions: "GateContext | None" = None,
+    *,
+    seat: Side = Side.ATTACKER,
 ) -> EffectiveRerolls:
-    """Compile the attack-roll re-rolls a contingent's rules grant.
+    """Compile the attack-die re-rolls a contingent's rules grant.
 
-    The re-roll seam: every :class:`RerollEffect` naming an attack roll (To
+    The re-roll seam: every :class:`RerollEffect` naming a per-attack die (To
     Hit, To Wound, a save) is gated on the ``conditions``, which carry the
     equipment in use beside the engagement facts, exactly as the armour fold
     gates Parry — a rule whose fact the conditions cannot answer is reported
     unfactored, one answered False (the weapon it names not in hand) is honoured
-    with no grant. Panic-test re-rolls are another seam's and pass untouched.
+    with no grant. ``seat`` is the side of the attack the rules' bearer occupies
+    in the walk being compiled: a grant reaches the walk iff the named stage's
+    roller (flipped by the effect's printed ``enemy`` subject) matches it — a
+    bearer's own save re-roll joins the attacks it suffers, an enemy-subject
+    one the attacks it makes; a grant for the other seat is honoured with no
+    record, like a gate answered False. Panic-test re-rolls are another seam's
+    and pass untouched.
 
     Returns:
         The re-roll records the dice walk applies, with factored and
@@ -623,17 +691,29 @@ def effective_rerolls(
         matching = [
             effect
             for effect in rule.effects
-            if isinstance(effect, RerollEffect) and effect.reroll in ATTACK_ROLLS
+            if isinstance(effect, RerollEffect) and effect.reroll.dice is Dice.D6_PER_ATTACK
         ]
         if not matching:
             continue
-        answers = [(effect, _gate_applies(effect, context)) for effect in matching]
+        # The seat gate, before the state gate: a grant whose die belongs to
+        # the other seat of this walk (the stage's roller, flipped when the
+        # printed subject is the enemy) is honoured with no record whatever
+        # its facts say — the rule still counts factored, like a gate
+        # answered False, and grants from its proper seat where it applies.
+        seated = [
+            effect
+            for effect in matching
+            if (effect.reroll.rolled_by.other if effect.enemy else effect.reroll.rolled_by) is seat
+        ]
+        answers = [(effect, _gate_applies(effect, context)) for effect in seated]
         if any(when is None for _, when in answers):
             unfactored.append(rule.name)
             continue
         for effect, when in answers:
             if when:
-                grants.append(Reroll(stage=effect.reroll, on_natural=effect.on_natural))
+                grants.append(
+                    Reroll(stage=effect.reroll, on_natural=effect.on_natural, of=effect.of)
+                )
         factored.append(rule.name)
         logger.debug("re-roll grant factored: %s -> %d record(s)", rule.name, len(grants))
     return EffectiveRerolls(tuple(grants), tuple(factored), tuple(unfactored))

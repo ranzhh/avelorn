@@ -1152,3 +1152,65 @@ def test_unit_rule_not_in_the_walk_is_still_reported() -> None:
     lions = _fielded(REPO.units["white-lions-of-chrace"], 10)
     result = strike_unit(spearmen, lions)
     assert any("Martial Prowess" in note for note in result.notes)
+
+
+def test_strike_unit_gromril_armour_re_rolls_the_dwarfs_own_save_natural_ones() -> None:
+    """Gromril Armour betters the Ironbreakers' save while they defend.
+
+    Spearmen (WS4, S3) strike Ironbreakers (WS5, T4, Full Plate and Shield):
+    hit 4+, wound 5+, save 3+, so p_unsaved = 1/2 * 1/3 * 1/3 = 1/18 with the
+    rule stripped. Re-rolling the save's natural 1s lifts P(save) to
+    4/6 + 1/6 * 4/6 = 7/9, so p_unsaved = 1/2 * 1/3 * 2/9 = 1/27 — read
+    straight from the unit's printed rules, claimed rather than noted.
+    """
+    spearmen, ironbreakers = REPO.units["elven-spearmen"], REPO.units["ironbreakers"]
+    stripped = ironbreakers.model_copy(
+        update={"special_rules": [r for r in ironbreakers.special_rules if r != "Gromril Armour"]}
+    )
+    attacker = _fielded(spearmen, 5).wielding("Thrusting Spear")
+
+    plain = strike_unit(attacker, _fielded(stripped, 10).wielding("Hand Weapon"))
+    gromril = strike_unit(attacker, _fielded(ironbreakers, 10).wielding("Hand Weapon"))
+    assert plain.p_unsaved == pytest.approx(1 / 18)
+    assert gromril.p_unsaved == pytest.approx(1 / 27)
+    assert not any("Gromril Armour" in note for note in gromril.notes)
+
+
+def test_strike_unit_gromril_armour_never_re_rolls_the_enemys_save() -> None:
+    """The wrong-way case: a Gromril unit strikes and the target's save stands.
+
+    Ironbreakers (WS5, S4) strike spearmen (T3, Light Armour and Shield):
+    hit 3+, wound 3+, and Gromril Weapons' Armour Piercing worsens the 5+
+    save to 6+, so p_unsaved = 2/3 * 2/3 * 5/6 = 10/27 — identical with
+    and without the dwarfs' own save re-roll, which names the other
+    seat's die.
+    """
+    spearmen, ironbreakers = REPO.units["elven-spearmen"], REPO.units["ironbreakers"]
+    stripped = ironbreakers.model_copy(
+        update={"special_rules": [r for r in ironbreakers.special_rules if r != "Gromril Armour"]}
+    )
+    target = _fielded(spearmen, 10).wielding("Thrusting Spear")
+
+    plain = strike_unit(_fielded(stripped, 5).wielding("Hand Weapon"), target)
+    gromril = strike_unit(_fielded(ironbreakers, 5).wielding("Hand Weapon"), target)
+    assert plain.p_unsaved == pytest.approx(10 / 27)
+    assert gromril.p_unsaved == pytest.approx(plain.p_unsaved)
+
+
+def test_strike_unit_daiths_reaper_re_rolls_the_targets_successful_saves() -> None:
+    """Daith's Reaper: the wielder's weapon, the target's die, the passes re-rolled.
+
+    Spearmen given the Reaper (S+1, AP -1) strike Dwarf Warriors (T4,
+    Heavy Armour): hit 4+, wound 4+, and the save worsens to 6+ — which
+    must then be re-rolled, so P(save) = 1/6 * 1/6 = 1/36 and
+    p_unsaved = 1/2 * 1/2 * 35/36 = 35/144. The item's rule rides the
+    weapon in use, so it is claimed off the weapon-rule notes.
+    """
+    spearmen, dwarfs = REPO.units["elven-spearmen"], REPO.units["dwarf-warriors"]
+    armed = spearmen.model_copy(update={"equipment": [*spearmen.equipment, "Daith's Reaper"]})
+    target = _fielded(dwarfs, 10).wielding("Hand Weapon")
+
+    result = strike_unit(_fielded(armed, 5).wielding("Daith's Reaper"), target)
+    assert result.save_target == 6
+    assert result.p_unsaved == pytest.approx(35 / 144)
+    assert not any("not factored: Daith's Reaper" in note for note in result.notes)

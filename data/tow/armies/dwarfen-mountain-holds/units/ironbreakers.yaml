@@ -1,0 +1,61 @@
+# Source: https://tow.whfb.app/unit/ironbreakers
+id: ironbreakers
+name: Ironbreakers
+points: 15
+unit_size:
+  min: 5
+troop_type: Heavy Infantry
+base_size:
+  width_mm: 25
+  depth_mm: 25
+profiles:
+  - { name: Ironbreaker, M: 3, WS: 5, BS: 3, S: 4, T: 4, W: 1, I: 2, A: 1, Ld: 9 }
+  - { name: Ironbeard, M: 3, WS: 5, BS: 3, S: 4, T: 4, W: 1, I: 2, A: 2, Ld: 9 }
+equipment:
+  - Hand Weapon
+  - Full Plate Armour
+  - Shield
+special_rules:
+  - Close Order
+  - Gromril Armour
+  - Gromril Weapons
+  - Hatred (Orcs & Goblins)
+  - Magic Resistance (-1)
+  - Regimental Unit
+  - Resolute
+  - Runes of Protection
+  - Shieldwall
+  - Stubborn
+options:
+  - name: Ironbeard
+    kind: champion
+    points: 7
+  - name: Standard Bearer
+    kind: standard_bearer
+    points: 7
+  - name: Musician
+    kind: musician
+    points: 7
+  - name: Brace of Drakefire Pistols
+    kind: equipment
+    applies_to: Ironbeard
+    points: 10
+    adds_equipment: [Brace of Drakefire Pistols]
+    removes_equipment: [Shield]
+  - name: Drakegun
+    kind: equipment
+    applies_to: Ironbeard
+    points: 10
+    adds_equipment: [Drakegun]
+    removes_equipment: [Shield]
+  - name: Cinderblast Bombs
+    kind: equipment
+    applies_to: Ironbeard
+    points: 15
+    adds_equipment: [Cinderblast Bombs]
+  - name: Drilled
+    kind: special_rule
+    points: 1
+    per_model: true
+    adds_rules: [Drilled]
+    limit: 0-1 unit per 1000 points

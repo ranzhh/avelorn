@@ -155,7 +155,10 @@ def _rerender(client: WhfbAppClient, path: Path, url: str) -> tuple[str, str, li
         armour = parse_armour(client.weapons_of_war_entry(slug))
         held = armour_to_yaml(load_yaml(path, Armour), source_url=url)
         return held, armour_to_yaml(armour.armour, source_url=url), armour.warnings
-    if kind == "rules":
+    if kind in ("rules", "magic-items"):
+        # An army's magic items (tow/armies/<army>/magic-items/) re-render
+        # through the rule path: their pages parse as rule entries, and the
+        # source header already carries the full magic-item/<slug> path.
         result = parse_special_rule(client.rule_entry(url.removeprefix(f"{BASE_URL}/")))
         # Merged exactly as a real import would merge, so what the check
         # reports is what running the import would do.

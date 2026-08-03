@@ -21,6 +21,25 @@ from avelorn.tow.schema.weapon import Weapon
 DATA_DIR = Path(__file__).parents[3] / "data"
 
 
+def rule_paths(data_dir: Path = DATA_DIR) -> list[Path]:
+    """Every rule-entry file: the shared rules, plus each army's magic items.
+
+    The one statement of where rule entries live — the registry loads
+    through it, and the per-file validation and round-trip tests
+    parametrize over it, so a new home (an army's magic items) joins
+    everywhere at once.
+
+    Returns:
+        The YAML paths, sorted.
+    """
+    return sorted(
+        (
+            *data_dir.glob("tow/rules/*.yaml"),
+            *data_dir.glob("tow/armies/*/magic-items/*.yaml"),
+        )
+    )
+
+
 class TOWRepository:
     """The hand-authored game data under ``data/``, loaded on demand.
 
@@ -60,8 +79,16 @@ class TOWRepository:
 
     @cached_property
     def rules(self) -> Registry[Rule]:
-        """Special rules."""
-        return Registry(load_yaml_dir(self._data_dir / "tow/rules", Rule), kind="rule")
+        """Special rules, plus each army's magic items.
+
+        A magic item lives under its army
+        (``tow/armies/<army>/magic-items/``) but resolves through this one
+        registry — an item's rule text compiles exactly like a special
+        rule's until magic items earn a model of their own, and printed
+        names are unique across both. :func:`rule_paths` states the homes.
+        """
+        entries = (load_yaml(path, Rule) for path in rule_paths(self._data_dir))
+        return Registry(entries, kind="rule")
 
     @cached_property
     def troop_types(self) -> Registry[TroopTypeProfile]:

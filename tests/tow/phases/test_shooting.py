@@ -409,3 +409,52 @@ def test_arrows_of_isha_worsens_the_bow_save_and_is_claimed() -> None:
     assert result.save_target == 6  # 5+ Heavy Armour, worsened one by the bow's AP
     assert not any("Arrows of Isha" in note for note in result.notes)
     assert any("Strike First" in note for note in result.notes)
+
+
+def test_shoot_unit_skirmishers_impose_minus_one_to_hit_on_the_shooter() -> None:
+    """Enemy Fire (Skirmishers): the defender's rule, the shooter's die.
+
+    Skirmishers grants the formation's own Enemy Fire (Skirmishers), whose
+    enemy-subject -1 To Hit lands on this volley's Roll to Hit: shooting the
+    same unit stripped of the rule hits one point easier. The rule is claimed
+    (never listed as not factored) and its formation simplification is noted.
+    """
+    archers, shadows = REPO.units["elven-archers"], REPO.units["shadow-warriors"]
+    formed = shadows.model_copy(
+        update={"special_rules": [r for r in shadows.special_rules if r != "Skirmishers"]}
+    )
+    shooter = _fielded(archers, 5).wielding("Longbow")
+
+    skirmishing = shoot_unit(shooter, _fielded(shadows, 10))
+    formed_up = shoot_unit(shooter, _fielded(formed, 10))
+    assert skirmishing.hit_target == formed_up.hit_target + 1
+    assert not any("not factored: Skirmishers" in note for note in skirmishing.notes)
+    assert any("Skirmish formation is not modelled" in note for note in skirmishing.notes)
+    # The granted rule's own caveat surfaces too: Enemy Fire (Skirmishers)
+    # lives only in granted_rules, and its Unit Strength scope is authored
+    # there, not on the granting rule.
+    assert any("Unit Strength 1" in note for note in skirmishing.notes)
+
+
+def test_shoot_unit_gromril_armour_re_rolls_the_targets_save_against_arrows() -> None:
+    """The defender's own save re-roll reaches a volley's walk too.
+
+    Archers (BS4; longbow S3, Armour Bane (1)) shoot Ironbreakers (T4,
+    save 3+): hit 3+, wound 5+, and a wound's natural 6 improves Armour
+    Piercing by one, so the save is 4+ on that branch and 3+ on the
+    natural 5. Stripped of the rule,
+    p_unsaved = 2/3 * (1/6 * 1/2 + 1/6 * 1/3) = 5/54; re-rolling the
+    save's natural 1s lifts the passes to 7/12 and 7/9, so
+    p_unsaved = 2/3 * (1/6 * 5/12 + 1/6 * 2/9) = 23/324.
+    """
+    archers, ironbreakers = REPO.units["elven-archers"], REPO.units["ironbreakers"]
+    stripped = ironbreakers.model_copy(
+        update={"special_rules": [r for r in ironbreakers.special_rules if r != "Gromril Armour"]}
+    )
+    shooter = _fielded(archers, 5).wielding("Longbow")
+
+    plain = shoot_unit(shooter, _fielded(stripped, 10))
+    gromril = shoot_unit(shooter, _fielded(ironbreakers, 10))
+    assert plain.p_unsaved == pytest.approx(5 / 54)
+    assert gromril.p_unsaved == pytest.approx(23 / 324)
+    assert not any("Gromril Armour" in note for note in gromril.notes)
