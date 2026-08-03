@@ -458,3 +458,20 @@ def test_shoot_unit_gromril_armour_re_rolls_the_targets_save_against_arrows() ->
     assert plain.p_unsaved == pytest.approx(5 / 54)
     assert gromril.p_unsaved == pytest.approx(23 / 324)
     assert not any("Gromril Armour" in note for note in gromril.notes)
+
+
+def test_shoot_unit_notes_the_defenders_rules_no_volley_could_use() -> None:
+    """A volley claims only what its own single walk factored.
+
+    Shot at, the Shadow Warriors' Ithilmar Weapons re-rolls the To Hit 1s of
+    blows *they* throw — the seat of the walk a volley does not resolve — and
+    their Elven Reflexes moves an Initiative no volley reads. Both are
+    reported. Neither may pass for factored merely because the volley's facts
+    answer its combat gate False: a strike, whose facts leave the round open,
+    reports the same pair.
+    """
+    archers, shadows = REPO.units["elven-archers"], REPO.units["shadow-warriors"]
+    result = shoot_unit(_fielded(archers, 5).wielding("Longbow"), _fielded(shadows, 10))
+    reported = [note for note in result.notes if "(Shadow Warriors)" in note]
+    assert "special rule not factored: Ithilmar Weapons (Shadow Warriors)" in reported
+    assert "special rule not factored: Elven Reflexes (Shadow Warriors)" in reported

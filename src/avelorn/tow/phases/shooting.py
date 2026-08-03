@@ -397,11 +397,10 @@ def shoot_unit(
     # Weapon rules with compiled effects join the dice walk; the rest are
     # reported, exactly as before. Shooting-phase chapter rules (Firing
     # at Long Range, Moving and Shooting) apply to every volley.
-    modifiers, unfactored = compile_rules(
+    weapon_compiled = compile_rules(
         profile.special_rules, attacker.loadout.weapon_rules, conditions
     )
-    if volley_fire:
-        unfactored = [rule for rule in unfactored if rule != "Volley Fire"]
+    modifiers = list(weapon_compiled.modifiers)
 
     # The attacker's own unit rules may also shape the volley — Arrows of Isha
     # improves a bow's Armour Piercing and grants it Armour Bane (1) — gated on
@@ -410,26 +409,27 @@ def shoot_unit(
     # Ithilmar Weapons' re-roll) stays unfactored and noted; the factored ones
     # are claimed out of the "special rule not factored" notes below.
     unit_index = {rule.name: rule for rule in attacker.loadout.rules}
-    unit_modifiers, unit_unfactored = compile_rules(
+    unit_compiled = compile_rules(
         list(unit_index), unit_index, conditions, grants=attacker.loadout.granted_rules
     )
-    modifiers.extend(unit_modifiers)
+    modifiers.extend(unit_compiled.modifiers)
 
     # The defender's own rules reach the same walk from the target seat: an
     # enemy-subject rule of the defender's ("enemy units shooting at this
     # unit suffer -1 To Hit") lands on this volley's Roll to Hit, gated on
     # the defender's facts — the incoming attack among them. Its
-    # armour-value rules stay the armour fold's (claimed there).
+    # armour-value rules stay the armour fold's (claimed there), and what
+    # belongs to the attacker's seat of the walk — the blows it would throw in
+    # a melee, not this volley — is inapplicable here and stays reported.
     defender_index = {rule.name: rule for rule in defender.loadout.rules}
-    defender_modifiers, defender_unfactored = compile_rules(
+    defender_compiled = compile_rules(
         list(defender_index),
         defender_index,
         incoming,
         seat=Side.TARGET,
         grants=defender.loadout.granted_rules,
     )
-    modifiers.extend(defender_modifiers)
-    defender_walk_rules = {name for name in defender_index if name not in defender_unfactored}
+    modifiers.extend(defender_compiled.modifiers)
 
     # Each side's re-roll grants, from its own seat: the attacker's
     # enemy-subject grants re-roll the defender's dice (a forced re-roll of
@@ -442,7 +442,10 @@ def shoot_unit(
     # compiling its profile rules into this call, as combat does.
     rerolls = effective_rerolls(attacker.loadout.rules, conditions, seat=Side.ATTACKER)
     defender_rerolls = effective_rerolls(defender.loadout.rules, incoming, seat=Side.TARGET)
-    claimed = {name for name in unit_index if name not in unit_unfactored} | {*rerolls.factored}
+    # One volley is one walk from the attacker's seat, so only what that walk
+    # factored is claimed: a rule belonging to its other seat is inapplicable
+    # and stays reported, since no second compile here covers it.
+    claimed = {*unit_compiled.factored, *rerolls.factored}
 
     notes: list[str] = []
     notes.extend(
@@ -458,7 +461,7 @@ def shoot_unit(
     defender_claimed = {
         *defender_armour_value.factored,
         *defender_rerolls.factored,
-        *defender_walk_rules,
+        *defender_compiled.factored,
     }
     notes.extend(
         f"special rule not factored: {rule} ({target.name})"
@@ -470,10 +473,22 @@ def shoot_unit(
             defender.loadout.rules, defender_claimed, target.name, defender.loadout.granted_rules
         )
     )
-    notes.extend(f"weapon rule not factored: {rule} ({chosen.name})" for rule in unfactored)
-    phase_modifiers, phase_unfactored = compile_rules(sorted(phase_rules), phase_rules, conditions)
-    modifiers.extend(phase_modifiers)
-    notes.extend(f"core rule not factored: {name}" for name in phase_unfactored)
+    # Volley Fire lands on the shot count above rather than in the walk, so it
+    # is claimed out of the weapon-rule notes. The profile in use is only ever
+    # compiled from its shooter's seat, so an inapplicable weapon rule is
+    # reported here — no second compile covers it.
+    weapon_claimed = {"Volley Fire"} if volley_fire else set()
+    notes.extend(
+        f"weapon rule not factored: {rule} ({chosen.name})"
+        for rule in (*weapon_compiled.unfactored, *weapon_compiled.inapplicable)
+        if rule not in weapon_claimed
+    )
+    phase_compiled = compile_rules(sorted(phase_rules), phase_rules, conditions)
+    modifiers.extend(phase_compiled.modifiers)
+    notes.extend(
+        f"core rule not factored: {name}"
+        for name in (*phase_compiled.unfactored, *phase_compiled.inapplicable)
+    )
     if chosen.notes is not None:
         notes.append(f"weapon notes not factored ({chosen.name}): {chosen.notes}")
 

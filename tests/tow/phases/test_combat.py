@@ -1214,3 +1214,43 @@ def test_strike_unit_daiths_reaper_re_rolls_the_targets_successful_saves() -> No
     assert result.save_target == 6
     assert result.p_unsaved == pytest.approx(35 / 144)
     assert not any("not factored: Daith's Reaper" in note for note in result.notes)
+
+
+def test_strike_unit_notes_the_targets_rules_only_its_own_blows_could_use() -> None:
+    """One walk, one seat claimed: the target's offensive rules stay reported.
+
+    Struck by spearmen, the Shadow Warriors' Ithilmar Weapons re-rolls the To
+    Hit 1s of blows *they* throw — the seat of this walk nothing here resolves,
+    since they do not strike back. It is reported rather than passing for
+    factored. Let both sides strike and the other seat's compile claims it, so
+    a fight leaves no note.
+    """
+    spearmen, shadows = REPO.units["elven-spearmen"], REPO.units["shadow-warriors"]
+    striking = _fielded(spearmen, 5).wielding("Thrusting Spear")
+    struck = _fielded(shadows, 5).wielding("Hand Weapon")
+
+    one_sided = strike_unit(striking, struck)
+    assert any(
+        "not factored: Ithilmar Weapons (Shadow Warriors)" in note for note in one_sided.notes
+    )
+
+    both = fight(striking, struck)
+    assert not any("Ithilmar Weapons" in note for note in both.notes)
+
+
+def test_strike_unit_notes_the_strikers_save_re_roll_nothing_saves_against() -> None:
+    """The mirror case: the striker's defensive rules stay reported too.
+
+    Ironbreakers striking spearmen roll no saves — Gromril Armour re-rolls a
+    die of the seat this walk gives to the spearmen — so it is reported, not
+    claimed. In a fight the spearmen strike back and it is factored there.
+    """
+    spearmen, ironbreakers = REPO.units["elven-spearmen"], REPO.units["ironbreakers"]
+    striking = _fielded(ironbreakers, 5).wielding("Hand Weapon")
+    struck = _fielded(spearmen, 5).wielding("Thrusting Spear")
+
+    one_sided = strike_unit(striking, struck)
+    assert any("not factored: Gromril Armour (Ironbreakers)" in note for note in one_sided.notes)
+
+    both = fight(striking, struck)
+    assert not any("Gromril Armour" in note for note in both.notes)
