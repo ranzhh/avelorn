@@ -4,7 +4,7 @@ from collections.abc import Hashable, Mapping
 
 import pytest
 
-from avelorn.core.dice import binomial_distribution, group_distribution
+from avelorn.core.dice import binomial_distribution, cap_distribution, group_distribution
 from avelorn.core.distribution import Distribution, Step
 
 
@@ -216,6 +216,20 @@ def test_floordiv_matches_the_count_pmf_grouping(group_size: int) -> None:
     assert _same(
         Distribution.from_counts(pmf) // group_size,
         Distribution.from_counts(group_distribution(pmf, group_size)),
+    )
+
+
+@pytest.mark.parametrize("cap", [0, 1, 3, 6, 9])
+def test_map_caps_a_count_without_an_operator_of_its_own(cap: int) -> None:
+    """A ceiling is ``min``, which has no operator, and ``map`` already applies it.
+
+    So the wound-to-casualty pipeline needs no further API: group with ``//``,
+    cap with ``map``.
+    """
+    pmf = [0.05, 0.1, 0.15, 0.2, 0.25, 0.15, 0.1]
+    assert _same(
+        Distribution.from_counts(pmf).map(lambda k: min(k, cap)),
+        Distribution.from_counts(cap_distribution(pmf, cap)),
     )
 
 
