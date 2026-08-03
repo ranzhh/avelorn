@@ -8,6 +8,7 @@ from avelorn.tow.contingent import Contingent, Movement
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.engine.attack import AttackProfile, Outcome, RollState, Transform
 from avelorn.tow.phases.shooting import _engagement_conditions, shoot, shoot_unit
+from avelorn.tow.schema.rule import RerollEffect, RollResult, Rule
 from avelorn.tow.schema.stage import Stage
 from avelorn.tow.schema.unit import Characteristic, Unit
 from avelorn.tow.schema.weapon import WeaponType
@@ -475,3 +476,60 @@ def test_shoot_unit_notes_the_defenders_rules_no_volley_could_use() -> None:
     reported = [note for note in result.notes if "(Shadow Warriors)" in note]
     assert "special rule not factored: Ithilmar Weapons (Shadow Warriors)" in reported
     assert "special rule not factored: Elven Reflexes (Shadow Warriors)" in reported
+
+
+def _with_a_magic_bow(archers: Contingent) -> Contingent:
+    # No printed magic bow grants a re-roll, so doctor the longbow with a rule
+    # in Daith's Reaper's shape — "enemy models must re-roll any successful
+    # Armour Save rolls" — printed on its missile profile and filed in the
+    # loadout's weapon rules under that name, exactly as fielding a real magic
+    # missile weapon would file it.
+    rule = Rule(
+        id="doctored-bow",
+        name="Doctored Bow",
+        paragraphs=["…"],
+        effects=[
+            RerollEffect(reroll=Stage.MAKE_ARMOUR_SAVES, of=RollResult.SUCCESSFUL, enemy=True)
+        ],
+    )
+    longbow = archers.loadout.weapon("Longbow")
+    printed = longbow.profiles[0]
+    doctored = longbow.model_copy(
+        update={
+            "profiles": [
+                printed.model_copy(update={"special_rules": [*printed.special_rules, rule.name]})
+            ]
+        }
+    )
+    loadout = replace(
+        archers.loadout,
+        weapons=(doctored, *(w for w in archers.loadout.weapons if w.name != longbow.name)),
+        weapon_rules={**archers.loadout.weapon_rules, rule.name: rule},
+    )
+    return replace(archers, loadout=loadout).wielding("Longbow")
+
+
+def test_shoot_unit_factors_a_missile_profiles_own_re_roll_grant() -> None:
+    """A magic bow's own grant reaches the volley, as a magic blade's reaches a melee.
+
+    Archers (BS4; longbow S3, Armour Bane (1)) shoot White Lions (T3, Heavy
+    Armour and a Lion Cloak that betters a non-magical shot's save to 4+): hit
+    3+, wound 4+, and a wound's natural 6 improves Armour Piercing by one, so
+    the save is 5+ on that branch and 4+ on the natural 4 or 5 —
+    p_unsaved = 2/3 * (2/6 * 1/2 + 1/6 * 2/3) = 5/27. Forced to re-roll its
+    successful saves, the defender keeps only the passes it makes twice: 1/4
+    where it saved on 4+, 1/9 on the branch worsened to 5+, so
+    p_unsaved = 2/3 * (2/6 * 3/4 + 1/6 * 8/9) = 43/162. The grant rides the
+    profile in use, so it is claimed off the weapon-rule notes.
+    """
+    archers, lions = REPO.units["elven-archers"], REPO.units["white-lions-of-chrace"]
+    target = _fielded(lions, 10)
+
+    plain = shoot_unit(_fielded(archers, 5).wielding("Longbow"), target)
+    magic = shoot_unit(_with_a_magic_bow(_fielded(archers, 5)), target)
+
+    assert plain.save_target == 4
+    assert plain.p_unsaved == pytest.approx(5 / 27)
+    assert magic.save_target == 4  # a re-roll shifts the probability, not the target
+    assert magic.p_unsaved == pytest.approx(43 / 162)
+    assert not any("Doctored Bow" in note for note in magic.notes)

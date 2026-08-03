@@ -434,13 +434,21 @@ def shoot_unit(
     # Each side's re-roll grants, from its own seat: the attacker's
     # enemy-subject grants re-roll the defender's dice (a forced re-roll of
     # successful saves), the defender's own grants its own (a save re-roll
-    # while shot at). The attacker's own-dice grants gate on the volley's
-    # facts like any weapon rule (a combat-only grant is honoured inert).
-    # not yet: the volley profile's weapon-borne grants (a magic bow's own
-    # re-roll) are not read here, where _engage reads the profile in use —
-    # nothing in the corpus prints one; a magic missile weapon joins by
-    # compiling its profile rules into this call, as combat does.
+    # while shot at). The attacker's grants come from its unit rules and from
+    # the rules of the missile profile in use — a magic bow's rule is scoped by
+    # shooting it — exactly as a melee reads the weapon in hand. Each gates on
+    # the volley's facts like any weapon rule (a combat-only grant is honoured
+    # inert).
+    in_use = [
+        attacker.loadout.weapon_rules[name]
+        for name in profile.special_rules
+        if name in attacker.loadout.weapon_rules
+    ]
+    # Compiled per source, not as one pool: unit-rule names claim unit-rule
+    # notes and weapon-rule names claim weapon-rule notes, so a printed name
+    # shared across the two namespaces cannot claim the other's note.
     rerolls = effective_rerolls(attacker.loadout.rules, conditions, seat=Side.ATTACKER)
+    weapon_rerolls = effective_rerolls(in_use, conditions, seat=Side.ATTACKER)
     defender_rerolls = effective_rerolls(defender.loadout.rules, incoming, seat=Side.TARGET)
     # One volley is one walk from the attacker's seat, so only what that walk
     # factored is claimed: a rule belonging to its other seat is inapplicable
@@ -473,11 +481,14 @@ def shoot_unit(
             defender.loadout.rules, defender_claimed, target.name, defender.loadout.granted_rules
         )
     )
-    # Volley Fire lands on the shot count above rather than in the walk, so it
-    # is claimed out of the weapon-rule notes. The profile in use is only ever
-    # compiled from its shooter's seat, so an inapplicable weapon rule is
-    # reported here — no second compile covers it.
-    weapon_claimed = {"Volley Fire"} if volley_fire else set()
+    # A weapon rule the walk cannot factor may be the re-roll seam's instead (a
+    # magic bow's grant), and Volley Fire lands on the shot count above rather
+    # than in the walk: both are claimed out of the weapon-rule notes. The
+    # profile in use is only ever compiled from its shooter's seat, so an
+    # inapplicable weapon rule is reported here — no second compile covers it.
+    weapon_claimed = {*weapon_rerolls.factored}
+    if volley_fire:
+        weapon_claimed.add("Volley Fire")
     notes.extend(
         f"weapon rule not factored: {rule} ({chosen.name})"
         for rule in (*weapon_compiled.unfactored, *weapon_compiled.inapplicable)
@@ -507,7 +518,7 @@ def shoot_unit(
         wounds_per_model=defender_wounds,
         targets=defenders,
         modifiers=modifiers,
-        rerolls=(*rerolls.rerolls, *defender_rerolls.rerolls),
+        rerolls=(*rerolls.rerolls, *weapon_rerolls.rerolls, *defender_rerolls.rerolls),
         notes=tuple(notes),
     )
 
