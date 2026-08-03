@@ -361,6 +361,30 @@ class Distribution[T: Hashable]:
         """
         return sum(self.mass.values())
 
+    def collapse(self) -> "Distribution[T]":
+        """Convert every mass to ``float``, giving up exactness deliberately.
+
+        The one place a distribution stops being exact. Exact masses can be
+        carried the whole way through a resolution — the folds preserve them and
+        the denominators grow slowly — so nothing needs to round early, and
+        anything that does is a bug rather than a boundary. This is the boundary:
+        named, greppable, and chosen by a caller.
+
+        There is no way back. Once a mass is a ``float`` the exact value is gone,
+        and no later exact step recovers it, so collapse at the edge where a
+        ``float`` is genuinely wanted rather than part-way through.
+
+        Almost nothing needs one. ``Fraction`` formats under a float spec,
+        compares against floats, and works as a ``random.choices`` weight, so a
+        distribution can usually be displayed and sampled without collapsing at
+        all. Reach for this to hand masses to something that demands ``float``
+        outright, or to stop denominators growing across a very long chain.
+
+        Returns:
+            The same outcomes with every mass converted to ``float``.
+        """
+        return Distribution({outcome: float(p) for outcome, p in self.mass.items()})
+
 
 @dataclass(frozen=True)
 class Step[T: Hashable, U: Hashable]:
