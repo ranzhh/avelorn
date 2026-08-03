@@ -12,7 +12,16 @@ maps each outcome to its probability and gives the engine one shared way to
 
 ``dist >> step`` is :meth:`bind` spelled as an operator, and a :class:`Step`
 wraps such a step as a value so a whole sequence composes before any
-distribution reaches it (``to_hit >> to_wound >> saves``).
+distribution reaches it (``to_hit >> to_wound >> saves``). Arithmetic on
+outcomes — :meth:`__add__` and the rest — goes through :meth:`combine`.
+
+The arithmetic operators mean whatever the *outcome type's* operator means, so
+they serve numeric outcomes and nothing else. A distribution over vectors of
+per-class counts (``(wounds, kills)``, the shape the multinomial aggregation in
+:mod:`avelorn.tow.engine.casualties` produces) does not add component-wise:
+``+`` concatenates the tuples instead, silently. Vector outcomes need
+:meth:`combine` with a component-wise operation, or a distribution per class.
+Naming that gap here rather than guessing at an operator for it.
 
 Formally this is the discrete probability monad: :meth:`pure` is a point mass,
 :meth:`bind` is the mix, and the two obey the monad laws (checked in the tests).
@@ -151,6 +160,13 @@ class Distribution[T: Hashable]:
         first. With a bare outcome it shifts every value by that constant, which
         is how a fixed edge (a Rank Bonus) enters a distribution of leads.
 
+        The sum is whatever ``+`` means for the outcome type, which is a total
+        only for numbers. On a tuple outcome — a vector of per-class counts, as
+        the multinomial aggregation produces — ``+`` concatenates and the result
+        is longer tuples, not component sums. Nothing raises. Adding such
+        outcomes component-wise needs :meth:`combine` with an explicit
+        operation; see the module docstring.
+
         Returns:
             The distribution of the sum.
         """
@@ -232,6 +248,9 @@ class Distribution[T: Hashable]:
         Zero copies has no answer for a general outcome type — there is no
         outcome meaning "nothing yet" to start from — so a caller wanting it
         names the identity itself with :meth:`pure`.
+
+        Being repeated ``+``, this inherits its meaning of "sum" from the outcome
+        type, and the tuple-concatenation trap in :meth:`__add__` with it.
 
         Returns:
             The distribution of the total over ``copies`` draws.

@@ -147,6 +147,30 @@ def test_add_conserves_mass() -> None:
     assert (_coin + _coin + _coin).total() == pytest.approx(1.0)
 
 
+# A distribution over per-class count vectors, the shape the multinomial
+# aggregation produces: (wounds, instant kills) for one attack.
+_classes: Distribution[tuple[int, int]] = Distribution({(1, 0): 0.3, (0, 1): 0.1, (0, 0): 0.6})
+
+
+def test_add_concatenates_tuple_outcomes_rather_than_summing_them() -> None:
+    """``+`` means the outcome type's ``+``, which for a tuple is not a total.
+
+    Pinned because it is silent: a vector of per-class counts added this way
+    grows longer instead of adding component-wise, and nothing raises.
+    """
+    assert all(len(outcome) == 4 for outcome in (_classes + _classes).mass)
+    assert all(len(outcome) == 6 for outcome in (3 @ _classes).mass)
+
+
+def test_combine_adds_count_vectors_component_wise() -> None:
+    """The escape hatch: name the component-wise operation and combine on it."""
+    summed = _classes.combine(_classes, lambda a, b: (a[0] + b[0], a[1] + b[1]))
+    assert summed.total() == pytest.approx(1.0)
+    assert all(len(outcome) == 2 for outcome in summed.mass)
+    assert summed.mass[(2, 0)] == pytest.approx(0.09)  # both drew a plain wound
+    assert summed.mass[(1, 1)] == pytest.approx(2 * 0.3 * 0.1)  # one of each, either order
+
+
 def test_sub_gives_a_signed_difference() -> None:
     """Two coins differenced span -1 to 1, the middle carrying both ties."""
     assert _same(_coin - _coin, Distribution({-1: 0.25, 0: 0.5, 1: 0.25}))
