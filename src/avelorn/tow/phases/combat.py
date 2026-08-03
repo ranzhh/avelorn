@@ -245,9 +245,14 @@ class _Engagement:
     # re-rolls, its enemy-subject maluses on the striker's dice.
     target_rerolls: EffectiveRerolls
     # Each side's unit rules the dice walk factored, claimed by the callers
-    # so a rule in the math is never also reported as not factored.
-    walk_rules: frozenset[str]
-    target_walk_rules: frozenset[str]
+    # so a rule in the math is never also reported as not factored — and,
+    # apart, those the *other* seat of the walk owns. A caller resolving both
+    # seats claims those too; a one-sided one reports them, since nothing in
+    # its single walk consumed them.
+    walk_factored: frozenset[str]
+    walk_inapplicable: frozenset[str]
+    target_walk_factored: frozenset[str]
+    target_walk_inapplicable: frozenset[str]
     p_unsaved: float
     p_kill: float
     target_wounds: int
@@ -313,28 +318,24 @@ def _engage(
         )
     strength = profile.strength.resolve(wielder_strength or 0)
 
-    armour_value = defender_armour(target.loadout.armour)
     # The defender's own rules may better its save (Parry's +1 with a hand
     # weapon and shield in use), gated on its equipment and engagement facts;
-    # a lower armour value is a better save. Nothing to improve unarmoured.
-    if armour_value is None:
-        target_armour = EffectiveValue(0)
-    else:
-        target_armour = effective_armour_value(
-            armour_value,
-            target.loadout.rules,
-            target_conditions,
-        )
-        armour_value = target_armour.value
+    # a lower armour value is a better save. An unarmoured defender has nothing
+    # to improve, but the fold still runs — it is the seam that owns an armour
+    # rule's disposition, and skipping it would leave the rule unspoken for.
+    printed_armour = defender_armour(target.loadout.armour)
+    target_armour = effective_armour_value(printed_armour, target.loadout.rules, target_conditions)
+    armour_value = None if printed_armour is None else target_armour.value
     notes: list[str] = []
     # This striker's engagement conditions gate its rules, exactly as a
     # volley's do: a weapon rule whose condition the facts answer is
     # factored (True) or honoured as a no-op (False), one they leave
     # unknown stays noted. The combat chapter's rules in force
     # (phase_rules) apply to every strike, gated by the same facts.
-    modifiers, unfactored = compile_rules(
+    weapon_compiled = compile_rules(
         profile.special_rules, striker.loadout.weapon_rules, conditions
     )
+    modifiers = list(weapon_compiled.modifiers)
     # The striker's own unit rules move the same dice — Gromril Weapons gives
     # its hand weapon an Armour Piercing characteristic of -1 — gated on the
     # weapon in hand, exactly as a volley reads Arrows of Isha. What the walk
@@ -342,27 +343,26 @@ def _engage(
     # what it cannot (Strike First's Initiative set, Ithilmar Weapons'
     # re-roll) belongs to another seam and is claimed by that one.
     unit_index = {rule.name: rule for rule in striker.loadout.rules}
-    unit_modifiers, unit_unfactored = compile_rules(
+    unit_compiled = compile_rules(
         list(unit_index), unit_index, conditions, grants=striker.loadout.granted_rules
     )
-    modifiers.extend(unit_modifiers)
-    walk_rules = frozenset(name for name in unit_index if name not in unit_unfactored)
+    modifiers.extend(unit_compiled.modifiers)
     # The target's own rules reach the same walk from the other seat: an
     # enemy-subject rule of the target's ("-1 to hit this unit") lands on
     # this striker's Roll to Hit, gated on the target's own facts — the
     # incoming attack among them. Rules whose quantities belong to the
-    # striker's seat, or to another seam (Parry's armour value, claimed by
-    # the armour fold), compile to nothing here and are claimed elsewhere.
+    # striker's seat compile to nothing here (inapplicable, kept apart so a
+    # one-sided strike still reports them); those belonging to another seam
+    # (Parry's armour value, claimed by the armour fold) are claimed there.
     target_index = {rule.name: rule for rule in target.loadout.rules}
-    target_modifiers, target_unfactored = compile_rules(
+    target_compiled = compile_rules(
         list(target_index),
         target_index,
         target_conditions,
         seat=Side.TARGET,
         grants=target.loadout.granted_rules,
     )
-    modifiers.extend(target_modifiers)
-    target_walk_rules = frozenset(name for name in target_index if name not in target_unfactored)
+    modifiers.extend(target_compiled.modifiers)
     # Each side's rules may re-roll the walk's dice, from its own seat: the
     # striker its own To Hit (Ithilmar Weapons' natural 1s) or, with an
     # enemy-subject grant, the target's save (Daith's Reaper's forced
@@ -387,17 +387,27 @@ def _engage(
     # attack count), the striking-order Initiative read (a great weapon's
     # Strike Last, which sets Initiative), or the re-roll seam (Daith's
     # Reaper). Claim all three out of the walk's unfactored notes, the way
-    # shooting claims Volley Fire off a volley.
+    # shooting claims Volley Fire off a volley. The weapon in hand is only
+    # ever compiled from its wielder's seat — no second compile covers a
+    # weapon rule aimed at the other one — so an inapplicable weapon rule is
+    # reported here, not claimed.
     claimed = {
         *striker.supporting_ranks().factored,
         *effective_initiative(striker, conditions=conditions).factored,
         *weapon_rerolls.factored,
     }
-    unfactored = [rule for rule in unfactored if rule not in claimed]
+    unfactored = [
+        rule
+        for rule in (*weapon_compiled.unfactored, *weapon_compiled.inapplicable)
+        if rule not in claimed
+    ]
     notes.extend(f"weapon rule not factored: {rule} ({weapon.name})" for rule in unfactored)
-    phase_modifiers, phase_unfactored = compile_rules(sorted(phase_rules), phase_rules, conditions)
-    modifiers.extend(phase_modifiers)
-    notes.extend(f"core rule not factored: {name}" for name in phase_unfactored)
+    phase_compiled = compile_rules(sorted(phase_rules), phase_rules, conditions)
+    modifiers.extend(phase_compiled.modifiers)
+    notes.extend(
+        f"core rule not factored: {name}"
+        for name in (*phase_compiled.unfactored, *phase_compiled.inapplicable)
+    )
     if weapon.notes is not None:
         notes.append(f"weapon notes not factored ({weapon.name}): {weapon.notes}")
 
@@ -437,8 +447,10 @@ def _engage(
         target_armour=target_armour,
         rerolls=rerolls,
         target_rerolls=target_rerolls,
-        walk_rules=walk_rules,
-        target_walk_rules=target_walk_rules,
+        walk_factored=frozenset(unit_compiled.factored),
+        walk_inapplicable=frozenset(unit_compiled.inapplicable),
+        target_walk_factored=frozenset(target_compiled.factored),
+        target_walk_inapplicable=frozenset(target_compiled.inapplicable),
         p_unsaved=p_unsaved,
         p_kill=p_kill,
         target_wounds=target_wounds,
@@ -541,7 +553,11 @@ def strike_unit(
             # rules (Press of Battle) and its effective-WS rules are in the math
             # and claimed; the target's stay noted until it strikes in its turn.
             # The round is unknown here, so a first-round rule like Martial
-            # Prowess factors nothing and stays noted.
+            # Prowess factors nothing and stays noted. One walk is resolved, so
+            # only what it factored is claimed: a rule belonging to the other
+            # seat of it (the striker's own save re-roll — nothing saves against
+            # it here) is inapplicable, and stays noted rather than passing for
+            # factored.
             *_unit_rule_notes(
                 striker,
                 claimed={
@@ -549,19 +565,21 @@ def strike_unit(
                     *striker.effective_attacks().factored,
                     *engagement.weapon_skill.factored,
                     *engagement.rerolls.factored,
-                    *engagement.walk_rules,
+                    *engagement.walk_factored,
                 },
             ),
             # The target throws no blows here, but its save is resolved and its
             # rules read from its seat of the walk, so its save-improving rules
             # (Parry), its own re-rolls, and its enemy-subject maluses are all
-            # factored and claimed.
+            # factored and claimed. What only the blows it would throw back
+            # could use (Ithilmar Weapons' To Hit re-roll) is the other seat's,
+            # and stays noted — it strikes in its own turn.
             *_unit_rule_notes(
                 target,
                 claimed={
                     *engagement.target_armour.factored,
                     *engagement.target_rerolls.factored,
-                    *engagement.target_walk_rules,
+                    *engagement.target_walk_factored,
                 },
             ),
             *engagement.notes,
@@ -938,7 +956,10 @@ def fight(
     # A rule factored into the striking order, the fighting-rank depth, the
     # effective Attacks, or the effective Weapon Skill is in the math — claimed,
     # so never noted; both sides strike, so each claims its own. A mirror match
-    # dedups the identical remainder.
+    # dedups the identical remainder. Both seats of both walks are resolved
+    # here, so each side also claims what the seat it did not compile from
+    # skipped as inapplicable: whatever one seat is not the business of, the
+    # other seat's compile has.
     notes = tuple(
         dict.fromkeys(
             [
@@ -950,12 +971,16 @@ def fight(
                         *a.effective_attacks().factored,
                         *a_strikes.weapon_skill.factored,
                         *a_strikes.rerolls.factored,
-                        *a_strikes.walk_rules,
+                        *a_strikes.rerolls.inapplicable,
+                        *a_strikes.walk_factored,
+                        *a_strikes.walk_inapplicable,
                         *a_combat_result.factored,
                         # a's defensive rules are read while it is b's target
                         *b_strikes.target_armour.factored,
                         *b_strikes.target_rerolls.factored,
-                        *b_strikes.target_walk_rules,
+                        *b_strikes.target_rerolls.inapplicable,
+                        *b_strikes.target_walk_factored,
+                        *b_strikes.target_walk_inapplicable,
                     },
                 ),
                 *_unit_rule_notes(
@@ -966,11 +991,15 @@ def fight(
                         *b.effective_attacks().factored,
                         *b_strikes.weapon_skill.factored,
                         *b_strikes.rerolls.factored,
-                        *b_strikes.walk_rules,
+                        *b_strikes.rerolls.inapplicable,
+                        *b_strikes.walk_factored,
+                        *b_strikes.walk_inapplicable,
                         *b_combat_result.factored,
                         *a_strikes.target_armour.factored,
                         *a_strikes.target_rerolls.factored,
-                        *a_strikes.target_walk_rules,
+                        *a_strikes.target_rerolls.inapplicable,
+                        *a_strikes.target_walk_factored,
+                        *a_strikes.target_walk_inapplicable,
                     },
                 ),
                 *a_strikes.notes,

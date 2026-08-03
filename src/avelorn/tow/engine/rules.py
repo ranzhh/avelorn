@@ -21,6 +21,9 @@ the engine cannot honour, or needs a parameter the printed name did
 not supply, the whole rule stays unfactored — reported, never
 partially or silently applied. A rule with no effects at all is
 likewise unfactored: recognised text the engine cannot yet honour.
+A rule that is simply not *this* compile's business — its dice belong
+to the other seat of the attack — is neither: it is inapplicable, the
+third bucket, claimed by whoever resolves that seat too.
 """
 
 import logging
@@ -28,6 +31,7 @@ import re
 from collections.abc import Collection, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field
+from enum import Enum, auto
 from typing import get_args
 
 from pydantic.fields import FieldInfo
@@ -231,6 +235,56 @@ def _with_parameter(effect: RuleEffect, parameter: int) -> RuleEffect:
     return effect.model_copy(update=placeholders) if placeholders else effect
 
 
+class _Disposition(Enum):
+    """Where a compiled effect — and so its rule — lands: in the math, or why not.
+
+    The three buckets :class:`CompiledRules` reports, as the verdict one
+    compile step returns.
+    """
+
+    FACTORED = auto()
+    UNFACTORED = auto()
+    INAPPLICABLE = auto()
+
+
+# One compile step's verdict: the bucket, and whatever modifiers it produced
+# (none for every bucket but a factored effect that also applies).
+_Verdict = tuple[_Disposition, Sequence[Modifier]]
+_UNFACTORED: _Verdict = (_Disposition.UNFACTORED, ())
+_INAPPLICABLE: _Verdict = (_Disposition.INAPPLICABLE, ())
+_HONOURED: _Verdict = (_Disposition.FACTORED, ())
+
+
+@dataclass(frozen=True)
+class CompiledRules:
+    """What one walk-compile made of a list of printed rule names.
+
+    ``modifiers`` are the records the dice walk applies. The three name
+    lists partition the names compiled — every one lands in exactly one, so
+    a caller can report a rule's disposition without double-counting:
+
+    - ``factored``: this walk owns the rule's effects and evaluated them in,
+      or honoured them by not applying (a gate answered False).
+    - ``inapplicable``: every effect belongs to the *other seat* of this
+      walk, so this compile is not the one that owns it. The same rule
+      compiles from its proper seat, so a caller resolving both seats
+      (:func:`~avelorn.tow.phases.combat.fight`) claims it — the other
+      seat's compile has it — while a one-sided caller keeps reporting it,
+      because no seat there consumed it.
+    - ``unfactored``: nothing here the walk can honour — the rule is
+      unmodelled, effect-less, needs a fact the conditions leave unknown, or
+      speaks to another *seam* entirely (a characteristic, a rank depth, a
+      re-roll). Another seam's fold has its own say on such a rule, so the
+      caller claims it from there or reports it; no seat of this walk ever
+      will, which is exactly why it is not ``inapplicable``.
+    """
+
+    modifiers: tuple[Modifier, ...] = ()
+    factored: tuple[str, ...] = ()
+    unfactored: tuple[str, ...] = ()
+    inapplicable: tuple[str, ...] = ()
+
+
 def compile_rules(
     printed_rules: Sequence[str],
     resolved: Mapping[str, Rule],
@@ -238,7 +292,7 @@ def compile_rules(
     *,
     seat: Side = Side.ATTACKER,
     grants: "Mapping[str, Rule] | None" = None,
-) -> tuple[list[Modifier], list[str]]:
+) -> CompiledRules:
     """Compile printed rule names into modifier records.
 
     ``resolved`` maps printed names to their rules as printed — built at
@@ -249,35 +303,43 @@ def compile_rules(
     compiled — the attacker's rules compile at ``ATTACKER``, the target's
     at ``TARGET``, both into the same walk. An effect reaches the walk iff
     its quantity's owner side (flipped by the effect's printed ``enemy``
-    subject) matches the seat; one for the other seat is honoured by not
-    applying, exactly as a gate answered False — the same rule compiles
-    from its proper seat in the walks where it matters. ``grants`` maps
-    the printed names of rules *conferred* by a grant effect to their resolved
-    entries (a loadout's ``granted_rules``) — the lookup a
-    :class:`~avelorn.tow.schema.rule.GrantEffect` expands through; a granted
-    name absent from it is unfactored, like any unmodelled rule. A rule whose
-    gate needs an unknown fact is unfactored and reported; a rule whose gate
-    evaluates False is honoured by not applying — no modifier, no note.
+    subject) matches the seat; one for the other seat is *inapplicable*
+    here — the same rule compiles from its proper seat in the walks where
+    it matters. ``grants`` maps the printed names of rules *conferred* by a
+    grant effect to their resolved entries (a loadout's ``granted_rules``) —
+    the lookup a :class:`~avelorn.tow.schema.rule.GrantEffect` expands
+    through; a granted name absent from it is unfactored, like any
+    unmodelled rule. A rule whose gate needs an unknown fact is unfactored
+    and reported; a rule whose gate evaluates False is factored, honoured by
+    not applying — no modifier, no note.
+
+    Whether the walk owns an effect at all is decided from the effect alone,
+    before any gate: a rule speaking to another seam is reported the same
+    whether the facts happen to answer its condition False or not.
 
     Returns:
-        The compiled modifier records, and the printed names that could
-        not be factored into the math (unresolved, effect-less, or
-        carrying an effect the engine cannot honour yet) — the caller
-        reports those.
+        The modifier records and each printed name's disposition — factored,
+        inapplicable, or unfactored (see :class:`CompiledRules`).
     """
     context = _as_context(conditions)
     modifiers: list[Modifier] = []
-    unfactored: list[str] = []
+    buckets: dict[_Disposition, list[str]] = {disposition: [] for disposition in _Disposition}
     for printed in printed_rules:
         rule = resolved.get(printed)
-        compiled = _compile(rule, context, grants, seat) if rule is not None else None
-        if compiled is None:
-            unfactored.append(printed)
-        else:
-            if compiled:
-                logger.debug("rule factored: %s -> %d modifier(s)", printed, len(compiled))
-            modifiers.extend(compiled)
-    return modifiers, unfactored
+        if rule is None:
+            buckets[_Disposition.UNFACTORED].append(printed)
+            continue
+        disposition, compiled = _compile(rule, context, grants, seat)
+        buckets[disposition].append(printed)
+        if compiled:
+            logger.debug("rule factored: %s -> %d modifier(s)", printed, len(compiled))
+        modifiers.extend(compiled)
+    return CompiledRules(
+        tuple(modifiers),
+        tuple(buckets[_Disposition.FACTORED]),
+        tuple(buckets[_Disposition.UNFACTORED]),
+        tuple(buckets[_Disposition.INAPPLICABLE]),
+    )
 
 
 def factored_notes(
@@ -350,19 +412,25 @@ def _compile(
     context: GateContext,
     grants: "Mapping[str, Rule] | None" = None,
     seat: Side = Side.ATTACKER,
-) -> list[Modifier] | None:
-    # All-or-nothing: every effect must compile, or the rule is
-    # unfactored. An effect whose condition evaluates False compiles to
-    # no modifiers — honoured, not unfactored.
+) -> _Verdict:
+    # All-or-nothing per rule: one effect the walk cannot honour leaves the
+    # whole rule unfactored, whatever the others gave. A rule whose *every*
+    # effect is the other seat's is inapplicable — nothing in it is this
+    # compile's business. Anything else is factored, including an effect whose
+    # condition evaluates False: honoured with no modifiers, not unfactored.
     if not rule.effects:
-        return None
+        return _UNFACTORED
     modifiers: list[Modifier] = []
+    dispositions: set[_Disposition] = set()
     for effect in rule.effects:
-        compiled = _compile_effect(effect, context, grants, seat)
-        if compiled is None:
-            return None
+        disposition, compiled = _compile_effect(effect, context, grants, seat)
+        if disposition is _Disposition.UNFACTORED:
+            return _UNFACTORED
+        dispositions.add(disposition)
         modifiers.extend(compiled)
-    return modifiers
+    if dispositions == {_Disposition.INAPPLICABLE}:
+        return _INAPPLICABLE
+    return _Disposition.FACTORED, modifiers
 
 
 @dataclass(frozen=True)
@@ -398,10 +466,12 @@ def _compile_effect(
     context: GateContext,
     grants: "Mapping[str, Rule] | None" = None,
     seat: Side = Side.ATTACKER,
-) -> list[Modifier] | None:
-    # One effect, top to bottom: bail where the walk cannot honour it,
-    # gate on the when's state, then record each additive entry as data —
-    # which roll's target moves, by how much, on which natural face.
+) -> _Verdict:
+    # One effect, top to bottom, structural first: what this walk can never
+    # honour is read off the effect alone — before any gate, so the verdict
+    # never turns on the facts' luck — then the seat, then the when's state,
+    # then each additive entry as data: which roll's target moves, by how
+    # much, on which natural face.
     if isinstance(effect, GrantEffect):
         # A grant confers a named rule under its own outer gate; the granted
         # rule's own effects (kept with their inner gates) compile in its place.
@@ -409,55 +479,64 @@ def _compile_effect(
     if not isinstance(effect, ModifierEffect):
         # Effects for other seams (e.g. re-rolls on make-panic-tests)
         # are not attack modifiers; their seams consume them directly.
-        # As a weapon rule they are honestly unfactored.
-        return None
+        # Unfactored here, and claimed by the seam that owns them — never
+        # inapplicable, which is the other *seat* of this walk's word alone.
+        return _UNFACTORED
     if effect.set_:
         # A set replaces a base value, which the effective-value query reads,
         # not the walk (the walk only moves a roll's target). A set on a roll
         # quantity is rejected at load, so any set reaching here belongs to
         # another seam — unfactored, exactly as the characteristic and rank
-        # adds below are. None is this compiler's "unfactored" signal (turned
-        # into a visible "not factored" note by compile_rules), never an error.
-        return None
+        # adds below are.
+        return _UNFACTORED
     adds = effect.add or {}
-    rolls = [_ROLLS[q] for q in adds if isinstance(q, Quantity) and q in _ROLLS]
-    if adds and len(rolls) == len(adds):
-        # The seat gate, before the state gate: an effect whose quantity
-        # belongs to the other seat of this walk (its owner side, flipped
-        # when the printed subject is the enemy) is no business of this
-        # compile whatever its facts say — honoured, never unfactored. It
-        # compiles from its proper seat in the walks where it applies.
-        # One effect speaks to one seam, so the sides agree; non-roll
-        # quantities fall through to the gate and stay another seam's.
-        sides = {roll.side for roll in rolls}
-        if effect.enemy:
-            sides = {side.other for side in sides}
-        if sides != {seat}:
-            return []
+    rolls = [
+        _ROLLS[quantity]
+        for quantity in adds
+        if isinstance(quantity, Quantity) and quantity in _ROLLS
+    ]
+    if len(rolls) != len(adds):
+        # The walk handles only roll quantities (the _ROLLS vocabulary). A
+        # characteristic is the effective-characteristic query's, a rank
+        # quantity the fighting-rank query's, and each of those folds has its
+        # own say on the rule. Settled here, ahead of the gate, so the same
+        # rule is reported the same whether the facts answer its condition
+        # False (a combat rule read in a volley) or leave it open.
+        return _UNFACTORED
+    amounts = [amount for amount in adds.values() if isinstance(amount, int)]
+    if len(amounts) != len(adds):
+        # An unsubstituted "X" placeholder: the printed name carried no parameter.
+        return _UNFACTORED
+    natural = effect.natural
+    if natural is not None and any(
+        _SEQUENCE[natural.roll] >= _SEQUENCE[roll.stage] for roll in rolls
+    ):
+        # A die can only shape rolls still to come; an event at or after the
+        # changed roll cannot be honoured.
+        return _UNFACTORED
+    # The seat gate, before the state gate: an effect whose quantity belongs
+    # to the other seat of this walk (its owner side, flipped when the printed
+    # subject is the enemy) is no business of this compile whatever its facts
+    # say — inapplicable, never unfactored. It compiles from its proper seat
+    # in the walks where it applies. One effect speaks to one seam, so the
+    # sides agree.
+    sides = {roll.side for roll in rolls}
+    if effect.enemy:
+        sides = {side.other for side in sides}
+    if sides != {seat}:
+        return _INAPPLICABLE
     applies = _gate_applies(effect, context)
     if applies is None:
-        return None  # the context cannot answer the condition
+        return _UNFACTORED  # the context cannot answer the condition
     if not applies:
-        return []  # honoured: the situation does not arise
-    natural = effect.natural
-    modifiers: list[Modifier] = []
-    for quantity, amount in (effect.add or {}).items():
-        if amount == "X":
-            # Unsubstituted placeholder: the printed name carried no parameter.
-            return None
-        if quantity not in _ROLLS:
-            # The walk handles only roll quantities (the _ROLLS vocabulary).
-            # A characteristic is the effective-characteristic query's, a rank
-            # quantity the fighting-rank query's; as a weapon or phase rule
-            # here they are honestly unfactored.
-            return None
-        roll = _ROLLS[quantity]
-        if natural is not None and _SEQUENCE[natural.roll] >= _SEQUENCE[roll.stage]:
-            # A die can only shape rolls still to come; an event at or
-            # after the changed roll cannot be honoured.
-            return None
-        modifiers.append(Modifier(lands_on=roll.stage, move=roll.sign * amount, trigger=natural))
-    return modifiers
+        return _HONOURED  # honoured: the situation does not arise
+    return (
+        _Disposition.FACTORED,
+        [
+            Modifier(lands_on=roll.stage, move=roll.sign * amount, trigger=natural)
+            for roll, amount in zip(rolls, amounts, strict=True)
+        ],
+    )
 
 
 def _compile_grant(
@@ -465,22 +544,24 @@ def _compile_grant(
     context: GateContext,
     grants: "Mapping[str, Rule] | None",
     seat: Side = Side.ATTACKER,
-) -> list[Modifier] | None:
+) -> _Verdict:
     # A grant confers a named rule under its own *outer* gate: evaluate that gate,
     # then — when it holds — compile the granted rule in its place, its own
     # effects keeping their *inner* gates (Armour Bane's natural-6 To Wound). The
     # two gates conjoin without merging the trees. The grant stacks with any
     # instance the model already carries, because each is compiled independently.
     # The granted rule compiles at the grantee's seat: its effects carry their
-    # own subjects, so a granted enemy-subject rule still reaches the right dice.
+    # own subjects, so a granted enemy-subject rule still reaches the right dice
+    # — and a grant conferring nothing but the other seat's business is
+    # inapplicable here, exactly as the rule itself would be.
     applies = _gate_applies(effect, context)
     if applies is None:
-        return None  # the context cannot answer the grant's gate
+        return _UNFACTORED  # the context cannot answer the grant's gate
     if not applies:
-        return []  # honoured: the grant does not fire
+        return _HONOURED  # honoured: the grant does not fire
     granted = (grants or {}).get(effect.grants)
     if granted is None:
-        return None  # the granted rule is not resolvable/modelled — unfactored
+        return _UNFACTORED  # the granted rule is not resolvable/modelled
     return _compile(granted, context, grants, seat)
 
 
@@ -592,7 +673,7 @@ def effective_combat_result_bonus(
 
 
 def effective_armour_value(
-    base: int,
+    base: int | None,
     rules: Sequence[Rule],
     conditions: "GateContext | None" = None,
 ) -> EffectiveValue:
@@ -607,11 +688,20 @@ def effective_armour_value(
     All-or-nothing per rule; a rule whose facts the conditions cannot answer is
     reported unfactored.
 
+    ``base`` is None when the defender wears nothing — there is no printed value
+    to improve — and the fold still runs, because the rules still need their
+    disposition read. One honoured by not applying is factored as ever (Parry
+    names a shield, and a model wearing nothing wears none), while one that
+    *would* improve the value is reported unfactored rather than applied to a
+    base that does not exist. The value returned is then 0, the caller's "no
+    save"; this is the seam that owns the question either way, so no armour rule
+    goes unspoken for just because its bearer is unarmoured.
+
     Returns:
         The improved armour value with the factored and unfactored rule names.
     """
     context = _as_context(conditions)
-    value = base
+    value = base if base is not None else 0
     factored: list[str] = []
     unfactored: list[str] = []
     for rule in rules:
@@ -627,6 +717,11 @@ def effective_armour_value(
             amount == "X" or when is None or effect.natural is not None
             for effect, amount, when in answers
         ):
+            unfactored.append(rule.name)
+            continue
+        if base is None and any(when for _, _, when in answers):
+            # Nothing printed to improve: applying it would invent a save out of
+            # a value the defender does not have. Reported, never assumed.
             unfactored.append(rule.name)
             continue
         for effect, amount, when in answers:
@@ -647,15 +742,20 @@ class EffectiveRerolls:
     The re-roll seam's fold, the sibling of the armour fold: every attack-roll
     re-roll a rule carries (Ithilmar Weapons' re-roll of To Hit natural 1s),
     gated on the conditions — the engagement facts and the equipment in use
-    alike — and compiled into the records the dice walk applies. ``factored``
-    names the rules evaluated in — including those honoured by not applying (a
-    gate answered False, the gear it names not in use) — and ``unfactored`` those
-    a fact could not answer; the caller reports the latter.
+    alike — and compiled into the records the dice walk applies. The name lists
+    are the compile's, with the same three meanings (see
+    :class:`CompiledRules`): ``factored`` names the rules evaluated in —
+    including those honoured by not applying (a gate answered False, the gear it
+    names not in use); ``inapplicable`` those whose every grant names the other
+    seat's die, which the fold at that seat is the one to own; ``unfactored``
+    those a fact could not answer. The caller reports the last, and claims the
+    middle one only when it resolves both seats.
     """
 
     rerolls: tuple[Reroll, ...] = ()
     factored: tuple[str, ...] = ()
     unfactored: tuple[str, ...] = ()
+    inapplicable: tuple[str, ...] = ()
 
 
 def effective_rerolls(
@@ -675,18 +775,19 @@ def effective_rerolls(
     in the walk being compiled: a grant reaches the walk iff the named stage's
     roller (flipped by the effect's printed ``enemy`` subject) matches it — a
     bearer's own save re-roll joins the attacks it suffers, an enemy-subject
-    one the attacks it makes; a grant for the other seat is honoured with no
-    record, like a gate answered False. Panic-test re-rolls are another seam's
-    and pass untouched.
+    one the attacks it makes; a rule whose every grant names the other seat is
+    inapplicable here, the fold at that seat being the one that owns it.
+    Panic-test re-rolls are another seam's and pass untouched.
 
     Returns:
-        The re-roll records the dice walk applies, with factored and
-        unfactored rule names.
+        The re-roll records the dice walk applies, with each rule's
+        disposition (see :class:`EffectiveRerolls`).
     """
     context = _as_context(conditions)
     grants: list[Reroll] = []
     factored: list[str] = []
     unfactored: list[str] = []
+    inapplicable: list[str] = []
     for rule in rules:
         matching = [
             effect
@@ -697,14 +798,17 @@ def effective_rerolls(
             continue
         # The seat gate, before the state gate: a grant whose die belongs to
         # the other seat of this walk (the stage's roller, flipped when the
-        # printed subject is the enemy) is honoured with no record whatever
-        # its facts say — the rule still counts factored, like a gate
-        # answered False, and grants from its proper seat where it applies.
+        # printed subject is the enemy) is no business of this fold whatever
+        # its facts say. A rule with nothing else to give is inapplicable
+        # here, and grants from its proper seat in the walks where it applies.
         seated = [
             effect
             for effect in matching
             if (effect.reroll.rolled_by.other if effect.enemy else effect.reroll.rolled_by) is seat
         ]
+        if not seated:
+            inapplicable.append(rule.name)
+            continue
         answers = [(effect, _gate_applies(effect, context)) for effect in seated]
         if any(when is None for _, when in answers):
             unfactored.append(rule.name)
@@ -716,7 +820,7 @@ def effective_rerolls(
                 )
         factored.append(rule.name)
         logger.debug("re-roll grant factored: %s -> %d record(s)", rule.name, len(grants))
-    return EffectiveRerolls(tuple(grants), tuple(factored), tuple(unfactored))
+    return EffectiveRerolls(tuple(grants), tuple(factored), tuple(unfactored), tuple(inapplicable))
 
 
 def _effective_quantity(

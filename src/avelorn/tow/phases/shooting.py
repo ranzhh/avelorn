@@ -45,7 +45,6 @@ from avelorn.tow.engine.charts import (
 )
 from avelorn.tow.engine.rules import (
     AttackFacts,
-    EffectiveValue,
     GateContext,
     MovementFacts,
     ShootingFacts,
@@ -383,25 +382,21 @@ def shoot_unit(
             magical="Magical Attacks" in profile.special_rules,
         ),
     )
-    if armour_value is None:
-        defender_armour_value = EffectiveValue(0)
-    else:
-        defender_armour_value = effective_armour_value(
-            armour_value,
-            defender.loadout.rules,
-            incoming,
-        )
+    # An unarmoured defender has nothing to improve, but the fold still runs: it
+    # owns an armour rule's disposition, and skipping it would leave the rule
+    # unspoken for in the notes.
+    defender_armour_value = effective_armour_value(armour_value, defender.loadout.rules, incoming)
+    if armour_value is not None:
         armour_value = defender_armour_value.value
     conditions = _engagement_conditions(attacker, chosen, profile, distance, force_short_range)
 
     # Weapon rules with compiled effects join the dice walk; the rest are
     # reported, exactly as before. Shooting-phase chapter rules (Firing
     # at Long Range, Moving and Shooting) apply to every volley.
-    modifiers, unfactored = compile_rules(
+    weapon_compiled = compile_rules(
         profile.special_rules, attacker.loadout.weapon_rules, conditions
     )
-    if volley_fire:
-        unfactored = [rule for rule in unfactored if rule != "Volley Fire"]
+    modifiers = list(weapon_compiled.modifiers)
 
     # The attacker's own unit rules may also shape the volley — Arrows of Isha
     # improves a bow's Armour Piercing and grants it Armour Bane (1) — gated on
@@ -410,39 +405,51 @@ def shoot_unit(
     # Ithilmar Weapons' re-roll) stays unfactored and noted; the factored ones
     # are claimed out of the "special rule not factored" notes below.
     unit_index = {rule.name: rule for rule in attacker.loadout.rules}
-    unit_modifiers, unit_unfactored = compile_rules(
+    unit_compiled = compile_rules(
         list(unit_index), unit_index, conditions, grants=attacker.loadout.granted_rules
     )
-    modifiers.extend(unit_modifiers)
+    modifiers.extend(unit_compiled.modifiers)
 
     # The defender's own rules reach the same walk from the target seat: an
     # enemy-subject rule of the defender's ("enemy units shooting at this
     # unit suffer -1 To Hit") lands on this volley's Roll to Hit, gated on
     # the defender's facts — the incoming attack among them. Its
-    # armour-value rules stay the armour fold's (claimed there).
+    # armour-value rules stay the armour fold's (claimed there), and what
+    # belongs to the attacker's seat of the walk — the blows it would throw in
+    # a melee, not this volley — is inapplicable here and stays reported.
     defender_index = {rule.name: rule for rule in defender.loadout.rules}
-    defender_modifiers, defender_unfactored = compile_rules(
+    defender_compiled = compile_rules(
         list(defender_index),
         defender_index,
         incoming,
         seat=Side.TARGET,
         grants=defender.loadout.granted_rules,
     )
-    modifiers.extend(defender_modifiers)
-    defender_walk_rules = {name for name in defender_index if name not in defender_unfactored}
+    modifiers.extend(defender_compiled.modifiers)
 
     # Each side's re-roll grants, from its own seat: the attacker's
     # enemy-subject grants re-roll the defender's dice (a forced re-roll of
     # successful saves), the defender's own grants its own (a save re-roll
-    # while shot at). The attacker's own-dice grants gate on the volley's
-    # facts like any weapon rule (a combat-only grant is honoured inert).
-    # not yet: the volley profile's weapon-borne grants (a magic bow's own
-    # re-roll) are not read here, where _engage reads the profile in use —
-    # nothing in the corpus prints one; a magic missile weapon joins by
-    # compiling its profile rules into this call, as combat does.
+    # while shot at). The attacker's grants come from its unit rules and from
+    # the rules of the missile profile in use — a magic bow's rule is scoped by
+    # shooting it — exactly as a melee reads the weapon in hand. Each gates on
+    # the volley's facts like any weapon rule (a combat-only grant is honoured
+    # inert).
+    in_use = [
+        attacker.loadout.weapon_rules[name]
+        for name in profile.special_rules
+        if name in attacker.loadout.weapon_rules
+    ]
+    # Compiled per source, not as one pool: unit-rule names claim unit-rule
+    # notes and weapon-rule names claim weapon-rule notes, so a printed name
+    # shared across the two namespaces cannot claim the other's note.
     rerolls = effective_rerolls(attacker.loadout.rules, conditions, seat=Side.ATTACKER)
+    weapon_rerolls = effective_rerolls(in_use, conditions, seat=Side.ATTACKER)
     defender_rerolls = effective_rerolls(defender.loadout.rules, incoming, seat=Side.TARGET)
-    claimed = {name for name in unit_index if name not in unit_unfactored} | {*rerolls.factored}
+    # One volley is one walk from the attacker's seat, so only what that walk
+    # factored is claimed: a rule belonging to its other seat is inapplicable
+    # and stays reported, since no second compile here covers it.
+    claimed = {*unit_compiled.factored, *rerolls.factored}
 
     notes: list[str] = []
     notes.extend(
@@ -458,7 +465,7 @@ def shoot_unit(
     defender_claimed = {
         *defender_armour_value.factored,
         *defender_rerolls.factored,
-        *defender_walk_rules,
+        *defender_compiled.factored,
     }
     notes.extend(
         f"special rule not factored: {rule} ({target.name})"
@@ -470,10 +477,25 @@ def shoot_unit(
             defender.loadout.rules, defender_claimed, target.name, defender.loadout.granted_rules
         )
     )
-    notes.extend(f"weapon rule not factored: {rule} ({chosen.name})" for rule in unfactored)
-    phase_modifiers, phase_unfactored = compile_rules(sorted(phase_rules), phase_rules, conditions)
-    modifiers.extend(phase_modifiers)
-    notes.extend(f"core rule not factored: {name}" for name in phase_unfactored)
+    # A weapon rule the walk cannot factor may be the re-roll seam's instead (a
+    # magic bow's grant), and Volley Fire lands on the shot count above rather
+    # than in the walk: both are claimed out of the weapon-rule notes. The
+    # profile in use is only ever compiled from its shooter's seat, so an
+    # inapplicable weapon rule is reported here — no second compile covers it.
+    weapon_claimed = {*weapon_rerolls.factored}
+    if volley_fire:
+        weapon_claimed.add("Volley Fire")
+    notes.extend(
+        f"weapon rule not factored: {rule} ({chosen.name})"
+        for rule in (*weapon_compiled.unfactored, *weapon_compiled.inapplicable)
+        if rule not in weapon_claimed
+    )
+    phase_compiled = compile_rules(sorted(phase_rules), phase_rules, conditions)
+    modifiers.extend(phase_compiled.modifiers)
+    notes.extend(
+        f"core rule not factored: {name}"
+        for name in (*phase_compiled.unfactored, *phase_compiled.inapplicable)
+    )
     if chosen.notes is not None:
         notes.append(f"weapon notes not factored ({chosen.name}): {chosen.notes}")
 
@@ -492,7 +514,7 @@ def shoot_unit(
         wounds_per_model=defender_wounds,
         targets=defenders,
         modifiers=modifiers,
-        rerolls=(*rerolls.rerolls, *defender_rerolls.rerolls),
+        rerolls=(*rerolls.rerolls, *weapon_rerolls.rerolls, *defender_rerolls.rerolls),
         notes=tuple(notes),
     )
 
