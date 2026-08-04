@@ -394,12 +394,29 @@ def test_fight_rejects_negative_models() -> None:
 
 
 def test_fight_degenerate_prior_losses_equal_a_plain_fight() -> None:
-    """A pmf certain no models were lost reproduces the plain-fight joint."""
+    """A pmf certain no models were lost reproduces the plain-fight joint.
+
+    Compared to tolerance, not bit-for-bit: a plain fight is exact throughout,
+    while an explicit ``[1.0]`` is an inexact weight and turns the round's masses
+    into floats. Numerically the same round, in the two numeric kinds.
+    """
     spearmen = REPO.units["elven-spearmen"]
     a, b = _fielded(spearmen, 3), _fielded(spearmen, 3)
     plain = fight(a.wielding("Thrusting Spear"), b.wielding("Thrusting Spear"))
     with_prior = fight(
         a.wielding("Thrusting Spear"), b.wielding("Thrusting Spear"), a_prior_losses=[1.0]
+    )
+    for got, want in zip(with_prior.losses, plain.losses, strict=True):
+        assert list(got) == pytest.approx([float(p) for p in want])
+
+
+def test_fight_an_exact_degenerate_prior_keeps_the_round_exact() -> None:
+    """An integer-1 prior is exact, so it reproduces the plain joint bit-for-bit."""
+    spearmen = REPO.units["elven-spearmen"]
+    a, b = _fielded(spearmen, 3), _fielded(spearmen, 3)
+    plain = fight(a.wielding("Thrusting Spear"), b.wielding("Thrusting Spear"))
+    with_prior = fight(
+        a.wielding("Thrusting Spear"), b.wielding("Thrusting Spear"), a_prior_losses=[1]
     )
     assert with_prior.losses == plain.losses
 
@@ -1027,10 +1044,15 @@ def test_fight_first_round_martial_prowess_sharpens_both_sides() -> None:
 
     A body carrying only Martial Prowess against a plain copy of itself, at
     equal Initiative (simultaneous, uncoupled): in the first round it strikes
-    at WS5 and fells more of the foe than in a later round at WS4, and — its
-    raised WS being the target the foe rolls against — it also loses fewer of
-    its own. The factored rule leaves no "not factored" note in either round,
-    the later round honouring it as a no-op.
+    at WS5 and fells more of the foe than in a later round at WS4. Its own
+    losses are *unchanged*, because the To Hit chart is coarse — a WS4 attacker
+    needs 4+ against WS4 and WS5 alike, and only "more than double" reaches 5+
+    (the-combat-phase/roll-to-hit-combat). So a single point of defensive WS
+    buys nothing here. The factored rule leaves no "not factored" note in either
+    round, the later round honouring it as a no-op.
+
+    This asserted ``<`` until the aggregations became exact: both sides are 5/6,
+    and float noise in the last bit had made the strict comparison pass.
     """
     spearmen = REPO.units["elven-spearmen"]
     elves = _fielded(_only_martial_prowess(spearmen), 5).wielding("Thrusting Spear")
@@ -1043,7 +1065,9 @@ def test_fight_first_round_martial_prowess_sharpens_both_sides() -> None:
 
     assert first.first_striker is None and later.first_striker is None  # equal I4
     assert expected_value(first.b_casualties) > expected_value(later.b_casualties)  # striker WS
-    assert expected_value(first.a_casualties) < expected_value(later.a_casualties)  # target WS
+    assert expected_value(first.a_casualties) == expected_value(
+        later.a_casualties
+    )  # chart is coarse
     assert not any("Martial Prowess" in note for note in first.notes)
     assert not any("Martial Prowess" in note for note in later.notes)
 

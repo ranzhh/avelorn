@@ -176,8 +176,10 @@ def shoot(
         transforms,
         rerolls,
     )
-    p_unsaved = float(resolution.p_unsaved)
-    p_kill = float(resolution.p_of(Outcome.INSTANT_KILL))
+    # Exact, not converted: the walk resolves in Fractions and the aggregations
+    # now carry whatever they are handed, so the volley is exact end to end.
+    p_unsaved = resolution.p_unsaved
+    p_kill = resolution.p_of(Outcome.INSTANT_KILL)
     # Report the walk's effective targets (modifiers included) so the printed
     # figures match the math. The To Hit target and the save target both carry
     # their unconditional modifiers — the save's flat Armour Piercing from a
@@ -591,7 +593,7 @@ def make_panic_tests(
         # A failed test is taken again: both dice, same natural bounds,
         # never more than once whatever the source.
         p_pass = p_pass + (1.0 - p_pass) * p_pass
-    tested = holds = falls_back = flees = destroyed = 0.0
+    tested = holds = falls_back = flees = destroyed = 0
     for killed, mass in enumerate(result.casualties):
         if killed == size:
             destroyed += mass
