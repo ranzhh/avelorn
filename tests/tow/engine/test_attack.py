@@ -54,14 +54,18 @@ def _profiles() -> list[AttackProfile]:
     ids=lambda p: f"h{p.hit_target}-w{p.wound_target}-s{p.save_target}-x{p.ward_target}",
 )
 def test_walk_matches_scalar_chain(profile: AttackProfile) -> None:
-    """The dice walk reproduces hit x wound x save-fail x ward-fail exactly."""
+    """The dice walk reproduces hit x wound x save-fail x ward-fail exactly.
+
+    Exactly, and now asserted as such: the charts return the walk's own exact
+    probabilities rather than floats of them, so the two agree with no tolerance.
+    """
     expected = (
         hit_probability(_chart(profile.hit_target) or 0)
         * wound_probability(_chart(profile.wound_target))
-        * (1.0 - save_probability(_chart(profile.save_target)))
-        * (1.0 - save_probability(_chart(profile.ward_target)))
+        * (1 - save_probability(_chart(profile.save_target)))
+        * (1 - save_probability(_chart(profile.ward_target)))
     )
-    assert float(resolve_attack(profile).p_unsaved) == pytest.approx(expected, abs=1e-12)
+    assert resolve_attack(profile).p_unsaved == expected
 
 
 @pytest.mark.parametrize("hit_target", _HIT_TARGETS)

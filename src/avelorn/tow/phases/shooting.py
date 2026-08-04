@@ -200,8 +200,8 @@ def shoot(
         p_unsaved,
         p_hit,
         p_wound,
-        1.0 - save_probability(save),
-        1.0 - save_probability(ward_target),
+        1 - save_probability(save),
+        1 - save_probability(ward_target),
     )
 
     distribution, casualties = wound_and_casualties(
@@ -587,13 +587,16 @@ def make_panic_tests(
         raise ValueError(f"battle strength ({battle}) cannot be below current size ({size})")
 
     test = PanicTest(defender.unit.highest(Characteristic.LEADERSHIP))
-    p_pass = float(test.chance())
+    p_pass = test.chance()
     reroll_from = _reroll_grant(defender.loadout, PanicCause.HEAVY_CASUALTIES)
     if reroll_from is not None:
         # A failed test is taken again: both dice, same natural bounds,
         # never more than once whatever the source.
-        p_pass = p_pass + (1.0 - p_pass) * p_pass
-    tested = holds = falls_back = flees = destroyed = 0
+        p_pass = p_pass + (1 - p_pass) * p_pass
+    # A zero of the volley's own numeric kind, so an outcome nothing reaches
+    # matches the rest rather than staying a bare int.
+    zero = p_pass * 0
+    tested = holds = falls_back = flees = destroyed = zero
     for killed, mass in enumerate(result.casualties):
         if killed == size:
             destroyed += mass
@@ -601,7 +604,7 @@ def make_panic_tests(
             tested += mass
             holds += mass * p_pass
             remaining = size - killed
-            failed = mass * (1.0 - p_pass)
+            failed = mass * (1 - p_pass)
             if remaining * 2 > battle:  # "more than half (50%) ... still remain"
                 falls_back += failed
             else:

@@ -169,8 +169,8 @@ def strike(
         p_unsaved,
         p_hit,
         p_wound,
-        1.0 - save_probability(save),
-        1.0 - save_probability(ward_target),
+        1 - save_probability(save),
+        1 - save_probability(ward_target),
     )
 
     distribution, casualties = wound_and_casualties(
