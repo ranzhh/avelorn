@@ -22,6 +22,7 @@ from math import isclose
 from typing import ClassVar, overload
 
 from avelorn.core.dice import expected_value
+from avelorn.core.distribution import Probability
 from avelorn.core.game import Phase
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.engine.armour import defender_armour
@@ -88,16 +89,16 @@ class StrikeResult:
     wound_target: int | None
     save_target: int | None
     ward_target: int | None
-    p_hit: float
-    p_wound: float
-    p_unsaved: float  # per-attack probability of an unsaved wound
-    distribution: list[float]  # index k = P(exactly k unsaved wounds)
-    casualties: list[float]  # index k = P(exactly k models removed)
+    p_hit: Probability
+    p_wound: Probability
+    p_unsaved: Probability  # per-attack probability of an unsaved wound
+    distribution: list[Probability]  # index k = P(exactly k unsaved wounds)
+    casualties: list[Probability]  # index k = P(exactly k models removed)
     notes: tuple[str, ...] = ()
     target_models: int | None = None  # size of the target unit, if bounded
 
     @property
-    def expected_wounds(self) -> float:
+    def expected_wounds(self) -> Probability:
         """Mean number of unsaved wounds.
 
         Returns:
@@ -106,7 +107,7 @@ class StrikeResult:
         return expected_value(self.distribution)
 
     @property
-    def expected_casualties(self) -> float:
+    def expected_casualties(self) -> Probability:
         """Mean number of models removed, capped at the target unit's size.
 
         Returns:
@@ -203,7 +204,7 @@ def _per_attack(
     modifiers: Sequence[Modifier],
     transforms: Sequence[Transform] = (),
     rerolls: Sequence[Reroll] = (),
-) -> tuple[float, float, int]:
+) -> tuple[Probability, Probability, int]:
     # Walk one melee attack's dice exactly, returning its per-attack
     # unsaved-wound and instant-kill probabilities and the effective To Hit
     # target after the rules' changes — the counts that depend only on the matchup,
@@ -253,14 +254,14 @@ class _Engagement:
     walk_inapplicable: frozenset[str]
     target_walk_factored: frozenset[str]
     target_walk_inapplicable: frozenset[str]
-    p_unsaved: float
-    p_kill: float
+    p_unsaved: Probability
+    p_kill: Probability
     target_wounds: int
     hit_target: int
     wound_target: int | None
     save_target: int | None
-    p_hit: float
-    p_wound: float
+    p_hit: Probability
+    p_wound: Probability
     notes: tuple[str, ...]
 
     def attacks(self, survivors: int) -> int:
@@ -617,7 +618,9 @@ class FightResult:
     :func:`combat_result` adds to the score alongside the Rank Bonus.
     """
 
-    losses: list[list[float]]  # losses[a_lost][b_lost] = joint probability
+    # Covariant, so a caller holding a list[list[float]] can pass it: list is
+    # invariant, and these are read-only after construction.
+    losses: Sequence[Sequence[Probability]]  # losses[a_lost][b_lost] = joint probability
     first_striker: Contingent | None
     notes: tuple[str, ...] = ()
     a_initiative: EffectiveValue = EffectiveValue(0)
@@ -631,21 +634,21 @@ class FightResult:
     # The signed distribution of (A's minus B's) combat-result wounds, populated by
     # fight(); empty on a fixture-built result, which then scores off the melee
     # joint alone (see scoring_wounds).
-    wound_margin: dict[int, float] = field(default_factory=dict)
+    wound_margin: Mapping[int, Probability] = field(default_factory=dict)
 
     @property
-    def a_casualties(self) -> list[float]:
+    def a_casualties(self) -> list[Probability]:
         """Marginal distribution of models A lost in the melee (index k = P(k removed))."""
         return [sum(row) for row in self.losses]
 
     @property
-    def b_casualties(self) -> list[float]:
+    def b_casualties(self) -> list[Probability]:
         """Marginal distribution of models B lost in the melee (index k = P(k removed))."""
         columns = len(self.losses[0]) if self.losses else 0
         return [sum(row[k] for row in self.losses) for k in range(columns)]
 
     @property
-    def scoring_wounds(self) -> dict[int, float]:
+    def scoring_wounds(self) -> Mapping[int, Probability]:
         """The signed distribution of (A's minus B's) combat-result wounds.
 
         Each side's wounds are the unsaved wounds it inflicted this round plus
@@ -662,12 +665,12 @@ class FightResult:
         """
         if self.wound_margin:
             return self.wound_margin
-        derived: dict[int, float] = {}
+        derived: dict[int, Probability] = {}
         for a_lost, row in enumerate(self.losses):
             for b_lost, mass in enumerate(row):
                 if mass:
                     diff = b_lost - a_lost
-                    derived[diff] = derived.get(diff, 0.0) + mass
+                    derived[diff] = derived.get(diff, 0) + mass
         return derived
 
 
@@ -791,7 +794,9 @@ def effective_weapon_skill(
     )
 
 
-def _prior_loss_pmf(pmf: Sequence[float] | None, models: int, name: str) -> Sequence[float]:
+def _prior_loss_pmf(
+    pmf: Sequence[Probability] | None, models: int, name: str
+) -> Sequence[Probability]:
     # A side's pre-combat loss distribution: pmf[k] = P(k models lost before
     # any blows are struck. None means none were lost — certainty at zero. A
     # side cannot lose more models than it fields, and the mass must be a
@@ -811,8 +816,8 @@ def fight(
     a: Contingent,
     b: Contingent,
     *,
-    a_prior_losses: Sequence[float] | None = None,
-    b_prior_losses: Sequence[float] | None = None,
+    a_prior_losses: Sequence[Probability] | None = None,
+    b_prior_losses: Sequence[Probability] | None = None,
     first_round: bool | None = None,
     phase_rules: Mapping[str, Rule] = _NONE_IN_PLAY,
 ) -> FightResult:
@@ -937,8 +942,8 @@ def fight(
     # ``pre_a`` of A both lightens A's return blows and scores for B. (Counts
     # models removed, = wounds for the 1-Wound models the engine fields; a
     # multi-Wound Stand & Shoot would credit wounds, not casualties.)
-    losses = [[0.0] * (b.models + 1) for _ in range(a.models + 1)]
-    wound_margin: dict[int, float] = {}
+    losses: list[list[Probability]] = [[0] * (b.models + 1) for _ in range(a.models + 1)]
+    wound_margin: Mapping[int, Probability] = {}
     for pre_a, p_a in enumerate(a_lost_before):
         for pre_b, p_b in enumerate(b_lost_before):
             weight = p_a * p_b
@@ -950,7 +955,7 @@ def fight(
                     contribution = weight * mass
                     losses[a_lost][b_lost] += contribution
                     diff = (b_lost + pre_b) - (a_lost + pre_a)
-                    wound_margin[diff] = wound_margin.get(diff, 0.0) + contribution
+                    wound_margin[diff] = wound_margin.get(diff, 0) + contribution
 
     first_striker = None if a_first is None else (a if a_first else b)
     # A rule factored into the striking order, the fighting-rank depth, the
@@ -1029,7 +1034,7 @@ def fight(
     )
 
 
-def _fell(engagement: _Engagement, fighters: int, *, targets: int) -> list[float]:
+def _fell(engagement: _Engagement, fighters: int, *, targets: int) -> list[Probability]:
     # Casualties inflicted on the target by ``fighters`` models striking.
     _, casualties = wound_and_casualties(
         engagement.attacks(fighters),
@@ -1043,7 +1048,7 @@ def _fell(engagement: _Engagement, fighters: int, *, targets: int) -> list[float
 
 def _independent(
     row_strikes: _Engagement, row_fighters: int, col_strikes: _Engagement, col_fighters: int
-) -> list[list[float]]:
+) -> list[list[Probability]]:
     # Simultaneous combat: neither side's casualties reduce the other's
     # blows, so the two loss distributions are independent — the joint is
     # their outer product. Each side's losses come from the other's strike.
@@ -1057,11 +1062,13 @@ def _sequenced(
     first_fighters: int,
     second_strikes: _Engagement,
     second_fighters: int,
-) -> list[list[float]]:
+) -> list[list[Probability]]:
     # The first side strikes at full strength; its casualties thin the second
     # before the survivors strike back, so the second's blows are conditioned
     # on how many of it remain. Returns joint[first_lost][second_lost].
-    joint = [[0.0] * (second_fighters + 1) for _ in range(first_fighters + 1)]
+    joint: list[list[Probability]] = [
+        [0] * (second_fighters + 1) for _ in range(first_fighters + 1)
+    ]
     for second_lost, p_second in enumerate(
         _fell(first_strikes, first_fighters, targets=second_fighters)
     ):
@@ -1075,7 +1082,7 @@ def _sequenced(
     return joint
 
 
-def _transpose(joint: list[list[float]]) -> list[list[float]]:
+def _transpose(joint: list[list[Probability]]) -> list[list[Probability]]:
     # Swap axes: [second_lost][first_lost] -> [first_lost][second_lost].
     return [list(row) for row in zip(*joint, strict=True)]
 
@@ -1094,7 +1101,7 @@ def _round_joint(
     b_strikes: _Engagement,
     b_models: int,
     a_first: bool | None,
-) -> list[list[float]]:
+) -> list[list[Probability]]:
     # One round's joint casualty distribution at fixed model counts, oriented
     # to (a, b). Equal Initiative (a_first is None) strikes simultaneously —
     # independent losses; otherwise the first striker thins the other before
@@ -1127,10 +1134,10 @@ class CombatResult:
     The signed ``margin`` is what the Break test adds to the loser's roll.
     """
 
-    p_a_wins: float
-    p_draw: float
-    p_b_wins: float
-    margin: dict[int, float]
+    p_a_wins: Probability
+    p_draw: Probability
+    p_b_wins: Probability
+    margin: Mapping[int, Probability]
     notes: tuple[str, ...] = ()
 
 
@@ -1150,7 +1157,7 @@ def combat_result(result: FightResult) -> CombatResult:
     Returns:
         The exact win/draw/loss probabilities and signed margin distribution.
     """
-    margin: dict[int, float] = {}
+    margin: Mapping[int, Probability] = {}
     p_a_wins = p_draw = p_b_wins = 0.0
     # A's fixed edge over B: Rank Bonus plus the rule-granted combat-result
     # points (Massed Infantry, ...), each a signed per-side constant that
@@ -1163,7 +1170,7 @@ def combat_result(result: FightResult) -> CombatResult:
         if mass == 0.0:
             continue
         lead = wound_diff + static_delta
-        margin[lead] = margin.get(lead, 0.0) + mass
+        margin[lead] = margin.get(lead, 0) + mass
         if lead > 0:
             p_a_wins += mass
         elif lead < 0:
@@ -1191,9 +1198,9 @@ class SideBreak:
     here.
     """
 
-    p_gives_ground: float
-    p_falls_back: float
-    p_breaks: float
+    p_gives_ground: Probability
+    p_falls_back: Probability
+    p_breaks: Probability
 
 
 @dataclass(frozen=True)
@@ -1210,7 +1217,7 @@ class BreakResult:
 
     a: SideBreak
     b: SideBreak
-    p_draw: float
+    p_draw: Probability
     notes: tuple[str, ...] = ()
 
 
@@ -1284,7 +1291,7 @@ def break_test(result: CombatResult, a: Contingent, b: Contingent) -> BreakResul
 
 
 def _side_break(
-    margin: Mapping[int, float],
+    margin: Mapping[int, Probability],
     leadership: int,
     *,
     deficit: Callable[[int], int | None],
@@ -1314,7 +1321,7 @@ def _side_break(
     return SideBreak(p_gives_ground=gives_ground, p_falls_back=falls_back, p_breaks=breaks)
 
 
-def _break_outcomes(leadership: int, margin: int) -> tuple[float, float, float]:
+def _break_outcomes(leadership: int, margin: int) -> tuple[Probability, Probability, Probability]:
     # The three Break-test outcome probabilities for a loser of ``leadership``
     # facing a winner's ``margin`` (>= 1), over an exact 2D6. A natural
     # double 1 always Gives Ground; otherwise a natural roll over Leadership

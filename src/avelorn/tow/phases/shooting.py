@@ -16,6 +16,7 @@ from fractions import Fraction
 from typing import ClassVar
 
 from avelorn.core.dice import expected_value
+from avelorn.core.distribution import Probability
 from avelorn.core.game import Phase
 from avelorn.tow.contingent import Contingent, Loadout
 from avelorn.tow.engine.armour import defender_armour
@@ -77,16 +78,16 @@ class ShootingResult:
     wound_target: int | None
     save_target: int | None
     ward_target: int | None
-    p_hit: float
-    p_wound: float
-    p_unsaved: float  # per-shot probability of an unsaved wound
-    distribution: list[float]  # index k = P(exactly k unsaved wounds)
-    casualties: list[float]  # index k = P(exactly k models removed)
+    p_hit: Probability
+    p_wound: Probability
+    p_unsaved: Probability  # per-shot probability of an unsaved wound
+    distribution: list[Probability]  # index k = P(exactly k unsaved wounds)
+    casualties: list[Probability]  # index k = P(exactly k models removed)
     notes: tuple[str, ...] = ()
     target_models: int | None = None  # size of the target unit, if bounded
 
     @property
-    def expected_wounds(self) -> float:
+    def expected_wounds(self) -> Probability:
         """Mean number of unsaved wounds.
 
         Returns:
@@ -95,7 +96,7 @@ class ShootingResult:
         return expected_value(self.distribution)
 
     @property
-    def expected_casualties(self) -> float:
+    def expected_casualties(self) -> Probability:
         """Mean number of models removed, capped at the target unit's size.
 
         Equals :attr:`expected_wounds` for a 1-Wound target large enough to
@@ -545,11 +546,11 @@ class PanicTest(Roll):
 class PanicResult:
     """Exact outcome probabilities of the Make Panic Tests step."""
 
-    p_test: float  # lost more than 25% of start-of-phase models (and survived)
-    p_holds: float  # never tested, or tested and passed
-    p_falls_back: float  # failed with more than half its battle strength left
-    p_flees: float  # failed at half its battle strength or less
-    p_destroyed: float  # every model lost: no unit remains to test
+    p_test: Probability  # lost more than 25% of start-of-phase models (and survived)
+    p_holds: Probability  # never tested, or tested and passed
+    p_falls_back: Probability  # failed with more than half its battle strength left
+    p_flees: Probability  # failed at half its battle strength or less
+    p_destroyed: Probability  # every model lost: no unit remains to test
     reroll_from: str | None = None  # the rule that re-rolls a failed test, if any
 
 

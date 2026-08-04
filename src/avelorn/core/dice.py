@@ -8,29 +8,36 @@ probabilities and distributions.
 import logging
 import random
 from collections.abc import Iterator, Sequence
+from fractions import Fraction
 from math import comb
+
+from avelorn.core.distribution import Probability
 
 logger = logging.getLogger(__name__)
 
 
-def p_d6_at_least(target: int) -> float:
+def p_d6_at_least(target: int) -> Probability:
     """Probability that a single D6 rolls ``target`` or higher.
 
     Targets of 1 or lower are certain; targets above 6 are impossible.
     Game rules such as "a natural 1 always fails" belong to callers, who
     should adjust the target before calling.
 
+    Exact: a D6 probability is a sixth, which no float represents. Every branch
+    returns a ``Fraction`` so the source of a probability is never the thing that
+    rounds it.
+
     Returns:
-        The success probability, in [0.0, 1.0].
+        The success probability, in [0, 1].
     """
     if target <= 1:
-        return 1.0
+        return Fraction(1)
     if target > 6:
-        return 0.0
-    return (7 - target) / 6
+        return Fraction(0)
+    return Fraction(7 - target, 6)
 
 
-def binomial_pmf(successes: int, trials: int, p: float) -> float:
+def binomial_pmf(successes: int, trials: int, p: Probability) -> Probability:
     """Probability of exactly ``successes`` hits in ``trials`` independent attempts.
 
     Carries ``p``'s numeric type: the complement is ``1 - p`` with an integer
@@ -43,7 +50,7 @@ def binomial_pmf(successes: int, trials: int, p: float) -> float:
     return comb(trials, successes) * p**successes * (1 - p) ** misses
 
 
-def binomial_distribution(trials: int, p: float) -> list[float]:
+def binomial_distribution(trials: int, p: Probability) -> list[Probability]:
     """Full probability mass function for a binomial outcome.
 
     Returns:
@@ -55,8 +62,8 @@ def binomial_distribution(trials: int, p: float) -> list[float]:
 
 
 def multinomial_outcomes(
-    trials: int, probabilities: Sequence[float]
-) -> Iterator[tuple[tuple[int, ...], float]]:
+    trials: int, probabilities: Sequence[Probability]
+) -> Iterator[tuple[tuple[int, ...], Probability]]:
     """Enumerate class-count vectors of a multinomial with their probabilities.
 
     ``probabilities`` are the per-trial probabilities of each class; any
@@ -83,8 +90,8 @@ def multinomial_outcomes(
     p_rest = 1 - sum(probabilities)
 
     def _vectors(
-        remaining: int, index: int, counts: tuple[int, ...], mass: float
-    ) -> Iterator[tuple[tuple[int, ...], float]]:
+        remaining: int, index: int, counts: tuple[int, ...], mass: Probability
+    ) -> Iterator[tuple[tuple[int, ...], Probability]]:
         if index == len(probabilities):
             yield counts, mass * p_rest**remaining
             return
@@ -97,7 +104,7 @@ def multinomial_outcomes(
     yield from _vectors(trials, 0, (), 1)
 
 
-def cap_distribution(distribution: list[float], cap: int) -> list[float]:
+def cap_distribution(distribution: Sequence[Probability], cap: int) -> list[Probability]:
     """Fold all probability mass at or above ``cap`` onto index ``cap``.
 
     Models a ceiling on a count: a volley cannot remove more models than a
@@ -118,7 +125,7 @@ def cap_distribution(distribution: list[float], cap: int) -> list[float]:
     return [*distribution[:cap], sum(distribution[cap:])]
 
 
-def group_distribution(distribution: list[float], group_size: int) -> list[float]:
+def group_distribution(distribution: Sequence[Probability], group_size: int) -> list[Probability]:
     """Collapse each ``group_size`` consecutive outcomes into one bucket.
 
     Outcome ``k`` maps to bucket ``k // group_size`` — the number of whole
@@ -138,14 +145,14 @@ def group_distribution(distribution: list[float], group_size: int) -> list[float
     if group_size == 1:
         return list(distribution)
     # Integer seeds, so an exact mass is not coerced by the first addition.
-    buckets: list[float] = [0] * ((len(distribution) - 1) // group_size + 1)
+    buckets: list[Probability] = [0] * ((len(distribution) - 1) // group_size + 1)
     for outcome, mass in enumerate(distribution):
         buckets[outcome // group_size] += mass
     logger.debug("grouping distribution by %d into %d buckets", group_size, len(buckets))
     return buckets
 
 
-def sample(distribution: list[float], rng: random.Random | None = None) -> int:
+def sample(distribution: Sequence[Probability], rng: random.Random | None = None) -> int:
     """Draw one concrete outcome from a distribution (index k = P(outcome k)).
 
     Sampling the computed distribution is statistically identical to
@@ -163,7 +170,7 @@ def sample(distribution: list[float], rng: random.Random | None = None) -> int:
     return outcome
 
 
-def expected_value(distribution: Sequence[float]) -> float:
+def expected_value(distribution: Sequence[Probability]) -> Probability:
     """Expected outcome of a distribution over the indices 0..n.
 
     Returns:
