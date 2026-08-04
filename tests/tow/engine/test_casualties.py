@@ -40,25 +40,37 @@ def test_uncapped_casualties_when_no_target_size() -> None:
     assert sum(casualties) == pytest.approx(1.0)
 
 
-def test_exact_probabilities_survive_both_aggregation_paths() -> None:
+@pytest.mark.parametrize("p_kill", [Fraction(0), Fraction(1, 6)])
+@pytest.mark.parametrize(
+    ("n", "wounds_per_model", "targets"),
+    [
+        (4, 2, 4),  # every casualty index reachable
+        (2, 3, 5),  # only 0..2 reachable: a volley too small to fill the unit
+    ],
+)
+def test_exact_probabilities_survive_both_aggregation_paths(
+    p_kill: Fraction, n: int, wounds_per_model: int, targets: int
+) -> None:
     """An exact per-attack probability aggregates exactly, kills or no kills.
 
     Both branches: the binomial path when nothing instant-kills, and the
-    multinomial one when something does. The `ty: ignore`s are the annotation
-    gap — these signatures still say `float`.
+    multinomial one when something does. Both a config where every casualty index
+    is reachable and one where the upper indices are not, since an accumulator
+    seeded with the wrong kind of zero only shows up at an index nothing lands
+    on. The `ty: ignore`s are the annotation gap — these signatures still say
+    `float`.
     """
-    for p_kill in (Fraction(0), Fraction(1, 6)):
-        wounds, casualties = wound_and_casualties(
-            4,
-            p_unsaved=Fraction(1, 3),  # ty: ignore[invalid-argument-type]
-            p_kill=p_kill,  # ty: ignore[invalid-argument-type]
-            wounds_per_model=2,
-            targets=4,
-        )
-        assert all(isinstance(p, Fraction) for p in wounds)
-        assert all(isinstance(p, Fraction) for p in casualties)
-        assert sum(wounds) == 1
-        assert sum(casualties) == 1
+    wounds, casualties = wound_and_casualties(
+        n,
+        p_unsaved=Fraction(1, 3),  # ty: ignore[invalid-argument-type]
+        p_kill=p_kill,  # ty: ignore[invalid-argument-type]
+        wounds_per_model=wounds_per_model,
+        targets=targets,
+    )
+    assert all(isinstance(p, Fraction) for p in wounds)
+    assert all(isinstance(p, Fraction) for p in casualties)
+    assert sum(wounds) == 1
+    assert sum(casualties) == 1
 
 
 @pytest.mark.parametrize(

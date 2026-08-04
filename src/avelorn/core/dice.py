@@ -65,6 +65,11 @@ def multinomial_outcomes(
     numeric type given: the leftover class and the recursion's seed are integer
     ``1``, so exact per-class probabilities enumerate exactly.
 
+    With *no* classes there is nothing to take a numeric type from, so the single
+    empty vector's mass is the integer ``1`` rather than ``1.0``. Degenerate and
+    unused, noted only because it is the one case where the seed reaches a caller
+    unchanged.
+
     Yields:
         ``(counts, probability)`` per distinct count vector, where
         ``counts[i]`` is how many of the ``trials`` fell in class ``i``.
