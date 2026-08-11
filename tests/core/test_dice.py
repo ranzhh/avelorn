@@ -1,6 +1,7 @@
 """Tests for the D6 probability primitives."""
 
 import random
+from fractions import Fraction
 
 import pytest
 
@@ -147,3 +148,45 @@ def test_multinomial_rejects_negative_trials() -> None:
     """A negative trial count is meaningless."""
     with pytest.raises(ValueError, match="trials must be >= 0"):
         list(multinomial_outcomes(-1, (0.5,)))
+
+
+def test_binomial_carries_an_exact_probability() -> None:
+    """An exact p gives exact masses, summing to exactly 1.
+
+    The `ty: ignore` is the annotation gap, not a runtime one: these signatures
+    still say `float`, so exactness is preserved but not yet typed. Widening the
+    engine's pmf annotations is a separate change.
+    """
+    exact = binomial_distribution(4, Fraction(1, 3))  # ty: ignore[invalid-argument-type]
+    assert all(isinstance(p, Fraction) for p in exact)
+    assert sum(exact) == 1
+    assert exact[0] == Fraction(16, 81)  # (2/3)^4
+
+
+def test_multinomial_carries_an_exact_probability() -> None:
+    """The class-count walk stays exact, and its vectors still sum to exactly 1."""
+    exact_classes = (Fraction(1, 3), Fraction(1, 6))
+    outcomes = list(multinomial_outcomes(3, exact_classes))  # ty: ignore[invalid-argument-type]
+    assert all(isinstance(mass, Fraction) for _, mass in outcomes)
+    assert sum(mass for _, mass in outcomes) == 1
+
+
+def test_binomial_float_path_is_unchanged() -> None:
+    """A float p gives the same masses as before, to the last bit.
+
+    Hardcoded rather than compared against `binomial_pmf`, which is the function
+    whose arithmetic changed: `binomial_distribution` is a comprehension over it,
+    so comparing the two would pass whatever either returned. These values are
+    the exact binomial at p=1/4 converted to float, and 1/4 and 3/4 are exact in
+    binary, so the comparison is bit-for-bit rather than approximate.
+    """
+    assert binomial_distribution(6, 0.25) == [
+        0.177978515625,
+        0.35595703125,
+        0.296630859375,
+        0.1318359375,
+        0.032958984375,
+        0.00439453125,
+        0.000244140625,
+    ]
+    assert sum(binomial_distribution(6, 0.25)) == pytest.approx(1.0)

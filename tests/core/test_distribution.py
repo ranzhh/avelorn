@@ -426,3 +426,29 @@ def test_probability_is_an_alias_not_a_runtime_type() -> None:
     with pytest.raises(TypeError):
         isinstance(1.0, Probability)  # ty: ignore[invalid-argument-type]
     assert isinstance(1, int | float | Fraction)
+
+
+def test_collapse_converts_every_mass_to_float() -> None:
+    """The named boundary: exact in, inexact out, same outcomes."""
+    collapsed = _exact.collapse()
+    assert collapsed.mass.keys() == _exact.mass.keys()
+    assert all(isinstance(p, float) for p in collapsed.mass.values())
+    assert collapsed.mass[1] == pytest.approx(1 / 6)
+
+
+def test_collapse_is_idempotent_on_float_masses() -> None:
+    """Collapsing an already-inexact distribution changes nothing."""
+    assert _same(_coin.collapse(), _coin)
+
+
+def test_collapse_is_one_way() -> None:
+    """No later exact step recovers what collapse gave up."""
+    lapsed = _exact.collapse().bind(_halves)
+    assert all(isinstance(p, float) for p in lapsed.mass.values())
+
+
+def test_nothing_collapses_without_being_asked() -> None:
+    """A full chain of folds and operators keeps exact masses exact."""
+    walked = ((3 @ _exact) + 1).bind(_halves).map(lambda k: k // 2)
+    assert all(isinstance(p, Fraction) for p in walked.mass.values())
+    assert walked.total() == 1
