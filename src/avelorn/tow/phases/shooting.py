@@ -16,6 +16,7 @@ from fractions import Fraction
 from typing import ClassVar
 
 from avelorn.core.dice import expected_value
+from avelorn.core.distribution import Probability
 from avelorn.core.game import Phase
 from avelorn.tow.contingent import Contingent, Loadout
 from avelorn.tow.engine.armour import defender_armour
@@ -77,16 +78,16 @@ class ShootingResult:
     wound_target: int | None
     save_target: int | None
     ward_target: int | None
-    p_hit: float
-    p_wound: float
-    p_unsaved: float  # per-shot probability of an unsaved wound
-    distribution: list[float]  # index k = P(exactly k unsaved wounds)
-    casualties: list[float]  # index k = P(exactly k models removed)
+    p_hit: Probability
+    p_wound: Probability
+    p_unsaved: Probability  # per-shot probability of an unsaved wound
+    distribution: list[Probability]  # index k = P(exactly k unsaved wounds)
+    casualties: list[Probability]  # index k = P(exactly k models removed)
     notes: tuple[str, ...] = ()
     target_models: int | None = None  # size of the target unit, if bounded
 
     @property
-    def expected_wounds(self) -> float:
+    def expected_wounds(self) -> Probability:
         """Mean number of unsaved wounds.
 
         Returns:
@@ -95,7 +96,7 @@ class ShootingResult:
         return expected_value(self.distribution)
 
     @property
-    def expected_casualties(self) -> float:
+    def expected_casualties(self) -> Probability:
         """Mean number of models removed, capped at the target unit's size.
 
         Equals :attr:`expected_wounds` for a 1-Wound target large enough to
@@ -175,8 +176,10 @@ def shoot(
         transforms,
         rerolls,
     )
-    p_unsaved = float(resolution.p_unsaved)
-    p_kill = float(resolution.p_of(Outcome.INSTANT_KILL))
+    # Exact, not converted: the walk resolves in Fractions and the aggregations
+    # now carry whatever they are handed, so the volley is exact end to end.
+    p_unsaved = resolution.p_unsaved
+    p_kill = resolution.p_of(Outcome.INSTANT_KILL)
     # Report the walk's effective targets (modifiers included) so the printed
     # figures match the math. The To Hit target and the save target both carry
     # their unconditional modifiers — the save's flat Armour Piercing from a
@@ -197,8 +200,8 @@ def shoot(
         p_unsaved,
         p_hit,
         p_wound,
-        1.0 - save_probability(save),
-        1.0 - save_probability(ward_target),
+        1 - save_probability(save),
+        1 - save_probability(ward_target),
     )
 
     distribution, casualties = wound_and_casualties(
@@ -545,11 +548,11 @@ class PanicTest(Roll):
 class PanicResult:
     """Exact outcome probabilities of the Make Panic Tests step."""
 
-    p_test: float  # lost more than 25% of start-of-phase models (and survived)
-    p_holds: float  # never tested, or tested and passed
-    p_falls_back: float  # failed with more than half its battle strength left
-    p_flees: float  # failed at half its battle strength or less
-    p_destroyed: float  # every model lost: no unit remains to test
+    p_test: Probability  # lost more than 25% of start-of-phase models (and survived)
+    p_holds: Probability  # never tested, or tested and passed
+    p_falls_back: Probability  # failed with more than half its battle strength left
+    p_flees: Probability  # failed at half its battle strength or less
+    p_destroyed: Probability  # every model lost: no unit remains to test
     reroll_from: str | None = None  # the rule that re-rolls a failed test, if any
 
 
@@ -584,13 +587,16 @@ def make_panic_tests(
         raise ValueError(f"battle strength ({battle}) cannot be below current size ({size})")
 
     test = PanicTest(defender.unit.highest(Characteristic.LEADERSHIP))
-    p_pass = float(test.chance())
+    p_pass = test.chance()
     reroll_from = _reroll_grant(defender.loadout, PanicCause.HEAVY_CASUALTIES)
     if reroll_from is not None:
         # A failed test is taken again: both dice, same natural bounds,
         # never more than once whatever the source.
-        p_pass = p_pass + (1.0 - p_pass) * p_pass
-    tested = holds = falls_back = flees = destroyed = 0.0
+        p_pass = p_pass + (1 - p_pass) * p_pass
+    # A zero of the volley's own numeric kind, so an outcome nothing reaches
+    # matches the rest rather than staying a bare int.
+    zero = p_pass * 0
+    tested = holds = falls_back = flees = destroyed = zero
     for killed, mass in enumerate(result.casualties):
         if killed == size:
             destroyed += mass
@@ -598,7 +604,7 @@ def make_panic_tests(
             tested += mass
             holds += mass * p_pass
             remaining = size - killed
-            failed = mass * (1.0 - p_pass)
+            failed = mass * (1 - p_pass)
             if remaining * 2 > battle:  # "more than half (50%) ... still remain"
                 falls_back += failed
             else:

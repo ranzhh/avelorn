@@ -62,8 +62,8 @@ def test_exact_probabilities_survive_both_aggregation_paths(
     """
     wounds, casualties = wound_and_casualties(
         n,
-        p_unsaved=Fraction(1, 3),  # ty: ignore[invalid-argument-type]
-        p_kill=p_kill,  # ty: ignore[invalid-argument-type]
+        p_unsaved=Fraction(1, 3),
+        p_kill=p_kill,
         wounds_per_model=wounds_per_model,
         targets=targets,
     )

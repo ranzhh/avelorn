@@ -17,6 +17,7 @@ from avelorn.core.dice import (
     group_distribution,
     multinomial_outcomes,
 )
+from avelorn.core.distribution import Probability
 
 logger = logging.getLogger(__name__)
 
@@ -24,11 +25,11 @@ logger = logging.getLogger(__name__)
 def wound_and_casualties(
     n: int,
     *,
-    p_unsaved: float,
-    p_kill: float,
+    p_unsaved: Probability,
+    p_kill: Probability,
     wounds_per_model: int,
     targets: int | None,
-) -> tuple[list[float], list[float]]:
+) -> tuple[list[Probability], list[Probability]]:
     """Distribute a volley's unsaved wounds and the models it removes.
 
     ``p_unsaved`` is the per-attack chance of an unsaved wound of any
@@ -72,11 +73,11 @@ def wound_and_casualties(
 def _remove_casualties(
     n: int,
     *,
-    p_wound_only: float,
-    p_kill: float,
+    p_wound_only: Probability,
+    p_kill: Probability,
     wounds_per_model: int,
     targets: int | None,
-) -> tuple[list[float], list[float]]:
+) -> tuple[list[Probability], list[Probability]]:
     # Class-aware aggregation, named after the printed "Remove Casualties"
     # step: enumerate (wounds, instant kills) counts over the volley by
     # multinomial. A kill removes a model outright; plain wounds accumulate
@@ -87,9 +88,9 @@ def _remove_casualties(
     # neither coerced on the first addition nor left as a bare int at an index no
     # outcome reaches (a volley too small to fill every casualty count).
     zero = (p_wound_only + p_kill) * 0
-    distribution: list[float] = [zero] * (n + 1)
+    distribution: list[Probability] = [zero] * (n + 1)
     size = n if targets is None else targets
-    casualties: list[float] = [zero] * (size + 1)
+    casualties: list[Probability] = [zero] * (size + 1)
     for (n_wound, n_kill), mass in multinomial_outcomes(n, (p_wound_only, p_kill)):
         distribution[n_wound + n_kill] += mass
         killed = min(n_kill + n_wound // wounds_per_model, size)

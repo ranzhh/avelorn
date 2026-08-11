@@ -24,10 +24,12 @@ probability. The arithmetic never leaves deterministic code.
 """
 
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 
 from avelorn.core.dice import expected_value
+from avelorn.core.distribution import Probability
 from avelorn.tow.phases.combat import FightResult
 from avelorn.tow.phases.shooting import ShootingResult
 
@@ -87,9 +89,9 @@ class Distribution:
     """
 
     name: str
-    pmf: tuple[float, ...]
+    pmf: tuple[Probability, ...]
 
-    def exactly(self, k: int) -> float:
+    def exactly(self, k: int) -> Probability:
         """P(value == k).
 
         Returns:
@@ -97,7 +99,7 @@ class Distribution:
         """
         return self.pmf[k] if 0 <= k < len(self.pmf) else 0.0
 
-    def at_most(self, k: int) -> float:
+    def at_most(self, k: int) -> Probability:
         """P(value <= k).
 
         Returns:
@@ -107,7 +109,7 @@ class Distribution:
             return 0.0
         return sum(self.pmf[: k + 1])
 
-    def at_least(self, k: int) -> float:
+    def at_least(self, k: int) -> Probability:
         """P(value >= k).
 
         Returns:
@@ -117,7 +119,7 @@ class Distribution:
             return sum(self.pmf)
         return sum(self.pmf[k:])
 
-    def between(self, low: int, high: int) -> float:
+    def between(self, low: int, high: int) -> Probability:
         """P(low <= value <= high), inclusive on both ends.
 
         Returns:
@@ -125,7 +127,7 @@ class Distribution:
         """
         return sum(self.pmf[max(low, 0) : high + 1]) if high >= 0 else 0.0
 
-    def mean(self) -> float:
+    def mean(self) -> Probability:
         """The expectation of the distribution.
 
         Returns:
@@ -147,7 +149,7 @@ class Distribution:
         return max(range(len(self.pmf)), key=self.pmf.__getitem__)
 
 
-def evaluate(distribution: Distribution, predicate: Predicate) -> float:
+def evaluate(distribution: Distribution, predicate: Predicate) -> Probability:
     """Answer a structured predicate against a distribution, exactly.
 
     This is the single query primitive the agent-facing surface routes
@@ -199,7 +201,7 @@ def result_distributions(result: ShootingResult) -> dict[str, Distribution]:
     return distributions
 
 
-def _mirror_survivors(name: str, casualties: list[float], size: int) -> Distribution:
+def _mirror_survivors(name: str, casualties: Sequence[Probability], size: int) -> Distribution:
     """Mirror a casualty distribution into a survivors distribution over 0..size.
 
     survivors = size - casualties: P(survivors == s) == P(casualties ==
@@ -211,14 +213,14 @@ def _mirror_survivors(name: str, casualties: list[float], size: int) -> Distribu
     Returns:
         The survivors distribution.
     """
-    survivors = [0.0] * (size + 1)
+    survivors: list[Probability] = [0] * (size + 1)
     for removed, mass in enumerate(casualties):
         survivors[size - removed] = mass
     logger.debug("survivors distribution mirrored over size %d", size)
     return Distribution(name, tuple(survivors))
 
 
-def query_result(result: ShootingResult, variable: str, predicate: Predicate) -> float:
+def query_result(result: ShootingResult, variable: str, predicate: Predicate) -> Probability:
     """Evaluate a predicate against one named variable of a shooting result.
 
     The convenience entry point a caller uses end to end: pick a variable

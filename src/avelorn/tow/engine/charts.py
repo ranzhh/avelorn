@@ -9,6 +9,7 @@ the-combat-phase/roll-to-hit-combat.
 
 import logging
 
+from avelorn.core.distribution import Probability
 from avelorn.tow.engine.attack import (
     ArmourSave,
     RollToHitCombat,
@@ -124,21 +125,21 @@ def armour_save_target(armour_value: int | None, armour_piercing: int = 0) -> in
     return target
 
 
-def hit_probability(target: int) -> float:
+def hit_probability(target: int) -> Probability:
     """Probability that one shooting attack hits, given its To Hit target.
 
     A natural 1 always fails; targets of 7+ confirm on a second die
     ("7 to Hit"). Derived from the walk's own Roll to Hit.
 
     Returns:
-        The hit probability, in [0.0, 5/6].
+        The hit probability, in [0, 5/6], exact.
     """
-    p = float(RollToHitShooting(target).chance())
+    p = RollToHitShooting(target).chance()
     logger.debug("hit %s -> p=%.3f", _fmt_target(target), p)
     return p
 
 
-def melee_hit_probability(target: int) -> float:
+def melee_hit_probability(target: int) -> Probability:
     """Probability that one close-combat attack hits, given its To Hit target.
 
     A natural 1 always fails and a natural 6 always hits, with no 7+
@@ -146,31 +147,31 @@ def melee_hit_probability(target: int) -> float:
     the walk's own close-combat Roll to Hit.
 
     Returns:
-        The hit probability, in [1/6, 5/6].
+        The hit probability, in [1/6, 5/6], exact.
     """
-    p = float(RollToHitCombat(target).chance())
+    p = RollToHitCombat(target).chance()
     logger.debug("melee hit %s -> p=%.3f", _fmt_target(target), p)
     return p
 
 
-def wound_probability(target: int | None) -> float:
+def wound_probability(target: int | None) -> Probability:
     """Probability that one wound roll succeeds; a natural 1 always fails.
 
     Returns:
-        The success probability, or 0.0 when ``target`` is None (the
+        The exact success probability, or 0 when ``target`` is None (the
         chart shows "-": the attack cannot wound).
     """
-    p = float(RollToWound(roll_target(target)).chance())
+    p = RollToWound(roll_target(target)).chance()
     logger.debug("wound %s -> p=%.3f", _fmt_target(target), p)
     return p
 
 
-def save_probability(target: int | None) -> float:
+def save_probability(target: int | None) -> Probability:
     """Probability that a save roll succeeds; a natural 1 always fails.
 
     Returns:
-        The success probability, or 0.0 when ``target`` is None (no save).
+        The exact success probability, or 0 when ``target`` is None (no save).
     """
-    p = float(ArmourSave(roll_target(target)).chance())
+    p = ArmourSave(roll_target(target)).chance()
     logger.debug("save %s -> p=%.3f", _fmt_target(target), p)
     return p
