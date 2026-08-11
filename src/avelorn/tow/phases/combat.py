@@ -23,7 +23,7 @@ from math import isclose
 from typing import ClassVar, overload
 
 from avelorn.core.dice import expected_value
-from avelorn.core.distribution import Probability
+from avelorn.core.distribution import Distribution, Probability
 from avelorn.core.game import Phase
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.engine.armour import defender_armour
@@ -958,12 +958,11 @@ def fight(
             if weight == 0:
                 continue
             joint = _round_joint(a_strikes, a.models - pre_a, b_strikes, b.models - pre_b, a_first)
-            for a_lost, row in enumerate(joint):
-                for b_lost, mass in enumerate(row):
-                    contribution = weight * mass
-                    losses[a_lost][b_lost] += contribution
-                    diff = (b_lost + pre_b) - (a_lost + pre_a)
-                    wound_margin[diff] = wound_margin.get(diff, 0) + contribution
+            for (a_lost, b_lost), mass in joint.mass.items():
+                contribution = weight * mass
+                losses[a_lost][b_lost] += contribution
+                diff = (b_lost + pre_b) - (a_lost + pre_a)
+                wound_margin[diff] = wound_margin.get(diff, 0) + contribution
 
     first_striker = None if a_first is None else (a if a_first else b)
     # A rule factored into the striking order, the fighting-rank depth, the
@@ -1042,8 +1041,10 @@ def fight(
     )
 
 
-def _fell(engagement: _Engagement, fighters: int, *, targets: int) -> list[Probability]:
+def _fell(engagement: _Engagement, fighters: int, *, targets: int) -> Distribution[int]:
     # Casualties inflicted on the target by ``fighters`` models striking.
+    # Zero-mass counts drop on the way in, which is what lets the folds below
+    # skip unreachable branches without testing for them.
     _, casualties = wound_and_casualties(
         engagement.attacks(fighters),
         p_unsaved=engagement.p_unsaved,
@@ -1051,18 +1052,19 @@ def _fell(engagement: _Engagement, fighters: int, *, targets: int) -> list[Proba
         wounds_per_model=engagement.target_wounds,
         targets=targets,
     )
-    return casualties
+    return Distribution.from_counts(casualties)
 
 
 def _independent(
     row_strikes: _Engagement, row_fighters: int, col_strikes: _Engagement, col_fighters: int
-) -> list[list[Probability]]:
-    # Simultaneous combat: neither side's casualties reduce the other's
-    # blows, so the two loss distributions are independent — the joint is
-    # their outer product. Each side's losses come from the other's strike.
+) -> Distribution[tuple[int, int]]:
+    # Simultaneous combat: neither side's casualties reduce the other's blows,
+    # so the two loss distributions are independent -- the joint is their outer
+    # product, which is what combine takes. Each side's losses come from the
+    # other's strike. Outcomes are (row_lost, col_lost).
     row_losses = _fell(col_strikes, col_fighters, targets=row_fighters)
     col_losses = _fell(row_strikes, row_fighters, targets=col_fighters)
-    return [[p_row * p_col for p_col in col_losses] for p_row in row_losses]
+    return row_losses.combine(col_losses, lambda row_lost, col_lost: (row_lost, col_lost))
 
 
 def _sequenced(
@@ -1070,30 +1072,23 @@ def _sequenced(
     first_fighters: int,
     second_strikes: _Engagement,
     second_fighters: int,
-) -> list[list[Probability]]:
+) -> Distribution[tuple[int, int]]:
     # The first side strikes at full strength; its casualties thin the second
-    # before the survivors strike back, so the second's blows are conditioned
-    # on how many of it remain. Returns joint[first_lost][second_lost].
-    zero = (first_strikes.p_unsaved + second_strikes.p_unsaved) * 0
-    joint: list[list[Probability]] = [
-        [zero] * (second_fighters + 1) for _ in range(first_fighters + 1)
-    ]
-    for second_lost, p_second in enumerate(
-        _fell(first_strikes, first_fighters, targets=second_fighters)
-    ):
-        if p_second == 0:
-            continue
-        survivors = second_fighters - second_lost
-        for first_lost, p_first in enumerate(
-            _fell(second_strikes, survivors, targets=first_fighters)
-        ):
-            joint[first_lost][second_lost] += p_second * p_first
-    return joint
+    # before the survivors strike back, so the second's blows are conditioned on
+    # how many of it remain. That conditioning is the bind: draw the second
+    # side's losses, then resolve the return blows given them. Outcomes are
+    # (first_lost, second_lost).
+    return _fell(first_strikes, first_fighters, targets=second_fighters) >> (
+        lambda second_lost: _fell(
+            second_strikes, second_fighters - second_lost, targets=first_fighters
+        ).map(lambda first_lost: (first_lost, second_lost))
+    )
 
 
-def _transpose(joint: list[list[Probability]]) -> list[list[Probability]]:
-    # Swap axes: [second_lost][first_lost] -> [first_lost][second_lost].
-    return [list(row) for row in zip(*joint, strict=True)]
+def _swapped(joint: Distribution[tuple[int, int]]) -> Distribution[tuple[int, int]]:
+    # Swap axes: (second_lost, first_lost) -> (first_lost, second_lost). A
+    # relabel of the outcomes, where a joint held as a grid needed a transpose.
+    return joint.map(lambda lost: (lost[1], lost[0]))
 
 
 def _strikes_first(initiative_a: int, initiative_b: int) -> bool | None:
@@ -1110,16 +1105,17 @@ def _round_joint(
     b_strikes: _Engagement,
     b_models: int,
     a_first: bool | None,
-) -> list[list[Probability]]:
-    # One round's joint casualty distribution at fixed model counts, oriented
-    # to (a, b). Equal Initiative (a_first is None) strikes simultaneously —
-    # independent losses; otherwise the first striker thins the other before
-    # it swings back, and the sequenced joint is oriented back to (a, b).
+) -> Distribution[tuple[int, int]]:
+    # One round's joint casualty distribution at fixed model counts, over
+    # outcomes (a_lost, b_lost). Equal Initiative (a_first is None) strikes
+    # simultaneously — independent losses; otherwise the first striker thins the
+    # other before it swings back, and the sequenced joint is oriented back to
+    # (a, b).
     if a_first is None:
         return _independent(a_strikes, a_models, b_strikes, b_models)
     if a_first:
         return _sequenced(a_strikes, a_models, b_strikes, b_models)
-    return _transpose(_sequenced(b_strikes, b_models, a_strikes, a_models))
+    return _swapped(_sequenced(b_strikes, b_models, a_strikes, a_models))
 
 
 _UNMODELLED_COMBAT_RESULT: tuple[str, ...] = (
