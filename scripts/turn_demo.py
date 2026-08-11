@@ -5,6 +5,8 @@ phase locks the units in combat, so the Shooting phase has nothing to shoot,
 and the Combat phase fights the engagement the charge formed.
 """
 
+from fractions import Fraction
+
 from avelorn.core.distribution import Distribution
 from avelorn.tow.contingent import Charge, ChargeArc
 from avelorn.tow.game import TOWGame
@@ -26,14 +28,17 @@ def main() -> None:
     with turn.combat() as combat:
         scored = combat.result(combat.fight(engagement))
 
-    felled = Distribution.from_counts(volley.casualties).expect(float) if volley else 0.0
-    print('Walking one turn — 20 Spearmen charge 10 Archers (8"):')
-    print(f"  Movement: Archers Stand & Shoot, {felled:.2f} chargers felled.")
-    print("  Shooting: both locked in combat — no shots.")
+    toll = Distribution.from_counts(volley.casualties) if volley else Distribution.pure(0)
+    print('Walking one turn -- 20 Spearmen charge 10 Archers (8"):')
+    print(f"  Movement: Archers Stand & Shoot, {toll.expect(Fraction):.2f} chargers felled.")
+    print("  Shooting: both locked in combat -- no shots.")
     print(
         f"  Combat:   P(Spearmen win) {scored.p_a_wins:.3f}  draw {scored.p_draw:.3f}  "
         f"P(Archers win) {scored.p_b_wins:.3f}"
     )
+    # Exact, so this is an identity rather than a rounding: the three outcomes of
+    # a scored round account for all of it.
+    print(f"  ... those three sum to {scored.p_a_wins + scored.p_draw + scored.p_b_wins} exactly.")
 
 
 if __name__ == "__main__":

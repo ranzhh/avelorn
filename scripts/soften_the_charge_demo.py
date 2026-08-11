@@ -1,13 +1,16 @@
 """Shoot the chargers first? Fold the opening volley into the ensuing combat.
 
 White Lions charge next turn regardless. Shooting them first folds the volley's
-whole casualty distribution into the melee (one `bind`) — decisive for the
-Sisters of Avelorn, near-useless for plain Elven Archers.
+whole casualty distribution into the melee -- one `>>` -- which is decisive for
+the Sisters of Avelorn and near-useless for plain Elven Archers.
+
+Exact throughout, so the gap between the two options is a difference of
+rationals rather than of roundings.
 """
 
 from enum import Enum, auto
 
-from avelorn.core.distribution import Distribution
+from avelorn.core.distribution import Distribution, Probability
 from avelorn.tow.contingent import Charge, ChargeArc
 from avelorn.tow.game import TOWGame
 from avelorn.tow.phases.movement import StandAndShoot
@@ -49,21 +52,17 @@ def win_if_shot(game: TOWGame, defender: Unit):
     """The opening volley, and P(defender wins) with its distribution folded in.
 
     Returns:
-        The opening ShootingResult and the folded P(defender wins).
+        The opening ShootingResult and the folded P(defender wins), exact.
     """
     lions = game.units["white-lions-of-chrace"]
     with game.turn().shooting() as shooting:
         opening = shooting.volley(game.field(defender, 10), game.field(lions, 10), distance=10)
-    folded = (
-        Distribution.from_counts(opening.casualties)
-        .map(lambda felled: 10 - felled)
-        .bind(lambda standing: win(game, defender, standing))
-        .prob(_defender_wins)
-    )
-    return opening, float(folded)
+    standing = 10 - Distribution.from_counts(opening.casualties)
+    folded = (standing >> (lambda left: win(game, defender, left))).prob(_defender_wins)
+    return opening, folded
 
 
-def _report(defender: Unit, opening, dont: float, shoot: float) -> None:
+def _report(defender: Unit, opening, dont: Probability, shoot: Probability) -> None:
     bs = defender.profiles[0][Characteristic.BALLISTIC_SKILL]
     fells = "  ".join(f"{k}:{p:.0%}" for k, p in enumerate(opening.casualties) if p > 0.005)
     print(f"  {defender.name} (BS {bs}, Lions save {opening.save_target}+):")
@@ -79,7 +78,7 @@ def main() -> None:
     for slug in ("sisters-of-avelorn", "elven-archers"):
         defender = game.units[slug]
         opening, shoot = win_if_shot(game, defender)
-        dont = float(win(game, defender, 10).prob(_defender_wins))
+        dont = win(game, defender, 10).prob(_defender_wins)
         _report(defender, opening, dont, shoot)
         print()
 
