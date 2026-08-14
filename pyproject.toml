@@ -14,6 +14,9 @@ dependencies = [
 [dependency-groups]
 dev = ["pre-commit", "pytest>=9.0.3", "ruff>=0.15", "ty>=0.0.39"]
 
+[project.scripts]
+avelorn = "avelorn.cli:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -49,6 +52,8 @@ ignore = ["TRY003"]
 [tool.ruff.lint.per-file-ignores]
 # CLI scripts report to the terminal by design.
 "scripts/*" = ["T20"]
+# The one module that emits the CLI's output; every command body returns lines.
+"src/avelorn/cli/main.py" = ["T20"]
 
 [tool.ruff.lint.flake8-annotations]
 # *args/**kwargs pass-throughs need Any to typecheck at the forwarding call site
