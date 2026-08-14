@@ -27,6 +27,7 @@ The tooling used so far is Claude Code + Claude Opus 4.8 and Claude Fable 5. If 
 - **The phases** (`tow/phases`) are its callers. **Shooting** resolves a volley end to end. **Combat** resolves a full round: both sides strike in Initiative order, casualties tally into a combat result, and the loser takes its break test. **Movement** carries the **charge sequence** — a unit charges, the target reacts with Stand & Shoot, and the survivors fight — all as exact distributions.
 - **Panic tests** take a casualty distribution and return the exact chance the target is forced to test, then holds, falls back, flees, or is wiped out.
 - **Querying** (`tow/query`) lets you ask for a specific outcome, such as `at least`, `at most`, `exactly`, or `between` over a named variable, and hands back its probability.
+- **The HTTP surface** (`api`) is a window on the database: `GET /units` lists the corpus, `GET /units/{slug}` reads a datasheet. Responses are the schema types themselves, so the OpenAPI document at `/docs` is generated from the same models the YAML validates against. Nothing the engine *resolves* is routed — a volley, a combat round, a break test, a folded question — because the vocabulary for posing those as requests is still to be designed. `make api` serves it.
 - **Army-list entries**: a `Complement` (`tow/muster`) sizes and equips a datasheet — a chosen model count and options, validated against what the unit is allowed to take — and derives its points and effective loadout. It is the first piece of the list planner.
 - **Importer** pulls units off tow.whfb.app into the `data/` tree (see credits).
 
@@ -34,7 +35,8 @@ The rest is still to come, roughly in the order it matters.
 
 - **More army data.** A handful of High Elf units exist today, which is enough to exercise the engine but nowhere near a playable database. Filling this out is what the importer is for.
 - **A backing store.** Everything loads from YAML on each run right now. The plan is to load that YAML into SQLite once and query it from there, so the database can grow past what you would want to parse from files every time.
-- **The query API.** This is an HTTP (and MCP) surface over that store, so the unit and army database becomes reachable from something other than a Python import. It is the queryable half of the goal.
+- **The query API.** This is an HTTP (and MCP) surface over that store, so the unit and army database becomes reachable from something other than a Python import. It is the queryable half of the goal. The `api` routes above are its first slice, over the YAML tree rather than the store; what is missing is the store beneath and the MCP surface beside.
+- **A question vocabulary.** What a caller — the API, an agent, a CLI — poses to the engine, and what comes back. `tow/query` has the operators (`at least`, `at most`, ...) but the questions are still named after the engine's own variables, so asking one means knowing how the resolver is shaped. Until this exists, resolutions stay reachable from Python and the demo scripts only.
 - **The list planner.** You build an army list and have it checked against the rules: points limits, army composition, and unit availability. The per-unit half exists as `Complement`; what is missing is the composition above it.
 - **The magic phase.** The exact dice walk underneath is generic — shooting and close combat are its first two callers — so what is missing is the phase resolver rather than the maths.
 
@@ -132,6 +134,7 @@ make install   # uv sync + install the pre-commit hooks
 make test      # run the suite
 make demo      # end-to-end shooting demo from the data files
 make lint      # ruff + ty + hygiene hooks over the whole tree
+make api       # serve the unit database at http://127.0.0.1:8000 (docs at /docs)
 ```
 
 ## Credits
