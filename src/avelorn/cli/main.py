@@ -17,7 +17,7 @@ import sys
 
 from avelorn.cli import commands
 from avelorn.core.errors import AvelornError
-from avelorn.tow.game import TOWGame
+from avelorn.tow.data import TOWRepository, default_repository
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -28,12 +28,15 @@ def main(argv: list[str] | None = None) -> int:
         will not answer.
     """
     args = _parser().parse_args(argv)
-    game = TOWGame.load_data()
+    # The corpus as data, not as a game in play: these commands read the
+    # database, and assembling a TOWGame would resolve every phase's rules
+    # in force to answer a question about a datasheet.
+    data = default_repository()
     # The process edge, where an engine error becomes a message: an unknown
     # slug is the user's question being refused, not a bug to dump a traceback
     # for.
     try:
-        lines = _dispatch(args, game)
+        lines = _dispatch(args, data)
     except (AvelornError, LookupError) as refused:
         # To stderr: a shell reading piped output must not find an error
         # message where a datasheet should be.
@@ -58,12 +61,12 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _dispatch(args: argparse.Namespace, game: TOWGame) -> list[str]:
+def _dispatch(args: argparse.Namespace, data: TOWRepository) -> list[str]:
     """Run the named command.
 
     Returns:
         The lines to print.
     """
     if args.command == "units":
-        return commands.units(game)
-    return commands.show(game, args.slug)
+        return commands.units(data)
+    return commands.show(data, args.slug)

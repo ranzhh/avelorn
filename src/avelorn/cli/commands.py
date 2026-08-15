@@ -7,11 +7,11 @@ reports is what a test reads. The flags that reach these live in
 
 from collections.abc import Sequence
 
-from avelorn.tow.game import TOWGame
+from avelorn.tow.data import TOWRepository
 from avelorn.tow.schema.unit import Characteristic, Unit, UnitOption
 
 
-def units(game: TOWGame) -> list[str]:
+def units(data: TOWRepository) -> list[str]:
     """List every datasheet in the corpus: slug, name, cost, allowed size.
 
     Returns:
@@ -20,18 +20,18 @@ def units(game: TOWGame) -> list[str]:
     rows = [["SLUG", "NAME", "PTS/MODEL", "SIZE", "TROOP TYPE"]]
     rows.extend(
         [unit.id, unit.name, str(unit.points), _size(unit), unit.troop_type.value]
-        for _, unit in sorted(game.units.items())
+        for _, unit in sorted(data.units.items())
     )
     return _columns(rows)
 
 
-def show(game: TOWGame, slug: str) -> list[str]:
+def show(data: TOWRepository, slug: str) -> list[str]:
     """Print one datasheet: its profile rows, cost, equipment, rules, and options.
 
     Returns:
         The lines to print.
     """
-    unit = _unit(game, slug)
+    unit = _unit(data, slug)
     rows = [["", *(characteristic.value for characteristic in Characteristic)]]
     rows.extend(
         [profile.name, *(_stat(profile[c]) for c in Characteristic)] for profile in unit.profiles
@@ -48,7 +48,7 @@ def show(game: TOWGame, slug: str) -> list[str]:
     return lines
 
 
-def _unit(game: TOWGame, slug: str) -> Unit:
+def _unit(data: TOWRepository, slug: str) -> Unit:
     """Address a datasheet by slug.
 
     Returns:
@@ -58,7 +58,7 @@ def _unit(game: TOWGame, slug: str) -> Unit:
         LookupError: no datasheet carries the slug. The registry raises a bare
             KeyError, which at a terminal reads as the slug and nothing else.
     """
-    unit = game.units.get(slug)
+    unit = data.units.get(slug)
     if unit is None:
         raise LookupError(f"no unit {slug!r}; run `avelorn units` for the slugs")
     return unit
