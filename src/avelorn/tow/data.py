@@ -5,6 +5,7 @@ weapons, armour, and rules. :class:`TOWRepository` is the one place that
 knows the tree's layout, so tests, demos, and the app read through it.
 """
 
+from collections.abc import Sequence
 from functools import cached_property
 from pathlib import Path
 
@@ -40,6 +41,46 @@ def rule_paths(data_dir: Path = DATA_DIR) -> list[Path]:
     )
 
 
+def _reconciled(loaded: Sequence[tuple[Path, Unit]]) -> list[Unit]:
+    """The one datasheet per slug, from the several armies that may file it.
+
+    Army membership is many-to-many — nine datasheets are fielded by more
+    than one army, every one of them a mount or a beast — so a slug may
+    arrive several times. Copies that agree *are* one datasheet and load as
+    one; copies that disagree are a stale file, not a variant, since the
+    game prints one Great Eagle however many armies take it.
+
+    Agreement is on the parsed datasheet, never the bytes: the ``# Source:``
+    header and any hand-authored comments differ freely, the game data may
+    not.
+
+    Returns:
+        One unit per slug, in the order the paths were read.
+
+    Raises:
+        ValueError: two files carry the same slug but different datasheets.
+            The message names both paths and the fields they disagree on.
+    """
+    reconciled: dict[str, tuple[Path, Unit]] = {}
+    for path, unit in loaded:
+        filed = reconciled.get(unit.id)
+        if filed is None:
+            reconciled[unit.id] = (path, unit)
+            continue
+        first_path, first = filed
+        if first != unit:
+            differing = ", ".join(
+                field
+                for field in type(unit).model_fields
+                if getattr(first, field) != getattr(unit, field)
+            )
+            raise ValueError(
+                f"unit {unit.id!r} differs between {first_path} and {path} "
+                f"(on: {differing}); one copy is stale -- re-import both, or edit them to agree"
+            )
+    return [unit for _, unit in reconciled.values()]
+
+
 class TOWRepository:
     """The hand-authored game data under ``data/``, loaded on demand.
 
@@ -61,11 +102,17 @@ class TOWRepository:
         The datasheet prints its troop type as a name; loading resolves
         that against the troop-type table and attaches the profile, so a
         unit carries how it ranks up without a registry in hand later.
+
+        A datasheet may be filed under every army that fields it — several
+        do (a Unicorn is a High Elf, Bretonnian and Wood Elf mount alike) —
+        so each army's directory stays complete and importing an army
+        writes everything it fields. Those copies are reconciled here into
+        the one datasheet they are (:func:`_reconciled`).
         """
         paths = sorted(self._data_dir.glob("tow/armies/*/units/*.yaml"))
         troop_types = self.troop_types
-        units = (load_yaml(path, Unit).with_troop_type(troop_types) for path in paths)
-        return Registry(units, kind="unit")
+        loaded = [(path, load_yaml(path, Unit).with_troop_type(troop_types)) for path in paths]
+        return Registry(_reconciled(loaded), kind="unit")
 
     @cached_property
     def weapons(self) -> Registry[Weapon]:
