@@ -13,6 +13,7 @@ from avelorn.tow.phases.combat import (
     effective_initiative,
     effective_weapon_skill,
     fight,
+    mount_initiative,
     strike,
     strike_unit,
 )
@@ -1334,3 +1335,164 @@ def test_fight_claims_each_sides_ward_from_its_own_seat() -> None:
     result = fight(spearmen, breakers, first_round=True)
 
     assert not any("Runes of Protection" in note for note in result.notes)
+
+
+# --- cavalry: a ridden model fights as rider and mount, two batches ---
+
+
+def _cavalry_unit(*, rider_i: int, mount_i: int) -> Unit:
+    # One rider row and one mount row, both WS4 S3 A1 against a WS4 T3 foe:
+    # every attack's p_unsaved is 1/2 * 1/2 = 1/4, so the goldens stay small.
+    rider = {
+        "name": "Rider",
+        "M": "-",
+        "WS": 4,
+        "BS": 4,
+        "S": 3,
+        "T": 3,
+        "W": 1,
+        "I": rider_i,
+        "A": 1,
+        "Ld": 8,
+    }
+    steed = {
+        "name": "Steed",
+        "role": "mount",
+        "M": 8,
+        "WS": 4,
+        "BS": "-",
+        "S": 3,
+        "T": "-",
+        "W": "-",
+        "I": mount_i,
+        "A": 1,
+        "Ld": "-",
+    }
+    return Unit.model_validate(
+        {
+            "id": "riders",
+            "name": "Riders",
+            "points": 20,
+            "unit_size": {"min": 1},
+            "troop_type": "Heavy Cavalry",
+            "equipment": ["Hand Weapon"],
+            "profiles": [rider, steed],
+        }
+    ).with_troop_type(REPO.troop_types)
+
+
+def _foot_unit(*, initiative: int) -> Unit:
+    # A single-row foe with no armour: WS4 S3 T3 A1, on a troop type that
+    # confers no rules, so the goldens carry no rule effects.
+    return Unit.model_validate(
+        {
+            "id": "footmen",
+            "name": "Footmen",
+            "points": 5,
+            "unit_size": {"min": 1},
+            "troop_type": "War Beast",
+            "equipment": ["Hand Weapon"],
+            "profiles": [
+                {
+                    "name": "Footman",
+                    "M": 5,
+                    "WS": 4,
+                    "BS": 4,
+                    "S": 3,
+                    "T": 3,
+                    "W": 1,
+                    "I": initiative,
+                    "A": 1,
+                    "Ld": 8,
+                }
+            ],
+        }
+    ).with_troop_type(REPO.troop_types)
+
+
+def test_fight_resolves_each_batch_at_its_own_initiative() -> None:
+    """Rider (I5), foe (I4), mount (I3): a model slain early loses its mount's blows.
+
+    One model a side, every attack felling at 1/4 (4+ to hit, 4+ to wound, no
+    save). Walking the Initiative steps by hand:
+
+    - I5: the rider fells the foe with p 1/4.
+    - I4: a surviving foe (3/4) fells the cavalry model with p 1/4.
+    - I3: the mount attacks only while both stand (9/16), felling at 1/4 --
+      a cavalry model slain at I4 never swings its mount
+      (the-combat-phase/split-profiles-combat).
+
+    Joint: P(0,1) = 1/4 + 9/64 = 25/64, P(1,0) = 12/64, P(0,0) = 27/64.
+    """
+    cavalry = Contingent.field(_cavalry_unit(rider_i=5, mount_i=3), 1, data=REPO).wielding(
+        "Hand Weapon"
+    )
+    foot = Contingent.field(_foot_unit(initiative=4), 1, data=REPO).wielding("Hand Weapon")
+
+    result = fight(cavalry, foot)
+
+    assert result.first_striker is cavalry
+    assert result.losses[0][0] == pytest.approx(27 / 64)
+    assert result.losses[0][1] == pytest.approx(25 / 64)
+    assert result.losses[1][0] == pytest.approx(12 / 64)
+    assert result.losses[1][1] == pytest.approx(0)
+
+
+def test_fight_strikes_rider_and_mount_together_at_equal_initiative() -> None:
+    """Rider and mount at one Initiative strike as one step, before the slower foe.
+
+    Both cavalry batches at I5 against a foe at I4: the foe dies before
+    striking whenever either of the two attacks fells it (1 - (3/4)^2 = 7/16),
+    and strikes back at 1/4 otherwise.
+    """
+    cavalry = Contingent.field(_cavalry_unit(rider_i=5, mount_i=5), 1, data=REPO).wielding(
+        "Hand Weapon"
+    )
+    foot = Contingent.field(_foot_unit(initiative=4), 1, data=REPO).wielding("Hand Weapon")
+
+    result = fight(cavalry, foot)
+
+    assert result.losses[0][1] == pytest.approx(7 / 16)
+    assert result.losses[1][0] == pytest.approx(9 / 16 * 1 / 4)
+    assert result.losses[0][0] == pytest.approx(9 / 16 * 3 / 4)
+
+
+def test_strike_unit_folds_the_mounts_attacks_in() -> None:
+    """5 Silver Helms throw rider and steed blows alike: 4 + 4 attacks.
+
+    The front rank is 4 wide (Heavy Cavalry); riders at WS4 and steeds at WS3
+    both hit Elven Spearmen (WS4) on 4+, wound T3 on 4+ (hand weapon at S3),
+    against a 5+ save: p_unsaved = 1/2 * 1/2 * 2/3 = 1/6 for all 8 attacks.
+    """
+    helms = Contingent.deploy("silver-helms", 5, data=REPO).wielding("Hand Weapon")
+    spearmen = _fielded(REPO.units["elven-spearmen"], 20)
+
+    result = strike_unit(helms, spearmen)
+
+    assert result.attacks == 8
+    assert result.expected_wounds == pytest.approx(8 / 6)
+    assert any("mount batch folded in: 4 Barded Elven Steed attacks" in n for n in result.notes)
+
+    # A/B: strip the steed row and the same strike throws the riders' 4 alone.
+    dismounted = REPO.units["silver-helms"].model_copy(
+        update={
+            "profiles": [p for p in REPO.units["silver-helms"].profiles if p.role.value != "mount"]
+        }
+    )
+    riders_only = strike_unit(
+        Contingent.field(dismounted, 5, data=REPO).wielding("Hand Weapon"), spearmen
+    )
+    assert riders_only.attacks == 4
+    assert riders_only.expected_wounds == pytest.approx(4 / 6)
+
+
+def test_mount_initiative_reads_the_mount_row_plus_the_charge_bonus() -> None:
+    """The mounts strike at their own printed Initiative, charge bonus included."""
+    helms = Contingent.deploy("silver-helms", 5, data=REPO)
+    assert mount_initiative(helms).value == 4  # the Barded Elven Steed's printed I
+    assert mount_initiative(helms, 2).value == 6
+    assert mount_initiative(helms, 8).value == 10  # capped, as any Initiative is
+
+    spearmen = _fielded(REPO.units["elven-spearmen"], 5)
+    with pytest.raises(ValueError, match="rides nothing"):
+        mount_initiative(spearmen)

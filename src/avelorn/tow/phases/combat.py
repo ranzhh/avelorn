@@ -41,7 +41,11 @@ from avelorn.tow.engine.attack import (
     resolve_attack,
     roll_target,
 )
-from avelorn.tow.engine.casualties import wound_and_casualties
+from avelorn.tow.engine.casualties import (
+    AttackBatch,
+    batched_wound_and_casualties,
+    wound_and_casualties,
+)
 from avelorn.tow.engine.charts import (
     armour_save_target,
     melee_hit_probability,
@@ -60,6 +64,7 @@ from avelorn.tow.engine.rules import (
     GateContext,
     MovementFacts,
     ShootingFacts,
+    WeaponFacts,
     compile_rules,
     effective_armour_value,
     effective_characteristic,
@@ -73,7 +78,8 @@ from avelorn.tow.phases.movement import Engagement
 from avelorn.tow.schema.psychology import BreakOutcome
 from avelorn.tow.schema.rule import AttackKind, Decision, Rule
 from avelorn.tow.schema.stage import Side
-from avelorn.tow.schema.unit import Characteristic
+from avelorn.tow.schema.unit import Characteristic, Profile, ProfileRole
+from avelorn.tow.schema.weapon import Weapon
 
 logger = logging.getLogger(__name__)
 
@@ -231,7 +237,7 @@ def _per_attack(
 
 @dataclass(frozen=True)
 class _Engagement:
-    """One side's per-attack resolution against a specific foe.
+    """One batch's per-attack resolution against a specific foe.
 
     The matchup-dependent, fighter-count-independent half of a melee
     strike: the per-attack probabilities and reported targets, the
@@ -241,9 +247,15 @@ class _Engagement:
     and :func:`wound_and_casualties` into a casualty distribution — the same
     walk serves a return strike whose numbers depend on casualties already
     taken.
+
+    A side contributes one batch per element of its model: the riders (the
+    main one), and — for a ridden unit — the mounts, whose batch reads its
+    blows off the mount row (``as_mount``). Every batch of a side thins with
+    the same casualties, since a slain model takes rider and mount together.
     """
 
     striker: Contingent
+    as_mount: bool
     weapon_skill: EffectiveValue
     target_armour: EffectiveValue
     # The ward the target's own rules grant it against this strike, folded
@@ -281,13 +293,15 @@ class _Engagement:
         (:meth:`~avelorn.tow.contingent.Contingent.melee_attacks`) — its full
         frontage until losses cut past the rear ranks into the front one, and
         the narrowed front thereafter — so a body thinned to fewer than a rank
-        swings back with fewer attacks.
+        swings back with fewer attacks. A mount batch reads the mount row's
+        Attacks instead, with no supporting term
+        (:meth:`~avelorn.tow.contingent.Contingent.mount_attacks`).
 
         Returns:
             The number of attacks thrown.
         """
         thinned = self.striker.remove_casualties(self.striker.models - survivors)
-        return thinned.melee_attacks()
+        return thinned.mount_attacks() if self.as_mount else thinned.melee_attacks()
 
 
 def _engage(
@@ -298,35 +312,42 @@ def _engage(
     conditions: "GateContext | None" = None,
     target_conditions: "GateContext | None" = None,
     phase_rules: Mapping[str, Rule] = _NONE_IN_PLAY,
+    element: Profile | None = None,
+    weapon: Weapon | None = None,
 ) -> _Engagement:
     # The matchup half of a strike, shared by strike_unit and fight:
-    # extract rank-and-file stats, resolve the weapon's Combat profile and
-    # the target's armour, compile the weapon's rules, and walk one
-    # attack. TODO(#46): rank-and-file profile only — a champion fighting
-    # at a different WS is a separate attack batch needing unit composition.
-    weapon = striker.in_hand()
+    # extract the striking element's stats, resolve the weapon's Combat
+    # profile and the target's armour, compile the weapon's rules, and walk
+    # one attack. By default the element is the rank and file (unit.main)
+    # swinging the weapon in hand; a mount batch passes its own row and
+    # weapon. TODO(#46): a champion fighting at a different WS is a further
+    # batch needing unit composition.
+    weapon = weapon if weapon is not None else striker.in_hand()
     profile = weapon.combat_profile
     if profile is None:
         raise ValueError(f"{weapon.name} has no Combat profile; it cannot fight")
     striker_unit, target_unit = striker.unit, target.unit
-    weapon_skill = striker_unit.profiles[0][Characteristic.WEAPON_SKILL]
-    target_weapon_skill = target_unit.profiles[0][Characteristic.WEAPON_SKILL]
-    attacks_per_model = striker_unit.profiles[0][Characteristic.ATTACKS]
-    toughness = target_unit.profiles[0][Characteristic.TOUGHNESS]
+    row = element if element is not None else striker_unit.main
+    who = striker_unit.name if element is None else f"{striker_unit.name}'s {row.name}"
+    weapon_skill = row[Characteristic.WEAPON_SKILL]
+    # Enemy rolls To Hit are made against the rider's Weapon Skill
+    # (troop-types-in-detail/split-profile-cavalry), so the target side is
+    # always its main row.
+    target_weapon_skill = target_unit.main[Characteristic.WEAPON_SKILL]
+    attacks_per_model = row[Characteristic.ATTACKS]
+    toughness = target_unit.main[Characteristic.TOUGHNESS]
     if weapon_skill is None:
-        raise ValueError(f"{striker_unit.name} has no Weapon Skill; it cannot fight")
+        raise ValueError(f"{who} has no Weapon Skill; it cannot fight")
     if target_weapon_skill is None:
         raise ValueError(f"{target_unit.name} has no Weapon Skill; its To Hit is undefined")
     if attacks_per_model is None:
-        raise ValueError(f"{striker_unit.name} has no Attacks; it cannot fight")
+        raise ValueError(f"{who} has no Attacks; it cannot fight")
     if toughness is None:
         raise ValueError(f"{target_unit.name} has no Toughness; it cannot be wounded")
 
-    wielder_strength = striker_unit.profiles[0][Characteristic.STRENGTH]
+    wielder_strength = row[Characteristic.STRENGTH]
     if profile.strength.is_relative and wielder_strength is None:
-        raise ValueError(
-            f"{weapon.name} strikes at the wielder's Strength, but {striker_unit.name} has none"
-        )
+        raise ValueError(f"{weapon.name} strikes at the wielder's Strength, but {who} has none")
     strength = profile.strength.resolve(wielder_strength or 0)
 
     # The defender's own rules may better its save (Parry's +1 with a hand
@@ -431,8 +452,15 @@ def _engage(
     # Each side's Weapon Skill is read effective, not raw: a rule that
     # modifies it (Martial Prowess's +1 in the first round) shapes both the
     # striker's To Hit and, as the target's WS, the roll against it — each
-    # gated on that side's own engagement conditions.
-    striker_ws = effective_weapon_skill(striker, conditions)
+    # gated on that side's own engagement conditions. A mount's is read
+    # printed: the corpus's characteristic modifiers are the rider's own
+    # (Elven Reflexes says "(but not its mount)"), and no schema word says
+    # which element a modifier reaches yet.
+    striker_ws = (
+        effective_weapon_skill(striker, conditions)
+        if element is None
+        else EffectiveValue(weapon_skill)
+    )
     target_ws = effective_weapon_skill(target, target_conditions)
     hit = melee_hit_target(striker_ws.value, target_ws.value, hit_modifier)
     wound = wound_target(strength, toughness)
@@ -446,11 +474,13 @@ def _engage(
         rerolls=(*rerolls.rerolls, *weapon_rerolls.rerolls, *target_rerolls.rerolls),
     )
     # Wounds accumulate into whole slain models; a profile with no printed
-    # Wounds ("-") is treated as a single-Wound model.
-    target_wounds = target_unit.profiles[0][Characteristic.WOUNDS] or 1
+    # Wounds ("-") is treated as a single-Wound model. A ridden model's Wounds
+    # are the rider's (the-combat-phase/split-profile-cavalry: the rider at
+    # zero Wounds removes the whole model), which main already is.
+    target_wounds = target_unit.main[Characteristic.WOUNDS] or 1
     logger.debug(
         "%s (WS %d, A %d) vs %s (WS %d, T %d): per-attack unsaved p=%.3f",
-        striker_unit.name,
+        who,
         striker_ws.value,
         attacks_per_model,
         target_unit.name,
@@ -460,6 +490,7 @@ def _engage(
     )
     return _Engagement(
         striker=striker,
+        as_mount=element is not None and element.role is ProfileRole.MOUNT,
         weapon_skill=striker_ws,
         target_armour=target_armour,
         target_ward=target_ward,
@@ -482,6 +513,49 @@ def _engage(
     )
 
 
+def _mount_engage(
+    striker: Contingent,
+    target: Contingent,
+    *,
+    hit_modifier: int = 0,
+    conditions: "GateContext | None" = None,
+    target_conditions: "GateContext | None" = None,
+    phase_rules: Mapping[str, Rule] = _NONE_IN_PLAY,
+) -> _Engagement | None:
+    # The mount batch of a ridden striker: the mount row fighting with its own
+    # Weapon Skill, Strength and Attacks (troop-types-in-detail/
+    # split-profile-cavalry), swinging its hooves — "even a cavalry mount is
+    # considered to be armed with a hand weapon" (weapons-of-war/hand-weapon).
+    # The striker's rules compile into this walk too — a split profile shares
+    # its special rules across both elements — gated on the mount's own weapon
+    # in hand, so a hand-weapon-gated rule (Ithilmar Weapons) reaches the
+    # hooves as printed.
+    mount = striker.unit.mount
+    if mount is None:
+        return None
+    hooves = striker.loadout.weapon("Hand Weapon")
+    mount_conditions = replace(
+        _as_conditions(conditions),
+        wielding=WeaponFacts(type=hooves.weapon_type, name=hooves.name),
+    )
+    return _engage(
+        striker,
+        target,
+        hit_modifier=hit_modifier,
+        conditions=mount_conditions,
+        target_conditions=target_conditions,
+        phase_rules=phase_rules,
+        element=mount,
+        weapon=hooves,
+    )
+
+
+def _as_conditions(conditions: "GateContext | None") -> GateContext:
+    # A context to derive the mount's from; None (all facts unknown) stands in
+    # as the empty context, exactly as the evaluator reads it.
+    return conditions if conditions is not None else GateContext()
+
+
 def strike_unit(
     striker: Contingent,
     target: Contingent,
@@ -495,7 +569,9 @@ def strike_unit(
     — the-combat-phase/who-can-fight): a body deeper than one rank no longer
     throws every model's Attacks, only its front. The Combat profile is the
     weapon the striker is wielding (``striker.in_hand()``), using each
-    side's first (rank-and-file) profile; casualties cap at the target's
+    side's rank-and-file profile (``unit.main``); a ridden striker's mounts
+    throw a second batch at the mount row's own line, convolved in before
+    the fold to models. Casualties cap at the target's
     fielded ``models``. The target's save folds from its resolved loadout,
     and the weapon's rules compile into the dice walk from the striker's
     resolved loadout (``striker.loadout.weapon_rules``). Unit special rules
@@ -548,14 +624,38 @@ def strike_unit(
         conditions=striker_conditions,
         target_conditions=target_conditions,
     )
-    attacks = engagement.attacks(fighters)
-    distribution, casualties = wound_and_casualties(
-        attacks,
-        p_unsaved=engagement.p_unsaved,
-        p_kill=engagement.p_kill,
+    # A ridden striker throws its mounts' blows too, a second batch at the
+    # mount's own line; a one-sided strike asks only what the target suffers,
+    # so both batches resolve at full strength and their wounds convolve
+    # before the fold to models and the size cap. The reported per-attack
+    # figures stay the rank and file's; the mount batch names its own in a
+    # note.
+    mount_engagement = _mount_engage(
+        striker,
+        target,
+        hit_modifier=hit_modifier,
+        conditions=striker_conditions,
+        target_conditions=target_conditions,
+    )
+    engagements = [engagement, *([mount_engagement] if mount_engagement is not None else [])]
+    batches = [
+        AttackBatch(e.attacks(fighters), p_unsaved=e.p_unsaved, p_kill=e.p_kill)
+        for e in engagements
+    ]
+    attacks = sum(batch.attacks for batch in batches)
+    distribution, casualties = batched_wound_and_casualties(
+        batches,
         wounds_per_model=engagement.target_wounds,
         targets=targets,
     )
+    mount_notes = ()
+    if mount_engagement is not None:
+        mount = striker.unit.mount
+        assert mount is not None  # _mount_engage returned a batch, so the row exists
+        mount_notes = (
+            f"mount batch folded in: {batches[1].attacks} {mount.name} attacks, "
+            f"hitting on {mount_engagement.hit_target}+",
+        )
     return StrikeResult(
         attacks=attacks,
         hit_target=engagement.hit_target,
@@ -582,9 +682,9 @@ def strike_unit(
                 claimed={
                     *striker.fighting_ranks().factored,
                     *striker.effective_attacks().factored,
-                    *engagement.weapon_skill.factored,
-                    *engagement.rerolls.factored,
-                    *engagement.walk_factored,
+                    *(name for e in engagements for name in e.weapon_skill.factored),
+                    *(name for e in engagements for name in e.rerolls.factored),
+                    *(name for e in engagements for name in e.walk_factored),
                 },
             ),
             # The target throws no blows here, but its save is resolved and its
@@ -596,13 +696,14 @@ def strike_unit(
             *_unit_rule_notes(
                 target,
                 claimed={
-                    *engagement.target_armour.factored,
-                    *engagement.target_ward.factored,
-                    *engagement.target_rerolls.factored,
-                    *engagement.target_walk_factored,
+                    *(name for e in engagements for name in e.target_armour.factored),
+                    *(name for e in engagements for name in e.target_ward.factored),
+                    *(name for e in engagements for name in e.target_rerolls.factored),
+                    *(name for e in engagements for name in e.target_walk_factored),
                 },
             ),
-            *engagement.notes,
+            *dict.fromkeys(note for e in engagements for note in e.notes),
+            *mount_notes,
         ),
         target_models=targets,
     )
@@ -783,10 +884,35 @@ def effective_initiative(
         with the rule names factored into it and those left unfactored —
         the caller reports the latter.
     """
-    base = contingent.unit.profiles[0][Characteristic.INITIATIVE] or 0
+    base = contingent.unit.main[Characteristic.INITIATIVE] or 0
     rules = [*contingent.loadout.rules, *contingent.in_hand_rules()]
     modified = effective_characteristic(base, Characteristic.INITIATIVE, rules, conditions)
     return replace(modified, value=min(modified.value + charge_bonus, 10))
+
+
+def mount_initiative(contingent: Contingent, charge_bonus: int = 0) -> EffectiveValue:
+    """The Initiative a ridden contingent's mounts strike at.
+
+    The mount row's own printed Initiative — a split profile's sets of
+    Attacks each resolve when their value is reached
+    (the-combat-phase/split-profiles-combat) — plus the ``charge_bonus`` the
+    model's charge grants ("models gain a modifier to their Initiative",
+    the-combat-phase/charging-units: the model's, so mount and rider alike),
+    capped at 10. Rule-granted Initiative modifiers are not folded: the
+    corpus's are the rider's own (Elven Reflexes prints "(but not its
+    mount)"), and no schema word says which element a modifier reaches yet.
+
+    Returns:
+        The mounts' effective Initiative.
+
+    Raises:
+        ValueError: the contingent rides nothing.
+    """
+    mount = contingent.unit.mount
+    if mount is None:
+        raise ValueError(f"{contingent.unit.name} rides nothing; it has no mount Initiative")
+    base = mount[Characteristic.INITIATIVE] or 0
+    return EffectiveValue(min(base + charge_bonus, 10))
 
 
 def effective_weapon_skill(
@@ -807,7 +933,7 @@ def effective_weapon_skill(
         The effective Weapon Skill, with the rule names factored into it and
         those left unfactored — the caller reports the latter.
     """
-    base = contingent.unit.profiles[0][Characteristic.WEAPON_SKILL] or 0
+    base = contingent.unit.main[Characteristic.WEAPON_SKILL] or 0
     return effective_characteristic(
         base, Characteristic.WEAPON_SKILL, contingent.loadout.rules, conditions
     )
@@ -868,20 +994,27 @@ def fight(
     first_round: bool | None = None,
     phase_rules: Mapping[str, Rule] = _NONE_IN_PLAY,
 ) -> FightResult:
-    """Resolve one round of close combat between two single-profile units.
+    """Resolve one round of close combat between two units.
 
     Each side fights with the weapon it has in hand (``a.in_hand()`` /
     ``b.in_hand()``), the one it was armed with through
     :meth:`~avelorn.tow.contingent.Contingent.wielding` — a per-side choice,
     since a unit may carry several (a hand weapon and a great weapon) and
-    picks one to swing.
+    picks one to swing. A ridden unit's mounts fight beside their riders as
+    a second batch of attacks — the mount row's own Weapon Skill, Strength
+    and Attacks, swinging the hooves that count as a hand weapon
+    (troop-types-in-detail/split-profile-cavalry) — resolved at the mount
+    row's own Initiative.
 
-    Striking order is by rank-and-file Initiative (highest first): the
-    higher-Initiative side strikes at full strength, its casualties are
-    removed, then the lower-Initiative side strikes back **with its
-    survivors** — so the loser of that exchange swings with fewer models
-    (the-combat-phase: who-strikes-first, fight-on). Equal Initiative
-    strikes simultaneously, with no such reduction (simultaneous-combat).
+    Striking order walks the batches' Initiative values from highest to
+    lowest: batches at a value strike together, their casualties are removed,
+    and lower batches strike **with the survivors** — so the loser of an
+    exchange swings back with fewer models, and a model slain before its
+    mounts' lower Initiative is reached loses those attacks
+    (the-combat-phase: who-strikes-first, fight-on, split-profiles-combat).
+    Batches at equal Initiative strike simultaneously, with no such
+    reduction (simultaneous-combat). ``first_striker`` compares the sides'
+    rank-and-file Initiatives, as before.
 
     Each side's own charge (``a.movement.charge`` / ``b.movement.charge``)
     adds its Initiative bonus before the comparison (the-combat-phase/charging-units),
@@ -965,11 +1098,27 @@ def fight(
         target_conditions=a_conditions,
         phase_rules=phase_rules,
     )
+    a_mount_strikes = _mount_engage(
+        a, b, conditions=a_conditions, target_conditions=b_conditions, phase_rules=phase_rules
+    )
+    b_mount_strikes = _mount_engage(
+        b, a, conditions=b_conditions, target_conditions=a_conditions, phase_rules=phase_rules
+    )
     a_bonus = 0 if a.movement.charge is None else a.movement.charge.initiative_bonus
     b_bonus = 0 if b.movement.charge is None else b.movement.charge.initiative_bonus
     a_initiative = effective_initiative(a, a_bonus, a_conditions)
     b_initiative = effective_initiative(b, b_bonus, b_conditions)
     a_first = _strikes_first(a_initiative.value, b_initiative.value)
+    # Each side's batches at the Initiative each strikes at: the rank and
+    # file at the side's effective Initiative, the mounts — a second set of
+    # attacks the walk resolves when their value is reached
+    # (the-combat-phase/split-profiles-combat) — at the mount row's own.
+    a_batches: list[tuple[int, _Engagement]] = [(a_initiative.value, a_strikes)]
+    if a_mount_strikes is not None:
+        a_batches.append((mount_initiative(a, a_bonus).value, a_mount_strikes))
+    b_batches: list[tuple[int, _Engagement]] = [(b_initiative.value, b_strikes)]
+    if b_mount_strikes is not None:
+        b_batches.append((mount_initiative(b, b_bonus).value, b_mount_strikes))
     # Each side's rule-granted combat-result points, summed under its facts
     # (Massed Infantry's +1 when it outnumbers): folded here, added to the
     # score in combat_result, and claimed out of the notes below.
@@ -982,9 +1131,9 @@ def fight(
     # branch left, tagged with the priors that produced it.
     priors = a_lost_before.combine(b_lost_before, _Priors)
     outcomes = priors >> (
-        lambda pre: _round_joint(
-            a_strikes, a.models - pre.a, b_strikes, b.models - pre.b, a_first
-        ).map(lambda lost: _RoundOutcome(pre.a, pre.b, *lost))
+        lambda pre: _round_joint(a_batches, a.models - pre.a, b_batches, b.models - pre.b).map(
+            lambda lost: _RoundOutcome(pre.a, pre.b, *lost)
+        )
     )
     # Both figures fight() reports are relabels of that one joint. ``losses``
     # keeps the melee alone, since a Stand & Shoot volley's casualties are
@@ -1008,6 +1157,11 @@ def fight(
     # here, so each side also claims what the seat it did not compile from
     # skipped as inapplicable: whatever one seat is not the business of, the
     # other seat's compile has.
+    # A side's mount batch reads the same rules from its own seat (the mount's
+    # weapon in hand), so what its walk factored is claimed alongside the rank
+    # and file's; a side with no mount contributes empty sets.
+    a_own = [s for s in (a_strikes, a_mount_strikes) if s is not None]
+    b_own = [s for s in (b_strikes, b_mount_strikes) if s is not None]
     notes = tuple(
         dict.fromkeys(
             [
@@ -1017,19 +1171,19 @@ def fight(
                         *a_initiative.factored,
                         *a.fighting_ranks().factored,
                         *a.effective_attacks().factored,
-                        *a_strikes.weapon_skill.factored,
-                        *a_strikes.rerolls.factored,
-                        *a_strikes.rerolls.inapplicable,
-                        *a_strikes.walk_factored,
-                        *a_strikes.walk_inapplicable,
+                        *(name for s in a_own for name in s.weapon_skill.factored),
+                        *(name for s in a_own for name in s.rerolls.factored),
+                        *(name for s in a_own for name in s.rerolls.inapplicable),
+                        *(name for s in a_own for name in s.walk_factored),
+                        *(name for s in a_own for name in s.walk_inapplicable),
                         *a_combat_result.factored,
                         # a's defensive rules are read while it is b's target
-                        *b_strikes.target_armour.factored,
-                        *b_strikes.target_ward.factored,
-                        *b_strikes.target_rerolls.factored,
-                        *b_strikes.target_rerolls.inapplicable,
-                        *b_strikes.target_walk_factored,
-                        *b_strikes.target_walk_inapplicable,
+                        *(name for s in b_own for name in s.target_armour.factored),
+                        *(name for s in b_own for name in s.target_ward.factored),
+                        *(name for s in b_own for name in s.target_rerolls.factored),
+                        *(name for s in b_own for name in s.target_rerolls.inapplicable),
+                        *(name for s in b_own for name in s.target_walk_factored),
+                        *(name for s in b_own for name in s.target_walk_inapplicable),
                     },
                 ),
                 *_unit_rule_notes(
@@ -1038,22 +1192,22 @@ def fight(
                         *b_initiative.factored,
                         *b.fighting_ranks().factored,
                         *b.effective_attacks().factored,
-                        *b_strikes.weapon_skill.factored,
-                        *b_strikes.rerolls.factored,
-                        *b_strikes.rerolls.inapplicable,
-                        *b_strikes.walk_factored,
-                        *b_strikes.walk_inapplicable,
+                        *(name for s in b_own for name in s.weapon_skill.factored),
+                        *(name for s in b_own for name in s.rerolls.factored),
+                        *(name for s in b_own for name in s.rerolls.inapplicable),
+                        *(name for s in b_own for name in s.walk_factored),
+                        *(name for s in b_own for name in s.walk_inapplicable),
                         *b_combat_result.factored,
-                        *a_strikes.target_armour.factored,
-                        *a_strikes.target_ward.factored,
-                        *a_strikes.target_rerolls.factored,
-                        *a_strikes.target_rerolls.inapplicable,
-                        *a_strikes.target_walk_factored,
-                        *a_strikes.target_walk_inapplicable,
+                        *(name for s in a_own for name in s.target_armour.factored),
+                        *(name for s in a_own for name in s.target_ward.factored),
+                        *(name for s in a_own for name in s.target_rerolls.factored),
+                        *(name for s in a_own for name in s.target_rerolls.inapplicable),
+                        *(name for s in a_own for name in s.target_walk_factored),
+                        *(name for s in a_own for name in s.target_walk_inapplicable),
                     },
                 ),
-                *a_strikes.notes,
-                *b_strikes.notes,
+                *(note for s in a_own for note in s.notes),
+                *(note for s in b_own for note in s.notes),
             ]
         )
     )
@@ -1079,54 +1233,25 @@ def fight(
     )
 
 
-def _fell(engagement: _Engagement, fighters: int, *, targets: int) -> Distribution[int]:
-    # Casualties inflicted on the target by ``fighters`` models striking.
+def _fell(engagements: Sequence[_Engagement], fighters: int, *, targets: int) -> Distribution[int]:
+    # Casualties inflicted on the target by ``fighters`` models striking, over
+    # every batch the models throw at this step (a lone rank-and-file batch,
+    # or riders and mounts sharing an Initiative). The batches' wounds pool
+    # before the fold to models and the size cap — the unit-level steps.
     # Zero-mass counts drop on the way in, which is what lets the folds below
     # skip unreachable branches without testing for them.
-    _, casualties = wound_and_casualties(
-        engagement.attacks(fighters),
-        p_unsaved=engagement.p_unsaved,
-        p_kill=engagement.p_kill,
-        wounds_per_model=engagement.target_wounds,
+    if not engagements:
+        return Distribution.pure(0)
+    batches = [
+        AttackBatch(e.attacks(fighters), p_unsaved=e.p_unsaved, p_kill=e.p_kill)
+        for e in engagements
+    ]
+    _, casualties = batched_wound_and_casualties(
+        batches,
+        wounds_per_model=engagements[0].target_wounds,
         targets=targets,
     )
     return Distribution.from_counts(casualties)
-
-
-def _independent(
-    row_strikes: _Engagement, row_fighters: int, col_strikes: _Engagement, col_fighters: int
-) -> Distribution[tuple[int, int]]:
-    # Simultaneous combat: neither side's casualties reduce the other's blows,
-    # so the two loss distributions are independent -- the joint is their outer
-    # product, which is what combine takes. Each side's losses come from the
-    # other's strike. Outcomes are (row_lost, col_lost).
-    row_losses = _fell(col_strikes, col_fighters, targets=row_fighters)
-    col_losses = _fell(row_strikes, row_fighters, targets=col_fighters)
-    return row_losses.combine(col_losses, lambda row_lost, col_lost: (row_lost, col_lost))
-
-
-def _sequenced(
-    first_strikes: _Engagement,
-    first_fighters: int,
-    second_strikes: _Engagement,
-    second_fighters: int,
-) -> Distribution[tuple[int, int]]:
-    # The first side strikes at full strength; its casualties thin the second
-    # before the survivors strike back, so the second's blows are conditioned on
-    # how many of it remain. That conditioning is the bind: draw the second
-    # side's losses, then resolve the return blows given them. Outcomes are
-    # (first_lost, second_lost).
-    return _fell(first_strikes, first_fighters, targets=second_fighters) >> (
-        lambda second_lost: _fell(
-            second_strikes, second_fighters - second_lost, targets=first_fighters
-        ).map(lambda first_lost: (first_lost, second_lost))
-    )
-
-
-def _swapped(joint: Distribution[tuple[int, int]]) -> Distribution[tuple[int, int]]:
-    # Swap axes: (second_lost, first_lost) -> (first_lost, second_lost). A
-    # relabel of the outcomes, where a joint held as a grid needed a transpose.
-    return joint.map(lambda lost: (lost[1], lost[0]))
 
 
 def _strikes_first(initiative_a: int, initiative_b: int) -> bool | None:
@@ -1137,23 +1262,52 @@ def _strikes_first(initiative_a: int, initiative_b: int) -> bool | None:
     return initiative_a > initiative_b
 
 
+# One side's attack batches, each at the Initiative it strikes at: the
+# rank-and-file batch, plus the mount batch for a ridden unit. The round
+# walks the Initiative values downward and resolves every batch when its
+# value is reached (the-combat-phase/who-strikes-first; split-profiles-combat).
+_Batches = Sequence[tuple[int, _Engagement]]
+
+
+class _Alive(NamedTuple):
+    # The models each side still has standing mid-round, the state the
+    # Initiative walk threads: batches yet to strike swing from these counts.
+    a: int
+    b: int
+
+
 def _round_joint(
-    a_strikes: _Engagement,
+    a_batches: _Batches,
     a_models: int,
-    b_strikes: _Engagement,
+    b_batches: _Batches,
     b_models: int,
-    a_first: bool | None,
 ) -> Distribution[tuple[int, int]]:
     # One round's joint casualty distribution at fixed model counts, over
-    # outcomes (a_lost, b_lost). Equal Initiative (a_first is None) strikes
-    # simultaneously -- independent losses; otherwise the first striker thins the
-    # other before it swings back, and the sequenced joint is oriented back to
-    # (a, b).
-    if a_first is None:
-        return _independent(a_strikes, a_models, b_strikes, b_models)
-    if a_first:
-        return _sequenced(a_strikes, a_models, b_strikes, b_models)
-    return _swapped(_sequenced(b_strikes, b_models, a_strikes, a_models))
+    # outcomes (a_lost, b_lost). The printed sequence: walk the Initiative
+    # values from highest to lowest; batches at the same value strike
+    # simultaneously (independent losses), casualties are removed, and lower
+    # batches strike from whatever remains (fight-on) — a model slain before
+    # its lower-Initiative batch strikes loses those attacks
+    # (the-combat-phase/split-profiles-combat).
+    state = Distribution.pure(_Alive(a_models, b_models))
+    for step in sorted({i for i, _ in (*a_batches, *b_batches)}, reverse=True):
+        a_now = [e for i, e in a_batches if i == step]
+        b_now = [e for i, e in b_batches if i == step]
+        state = state >> (lambda alive, a_now=a_now, b_now=b_now: _step_joint(alive, a_now, b_now))
+    return state.map(lambda alive: (a_models - alive.a, b_models - alive.b))
+
+
+def _step_joint(
+    alive: _Alive, a_now: Sequence[_Engagement], b_now: Sequence[_Engagement]
+) -> Distribution[_Alive]:
+    # One Initiative step from one branch of the round: every batch whose value
+    # is reached strikes at once, from the models its side still has, so the two
+    # sides' losses this step are independent — the outer product combine takes.
+    b_losses = _fell(a_now, alive.a, targets=alive.b)
+    a_losses = _fell(b_now, alive.b, targets=alive.a)
+    return a_losses.combine(
+        b_losses, lambda a_lost, b_lost: _Alive(alive.a - a_lost, alive.b - b_lost)
+    )
 
 
 _UNMODELLED_COMBAT_RESULT: tuple[str, ...] = (

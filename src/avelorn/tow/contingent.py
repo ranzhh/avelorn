@@ -346,13 +346,14 @@ class Contingent:
     :func:`~avelorn.tow.phases.movement.stand_and_shoot`), so a contingent
     is armed before it fights or shoots.
 
-    Today a contingent is a single homogeneous body — one profile (the
-    rank-and-file, ``unit.profiles[0]``). A real contingent can be
-    heterogeneous: rank and file plus a champion, plus an embedded
-    character, each its own profile, Attacks and weapon. That is
-    deliberately not modelled yet (#46); when it is, this grows a notion of
-    *parts* and the single-body fields become the one-part case. Callers read
-    only ``profiles[0]``, so the assumption stays localized to that migration.
+    Today a contingent is a body of identical models — one rank-and-file
+    profile (``unit.main``), plus the mount every model rides where the
+    datasheet prints one (``unit.mount``, whose attacks the melee folds in
+    as a second batch). A champion or an embedded character, each a *count*
+    of differently-profiled models, is deliberately not modelled yet (#46);
+    when it is, this grows a notion of *parts* and the single-body fields
+    become the one-part case. Callers read only ``unit.main`` and
+    ``unit.mount``, so the assumption stays localized to that migration.
     """
 
     unit: Unit
@@ -549,7 +550,7 @@ class Contingent:
             The effective Attacks, with the rule names factored into it and
             those left unfactored.
         """
-        base = self.unit.profiles[0][Characteristic.ATTACKS] or 0
+        base = self.unit.main[Characteristic.ATTACKS] or 0
         return effective_characteristic(
             base, Characteristic.ATTACKS, self.loadout.rules, self._charge_context()
         )
@@ -576,6 +577,27 @@ class Contingent:
         supporting_models = formation.front_ranks(fighting + supporting) - fighting_models
         return fighting_models * attacks_per_model + supporting_models
 
+    def mount_attacks(self) -> int:
+        """The attacks the fighting rank's mounts throw striking a frontal melee.
+
+        Every fighting-rank model's mount fights beside its rider with its own
+        Attacks (troop-types-in-detail/split-profile-cavalry), so the count is
+        the fighting rank's models times the mount row's Attacks. Mounts never
+        make supporting attacks -- "only the rider can attack, not the mount"
+        (troop-types-in-detail/cavalry-support) -- so no supporting term joins.
+        Rule-granted Attacks modifiers are the rider's (:meth:`effective_attacks`)
+        and do not reach the mount's printed value here.
+
+        Returns:
+            The number of mount attacks thrown this round; 0 for a unit that
+            rides nothing.
+        """
+        mount = self.unit.mount
+        if mount is None:
+            return 0
+        per_model = mount[Characteristic.ATTACKS] or 0
+        return self.formation.front_ranks(self.fighting_ranks().value) * per_model
+
     def unit_strength(self) -> int:
         """This body's Unit Strength: its models' per-model strength, summed.
 
@@ -590,7 +612,7 @@ class Contingent:
             The Unit Strength of the models on the table.
         """
         per_model = self.unit.rank_and_file.unit_strength_per_model(
-            self.unit.profiles[0][Characteristic.WOUNDS]
+            self.unit.main[Characteristic.WOUNDS]
         )
         return self.models * per_model
 
