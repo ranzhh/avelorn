@@ -18,8 +18,15 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, HTTPException
 
 from avelorn.tow.data import TOWRepository, default_repository
+from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.unit import Unit
-from avelorn.tow.views import UnitSummary
+from avelorn.tow.views import (
+    RuleSummary,
+    UnitSummary,
+    UnmodelledRule,
+    rule_summaries,
+    unmodelled_rules,
+)
 
 app = FastAPI(
     title="Avelorn",
@@ -68,3 +75,44 @@ def read_unit(slug: str, data: Corpus) -> Unit:
     if unit is None:
         raise HTTPException(status_code=404, detail=f"no unit {slug!r}")
     return unit
+
+
+@app.get("/rules", summary="List every rule entry in the corpus")
+def list_rules(data: Corpus) -> list[RuleSummary]:
+    """List the rule entries, ordered by slug.
+
+    Returns:
+        One summary per entry.
+    """
+    return rule_summaries(data)
+
+
+# Declared before /rules/{slug}, so the path matches this route rather than
+# being read as a slug. No rule is filed under "unmodelled", and none can be
+# while this route owns the name.
+@app.get("/rules/unmodelled", summary="Report the printed rules the engine does not apply")
+def list_unmodelled(data: Corpus) -> list[UnmodelledRule]:
+    """Report every rule the corpus prints that never reaches the maths.
+
+    Returns:
+        The report, most-printed first.
+    """
+    return unmodelled_rules(data)
+
+
+@app.get("/rules/{slug}", summary="Read one rule entry")
+def read_rule(slug: str, data: Corpus) -> Rule:
+    """Read a rule entry in full: its text, its effects, and what it leaves out.
+
+    Returns:
+        The rule entry.
+
+    Raises:
+        HTTPException: 404, when no entry carries the slug. A rule the corpus
+            prints without an entry has none to read; ``/rules/unmodelled``
+            names those.
+    """
+    rule = data.rules.get(slug)
+    if rule is None:
+        raise HTTPException(status_code=404, detail=f"no rule entry {slug!r}")
+    return rule

@@ -5,14 +5,18 @@ reports is what a test reads. The flags that reach these live in
 :mod:`avelorn.cli.main`.
 """
 
+import textwrap
 from collections.abc import Sequence
 
+import yaml
+
 from avelorn.tow.data import TOWRepository
+from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.unit import BaseSize, Characteristic, Unit, UnitOption, UnitSize
-from avelorn.tow.views import UnitSummary
+from avelorn.tow.views import UnitSummary, rule_summaries, unmodelled_rules
 
 
-def units(data: TOWRepository) -> list[str]:
+def list_units(data: TOWRepository) -> list[str]:
     """List every datasheet in the corpus: slug, name, cost, allowed size.
 
     One column per field of the shared listing view, so the terminal shows
@@ -35,7 +39,7 @@ def units(data: TOWRepository) -> list[str]:
     return _columns(rows)
 
 
-def show(data: TOWRepository, slug: str) -> list[str]:
+def show_unit(data: TOWRepository, slug: str) -> list[str]:
     """Print one datasheet whole -- everything ``GET /units/{slug}`` serves.
 
     The detail view is the datasheet itself, so every field
@@ -64,6 +68,107 @@ def show(data: TOWRepository, slug: str) -> list[str]:
     return lines
 
 
+def list_rules(data: TOWRepository) -> list[str]:
+    """List every rule entry, and whether it reaches the maths.
+
+    Returns:
+        The lines to print.
+    """
+    rows = [["SLUG", "NAME", "CATEGORY", "FACTORS", "PRINTED BY"]]
+    rows.extend(
+        [
+            summary.id,
+            summary.name,
+            summary.category or "-",
+            "yes" if summary.factors else "no",
+            str(summary.references),
+        ]
+        for summary in rule_summaries(data)
+    )
+    return _columns(rows)
+
+
+def list_unmodelled(data: TOWRepository) -> list[str]:
+    """Report every rule the corpus prints that the engine does not apply.
+
+    The same honesty the per-action "special rule not factored" notes give,
+    totalled: what is printed, why it does not fold, and who prints it.
+
+    Returns:
+        The lines to print.
+    """
+    report = unmodelled_rules(data)
+    entries = len(rule_summaries(data))
+    lines = [f"{len(report)} printed rules do not reach the maths ({entries} entries in all):"]
+    for rule in report:
+        lines.extend(["", f"{rule.name}  --  {rule.why.value}"])
+        if rule.units:
+            lines.append(f"    units:   {', '.join(rule.units)}")
+        if rule.weapons:
+            lines.append(f"    weapons: {', '.join(rule.weapons)}")
+        if not rule.units and not rule.weapons:
+            lines.append("    nothing in the corpus prints it")
+    return lines
+
+
+def show_rule(data: TOWRepository, slug: str) -> list[str]:
+    """Print one rule entry: its text, its effects, and what it leaves out.
+
+    Effects print as the YAML they are authored as, rather than a prose gloss --
+    the file is the statement of what the engine does, so a second wording of it
+    would only be something to drift.
+
+    Returns:
+        The lines to print.
+    """
+    rule = _rule(data, slug)
+    page = "" if rule.page is None else f", page {rule.page}"
+    lines = [f"{rule.name}  ({rule.id})", f"{rule.category or 'uncategorised'}{page}"]
+    if rule.flavour:
+        lines.extend(["", *(f"  {line}" for line in _wrapped(rule.flavour))])
+    for paragraph in rule.paragraphs:
+        lines.extend(["", *_wrapped(paragraph)])
+    if rule.effects:
+        dumped = yaml.safe_dump(
+            [effect.model_dump(mode="json", exclude_none=True) for effect in rule.effects],
+            sort_keys=False,
+        )
+        lines.extend(["", "Effects:", *(f"  {line}" for line in dumped.rstrip().splitlines())])
+    else:
+        lines.extend(["", "Effects: none -- the engine holds this text and does not apply it"])
+    if rule.notes:
+        lines.extend(["", "Not covered:", *(f"  {line}" for line in _wrapped(rule.notes))])
+    return lines
+
+
+def _rule(data: TOWRepository, slug: str) -> Rule:
+    """Address a rule entry by slug.
+
+    Returns:
+        The rule entry.
+
+    Raises:
+        LookupError: no entry carries the slug. A rule the corpus prints without
+            an entry is real but unreadable here, so the miss says where to look.
+    """
+    rule = data.rules.get(slug)
+    if rule is None:
+        raise LookupError(
+            f"no rule entry {slug!r}; run `avelorn rules list` for the slugs, "
+            "or `avelorn rules list --unmodelled` for the names printed without one"
+        )
+    return rule
+
+
+def _wrapped(text: str, width: int = 96) -> list[str]:
+    """Rule prose, wrapped to a readable width.
+
+    Returns:
+        The wrapped lines.
+    """
+    return textwrap.wrap(" ".join(text.split()), width=width) or [""]
+
+
 def _unit(data: TOWRepository, slug: str) -> Unit:
     """Address a datasheet by slug.
 
@@ -76,7 +181,7 @@ def _unit(data: TOWRepository, slug: str) -> Unit:
     """
     unit = data.units.get(slug)
     if unit is None:
-        raise LookupError(f"no unit {slug!r}; run `avelorn units` for the slugs")
+        raise LookupError(f"no unit {slug!r}; run `avelorn units list` for the slugs")
     return unit
 
 

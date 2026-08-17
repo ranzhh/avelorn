@@ -17,3 +17,6 @@ avelorn.db
 
 # environment files
 .env
+
+# git worktrees this session creates for parallel work
+.claude/worktrees/

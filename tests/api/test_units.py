@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from avelorn.api.app import app, corpus
 from avelorn.tow.data import TOWRepository
+from avelorn.tow.views import RuleSummary
 
 REPO = TOWRepository()
 
@@ -61,3 +62,40 @@ def test_an_unknown_slug_is_a_404(client: TestClient) -> None:
     response = client.get("/units/wood-elves")
     assert response.status_code == 404
     assert response.json() == {"detail": "no unit 'wood-elves'"}
+
+
+def test_rules_are_listed_through_the_shared_summary(client: TestClient) -> None:
+    """The rule listing carries the shared view's fields, one entry each."""
+    body = client.get("/rules").json()
+    assert [r["id"] for r in body] == sorted(REPO.rules)
+    assert set(body[0]) == set(RuleSummary.model_fields)
+
+
+def test_an_unmodelled_report_names_the_rules_and_who_prints_them(client: TestClient) -> None:
+    """The report is the per-action "not factored" notes, totalled."""
+    body = client.get("/rules/unmodelled").json()
+    close_order = next(r for r in body if r["name"] == "Close Order")
+    assert close_order["id"] is None
+    assert close_order["why"] == "no entry"
+    assert "elven-spearmen" in close_order["units"]
+
+
+def test_unmodelled_is_a_route_not_a_slug(client: TestClient) -> None:
+    """Declared before /rules/{slug}, so the report wins the path."""
+    assert isinstance(client.get("/rules/unmodelled").json(), list)
+
+
+def test_a_rule_is_served_whole(client: TestClient) -> None:
+    """The detail route is the schema type, effects and notes included."""
+    body = client.get("/rules/stubborn").json()
+    # Served with its nulls, as every response model is; the CLI drops them for
+    # readability, which is rendering rather than a difference in what is carried.
+    assert body["effects"] == [{"when": None, "forces": {"break": "fall-back-in-good-order"}}]
+    assert body["notes"]
+
+
+def test_an_unknown_rule_slug_is_a_404(client: TestClient) -> None:
+    """A rule printed without an entry has none to read."""
+    response = client.get("/rules/close-order")
+    assert response.status_code == 404
+    assert response.json() == {"detail": "no rule entry 'close-order'"}
