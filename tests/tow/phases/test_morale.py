@@ -173,6 +173,20 @@ def test_valour_of_ages_applies_from_the_data_file() -> None:
     assert panic.p_holds == pytest.approx(P_PASS + (1 - P_PASS) * P_PASS)
 
 
+def test_veteran_rerolls_a_failed_panic_test_from_the_data_file() -> None:
+    """Veteran's grant is unrestricted, where Valour of Ages names two causes.
+
+    "May re-roll any failed Leadership test", so the authored effect carries no
+    cause filter and admits this seam's heavy casualties like any other.
+    """
+    fielded = Contingent.field(REPO.units["lion-guard"], 8, data=REPO)
+    panic = make_panic_tests(_result([0.0, 0.0, 0.0, 1.0], size=8), fielded)
+    assert panic.reroll_from == "Veteran"
+    # Lion Guard carry Ld 9: a Leadership test passes 30/36.
+    p_pass = float(Fraction(30, 36))
+    assert panic.p_holds == pytest.approx(p_pass + (1 - p_pass) * p_pass)
+
+
 # --- Break test: 2D6 + margin vs Leadership, three outcomes ---
 
 

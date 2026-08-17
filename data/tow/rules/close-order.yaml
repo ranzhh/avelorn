@@ -1,0 +1,14 @@
+# Source: https://tow.whfb.app/special-rules/close-order
+id: close-order
+name: Close Order
+page: 167
+category: Special Rules
+flavour: The mainstay of any army is its regiments of close order infantry and cavalry.
+paragraphs:
+  - A unit consisting of models with this special rule may adopt a Close Order formation.
+# No effects, deliberately: the rule confers a permission, not a modifier. What
+# a Close Order formation then does is the formation's rules, not this one's.
+notes: >-
+  Grants permission to adopt a formation; formations are not modelled (#28), so
+  there is nothing for the permission to unlock. The engine ranks a unit up by
+  its troop type alone.

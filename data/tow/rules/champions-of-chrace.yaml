@@ -1,0 +1,16 @@
+# Source: https://tow.whfb.app/special-rules/champions-of-chrace
+id: champions-of-chrace
+name: Champions of Chrace
+page: 42
+category: Special Rules
+flavour: Even amongst the warriors of Chrace, the Lion Guard are renowned fighters, eager to best their foes in single combat.
+paragraphs:
+  - Any model in a unit of Lion Guard can accept challenges in the same manner as a character. In addition, once per turn
+    a character that has joined a unit of Lion Guard may re-roll their "Look Out, Sir!" roll.
+# No effects, deliberately: both halves act on things the engine has no model
+# of, so there is nothing to fold and the rule stays reported as unfactored.
+notes: >-
+  Not modelled, and not modellable yet: challenges are not resolved (a combat is
+  two units striking, with no single-combat within it), and "Look Out, Sir!"
+  needs a character embedded in a unit, which the fielded body does not yet
+  distinguish (#46).
