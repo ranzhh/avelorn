@@ -22,7 +22,6 @@ than read the rule registry alone -- a rule with no entry is invisible there.
 """
 
 from collections import defaultdict
-from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict
 
@@ -87,27 +86,23 @@ class RuleSummary(BaseModel):
         )
 
 
-class Unmodelled(StrEnum):
-    """Why a printed rule does not reach the maths."""
-
-    NO_ENTRY = "no entry"
-    NO_EFFECTS = "entry carries no effects"
-
-
 class UnmodelledRule(BaseModel):
-    """A rule the corpus prints and the engine does not apply.
+    """A rule the corpus prints that has no entry, so the engine cannot apply it.
 
-    Keyed by printed ``name``, because that is how a datasheet references a rule
-    and the only handle a rule with no entry has at all -- ``id`` is None for
-    those. ``units`` and ``weapons`` name who prints it, which is what makes the
-    report actionable: a rule nothing carries is not worth modelling yet.
+    Keyed by printed ``name``: that is how a datasheet references a rule, and
+    with no entry it is the only handle the rule has. ``units`` and ``weapons``
+    name who prints it, which is what makes the report actionable -- a rule
+    nothing carries is not worth modelling yet.
+
+    An entry that carried no effects would be unapplied too, but no such entry
+    is allowed in ``data/`` (``test_every_rule_entry_carries_effects``): a rule
+    that cannot fold is filed by not filing it. So a missing entry is the only
+    way a printed rule goes unmodelled, and this needs no reason field.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     name: str
-    id: str | None
-    why: Unmodelled
     units: tuple[str, ...]
     weapons: tuple[str, ...]
 
@@ -128,32 +123,24 @@ def rule_summaries(data: TOWRepository) -> list[RuleSummary]:
 def unmodelled_rules(data: TOWRepository) -> list[UnmodelledRule]:
     """Every rule the corpus prints that never reaches the maths.
 
-    Two ways that happens: the rule has no entry at all, so it rides along as a
-    printed name; or it has an entry that carries no effects. The first is only
-    visible by scanning what units and weapons print, since a rule with no file
-    is nowhere in the registry. The second is visible in the registry whether
-    anything prints it or not, and is listed either way -- Killing Blow is a rule
-    the engine does not apply, and its being unused today does not make it
-    modelled.
+    Found by scanning what units and weapons print, not by reading the rule
+    registry: a rule with no file is nowhere in the registry, which is the whole
+    point of the report.
 
     Returns:
         The report, ordered by how many entries print each rule, then by name.
     """
     units, weapons = _references(data)
-    idle = {rule.name for rule in data.rules.values() if not rule.effects}
     report = []
-    for name in set(units) | set(weapons) | idle:
+    for name in set(units) | set(weapons):
         # Resolved the way fielding resolves it, so a printed parameter finds
         # the entry filed under "(X)": Armour Bane (1) is modelled, and reporting
         # it as missing because no file carries that exact name would be a lie.
-        entry = printed_rule(name, data.rules)
-        if entry is not None and entry.effects:
+        if printed_rule(name, data.rules) is not None:
             continue
         report.append(
             UnmodelledRule(
                 name=name,
-                id=None if entry is None else entry.id,
-                why=Unmodelled.NO_ENTRY if entry is None else Unmodelled.NO_EFFECTS,
                 units=tuple(sorted(units[name])),
                 weapons=tuple(sorted(weapons[name])),
             )

@@ -89,25 +89,23 @@ def list_rules(data: TOWRepository) -> list[str]:
 
 
 def list_unmodelled(data: TOWRepository) -> list[str]:
-    """Report every rule the corpus prints that the engine does not apply.
+    """Report every rule the corpus prints without an entry to apply.
 
     The same honesty the per-action "special rule not factored" notes give,
-    totalled: what is printed, why it does not fold, and who prints it.
+    totalled: what is printed, and who prints it.
 
     Returns:
         The lines to print.
     """
     report = unmodelled_rules(data)
     entries = len(rule_summaries(data))
-    lines = [f"{len(report)} printed rules do not reach the maths ({entries} entries in all):"]
+    lines = [f"{len(report)} printed rules have no entry ({entries} entries in all):"]
     for rule in report:
-        lines.extend(["", f"{rule.name}  --  {rule.why.value}"])
+        lines.extend(["", rule.name])
         if rule.units:
             lines.append(f"    units:   {', '.join(rule.units)}")
         if rule.weapons:
             lines.append(f"    weapons: {', '.join(rule.weapons)}")
-        if not rule.units and not rule.weapons:
-            lines.append("    nothing in the corpus prints it")
     return lines
 
 

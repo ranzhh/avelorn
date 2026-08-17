@@ -6,7 +6,7 @@ import pytest
 from pydantic import TypeAdapter, ValidationError
 
 from avelorn.core.loading import load_yaml
-from avelorn.tow.data import rule_paths
+from avelorn.tow.data import TOWRepository, rule_paths
 from avelorn.tow.schema.rule import ModifierEffect, Quantity, RerollEffect, Rule, RuleEffect
 from avelorn.tow.schema.unit import Characteristic
 
@@ -549,3 +549,15 @@ def test_enemy_re_roll_names_a_per_attack_die() -> None:
     """The enemy subject flips a per-attack die; the panic seam folds a side's own tests."""
     with pytest.raises(ValidationError, match="enemy flips a per-attack die"):
         _EFFECT.validate_python({"reroll": "make-panic-tests", "enemy": True})
+
+
+def test_every_rule_entry_carries_effects() -> None:
+    """A rule the engine cannot apply is filed by not filing it at all.
+
+    An entry with no effects reports "special rule not factored" exactly as a
+    rule with no file does, so the file adds nothing but the appearance of
+    having been modelled. `avelorn rules list --unmodelled` names what is
+    missing; data/ holds only what folds.
+    """
+    idle = sorted(rule.id for rule in TOWRepository().rules.values() if not rule.effects)
+    assert idle == []

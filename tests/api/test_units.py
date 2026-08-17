@@ -75,9 +75,8 @@ def test_an_unmodelled_report_names_the_rules_and_who_prints_them(client: TestCl
     """The report is the per-action "not factored" notes, totalled."""
     body = client.get("/rules/unmodelled").json()
     close_order = next(r for r in body if r["name"] == "Close Order")
-    assert close_order["id"] is None
-    assert close_order["why"] == "no entry"
     assert "elven-spearmen" in close_order["units"]
+    assert set(close_order) == {"name", "units", "weapons"}
 
 
 def test_unmodelled_is_a_route_not_a_slug(client: TestClient) -> None:

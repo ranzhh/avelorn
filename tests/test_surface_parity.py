@@ -88,7 +88,7 @@ def test_the_unmodelled_report_names_the_same_rules_on_both() -> None:
         assert rule["name"] in printed
         for slug in (*rule["units"], *rule["weapons"]):
             assert slug in printed
-    assert f"{len(served)} printed rules do not reach the maths" in printed
+    assert f"{len(served)} printed rules have no entry" in printed
 
 
 def test_show_rule_covers_every_field_the_detail_endpoint_serves() -> None:

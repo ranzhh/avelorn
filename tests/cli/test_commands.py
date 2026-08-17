@@ -43,22 +43,16 @@ def test_rules_list_says_which_entries_reach_the_maths() -> None:
     lines = commands.list_rules(REPO)
     assert len(lines) == len(REPO.rules) + 1
     stubborn = next(line for line in lines if line.startswith("stubborn"))
-    killing = next(line for line in lines if line.startswith("killing-blow"))
     assert stubborn.split()[-2:] == ["yes", "3"]  # effects, and three units print it
-    assert "no" in killing.split()  # real text the effect vocabulary cannot express
+    # Every entry folds, because one that did not would not be filed at all.
+    assert all(line.split()[-2] == "yes" for line in lines[1:])
 
 
 def test_unmodelled_reports_a_name_with_no_entry_and_who_prints_it() -> None:
     """A rule the corpus prints without an entry is invisible in the registry."""
     printed = "\n".join(commands.list_unmodelled(REPO))
-    assert "Close Order  --  no entry" in printed
+    assert "\nClose Order\n" in printed
     assert "elven-spearmen" in printed
-
-
-def test_unmodelled_reports_an_entry_that_carries_no_effects() -> None:
-    """The other way a rule goes unapplied: an entry the engine holds and ignores."""
-    printed = "\n".join(commands.list_unmodelled(REPO))
-    assert "Killing Blow  --  entry carries no effects" in printed
 
 
 def test_unmodelled_resolves_a_printed_parameter_before_judging_it() -> None:
@@ -84,12 +78,6 @@ def test_rules_show_prints_the_text_the_effects_and_what_is_left_out() -> None:
     assert "Special Rules, page 178" in printed
     assert "break: fall-back-in-good-order" in printed
     assert "Not covered:" in printed
-
-
-def test_rules_show_says_when_an_entry_applies_nothing() -> None:
-    """An effect-less entry says so rather than printing an empty heading."""
-    printed = "\n".join(commands.show_rule(REPO, "killing-blow"))
-    assert "Effects: none" in printed
 
 
 def test_rules_show_points_a_miss_at_the_unmodelled_report() -> None:

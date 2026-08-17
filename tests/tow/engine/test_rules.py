@@ -68,7 +68,7 @@ def _one_rule(effect: RuleEffect) -> dict[str, Rule]:
 
 def test_printed_rule_exact_name_is_the_entry_itself() -> None:
     """A printed name matching an entry name returns that entry, unchanged."""
-    assert printed_rule("Killing Blow", REPO.rules) is REPO.rules["killing-blow"]
+    assert printed_rule("Stubborn", REPO.rules) is REPO.rules["stubborn"]
 
 
 def test_printed_rule_substitutes_the_parameter() -> None:
@@ -113,10 +113,15 @@ def test_compile_armour_bane_from_data_reproduces_the_golden() -> None:
 
 
 def test_compile_effectless_rule_stays_unfactored() -> None:
-    """A resolved rule with no effects is recognised but not factored."""
-    compiled = compile_rules(["Killing Blow"], REPO.rules)
+    """A resolved rule with no effects is recognised but not factored.
+
+    Built here rather than taken from data/, where no such entry is allowed to
+    exist: a rule the engine cannot apply is filed by not filing it at all.
+    """
+    effectless = Rule(id="effectless", name="Effectless", paragraphs=["Says nothing."])
+    compiled = compile_rules(["Effectless"], {effectless.name: effectless})
     assert compiled.modifiers == ()
-    assert compiled.unfactored == ("Killing Blow",)
+    assert compiled.unfactored == ("Effectless",)
 
 
 def test_compile_rank_quantity_stays_unfactored_in_the_dice_walk() -> None:
