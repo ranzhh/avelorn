@@ -16,10 +16,10 @@ from importlib.metadata import version
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException
-from pydantic import BaseModel, ConfigDict
 
 from avelorn.tow.data import TOWRepository, default_repository
-from avelorn.tow.schema.unit import TroopType, Unit, UnitSize
+from avelorn.tow.schema.unit import Unit
+from avelorn.tow.views import UnitSummary
 
 app = FastAPI(
     title="Avelorn",
@@ -44,23 +44,6 @@ def corpus() -> TOWRepository:
 Corpus = Annotated[TOWRepository, Depends(corpus)]
 
 
-class UnitSummary(BaseModel):
-    """A datasheet as the listing shows it: what it costs and how it is fielded.
-
-    Deliberately not the whole datasheet. Profiles, equipment, rules, and
-    options are what ``GET /units/{slug}`` is for; serving them for every unit
-    at once makes the listing grow with the corpus rather than with its length.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    id: str
-    name: str
-    points: int
-    unit_size: UnitSize
-    troop_type: TroopType
-
-
 @app.get("/units", summary="List every datasheet in the corpus")
 def list_units(data: Corpus) -> list[UnitSummary]:
     """List the datasheets, ordered by slug.
@@ -68,10 +51,7 @@ def list_units(data: Corpus) -> list[UnitSummary]:
     Returns:
         One summary per unit.
     """
-    return [
-        UnitSummary.model_validate(unit, from_attributes=True)
-        for _, unit in sorted(data.units.items())
-    ]
+    return [UnitSummary.of(unit) for _, unit in sorted(data.units.items())]
 
 
 @app.get("/units/{slug}", summary="Read one datasheet")

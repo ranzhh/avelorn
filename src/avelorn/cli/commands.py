@@ -8,25 +8,39 @@ reports is what a test reads. The flags that reach these live in
 from collections.abc import Sequence
 
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.schema.unit import Characteristic, Unit, UnitOption
+from avelorn.tow.schema.unit import BaseSize, Characteristic, Unit, UnitOption, UnitSize
+from avelorn.tow.views import UnitSummary
 
 
 def units(data: TOWRepository) -> list[str]:
     """List every datasheet in the corpus: slug, name, cost, allowed size.
+
+    One column per field of the shared listing view, so the terminal shows
+    exactly what ``GET /units`` serves.
 
     Returns:
         The lines to print.
     """
     rows = [["SLUG", "NAME", "PTS/MODEL", "SIZE", "TROOP TYPE"]]
     rows.extend(
-        [unit.id, unit.name, str(unit.points), _size(unit), unit.troop_type.value]
-        for _, unit in sorted(data.units.items())
+        [
+            summary.id,
+            summary.name,
+            str(summary.points),
+            _size(summary.unit_size),
+            summary.troop_type.value,
+        ]
+        for summary in (UnitSummary.of(unit) for _, unit in sorted(data.units.items()))
     )
     return _columns(rows)
 
 
 def show(data: TOWRepository, slug: str) -> list[str]:
-    """Print one datasheet: its profile rows, cost, equipment, rules, and options.
+    """Print one datasheet whole -- everything ``GET /units/{slug}`` serves.
+
+    The detail view is the datasheet itself, so every field
+    :class:`~avelorn.tow.schema.unit.Unit` carries reaches the terminal; a test
+    holds the two surfaces to that.
 
     Returns:
         The lines to print.
@@ -38,7 +52,9 @@ def show(data: TOWRepository, slug: str) -> list[str]:
     )
     lines = [
         f"{unit.name}  ({unit.id})",
-        f"{unit.troop_type.value}, {unit.points} points per model, unit size {_size(unit)}",
+        f"{unit.troop_type.value}, {unit.points} points per model, "
+        f"unit size {_size(unit.unit_size)}",
+        f"base {_base(unit.base_size)}, {_ranks(unit)}",
         "",
         *_columns(rows),
     ]
@@ -64,14 +80,40 @@ def _unit(data: TOWRepository, slug: str) -> Unit:
     return unit
 
 
-def _size(unit: Unit) -> str:
+def _base(size: BaseSize | None) -> str:
+    """A model's footprint, in millimetres.
+
+    Returns:
+        The printed WxD, or a dash where the datasheet gives none.
+    """
+    return "-" if size is None else f"{size.width_mm} x {size.depth_mm} mm"
+
+
+def _ranks(unit: Unit) -> str:
+    """How the unit's troop type ranks it up.
+
+    Reads the profile the repository resolved onto the datasheet, which is what
+    the engine consults for Unit Strength and rank bonus.
+
+    Returns:
+        The troop type's models per rank and rank-bonus cap, or a note that the
+        profile is unresolved.
+    """
+    if unit.troop_type_profile is None:
+        return "troop-type profile unresolved"
+    profile = unit.troop_type_profile
+    width = profile.models_per_rank
+    per_rank = "any width" if width is None else f"{width}/rank"
+    return f"{per_rank}, rank bonus up to +{profile.max_rank_bonus}"
+
+
+def _size(size: UnitSize) -> str:
     """A datasheet's allowed model count.
 
     Returns:
         The range, open-ended when the datasheet prints no maximum.
     """
-    allowed = unit.unit_size
-    return f"{allowed.min}+" if allowed.max is None else f"{allowed.min}-{allowed.max}"
+    return f"{size.min}+" if size.max is None else f"{size.min}-{size.max}"
 
 
 def _stat(value: int | None) -> str:
