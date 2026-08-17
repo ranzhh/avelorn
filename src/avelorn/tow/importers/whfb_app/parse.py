@@ -207,13 +207,17 @@ _COST_RES = (
     re.compile(rf"\s*\({_COST_BODY}\)$", re.I),
     re.compile(rf"\s*{_COST_BODY}$", re.I),
 )
+# "Free" is a printed cost of nothing, not the absence of one. The distinction
+# matters: the schema requires exactly one cost shape, so a line read as having
+# no cost at all is refused and dropped ("Scouts (Free)").
+_FREE_RE = re.compile(r"\s*\(free\)$", re.I)
 # A page cross-reference, not part of the printed name: "Drakegun (see below)".
 _CROSS_REF_RE = re.compile(r"\s*\(see\s+[^)]+\)", re.I)
 # A line or group header reads "<subject> may ...". A header may also carry
 # the verb its children omit: "The entire unit may take any of the following:".
 _HEADER_RE = re.compile(
     r"^(?P<subject>.+?)\s+may"
-    r"(?:\s+(?P<verb>.+?)\s+(?P<quantifier>any|one)\s+of the following)?:?$",
+    r"(?:\s+(?P<verb>.+?)(?:\s+(?P<quantifier>any|one)\s+of the following)?)?:?$",
     re.I,
 )
 _LINE_SUBJECT_RE = re.compile(r"^(?P<subject>.+?)\s+may\s+(?P<body>.+)$", re.I)
@@ -221,6 +225,9 @@ _SUBJECT_PLAIN_RE = re.compile(r"^(?:Any|The entire)\s+units?(?:\s+of\s+.+?)?$",
 _SUBJECT_LIMIT_RE = re.compile(
     r"^(\d+-\d+)\s+units?(?:\s+of\s+.+?)?\s+per\s+([\d,]+)\s+points$", re.I
 )
+# The same restriction with no points clause: "0-1 unit may ...", a cap on the
+# army rather than a ratio to its size.
+_SUBJECT_COUNT_RE = re.compile(r"^(\d+-\d+)\s+units?(?:\s+of\s+.+?)?$", re.I)
 _SUBJECT_MODEL_RE = re.compile(r"^an?\s+(.+)$", re.I)
 _UPGRADE_RE = re.compile(r"^upgrade one model to an?\s+(.+)$", re.I)
 _RULE_ADD_RE = re.compile(r"^have the\s+(.+?)\s+special rule$", re.I)
@@ -270,6 +277,15 @@ def _parse_options(
             _append_option(options, slug, header, OptionGroup(), printed, warnings)
             continue
         group = _parse_group(slug, header.text, printed, warnings)
+        # "0-1 unit may replace the Vanguard special rule with: Scouts /
+        # Ambushers" offers alternatives, not a shopping list -- the one thing
+        # being replaced can only be replaced once. Said here rather than in
+        # _parse_group, which sees the header and not how many follow it.
+        if group.verb and group.verb.lower().startswith("replace") and len(children) > 1:
+            warnings.append(
+                f"{slug}: the {len(children)} options under {header.text!r} replace the same "
+                "thing, so they are mutually exclusive; exclusivity not recorded"
+            )
         for child in children:
             _append_option(options, slug, child, group, printed, warnings)
     return options
@@ -303,6 +319,8 @@ def _parse_subject(subject: str, printed: set[str]) -> OptionGroup | None:
         return OptionGroup()
     if m := _SUBJECT_LIMIT_RE.fullmatch(subject):
         return OptionGroup(limit=f"{m.group(1)} unit per {m.group(2).replace(',', '')} points")
+    if m := _SUBJECT_COUNT_RE.fullmatch(subject):
+        return OptionGroup(limit=f"{m.group(1)} unit")
     if (m := _SUBJECT_MODEL_RE.fullmatch(subject)) and m.group(1) in printed:
         return OptionGroup(applies_to=m.group(1))
     return None
@@ -358,6 +376,10 @@ def _parse_option_line(
             per_model = m.group("scope") == "model"
             text = text[: m.start()].strip()
             break
+    else:
+        if m := _FREE_RE.search(text):
+            points = 0
+            text = text[: m.start()].strip()
     text = _CROSS_REF_RE.sub("", text).strip()
 
     if m := _MAGIC_ITEMS_RE.fullmatch(text):
