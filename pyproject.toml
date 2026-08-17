@@ -35,6 +35,12 @@ avelorn = "avelorn.cli:main"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+# A worktree under .claude/worktrees/ is a second checkout of this repo. ty walks
+# the tree by path rather than by what git tracks, so without this it type-checks
+# that copy too and reports every diagnostic twice.
+[tool.ty.src]
+exclude = [".claude"]
+
 [tool.ruff]
 cache-dir = "~/.cache/ruff"
 line-length = 99

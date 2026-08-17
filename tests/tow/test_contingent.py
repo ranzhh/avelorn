@@ -152,7 +152,6 @@ def test_field_resolves_equipment_into_the_loadout(spearmen_unit: Unit) -> None:
         weapons=(REPO.weapons["hand-weapon"], REPO.weapons["thrusting-spear"]),
         armour=(REPO.armoury["light-armour"], REPO.armoury["shield"]),
         rules=(
-            REPO.rules["close-order"],
             REPO.rules["elven-reflexes"],
             REPO.rules["martial-prowess"],
             REPO.rules["valour-of-ages"],
@@ -160,7 +159,10 @@ def test_field_resolves_equipment_into_the_loadout(spearmen_unit: Unit) -> None:
             REPO.rules["massed-infantry"],
             REPO.rules["parry"],
         ),
-        unresolved_rules=("Regimental Unit",),
+        unresolved_rules=(
+            "Close Order",
+            "Regimental Unit",
+        ),
         weapon_rules={"Fight In Extra Rank": REPO.rules["fight-in-extra-rank"]},
     )
 
@@ -276,7 +278,6 @@ def test_field_tolerates_rules_without_entries(spearmen_unit: Unit) -> None:
     contingent = Contingent.field(mustered, data=REPO)
     assert contingent.loadout is not None
     assert [rule.id for rule in contingent.loadout.rules] == [
-        "close-order",
         "elven-reflexes",
         "martial-prowess",
         "valour-of-ages",

@@ -27,8 +27,8 @@ The tooling used so far is Claude Code + Claude Opus 4.8 and Claude Fable 5. If 
 - **The phases** (`tow/phases`) are its callers. **Shooting** resolves a volley end to end. **Combat** resolves a full round: both sides strike in Initiative order, casualties tally into a combat result, and the loser takes its break test. **Movement** carries the **charge sequence** — a unit charges, the target reacts with Stand & Shoot, and the survivors fight — all as exact distributions.
 - **Panic tests** take a casualty distribution and return the exact chance the target is forced to test, then holds, falls back, flees, or is wiped out.
 - **Querying** (`tow/query`) lets you ask for a specific outcome, such as `at least`, `at most`, `exactly`, or `between` over a named variable, and hands back its probability.
-- **The command line** (`cli`) is a window on the database: `avelorn units` lists the corpus, `avelorn show <slug>` prints a datasheet. Nothing the engine *resolves* is a flag — a volley, a combat round, a break test, a folded question spanning two turns. The vocabulary for posing those is still to be designed, and mirroring each resolver's signature into options would fix the wrong shape in place.
-- **The HTTP surface** (`api`) is the same window over the wire: `GET /units` and `GET /units/{slug}`, the responses being the schema types themselves, so the OpenAPI document at `/docs` is generated from the same models the YAML validates against. `make serve` runs it. Both surfaces show a unit through one declared view (`tow/views`), so neither can fall behind the other.
+- **The command line** (`cli`) is a window on the database, grouped by what it reads: `avelorn units list` and `avelorn units show <slug>`, `avelorn rules list` and `avelorn rules show <slug>`. `avelorn rules list --unmodelled` reports every rule the corpus prints that the engine does not apply -- the per-action "not factored" notes, totalled. Nothing the engine *resolves* is a flag — a volley, a combat round, a break test, a folded question spanning two turns. The vocabulary for posing those is still to be designed, and mirroring each resolver's signature into options would fix the wrong shape in place.
+- **The HTTP surface** (`api`) is the same window over the wire: `GET /units`, `GET /units/{slug}`, `GET /rules`, `GET /rules/{slug}` and `GET /rules/unmodelled`, the responses being the schema types themselves, so the OpenAPI document at `/docs` is generated from the same models the YAML validates against. `make serve` runs it. Both surfaces show a unit through one declared view (`tow/views`), so neither can fall behind the other.
 - **Army-list entries**: a `Complement` (`tow/muster`) sizes and equips a datasheet — a chosen model count and options, validated against what the unit is allowed to take — and derives its points and effective loadout. It is the first piece of the list planner.
 - **Importer** pulls units off tow.whfb.app into the `data/` tree (see credits).
 
@@ -138,7 +138,7 @@ make lint      # ruff + ty + hygiene hooks over the whole tree
 make serve     # serve the unit database at http://127.0.0.1:8000 (docs at /docs)
 ```
 
-Then `uv run avelorn units` to see what the corpus holds, and `uv run avelorn show <slug>` to read a datasheet.
+Then `uv run avelorn units list` to see what the corpus holds, `uv run avelorn units show <slug>` to read a datasheet, and `uv run avelorn rules list --unmodelled` to see what the engine is not yet applying.
 
 ## Credits
 
