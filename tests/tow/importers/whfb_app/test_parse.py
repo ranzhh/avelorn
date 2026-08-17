@@ -161,6 +161,43 @@ def test_group_header_carries_both_a_limit_and_a_verb() -> None:
     assert group == OptionGroup(limit="0-1 unit per 1000 points", verb="take")
 
 
+def test_group_header_verb_needs_no_of_the_following() -> None:
+    """A header may state its action outright, with no list phrasing to close it.
+
+    "0-1 unit may replace the Vanguard special rule with:" carries the whole verb
+    for its children, which are bare names.
+    """
+    group, warnings = _group("0-1 unit may replace the Vanguard special rule with:")
+    assert group == OptionGroup(limit="0-1 unit", verb="replace the Vanguard special rule with")
+    assert warnings == []
+
+
+def test_a_count_limit_needs_no_points_clause() -> None:
+    """A bare count caps the army outright, where "0-1 per 1,000 points" is a ratio."""
+    group, warnings = _group("0-1 unit may:")
+    assert group == OptionGroup(limit="0-1 unit")
+    assert warnings == []
+
+
+def test_free_is_a_cost_of_zero_not_an_absent_cost() -> None:
+    """A printed "(Free)" prices the option at nothing.
+
+    The schema demands exactly one cost shape, so a line read as having no cost
+    is refused and dropped -- which is what happened to "Scouts (Free)".
+    """
+    group = OptionGroup(limit="0-1 unit", verb="replace the Vanguard special rule with")
+    option, warnings = _option("Scouts (Free)", group)
+    assert option == UnitOption(
+        name="Scouts",
+        kind=OptionKind.SPECIAL_RULE,
+        points=0,
+        adds_rules=["Scouts"],
+        removes_rules=["Vanguard"],
+        limit="0-1 unit",
+    )
+    assert warnings == []
+
+
 def test_exclusive_group_header_warns_about_lost_exclusivity() -> None:
     """A "one of the following" group is a choice the schema cannot express yet."""
     group, warnings = _group("The entire unit may take one of the following:")
