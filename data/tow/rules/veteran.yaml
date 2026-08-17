@@ -1,0 +1,20 @@
+# Source: https://tow.whfb.app/special-rules/veteran
+id: veteran
+name: Veteran
+page: 180
+category: Special Rules
+flavour: Veteran warriors have seen and done it all, and it takes a lot to unsettle them.
+paragraphs:
+  - If the majority of the models in a unit have this special rule, the unit may re-roll any failed Leadership test.
+  - Note that a Break test is not a Leadership test.
+# Hand-authored, diffable against the paragraphs above. The panic test is the
+# Leadership test the engine rolls, and every printed cause qualifies -- so no
+# `causes` filter, where Valour of Ages names two. The printed exclusion of the
+# Break test needs no expressing: a Break test is a decision, not this stage.
+notes: >-
+  The "majority of the models" condition is not expressed: the engine fields a
+  homogeneous unit, so a rule printed on its profile is carried by every model
+  and the majority always holds. It will need a gate once a unit can be mustered
+  from parts that do not all share it.
+effects:
+  - reroll: make-panic-tests
