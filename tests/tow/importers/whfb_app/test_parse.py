@@ -22,16 +22,19 @@ from avelorn.tow.importers.whfb_app.richtext import OptionLine
 from avelorn.tow.schema.unit import BaseSize, OptionKind, TroopType, UnitOption, UnitSize
 
 
-def _line(text: str) -> OptionLine:
-    return OptionLine(text=text, rules=[])
+def _line(text: str, rules: list[str] | None = None) -> OptionLine:
+    return OptionLine(text=text, rules=rules or [])
 
 
 def _option(
-    text: str, group: OptionGroup | None = None, printed: set[str] | None = None
+    text: str,
+    group: OptionGroup | None = None,
+    printed: set[str] | None = None,
+    rules: list[str] | None = None,
 ) -> tuple[UnitOption, list[str]]:
     warnings: list[str] = []
     option = _parse_option_line(
-        "some-unit", _line(text), group or OptionGroup(), printed or set(), warnings
+        "some-unit", _line(text, rules), group or OptionGroup(), printed or set(), warnings
     )
     return option, warnings
 
@@ -415,6 +418,22 @@ def test_equipment_swap_line() -> None:
         per_model=True,
         adds_equipment=["Shortbows"],
         removes_equipment=["Cavalry Spear"],
+    )
+    assert warnings == []
+
+
+def test_equipment_swap_line_gaining_two_entries() -> None:
+    """An and-joined gain is two entries, so each resolves against data/."""
+    option, warnings = _option(
+        "The entire unit may replace Warbow with Thrusting Spear and Shield (Free)",
+        rules=["Warbow", "Thrusting Spear", "Shield"],
+    )
+    assert option == UnitOption(
+        name="Thrusting Spear and Shield",
+        kind=OptionKind.EQUIPMENT,
+        points=0,
+        adds_equipment=["Thrusting Spear", "Shield"],
+        removes_equipment=["Warbow"],
     )
     assert warnings == []
 
