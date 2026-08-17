@@ -1,4 +1,4 @@
-.PHONY: install test lint demo
+.PHONY: install test lint demo serve
 
 # Which end-to-end demo `make demo` runs — any scripts/<DEMO>_demo.py:
 # shooting, melee, turn, or soften_the_charge.
@@ -16,3 +16,6 @@ lint: ## run all pre-commit hooks (ruff, ty, hygiene) on the full tree
 
 demo: ## end-to-end demo from the data files (DEMO=shooting|melee|charge)
 	uv run python scripts/$(DEMO)_demo.py
+
+serve: ## serve the unit database over HTTP, with reload (docs at /docs)
+	uv run fastapi dev src/avelorn/api/app.py

@@ -11,8 +11,22 @@ dependencies = [
     "pyyaml>=6.0.3",
 ]
 
+[project.optional-dependencies]
+# The HTTP surface, optional: importing the engine must not require a web
+# framework. `uv sync --extra api` to serve it.
+api = ["fastapi[standard]>=0.115"]
+
 [dependency-groups]
-dev = ["pre-commit", "pytest>=9.0.3", "ruff>=0.15", "ty>=0.0.39"]
+# The API tests drive the app in process through Starlette's TestClient, which
+# wants httpx2 and warns on the httpx that fastapi[standard] brings.
+dev = [
+    "pre-commit",
+    "pytest>=9.0.3",
+    "ruff>=0.15",
+    "ty>=0.0.39",
+    "fastapi[standard]>=0.115",
+    "httpx2>=2.10.0",
+]
 
 [project.scripts]
 avelorn = "avelorn.cli:main"
