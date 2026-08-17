@@ -24,6 +24,7 @@ from typing import ClassVar, NamedTuple, overload
 
 from avelorn.core.dice import expected_value
 from avelorn.core.distribution import Distribution, Probability
+from avelorn.core.errors import UnmodelledRuleError
 from avelorn.core.game import Phase
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.engine.armour import defender_armour
@@ -302,6 +303,19 @@ def _engage(
     if profile is None:
         raise ValueError(f"{weapon.name} has no Combat profile; it cannot fight")
     striker_unit, target_unit = striker.unit, target.unit
+    # profiles[0] is the rank and file, and for a ridden model that is the rider
+    # alone: the mount's own attacks, its Initiative and the Movement it lends
+    # are all on another row. Resolving off the rider would answer a question
+    # about half a model without saying so, and a cavalry rider's row is
+    # complete enough that nothing else would stop it. Refuse until a unit can
+    # contribute more than one batch of attacks (#46).
+    for side in (striker_unit, target_unit):
+        if (mount := side.mount) is not None:
+            raise UnmodelledRuleError(
+                f"{side.name} rides {mount.name}, and a ridden model is not resolved yet: "
+                "its mount's attacks and Initiative are a second profile the fight cannot "
+                "yet fold in (#46)"
+            )
     weapon_skill = striker_unit.profiles[0][Characteristic.WEAPON_SKILL]
     target_weapon_skill = target_unit.profiles[0][Characteristic.WEAPON_SKILL]
     attacks_per_model = striker_unit.profiles[0][Characteristic.ATTACKS]

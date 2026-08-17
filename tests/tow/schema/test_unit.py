@@ -6,10 +6,11 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from avelorn.tow.data import DATA_DIR
+from avelorn.tow.data import DATA_DIR, TOWRepository
 from avelorn.tow.schema.unit import (
     Characteristic,
     Profile,
+    ProfileRole,
     Unit,
     UnitOption,
     UnitSize,
@@ -123,3 +124,68 @@ def test_profile_rejects_unknown_abbreviation() -> None:
     stats = {"M": 4, "WS": 3, "BS": 3, "S": 3, "T": 3, "W": 1, "I": 3, "A": 1, "Ld": 7}
     with pytest.raises(ValidationError):
         Profile.model_validate({"name": "Crew", "Sv": 5, **stats})
+
+
+def test_a_row_defaults_to_rank_and_file() -> None:
+    """A single-row datasheet says nothing about roles and means the plain one."""
+    row = Profile.model_validate(
+        {
+            "name": "Spearman",
+            "M": 5,
+            "WS": 4,
+            "BS": 4,
+            "S": 3,
+            "T": 3,
+            "W": 1,
+            "I": 5,
+            "A": 1,
+            "Ld": 8,
+        }
+    )
+    assert row.role is ProfileRole.RANK_AND_FILE
+
+
+def test_the_mount_row_is_the_one_the_unit_rides() -> None:
+    """`Unit.mount` finds the row every model of the unit sits on."""
+    rider = {
+        "name": "Rider",
+        "M": "-",
+        "WS": 4,
+        "BS": 4,
+        "S": 3,
+        "T": 3,
+        "W": 1,
+        "I": 5,
+        "A": 1,
+        "Ld": 8,
+    }
+    steed = {
+        "name": "Steed",
+        "role": "mount",
+        "M": 8,
+        "WS": 3,
+        "BS": "-",
+        "S": 3,
+        "T": "-",
+        "W": "-",
+        "I": 4,
+        "A": 1,
+        "Ld": "-",
+    }
+    unit = Unit.model_validate(
+        {
+            "id": "riders",
+            "name": "Riders",
+            "points": 20,
+            "unit_size": {"min": 5},
+            "troop_type": "Heavy Cavalry",
+            "profiles": [rider, steed],
+        }
+    )
+    assert unit.mount is not None
+    assert unit.mount.name == "Steed"
+
+
+def test_a_unit_on_foot_rides_nothing() -> None:
+    """Every committed datasheet today is on foot, so none reports a mount."""
+    assert [u.id for u in TOWRepository().units.values() if u.mount is not None] == []

@@ -3,6 +3,7 @@
 import pytest
 
 from avelorn.core.dice import binomial_distribution, expected_value
+from avelorn.core.errors import UnmodelledRuleError
 from avelorn.tow.contingent import Charge, ChargeArc, Contingent, Loadout
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.engine.rules import CombatFacts, GateContext
@@ -1294,3 +1295,58 @@ def test_strike_unit_notes_the_strikers_save_re_roll_nothing_saves_against() -> 
 
     both = fight(striking, struck)
     assert not any("Gromril Armour" in note for note in both.notes)
+
+
+def test_a_ridden_unit_refuses_to_fight_rather_than_fight_as_the_rider() -> None:
+    """A mount is a second profile the round cannot fold in, so the fight stops.
+
+    profiles[0] is the rider, and a cavalry rider's row is complete -- unlike a
+    chariot's chassis, nothing in it is missing. Resolving off it would answer
+    with the steed's attacks, Initiative and Movement silently absent (#46).
+    """
+    rider = {
+        "name": "Rider",
+        "M": "-",
+        "WS": 4,
+        "BS": 4,
+        "S": 3,
+        "T": 3,
+        "W": 1,
+        "I": 5,
+        "A": 1,
+        "Ld": 8,
+    }
+    steed = {
+        "name": "Steed",
+        "role": "mount",
+        "M": 8,
+        "WS": 3,
+        "BS": "-",
+        "S": 3,
+        "T": "-",
+        "W": "-",
+        "I": 4,
+        "A": 1,
+        "Ld": "-",
+    }
+    ridden = Unit.model_validate(
+        {
+            "id": "riders",
+            "name": "Riders",
+            "points": 20,
+            "unit_size": {"min": 5},
+            "troop_type": "Heavy Cavalry",
+            "equipment": ["Hand Weapon"],
+            "profiles": [rider, steed],
+        }
+    ).with_troop_type(REPO.troop_types)
+    mounted = Contingent.field(ridden, 5, data=REPO).wielding("Hand Weapon")
+    foot = Contingent.field(REPO.units["elven-spearmen"], 20, data=REPO).wielding(
+        "Thrusting Spear"
+    )
+
+    with pytest.raises(UnmodelledRuleError, match="rides Steed"):
+        fight(mounted, foot)
+    # Either seat: a unit is no more resolvable as the thing being charged.
+    with pytest.raises(UnmodelledRuleError, match="rides Steed"):
+        fight(foot, mounted)
