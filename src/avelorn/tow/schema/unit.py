@@ -44,6 +44,27 @@ class Characteristic(StrEnum):
     LEADERSHIP = "Ld"
 
 
+class ProfileRole(StrEnum):
+    """What a profile row is a row *of*.
+
+    A datasheet's rows are not alternatives; they are the parts a model is made
+    of. A Silver Helm prints three: the rider, the champion who replaces one
+    rider, and the Barded Elven Steed every rider sits on. Reading any one of
+    them as "the unit's profile" drops the others.
+
+    The distinction is not cosmetic. A champion is one model of the unit
+    fighting at its own line (#46); a mount is carried by *every* model and
+    fights alongside it, contributing its own attacks and lending the ridden
+    model its Movement. Which row is which cannot be inferred safely at the
+    point of use -- a mount is recognisable only by the shape of its dashes --
+    so it is recorded here, once, when the datasheet is written.
+    """
+
+    RANK_AND_FILE = "rank-and-file"
+    CHAMPION = "champion"
+    MOUNT = "mount"
+
+
 class Profile(BaseModel):
     """One row of a characteristic profile, keyed by the printed abbreviations.
 
@@ -51,11 +72,16 @@ class Profile(BaseModel):
     row is written flat in the printed form ({ name: ..., M: 5, ... });
     a validator gathers the abbreviation keys into ``characteristics``,
     so the vocabulary is declared once, on :class:`Characteristic`.
+
+    ``role`` says which part of the model the row describes
+    (:class:`ProfileRole`); it defaults to rank-and-file, which is what a
+    single-row datasheet prints.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     name: str
+    role: ProfileRole = ProfileRole.RANK_AND_FILE
     characteristics: dict[Characteristic, Stat]
 
     @model_validator(mode="before")
@@ -236,6 +262,43 @@ class Unit(BaseModel):
                 "load the datasheet through the repository"
             )
         return self.troop_type_profile
+
+    @property
+    def main(self) -> Profile:
+        """The rank-and-file row -- the model the unit is bought by.
+
+        For a single-row datasheet this is the one row; for a cavalry
+        datasheet it is the rider, whose Toughness and Wounds the model
+        uses, whose Weapon Skill enemy To Hit rolls are made against, and
+        whose armour value the model saves on
+        (troop-types-in-detail/split-profile-cavalry). Champion and mount
+        rows are other parts of the unit, reached by their own accessors.
+
+        Returns:
+            The first rank-and-file profile row.
+
+        Raises:
+            ValueError: no row is rank-and-file -- a malformed datasheet.
+        """
+        row = next((p for p in self.profiles if p.role is ProfileRole.RANK_AND_FILE), None)
+        if row is None:
+            raise ValueError(f"{self.name}: no rank-and-file profile row")
+        return row
+
+    @property
+    def mount(self) -> Profile | None:
+        """The row for the creature every model of this unit rides, if any.
+
+        A cavalry unit's steed: the model on the table is the rider *and*
+        this. The mount supplies the model's Movement and fights beside the
+        rider with its own Weapon Skill, Strength, Initiative and Attacks
+        (troop-types-in-detail/split-profile-cavalry); the fight folds it in
+        as a second attack batch.
+
+        Returns:
+            The mount row, or None for a unit that rides nothing.
+        """
+        return next((p for p in self.profiles if p.role is ProfileRole.MOUNT), None)
 
     def with_troop_type(self, troop_types: Registry[TroopTypeProfile]) -> "Unit":
         """This datasheet with its troop-type profile resolved from the registry.

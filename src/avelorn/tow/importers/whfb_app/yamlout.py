@@ -13,7 +13,7 @@ import yaml
 
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
-from avelorn.tow.schema.unit import Characteristic, Profile, Unit, UnitOption
+from avelorn.tow.schema.unit import Characteristic, Profile, ProfileRole, Unit, UnitOption
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile
 
 
@@ -143,6 +143,10 @@ def _dump(doc: dict, source_url: str | None) -> str:
 
 def _profile_row(profile: Profile) -> _FlowMap:
     row: dict = {"name": profile.name}
+    # Written only when it is not the default, so a plain infantry datasheet
+    # reads as it always did.
+    if profile.role is not ProfileRole.RANK_AND_FILE:
+        row["role"] = profile.role.value
     for characteristic in Characteristic:
         value = profile[characteristic]
         row[characteristic.value] = "-" if value is None else value
