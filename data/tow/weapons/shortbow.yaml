@@ -1,0 +1,5 @@
+# Source: https://tow.whfb.app/weapons-of-war/shortbow
+id: shortbow
+name: Shortbow
+profiles:
+  - { R: 18, S: 3, AP: '-', special_rules: [Quick Shot, Volley Fire] }
