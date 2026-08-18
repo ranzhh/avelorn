@@ -7,17 +7,13 @@ flavour: Many weapons are unwieldy, requiring a firm two-handed grip in order to
 paragraphs:
   - A model cannot use a shield alongside a weapon with this special rule during the Combat phase (a shield can still be used
     against wounds caused by shooting or magic during other phases of the game).
-# Hand-authored, diffable against the paragraph above: while the weapon is
-# in use in the Combat phase, the shield does not count -- expressed as
-# undoing its +1 armour value improvement, exact for the one printed Shield.
-# Consumed from the bearer's weapon in use, so no gate names the weapon.
+# Hand-authored, diffable against the paragraph above: a model has two
+# hands, so while this weapon is in use in the Combat phase the shield is
+# withdrawn from what it effectively wears -- the piece and its whole
+# bonus, not a counter-modifier. Consumed from the bearer's weapon in
+# use, so no gate names the weapon; kept against shooting, as printed.
 effects:
   - when:
       combat: true
-      worn:
-        name: Shield
-    add:
-      armour-value: -1
-notes: That the model simply cannot use the shield alongside the weapon is equipment
-  legality (#17); here the shield's bonus is withdrawn in combat and kept against
-  shooting, as printed.
+    bars: Shield
+notes: That the model cannot even be armed with the pairing is equipment legality (#17).

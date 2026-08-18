@@ -43,6 +43,7 @@ from avelorn.tow.schema.rule import (
     PARAMETER_SUFFIX,
     AttackKind,
     AttackMarkEffect,
+    BarEffect,
     ChoiceEffect,
     Comparison,
     Decision,
@@ -57,6 +58,7 @@ from avelorn.tow.schema.rule import (
     Rule,
     RuleEffect,
     Seam,
+    UnbarEffect,
     seam_of,
 )
 from avelorn.tow.schema.stage import Dice, Side, Stage
@@ -740,6 +742,66 @@ def effective_armour_value(
         factored.append(rule.name)
         logger.debug("armour-value modifier factored: %s -> %d", rule.name, value)
     return EffectiveValue(value, tuple(factored), tuple(unfactored))
+
+
+@dataclass(frozen=True)
+class BarredWorn:
+    """The armour pieces a bearer cannot use, and the rules on either side of it.
+
+    ``factored`` names the barring rules (the weapon in use's namespace);
+    ``lifted`` names the bearer's rules whose unbars were consumed (the unit
+    namespace) — an extra arm's, whether or not a bar was there to lift.
+    """
+
+    names: frozenset[str] = frozenset()
+    factored: tuple[str, ...] = ()
+    lifted: tuple[str, ...] = ()
+
+
+def barred_worn(
+    weapon_rules: Sequence[Rule],
+    unit_rules: Sequence[Rule] = (),
+    conditions: "GateContext | None" = None,
+) -> BarredWorn:
+    """The armour pieces the weapon in use bars the bearer from using.
+
+    The consumption of :class:`~avelorn.tow.schema.rule.BarEffect`, run
+    where a bearer's usable armour is assembled: a barred piece is withdrawn
+    whole — its bonus, whatever its size, and its presence to any gate that
+    asks — under the effect's own gate (Requires Two Hands bars the shield
+    in close combat and leaves it counting against shooting). The bearer's
+    own rules may lift a bar (:class:`~avelorn.tow.schema.rule.UnbarEffect`
+    — a Gift of Chaos growing the arm that holds both): a lifted piece stays
+    usable whichever weapon barred it. All-or-nothing per rule, as every
+    fold is; a gate the ``conditions`` cannot answer bars or lifts nothing
+    and leaves its rule unconsumed, reported rather than guessed.
+
+    Returns:
+        The barred piece names and the consumed rule names, per side.
+    """
+    context = _as_context(conditions)
+    names: set[str] = set()
+    factored: list[str] = []
+    for rule in weapon_rules:
+        bars = [effect for effect in rule.effects if isinstance(effect, BarEffect)]
+        if not bars:
+            continue
+        answers = [(effect, _gate_applies(effect, context)) for effect in bars]
+        if any(when is None for _, when in answers):
+            continue
+        names.update(effect.bars for effect, when in answers if when)
+        factored.append(rule.name)
+    lifted: list[str] = []
+    for rule in unit_rules:
+        unbars = [effect for effect in rule.effects if isinstance(effect, UnbarEffect)]
+        if not unbars:
+            continue
+        answers = [(effect, _gate_applies(effect, context)) for effect in unbars]
+        if any(when is None for _, when in answers):
+            continue
+        names.difference_update(effect.unbars for effect, when in answers if when)
+        lifted.append(rule.name)
+    return BarredWorn(frozenset(names), tuple(factored), tuple(lifted))
 
 
 @dataclass(frozen=True)

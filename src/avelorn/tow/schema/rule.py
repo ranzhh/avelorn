@@ -773,7 +773,44 @@ class AttackMarkEffect(GatedEffect):
     attack: AttackMarks
 
 
-RuleEffect = ModifierEffect | RerollEffect | GrantEffect | ChoiceEffect | AttackMarkEffect
+class BarEffect(GatedEffect):
+    """The bearer cannot use a piece of armour while this rule is in force.
+
+    "A model cannot use a shield alongside a weapon with this special rule
+    during the Combat phase": a model has two hands, and wielding decides
+    what else it can hold. The barred piece is *withdrawn* from what the
+    bearer effectively wears — its armour bonus, whatever its size, and its
+    presence to any gate that asks — never compensated with a counter-
+    modifier, which would couple the rule to the piece's printed value.
+    Consumed where the bearer's usable armour is assembled; scoped by the
+    weapon in use when the entry rides a weapon profile, as any weapon rule
+    is. Self-naming by ``bars``; each model forbids the others' keys.
+    """
+
+    bars: str  # the printed name of the armour piece barred, e.g. "Shield"
+
+
+class UnbarEffect(GatedEffect):
+    """The bearer may use a piece of armour whatever bars it.
+
+    The bar's counter, for the rules that change what a model's body can
+    hold — a Gift of Chaos growing the extra arm that wields a two-handed
+    weapon and a shield at once. A model rule: it lifts every bar on the
+    named piece, whichever weapon imposed one. Self-naming by ``unbars``.
+    """
+
+    unbars: str  # the printed name of the armour piece freed, e.g. "Shield"
+
+
+RuleEffect = (
+    ModifierEffect
+    | RerollEffect
+    | GrantEffect
+    | ChoiceEffect
+    | AttackMarkEffect
+    | BarEffect
+    | UnbarEffect
+)
 
 
 def references_parameter(effect: RuleEffect) -> bool:

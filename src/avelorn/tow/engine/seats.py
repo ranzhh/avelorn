@@ -27,6 +27,7 @@ from avelorn.tow.engine.rules import (
     EffectiveWard,
     GateContext,
     attack_marks,
+    barred_worn,
     compile_rules,
     effective_armour_value,
     effective_rerolls,
@@ -145,7 +146,12 @@ class Defence:
         Returns:
             The seat, folded under the target's ``incoming`` facts.
         """
-        printed = defender_armour(armour)
+        # A barred piece (Requires Two Hands' shield, in combat) is withdrawn
+        # from what the target effectively wears before any value is read —
+        # its bonus goes with it whole, whatever its size.
+        barred = barred_worn(weapon_rules_in_use, rules, incoming)
+        usable = [piece for piece in armour if piece.name not in barred.names]
+        printed = defender_armour(usable)
         unit_fold = effective_armour_value(printed, rules, incoming)
         after_unit = None if printed is None else unit_fold.value
         weapon_fold = effective_armour_value(after_unit, weapon_rules_in_use, incoming)
@@ -162,7 +168,9 @@ class Defence:
             ),
             modifiers=tuple(compiled.modifiers),
             rerolls=effective_rerolls(rules, incoming, seat=Side.TARGET),
-            factored=frozenset(compiled.factored),
             inapplicable=frozenset(compiled.inapplicable),
-            weapon_factored=frozenset({*weapon_fold.factored, *weapon_ward.factored}),
+            factored=frozenset({*compiled.factored, *barred.lifted}),
+            weapon_factored=frozenset(
+                {*weapon_fold.factored, *weapon_ward.factored, *barred.factored}
+            ),
         )

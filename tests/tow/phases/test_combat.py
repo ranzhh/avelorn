@@ -1541,3 +1541,87 @@ def test_requires_two_hands_withdraws_the_shield_in_combat_only() -> None:
 
     one_sided = strike_unit(greatswords, spears)
     assert any("weapon rule not factored: Requires Two Hands" in note for note in one_sided.notes)
+
+
+def test_a_two_handed_carrier_electing_the_hand_weapon_keeps_and_parries_its_shield() -> None:
+    """Wielding decides what the hands hold: the great weapon stowed, the shield works.
+
+    The same doctored carrier fighting with its hand weapon instead: the
+    shield's +1 stands (5+) and Parry betters it again (4+) -- the bar rides
+    the weapon in use, never the weapon merely carried.
+    """
+    spearmen = REPO.units["elven-spearmen"]
+    two_handed = spearmen.model_copy(update={"equipment": [*spearmen.equipment, "Great Weapon"]})
+    electing = _fielded(two_handed, 10).wielding("Hand Weapon")
+
+    struck = strike_unit(_fielded(spearmen, 10).wielding("Thrusting Spear"), electing)
+
+    assert struck.save_target == 4  # 6+ light armour, +1 shield, +1 Parry
+
+
+def test_a_barred_piece_is_withdrawn_whole_not_compensated() -> None:
+    """The bar takes the piece with its whole bonus, whatever its size.
+
+    A doctored tower shield improving the save by 2: light armour (6+) plus
+    it saves on 4+, and a great weapon in hand withdraws both points -- a
+    counter-modifier of the printed Shield's -1 would leave a phantom 5+.
+    """
+    from avelorn.core.registry import Registry
+    from avelorn.tow.schema.armour import Armour
+
+    tower = Armour(id="tower-shield", name="Shield", armour_value_improvement=2)
+    doctored = TOWRepository()
+    doctored.armoury = Registry(
+        [tower if piece.id == "shield" else piece for piece in REPO.armoury.values()],
+        kind="armour",
+    )
+    spearmen = REPO.units["elven-spearmen"]
+    two_handed = spearmen.model_copy(update={"equipment": [*spearmen.equipment, "Great Weapon"]})
+    towered = Contingent.field(two_handed, 10, data=doctored).wielding("Great Weapon")
+    striker = Contingent.field(spearmen, 10, data=doctored).wielding("Thrusting Spear")
+
+    at_rest = strike_unit(striker, Contingent.field(two_handed, 10, data=doctored))
+    struck = strike_unit(striker, towered)
+
+    assert at_rest.save_target == 4  # 6+ light armour bettered 2 by the tower shield
+    assert struck.save_target == 6  # the whole piece withdrawn, not one point of it
+
+
+def test_an_extra_arm_lifts_the_bar_and_holds_great_weapon_and_shield_at_once() -> None:
+    """A Gift of Chaos grows the arm that wields a two-handed weapon beside a shield.
+
+    The bar's counter (`unbars`), doctored here as the gift prints it in
+    spirit -- its real carriers are characters (#10) and the gift entries are
+    not on the site's pages. With the gift, the great-weapon wielder keeps
+    its shield's +1 in melee (5+); without it, the bar withdraws the shield
+    (6+). Both rules are in the math, so neither reaches the notes.
+    """
+    from avelorn.core.registry import Registry
+    from avelorn.tow.schema.rule import Rule, UnbarEffect
+
+    gift = Rule(
+        id="mutant-appendage",
+        name="Mutant Appendage",
+        paragraphs=["…"],
+        effects=[UnbarEffect(unbars="Shield")],
+    )
+    doctored = TOWRepository()
+    doctored.rules = Registry([*REPO.rules.values(), gift], kind="rule")
+    spearmen = REPO.units["elven-spearmen"]
+    gifted_unit = spearmen.model_copy(
+        update={
+            "equipment": [*spearmen.equipment, "Great Weapon"],
+            "special_rules": [*spearmen.special_rules, "Mutant Appendage"],
+        }
+    )
+    barred_unit = spearmen.model_copy(update={"equipment": [*spearmen.equipment, "Great Weapon"]})
+    gifted = Contingent.field(gifted_unit, 10, data=doctored).wielding("Great Weapon")
+    barred = Contingent.field(barred_unit, 10, data=doctored).wielding("Great Weapon")
+    striker = Contingent.field(spearmen, 10, data=doctored).wielding("Thrusting Spear")
+
+    assert strike_unit(striker, barred).save_target == 6  # the shield withdrawn
+    assert strike_unit(striker, gifted).save_target == 5  # the extra arm holds both
+
+    both = fight(gifted, striker)
+    assert not any("Requires Two Hands" in note for note in both.notes)
+    assert not any("Mutant Appendage" in note for note in both.notes)

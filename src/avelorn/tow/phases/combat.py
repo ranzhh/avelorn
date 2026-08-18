@@ -54,6 +54,7 @@ from avelorn.tow.engine.charts import (
     wound_target,
 )
 from avelorn.tow.engine.rules import (
+    ArmourFacts,
     AttackFacts,
     ChargeEvent,
     CombatFacts,
@@ -63,6 +64,7 @@ from avelorn.tow.engine.rules import (
     ShootingFacts,
     WeaponFacts,
     attack_marks,
+    barred_worn,
     compile_rules,
     effective_characteristic,
     effective_combat_result_bonus,
@@ -553,12 +555,12 @@ def strike_unit(
     striker_conditions = GateContext(
         combat=CombatFacts(),
         wielding=striker.weapon_facts,
-        worn=striker.armour_facts,
+        worn=_worn_in_combat(striker),
     )
     target_conditions = GateContext(
         combat=CombatFacts(),
         wielding=target.weapon_facts,
-        worn=target.armour_facts,
+        worn=_worn_in_combat(target),
         target_of=AttackFacts(
             kind=AttackKind.CLOSE_COMBAT,
             magical=marks.magical,
@@ -765,6 +767,17 @@ def _unit_rule_notes(side: Contingent, claimed: Collection[str] = ()) -> list[st
     )
 
 
+def _worn_in_combat(side: Contingent) -> "tuple[ArmourFacts, ...]":
+    # What a side effectively wears in close combat: its pieces less what the
+    # weapon in its hands bars (Requires Two Hands' shield). Filtered from the
+    # facts as well as the folds, so a gate asking "using a shield" is told
+    # the truth about a two-handed wielder.
+    barred = barred_worn(
+        side.in_hand_rules(), side.loadout.rules, GateContext(combat=CombatFacts())
+    )
+    return tuple(facts for facts in side.armour_facts if facts.name not in barred.names)
+
+
 def _weapon_rule_notes(engagement: _Engagement, claimed: Collection[str] = ()) -> list[str]:
     # The weapon rules this batch's walk could not factor, less what its own
     # seams claimed and what the ``claimed`` extra covers — in a full round,
@@ -808,7 +821,7 @@ def _combat_conditions(first_round: bool | None, side: Contingent, foe: Continge
         ),
         shooting=ShootingFacts(at_long_range=False),
         wielding=side.weapon_facts,
-        worn=side.armour_facts,
+        worn=_worn_in_combat(side),
         target_of=AttackFacts(
             kind=AttackKind.CLOSE_COMBAT,
             magical=foe_marks.magical,
