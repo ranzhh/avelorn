@@ -1135,3 +1135,31 @@ def test_barred_worn_withdraws_under_its_gate() -> None:
     at_range = barred_worn([two_hands], GateContext())
     assert at_range.names == frozenset()  # combat absent: the shield still counts
     assert at_range.factored == ("Requires Two Hands",)  # honoured, so consumed
+
+
+def test_the_phoenix_guards_wards_read_the_attacks_flame_and_take_the_best() -> None:
+    """Blessings of Asuryan (5+ vs Flaming) beside Witness to Destiny (6+ vs non-magical).
+
+    Real entries. A mundane arrow answers only Witness: 6+. A flaming,
+    non-magical attack (a Drakegun's) answers both, and wards never stack --
+    the best (5+) applies. An attack whose flame is unknown leaves Blessings
+    unfactored, reported rather than guessed.
+    """
+    rules = [REPO.rules["blessings-of-asuryan"], REPO.rules["witness-to-destiny"]]
+
+    mundane = GateContext(
+        target_of=AttackFacts(kind=AttackKind.SHOOTING, magical=False, flaming=False)
+    )
+    assert effective_ward_target(rules, mundane).target == 6
+
+    flaming = GateContext(
+        target_of=AttackFacts(kind=AttackKind.SHOOTING, magical=False, flaming=True)
+    )
+    best = effective_ward_target(rules, flaming)
+    assert best.target == 5
+    assert set(best.factored) == {"Blessings of Asuryan", "Witness to Destiny"}
+
+    unknown_flame = GateContext(target_of=AttackFacts(kind=AttackKind.SHOOTING, magical=False))
+    part = effective_ward_target(rules, unknown_flame)
+    assert part.target == 6  # Witness still holds
+    assert part.unfactored == ("Blessings of Asuryan",)
