@@ -54,6 +54,7 @@ from avelorn.tow.engine.charts import (
     wound_target,
 )
 from avelorn.tow.engine.rules import (
+    ArmourFacts,
     AttackFacts,
     ChargeEvent,
     CombatFacts,
@@ -62,6 +63,8 @@ from avelorn.tow.engine.rules import (
     MovementFacts,
     ShootingFacts,
     WeaponFacts,
+    attack_marks,
+    barred_worn,
     compile_rules,
     effective_characteristic,
     effective_combat_result_bonus,
@@ -259,6 +262,14 @@ class _Engagement:
     # one-sided one reports the seat its walk did not consume.
     offence: Offence
     defence: Defence
+    # The weapon the batch swings, and the weapon-rule names other seams of
+    # this walk claimed (the attack count, the Initiative read, the re-roll
+    # fold). Weapon-rule notes are the caller's to emit — only a full round
+    # knows whether the *bearer's own defence* consumed one (Requires Two
+    # Hands is resolved while the bearer is the other walk's target), where a
+    # one-sided strike honestly leaves it noted (_weapon_rule_notes).
+    weapon_name: str
+    weapon_claimed: frozenset[str]
     p_unsaved: Probability
     p_kill: Probability
     target_wounds: int
@@ -350,6 +361,7 @@ def _engage(
         rules=target.loadout.rules,
         grants=target.loadout.granted_rules,
         incoming=target_conditions,
+        weapon_rules_in_use=target.in_hand_rules(),
     )
     notes: list[str] = []
     modifiers = [*offence.modifiers, *defence.modifiers]
@@ -362,13 +374,13 @@ def _engage(
     # ever compiled from its wielder's seat — no second compile covers a
     # weapon rule aimed at the other one — so an inapplicable weapon rule is
     # reported here, not claimed.
-    claimed = {
-        *striker.supporting_ranks().factored,
-        *effective_initiative(striker, conditions=conditions).factored,
-        *offence.weapon_rerolls.factored,
-    }
-    unfactored = [rule for rule in offence.weapon_unfactored if rule not in claimed]
-    notes.extend(f"weapon rule not factored: {rule} ({weapon.name})" for rule in unfactored)
+    weapon_claimed = frozenset(
+        {
+            *striker.supporting_ranks().factored,
+            *effective_initiative(striker, conditions=conditions).factored,
+            *offence.weapon_rerolls.factored,
+        }
+    )
     phase_compiled = compile_rules(sorted(phase_rules), phase_rules, conditions)
     modifiers.extend(phase_compiled.modifiers)
     notes.extend(
@@ -427,6 +439,8 @@ def _engage(
         weapon_skill=striker_ws,
         offence=offence,
         defence=defence,
+        weapon_name=weapon.name,
+        weapon_claimed=weapon_claimed,
         p_unsaved=p_unsaved,
         p_kill=p_kill,
         target_wounds=target_wounds,
@@ -530,18 +544,27 @@ def strike_unit(
     # target here. Each side carries its own equipment in use, so Parry reads the
     # target's shield and Ithilmar Weapons the striker's hand weapon.
     in_hand = striker.in_hand().combat_profile
+    # What the striker's blows *are* (magical, Flaming) is its rules' say —
+    # the profile in use's and the unit's own (attack_marks); the same read
+    # the striker's seat makes for claiming, so the fact and the note agree.
+    marks = attack_marks(
+        in_hand.special_rules if in_hand is not None else [],
+        striker.loadout.weapon_rules,
+        striker.loadout.rules,
+    )
     striker_conditions = GateContext(
         combat=CombatFacts(),
         wielding=striker.weapon_facts,
-        worn=striker.armour_facts,
+        worn=_worn_in_combat(striker),
     )
     target_conditions = GateContext(
         combat=CombatFacts(),
         wielding=target.weapon_facts,
-        worn=target.armour_facts,
+        worn=_worn_in_combat(target),
         target_of=AttackFacts(
             kind=AttackKind.CLOSE_COMBAT,
-            magical=in_hand is not None and "Magical Attacks" in in_hand.special_rules,
+            magical=marks.magical,
+            flaming=marks.flaming,
         ),
     )
     engagement = _engage(
@@ -629,7 +652,9 @@ def strike_unit(
                     *(name for e in engagements for name in e.defence.factored),
                 },
             ),
-            *dict.fromkeys(note for e in engagements for note in e.notes),
+            *dict.fromkeys(
+                note for e in engagements for note in (*_weapon_rule_notes(e), *e.notes)
+            ),
             *mount_notes,
         ),
         target_models=targets,
@@ -742,6 +767,26 @@ def _unit_rule_notes(side: Contingent, claimed: Collection[str] = ()) -> list[st
     )
 
 
+def _worn_in_combat(side: Contingent) -> "tuple[ArmourFacts, ...]":
+    # What a side effectively wears in close combat: its pieces less what the
+    # weapon in its hands bars (Requires Two Hands' shield). Filtered from the
+    # facts as well as the folds, so a gate asking "using a shield" is told
+    # the truth about a two-handed wielder.
+    barred = barred_worn(side.in_hand_rules(), GateContext(combat=CombatFacts()))
+    return tuple(facts for facts in side.armour_facts if facts.name not in barred.names)
+
+
+def _weapon_rule_notes(engagement: _Engagement, claimed: Collection[str] = ()) -> list[str]:
+    # The weapon rules this batch's walk could not factor, less what its own
+    # seams claimed and what the ``claimed`` extra covers — in a full round,
+    # the names the bearer's own defence consumed from the other walk's seat.
+    return [
+        f"weapon rule not factored: {rule} ({engagement.weapon_name})"
+        for rule in engagement.offence.weapon_unfactored
+        if rule not in engagement.weapon_claimed and rule not in claimed
+    ]
+
+
 def _combat_conditions(first_round: bool | None, side: Contingent, foe: Contingent) -> GateContext:
     # The gate facts for one side of the combat. ``first_round`` is the combat's
     # (a relational fact); ``outnumbers`` weighs the two sides' Unit Strength
@@ -758,6 +803,11 @@ def _combat_conditions(first_round: bool | None, side: Contingent, foe: Continge
     charge = side.movement.charge
     foe_weapon = foe.weapon
     foe_profile = foe_weapon.combat_profile if foe_weapon is not None else None
+    foe_marks = attack_marks(
+        foe_profile.special_rules if foe_profile is not None else [],
+        foe.loadout.weapon_rules,
+        foe.loadout.rules,
+    )
     return GateContext(
         combat=CombatFacts(
             first_round=first_round,
@@ -769,10 +819,11 @@ def _combat_conditions(first_round: bool | None, side: Contingent, foe: Continge
         ),
         shooting=ShootingFacts(at_long_range=False),
         wielding=side.weapon_facts,
-        worn=side.armour_facts,
+        worn=_worn_in_combat(side),
         target_of=AttackFacts(
             kind=AttackKind.CLOSE_COMBAT,
-            magical=foe_profile is not None and "Magical Attacks" in foe_profile.special_rules,
+            magical=foe_marks.magical,
+            flaming=foe_marks.flaming,
         ),
     )
 
@@ -1132,6 +1183,20 @@ def fight(
                         *(name for s in a_own for name in s.defence.factored),
                         *(name for s in a_own for name in s.defence.inapplicable),
                     },
+                ),
+                *(
+                    note
+                    for s in a_own
+                    for note in _weapon_rule_notes(
+                        s, claimed=[n for o in b_own for n in o.defence.weapon_factored]
+                    )
+                ),
+                *(
+                    note
+                    for s in b_own
+                    for note in _weapon_rule_notes(
+                        s, claimed=[n for o in a_own for n in o.defence.weapon_factored]
+                    )
                 ),
                 *(note for s in a_own for note in s.notes),
                 *(note for s in b_own for note in s.notes),

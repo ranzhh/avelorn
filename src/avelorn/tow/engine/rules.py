@@ -42,6 +42,8 @@ from avelorn.tow.schema.psychology import Outcome
 from avelorn.tow.schema.rule import (
     PARAMETER_SUFFIX,
     AttackKind,
+    AttackMarkEffect,
+    BarEffect,
     ChoiceEffect,
     Comparison,
     Decision,
@@ -139,10 +141,16 @@ class ArmourFacts:
 
 @dataclass(frozen=True)
 class AttackFacts:
-    """The evaluated facts of the incoming attack — the values behind an AttackGate."""
+    """The evaluated facts of the incoming attack — the values behind an AttackGate.
+
+    ``magical`` and ``flaming`` are read from the striker's resolved rules —
+    the profile in use's and the unit's own alike (:func:`attack_marks`), as
+    the printed sentences confer either way.
+    """
 
     kind: AttackKind | None = None
     magical: bool | None = None
+    flaming: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -733,6 +741,101 @@ def effective_armour_value(
         factored.append(rule.name)
         logger.debug("armour-value modifier factored: %s -> %d", rule.name, value)
     return EffectiveValue(value, tuple(factored), tuple(unfactored))
+
+
+@dataclass(frozen=True)
+class BarredWorn:
+    """The armour pieces a bearer cannot use, by name, and the rules that bar them."""
+
+    names: frozenset[str] = frozenset()
+    factored: tuple[str, ...] = ()
+
+
+def barred_worn(
+    weapon_rules: Sequence[Rule],
+    conditions: "GateContext | None" = None,
+) -> BarredWorn:
+    """The armour pieces the weapon in use bars the bearer from using.
+
+    The consumption of :class:`~avelorn.tow.schema.rule.BarEffect`, run
+    where a bearer's usable armour is assembled: a barred piece is withdrawn
+    whole — its bonus, whatever its size, and its presence to any gate that
+    asks — under the effect's own gate (Requires Two Hands bars the shield
+    in close combat and leaves it counting against shooting). All-or-nothing
+    per rule, as every fold is; a gate the ``conditions`` cannot answer bars
+    nothing and leaves its rule unconsumed, reported rather than guessed.
+    A rule *lifting* a bar (an extra limb) has no printed carrier the site
+    reaches, so no counter-word exists yet; one joins when an entry needs it.
+
+    Returns:
+        The barred piece names and the consumed rule names.
+    """
+    context = _as_context(conditions)
+    names: set[str] = set()
+    factored: list[str] = []
+    for rule in weapon_rules:
+        bars = [effect for effect in rule.effects if isinstance(effect, BarEffect)]
+        if not bars:
+            continue
+        answers = [(effect, _gate_applies(effect, context)) for effect in bars]
+        if any(when is None for _, when in answers):
+            continue
+        names.update(effect.bars for effect, when in answers if when)
+        factored.append(rule.name)
+    return BarredWorn(frozenset(names), tuple(factored))
+
+
+@dataclass(frozen=True)
+class EffectiveMarks:
+    """The marks a striker's rules put on the attacks it makes.
+
+    The evaluated half of :class:`~avelorn.tow.schema.rule.AttackMarkEffect`:
+    whether the attacks are magical and whether they are Flaming, read from
+    the resolved rules of the profile in use and of the unit alike — the
+    printed sentences confer either way ("a model with this special rule,
+    or ... a weapon with this special rule"). ``weapon_factored`` and
+    ``unit_factored`` name the consumed rules per source, so each claims
+    its own namespace's note.
+    """
+
+    magical: bool = False
+    flaming: bool = False
+    weapon_factored: tuple[str, ...] = ()
+    unit_factored: tuple[str, ...] = ()
+
+
+def attack_marks(
+    profile_rules: Sequence[str],
+    weapon_rules: Mapping[str, Rule],
+    rules: Sequence[Rule],
+) -> EffectiveMarks:
+    """Read what the attacks a striker makes *are*: Magical, Flaming.
+
+    The fact producer behind the incoming-attack gates (Lion Cloak's
+    non-magical armour bonus, a ward's flame gate): mark effects are
+    consumed from the profile in use's resolved entries and from the
+    striker's unit rules, and the consumed rule names come back for the
+    caller to claim out of the notes. A mark carrying a ``when`` is not
+    consumable here — the attack's own facts are what is being built — so
+    its rule is left unconsumed and rides noted rather than guessed.
+
+    Returns:
+        The marks with the consumed rule names, per source.
+    """
+    in_use = [weapon_rules[name] for name in profile_rules if name in weapon_rules]
+    magical = flaming = False
+    weapon_factored: list[str] = []
+    unit_factored: list[str] = []
+    for source, factored in ((in_use, weapon_factored), (rules, unit_factored)):
+        for rule in source:
+            marks = [e for e in rule.effects if isinstance(e, AttackMarkEffect)]
+            if not marks or any(effect.when is not None for effect in marks):
+                continue
+            for effect in marks:
+                magical = magical or bool(effect.attack.magical)
+                flaming = flaming or bool(effect.attack.flaming)
+            factored.append(rule.name)
+    return EffectiveMarks(magical, flaming, tuple(weapon_factored), tuple(unit_factored))
 
 
 @dataclass(frozen=True)

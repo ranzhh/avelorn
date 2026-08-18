@@ -575,3 +575,12 @@ def test_a_ward_save_takes_no_maximum() -> None:
     """A printed ceiling caps a characteristic or the armour value, never a ward."""
     with pytest.raises(ValidationError, match="maximum bounds"):
         _EFFECT.validate_python({"set": {"ward-save": 6}, "maximum": 4})
+
+
+def test_an_attack_mark_confers_a_property_and_never_revokes_one() -> None:
+    """`attack:` classifies the bearer's attacks; an empty or False mark says nothing."""
+    _EFFECT.validate_python({"attack": {"magical": True}})
+    with pytest.raises(ValidationError, match="must confer"):
+        _EFFECT.validate_python({"attack": {}})
+    with pytest.raises(ValidationError, match="never revoked"):
+        _EFFECT.validate_python({"attack": {"flaming": False}})

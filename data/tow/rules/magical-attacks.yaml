@@ -1,0 +1,18 @@
+# Source: https://tow.whfb.app/special-rules/magical-attacks
+id: magical-attacks
+name: Magical Attacks
+page: 172
+category: Special Rules
+flavour: The Warhammer world is a deeply magical place. Consequently, magical weapons are quite commonplace.
+paragraphs:
+  - Any attack made or hit caused by a model with this special rule, or made using a weapon with this special rule, is a 'Magical'
+    attack.
+  - Note that all spells are considered to have this special rule, as are any hits caused by magic items.
+# Hand-authored, diffable against the paragraph above: the bearer's attacks
+# are magical, read by the incoming-attack gates (Lion Cloak, Runes of
+# Protection, Witness to Destiny) from the profile in use and the unit's
+# rules alike.
+effects:
+  - attack:
+      magical: true
+notes: Spells and magic-item hits carry this rule too; neither exists to mark.

@@ -370,26 +370,12 @@ def shoot_unit(
         profile.armour_piercing,
     )
 
-    # The walk's two seats, resolved once each (engine/seats): the defender's
-    # armour, ward, re-rolls and enemy-subject maluses folded under the
-    # incoming attack's facts — a shooting attack, magical iff the missile
-    # weapon is (Parry stays inert here: it gates on close combat) — and the
-    # attacker's weapon and unit rules compiled under the volley's. The same
-    # two resolutions a melee strike makes.
-    incoming = GateContext(
-        wielding=defender.weapon_facts,
-        worn=defender.armour_facts,
-        target_of=AttackFacts(
-            kind=AttackKind.SHOOTING,
-            magical="Magical Attacks" in profile.special_rules,
-        ),
-    )
-    defence = Defence.resolve(
-        armour=defender.loadout.armour,
-        rules=defender.loadout.rules,
-        grants=defender.loadout.granted_rules,
-        incoming=incoming,
-    )
+    # The walk's two seats, resolved once each (engine/seats): the attacker's
+    # weapon and unit rules compiled under the volley's facts, then the
+    # defender's armour, ward, re-rolls and enemy-subject maluses folded under
+    # the incoming attack's — whose marks (magical, Flaming) are the
+    # attacker's seat's to say (Parry stays inert here: it gates on close
+    # combat). The same two resolutions a melee strike makes.
     conditions = _engagement_conditions(attacker, chosen, profile, distance, force_short_range)
     offence = Offence.resolve(
         profile,
@@ -397,6 +383,22 @@ def shoot_unit(
         rules=attacker.loadout.rules,
         grants=attacker.loadout.granted_rules,
         conditions=conditions,
+    )
+    incoming = GateContext(
+        wielding=defender.weapon_facts,
+        worn=defender.armour_facts,
+        target_of=AttackFacts(
+            kind=AttackKind.SHOOTING,
+            magical=offence.marks.magical,
+            flaming=offence.marks.flaming,
+        ),
+    )
+    defence = Defence.resolve(
+        armour=defender.loadout.armour,
+        rules=defender.loadout.rules,
+        grants=defender.loadout.granted_rules,
+        incoming=incoming,
+        weapon_rules_in_use=defender.in_hand_rules(),
     )
     modifiers = [*offence.modifiers, *defence.modifiers]
     # One volley is one walk from the attacker's seat, so only what that walk
