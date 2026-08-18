@@ -26,7 +26,6 @@ from avelorn.core.dice import expected_value
 from avelorn.core.distribution import Distribution, Probability
 from avelorn.core.game import Phase
 from avelorn.tow.contingent import Contingent
-from avelorn.tow.engine.armour import defender_armour
 from avelorn.tow.engine.attack import (
     ArmourSave,
     AttackProfile,
@@ -58,26 +57,21 @@ from avelorn.tow.engine.rules import (
     AttackFacts,
     ChargeEvent,
     CombatFacts,
-    EffectiveRerolls,
     EffectiveValue,
-    EffectiveWard,
     GateContext,
     MovementFacts,
     ShootingFacts,
     WeaponFacts,
     compile_rules,
-    effective_armour_value,
     effective_characteristic,
     effective_combat_result_bonus,
-    effective_rerolls,
-    effective_ward_target,
     factored_notes,
     forced_outcome,
 )
+from avelorn.tow.engine.seats import Defence, Offence
 from avelorn.tow.phases.movement import Engagement
 from avelorn.tow.schema.psychology import BreakOutcome
 from avelorn.tow.schema.rule import AttackKind, Decision, Rule
-from avelorn.tow.schema.stage import Side
 from avelorn.tow.schema.unit import Characteristic, Profile, ProfileRole
 from avelorn.tow.schema.weapon import Weapon
 
@@ -257,24 +251,14 @@ class _Engagement:
     striker: Contingent
     as_mount: bool
     weapon_skill: EffectiveValue
-    target_armour: EffectiveValue
-    # The ward the target's own rules grant it against this strike, folded
-    # from its seat exactly as its armour is: the walk rolls it after the
-    # armour save, untouched by Armour Piercing.
-    target_ward: EffectiveWard
-    rerolls: EffectiveRerolls
-    # The target's rules read from its seat of this walk — its own save
-    # re-rolls, its enemy-subject maluses on the striker's dice.
-    target_rerolls: EffectiveRerolls
-    # Each side's unit rules the dice walk factored, claimed by the callers
-    # so a rule in the math is never also reported as not factored — and,
-    # apart, those the *other* seat of the walk owns. A caller resolving both
-    # seats claims those too; a one-sided one reports them, since nothing in
-    # its single walk consumed them.
-    walk_factored: frozenset[str]
-    walk_inapplicable: frozenset[str]
-    target_walk_factored: frozenset[str]
-    target_walk_inapplicable: frozenset[str]
+    # The walk's two seats, resolved once each: the striker's compiled
+    # weapon and unit rules, and the target's armour, ward, re-rolls and
+    # enemy-subject maluses. What each seat factored is claimed by the
+    # callers so a rule in the math is never also reported as not factored;
+    # a caller resolving both walks of a round claims both seats' names, a
+    # one-sided one reports the seat its walk did not consume.
+    offence: Offence
+    defence: Defence
     p_unsaved: Probability
     p_kill: Probability
     target_wounds: int
@@ -350,76 +334,25 @@ def _engage(
         raise ValueError(f"{weapon.name} strikes at the wielder's Strength, but {who} has none")
     strength = profile.strength.resolve(wielder_strength or 0)
 
-    # The defender's own rules may better its save (Parry's +1 with a hand
-    # weapon and shield in use), gated on its equipment and engagement facts;
-    # a lower armour value is a better save. An unarmoured defender has nothing
-    # to improve, but the fold still runs — it is the seam that owns an armour
-    # rule's disposition, and skipping it would leave the rule unspoken for.
-    printed_armour = defender_armour(target.loadout.armour)
-    target_armour = effective_armour_value(printed_armour, target.loadout.rules, target_conditions)
-    armour_value = None if printed_armour is None else target_armour.value
-    # The target's rules may also grant it a ward save against this strike
-    # (Runes of Protection's 6+ vs non-magical attacks), gated on the same
-    # incoming-attack facts its armour rules read. Its own seam: a ward is
-    # rolled after the armour save and Armour Piercing never moves it
-    # (the-shooting-phase/ward-saves).
-    target_ward = effective_ward_target(target.loadout.rules, target_conditions)
-    notes: list[str] = []
-    # This striker's engagement conditions gate its rules, exactly as a
-    # volley's do: a weapon rule whose condition the facts answer is
-    # factored (True) or honoured as a no-op (False), one they leave
-    # unknown stays noted. The combat chapter's rules in force
-    # (phase_rules) apply to every strike, gated by the same facts.
-    weapon_compiled = compile_rules(
-        profile.special_rules, striker.loadout.weapon_rules, conditions
+    # The walk's two seats, resolved once each (engine/seats): the striker's
+    # weapon and unit rules compiled under its own conditions, and the
+    # target's armour, ward, re-rolls and enemy-subject maluses folded under
+    # its — the same two resolutions a volley makes.
+    offence = Offence.resolve(
+        profile,
+        weapon_rules=striker.loadout.weapon_rules,
+        rules=striker.loadout.rules,
+        grants=striker.loadout.granted_rules,
+        conditions=conditions,
     )
-    modifiers = list(weapon_compiled.modifiers)
-    # The striker's own unit rules move the same dice — Gromril Weapons gives
-    # its hand weapon an Armour Piercing characteristic of -1 — gated on the
-    # weapon in hand, exactly as a volley reads Arrows of Isha. What the walk
-    # factors is claimed, so the "special rule not factored" notes stay true;
-    # what it cannot (Strike First's Initiative set, Ithilmar Weapons'
-    # re-roll) belongs to another seam and is claimed by that one.
-    unit_index = {rule.name: rule for rule in striker.loadout.rules}
-    unit_compiled = compile_rules(
-        list(unit_index), unit_index, conditions, grants=striker.loadout.granted_rules
-    )
-    modifiers.extend(unit_compiled.modifiers)
-    # The target's own rules reach the same walk from the other seat: an
-    # enemy-subject rule of the target's ("-1 to hit this unit") lands on
-    # this striker's Roll to Hit, gated on the target's own facts — the
-    # incoming attack among them. Rules whose quantities belong to the
-    # striker's seat compile to nothing here (inapplicable, kept apart so a
-    # one-sided strike still reports them); those belonging to another seam
-    # (Parry's armour value, claimed by the armour fold) are claimed there.
-    target_index = {rule.name: rule for rule in target.loadout.rules}
-    target_compiled = compile_rules(
-        list(target_index),
-        target_index,
-        target_conditions,
-        seat=Side.TARGET,
+    defence = Defence.resolve(
+        armour=target.loadout.armour,
+        rules=target.loadout.rules,
         grants=target.loadout.granted_rules,
+        incoming=target_conditions,
     )
-    modifiers.extend(target_compiled.modifiers)
-    # Each side's rules may re-roll the walk's dice, from its own seat: the
-    # striker its own To Hit (Ithilmar Weapons' natural 1s) or, with an
-    # enemy-subject grant, the target's save (Daith's Reaper's forced
-    # re-roll of its passes); the target its own save (Gromril Armour's
-    # natural 1s while defending). The striker's grants come from its unit
-    # rules and from the rules of the profile in use — a magic weapon's
-    # rule is scoped by wielding it — each gated on that side's conditions,
-    # exactly as the armour fold gates the defender's save.
-    in_use = [
-        striker.loadout.weapon_rules[name]
-        for name in profile.special_rules
-        if name in striker.loadout.weapon_rules
-    ]
-    # Compiled per source, not as one pool: unit-rule names claim unit-rule
-    # notes and weapon-rule names claim weapon-rule notes, so a printed name
-    # shared across the two namespaces cannot claim the other's note.
-    rerolls = effective_rerolls(striker.loadout.rules, conditions, seat=Side.ATTACKER)
-    weapon_rerolls = effective_rerolls(in_use, conditions, seat=Side.ATTACKER)
-    target_rerolls = effective_rerolls(target.loadout.rules, target_conditions, seat=Side.TARGET)
+    notes: list[str] = []
+    modifiers = [*offence.modifiers, *defence.modifiers]
     # A weapon rule the walk cannot factor may still be consumed by another
     # seam: the supporting-rank query (Fight in Extra Rank, folded into the
     # attack count), the striking-order Initiative read (a great weapon's
@@ -432,13 +365,9 @@ def _engage(
     claimed = {
         *striker.supporting_ranks().factored,
         *effective_initiative(striker, conditions=conditions).factored,
-        *weapon_rerolls.factored,
+        *offence.weapon_rerolls.factored,
     }
-    unfactored = [
-        rule
-        for rule in (*weapon_compiled.unfactored, *weapon_compiled.inapplicable)
-        if rule not in claimed
-    ]
+    unfactored = [rule for rule in offence.weapon_unfactored if rule not in claimed]
     notes.extend(f"weapon rule not factored: {rule} ({weapon.name})" for rule in unfactored)
     phase_compiled = compile_rules(sorted(phase_rules), phase_rules, conditions)
     modifiers.extend(phase_compiled.modifiers)
@@ -464,14 +393,18 @@ def _engage(
     target_ws = effective_weapon_skill(target, target_conditions)
     hit = melee_hit_target(striker_ws.value, target_ws.value, hit_modifier)
     wound = wound_target(strength, toughness)
-    save = armour_save_target(armour_value, profile.armour_piercing)
+    save = armour_save_target(defence.armour_value, profile.armour_piercing)
     p_unsaved, p_kill, hit = _per_attack(
         hit,
         wound,
         save,
-        target_ward.target,
+        defence.ward.target,
         modifiers,
-        rerolls=(*rerolls.rerolls, *weapon_rerolls.rerolls, *target_rerolls.rerolls),
+        rerolls=(
+            *offence.rerolls.rerolls,
+            *offence.weapon_rerolls.rerolls,
+            *defence.rerolls.rerolls,
+        ),
     )
     # Wounds accumulate into whole slain models; a profile with no printed
     # Wounds ("-") is treated as a single-Wound model. A ridden model's Wounds
@@ -492,21 +425,15 @@ def _engage(
         striker=striker,
         as_mount=element is not None and element.role is ProfileRole.MOUNT,
         weapon_skill=striker_ws,
-        target_armour=target_armour,
-        target_ward=target_ward,
-        rerolls=rerolls,
-        target_rerolls=target_rerolls,
-        walk_factored=frozenset(unit_compiled.factored),
-        walk_inapplicable=frozenset(unit_compiled.inapplicable),
-        target_walk_factored=frozenset(target_compiled.factored),
-        target_walk_inapplicable=frozenset(target_compiled.inapplicable),
+        offence=offence,
+        defence=defence,
         p_unsaved=p_unsaved,
         p_kill=p_kill,
         target_wounds=target_wounds,
         hit_target=hit,
         wound_target=wound,
         save_target=save,
-        ward_target=target_ward.target,
+        ward_target=defence.ward.target,
         p_hit=melee_hit_probability(hit),
         p_wound=wound_probability(wound),
         notes=tuple(notes),
@@ -683,8 +610,8 @@ def strike_unit(
                     *striker.fighting_ranks().factored,
                     *striker.effective_attacks().factored,
                     *(name for e in engagements for name in e.weapon_skill.factored),
-                    *(name for e in engagements for name in e.rerolls.factored),
-                    *(name for e in engagements for name in e.walk_factored),
+                    *(name for e in engagements for name in e.offence.rerolls.factored),
+                    *(name for e in engagements for name in e.offence.factored),
                 },
             ),
             # The target throws no blows here, but its save is resolved and its
@@ -696,10 +623,10 @@ def strike_unit(
             *_unit_rule_notes(
                 target,
                 claimed={
-                    *(name for e in engagements for name in e.target_armour.factored),
-                    *(name for e in engagements for name in e.target_ward.factored),
-                    *(name for e in engagements for name in e.target_rerolls.factored),
-                    *(name for e in engagements for name in e.target_walk_factored),
+                    *(name for e in engagements for name in e.defence.armour.factored),
+                    *(name for e in engagements for name in e.defence.ward.factored),
+                    *(name for e in engagements for name in e.defence.rerolls.factored),
+                    *(name for e in engagements for name in e.defence.factored),
                 },
             ),
             *dict.fromkeys(note for e in engagements for note in e.notes),
@@ -1172,18 +1099,18 @@ def fight(
                         *a.fighting_ranks().factored,
                         *a.effective_attacks().factored,
                         *(name for s in a_own for name in s.weapon_skill.factored),
-                        *(name for s in a_own for name in s.rerolls.factored),
-                        *(name for s in a_own for name in s.rerolls.inapplicable),
-                        *(name for s in a_own for name in s.walk_factored),
-                        *(name for s in a_own for name in s.walk_inapplicable),
+                        *(name for s in a_own for name in s.offence.rerolls.factored),
+                        *(name for s in a_own for name in s.offence.rerolls.inapplicable),
+                        *(name for s in a_own for name in s.offence.factored),
+                        *(name for s in a_own for name in s.offence.inapplicable),
                         *a_combat_result.factored,
                         # a's defensive rules are read while it is b's target
-                        *(name for s in b_own for name in s.target_armour.factored),
-                        *(name for s in b_own for name in s.target_ward.factored),
-                        *(name for s in b_own for name in s.target_rerolls.factored),
-                        *(name for s in b_own for name in s.target_rerolls.inapplicable),
-                        *(name for s in b_own for name in s.target_walk_factored),
-                        *(name for s in b_own for name in s.target_walk_inapplicable),
+                        *(name for s in b_own for name in s.defence.armour.factored),
+                        *(name for s in b_own for name in s.defence.ward.factored),
+                        *(name for s in b_own for name in s.defence.rerolls.factored),
+                        *(name for s in b_own for name in s.defence.rerolls.inapplicable),
+                        *(name for s in b_own for name in s.defence.factored),
+                        *(name for s in b_own for name in s.defence.inapplicable),
                     },
                 ),
                 *_unit_rule_notes(
@@ -1193,17 +1120,17 @@ def fight(
                         *b.fighting_ranks().factored,
                         *b.effective_attacks().factored,
                         *(name for s in b_own for name in s.weapon_skill.factored),
-                        *(name for s in b_own for name in s.rerolls.factored),
-                        *(name for s in b_own for name in s.rerolls.inapplicable),
-                        *(name for s in b_own for name in s.walk_factored),
-                        *(name for s in b_own for name in s.walk_inapplicable),
+                        *(name for s in b_own for name in s.offence.rerolls.factored),
+                        *(name for s in b_own for name in s.offence.rerolls.inapplicable),
+                        *(name for s in b_own for name in s.offence.factored),
+                        *(name for s in b_own for name in s.offence.inapplicable),
                         *b_combat_result.factored,
-                        *(name for s in a_own for name in s.target_armour.factored),
-                        *(name for s in a_own for name in s.target_ward.factored),
-                        *(name for s in a_own for name in s.target_rerolls.factored),
-                        *(name for s in a_own for name in s.target_rerolls.inapplicable),
-                        *(name for s in a_own for name in s.target_walk_factored),
-                        *(name for s in a_own for name in s.target_walk_inapplicable),
+                        *(name for s in a_own for name in s.defence.armour.factored),
+                        *(name for s in a_own for name in s.defence.ward.factored),
+                        *(name for s in a_own for name in s.defence.rerolls.factored),
+                        *(name for s in a_own for name in s.defence.rerolls.inapplicable),
+                        *(name for s in a_own for name in s.defence.factored),
+                        *(name for s in a_own for name in s.defence.inapplicable),
                     },
                 ),
                 *(note for s in a_own for note in s.notes),

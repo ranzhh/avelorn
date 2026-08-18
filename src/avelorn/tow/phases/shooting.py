@@ -19,7 +19,6 @@ from avelorn.core.dice import expected_value
 from avelorn.core.distribution import Probability
 from avelorn.core.game import Phase
 from avelorn.tow.contingent import Contingent, Loadout
-from avelorn.tow.engine.armour import defender_armour
 from avelorn.tow.engine.attack import (
     ArmourSave,
     AttackProfile,
@@ -51,14 +50,12 @@ from avelorn.tow.engine.rules import (
     ShootingFacts,
     WeaponFacts,
     compile_rules,
-    effective_armour_value,
-    effective_rerolls,
-    effective_ward_target,
     factored_notes,
 )
+from avelorn.tow.engine.seats import Defence, Offence
 from avelorn.tow.schema.psychology import PanicCause
 from avelorn.tow.schema.rule import AttackKind, RerollEffect, Rule
-from avelorn.tow.schema.stage import Side, Stage
+from avelorn.tow.schema.stage import Stage
 from avelorn.tow.schema.unit import Characteristic
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile
 
@@ -373,11 +370,12 @@ def shoot_unit(
         profile.armour_piercing,
     )
 
-    # The defender's own rules may better its save against this volley (Lion
-    # Cloak's +1 vs non-magical shooting), gated on the incoming attack: a
-    # shooting attack, magical iff the missile weapon is. Parry stays inert here
-    # — it gates on being engaged in close combat, and a shot target is not.
-    armour_value = defender_armour(defender.loadout.armour)
+    # The walk's two seats, resolved once each (engine/seats): the defender's
+    # armour, ward, re-rolls and enemy-subject maluses folded under the
+    # incoming attack's facts — a shooting attack, magical iff the missile
+    # weapon is (Parry stays inert here: it gates on close combat) — and the
+    # attacker's weapon and unit rules compiled under the volley's. The same
+    # two resolutions a melee strike makes.
     incoming = GateContext(
         wielding=defender.weapon_facts,
         worn=defender.armour_facts,
@@ -386,79 +384,25 @@ def shoot_unit(
             magical="Magical Attacks" in profile.special_rules,
         ),
     )
-    # An unarmoured defender has nothing to improve, but the fold still runs: it
-    # owns an armour rule's disposition, and skipping it would leave the rule
-    # unspoken for in the notes.
-    defender_armour_value = effective_armour_value(armour_value, defender.loadout.rules, incoming)
-    if armour_value is not None:
-        armour_value = defender_armour_value.value
-    # The defender's rules may also grant it a ward save against this volley
-    # (Runes of Protection's 6+ vs non-magical attacks), gated on the same
-    # incoming-attack facts. Its own seam: the ward is rolled after the armour
-    # save, and Armour Piercing never moves it (the-shooting-phase/ward-saves).
-    defender_ward = effective_ward_target(defender.loadout.rules, incoming)
-    conditions = _engagement_conditions(attacker, chosen, profile, distance, force_short_range)
-
-    # Weapon rules with compiled effects join the dice walk; the rest are
-    # reported, exactly as before. Shooting-phase chapter rules (Firing
-    # at Long Range, Moving and Shooting) apply to every volley.
-    weapon_compiled = compile_rules(
-        profile.special_rules, attacker.loadout.weapon_rules, conditions
-    )
-    modifiers = list(weapon_compiled.modifiers)
-
-    # The attacker's own unit rules may also shape the volley — Arrows of Isha
-    # improves a bow's Armour Piercing and grants it Armour Bane (1) — gated on
-    # the weapon in hand's family and expanded through the loadout's granted
-    # rules. A rule the walk cannot factor (Strike First's Initiative set,
-    # Ithilmar Weapons' re-roll) stays unfactored and noted; the factored ones
-    # are claimed out of the "special rule not factored" notes below.
-    unit_index = {rule.name: rule for rule in attacker.loadout.rules}
-    unit_compiled = compile_rules(
-        list(unit_index), unit_index, conditions, grants=attacker.loadout.granted_rules
-    )
-    modifiers.extend(unit_compiled.modifiers)
-
-    # The defender's own rules reach the same walk from the target seat: an
-    # enemy-subject rule of the defender's ("enemy units shooting at this
-    # unit suffer -1 To Hit") lands on this volley's Roll to Hit, gated on
-    # the defender's facts — the incoming attack among them. Its
-    # armour-value rules stay the armour fold's (claimed there), and what
-    # belongs to the attacker's seat of the walk — the blows it would throw in
-    # a melee, not this volley — is inapplicable here and stays reported.
-    defender_index = {rule.name: rule for rule in defender.loadout.rules}
-    defender_compiled = compile_rules(
-        list(defender_index),
-        defender_index,
-        incoming,
-        seat=Side.TARGET,
+    defence = Defence.resolve(
+        armour=defender.loadout.armour,
+        rules=defender.loadout.rules,
         grants=defender.loadout.granted_rules,
+        incoming=incoming,
     )
-    modifiers.extend(defender_compiled.modifiers)
-
-    # Each side's re-roll grants, from its own seat: the attacker's
-    # enemy-subject grants re-roll the defender's dice (a forced re-roll of
-    # successful saves), the defender's own grants its own (a save re-roll
-    # while shot at). The attacker's grants come from its unit rules and from
-    # the rules of the missile profile in use — a magic bow's rule is scoped by
-    # shooting it — exactly as a melee reads the weapon in hand. Each gates on
-    # the volley's facts like any weapon rule (a combat-only grant is honoured
-    # inert).
-    in_use = [
-        attacker.loadout.weapon_rules[name]
-        for name in profile.special_rules
-        if name in attacker.loadout.weapon_rules
-    ]
-    # Compiled per source, not as one pool: unit-rule names claim unit-rule
-    # notes and weapon-rule names claim weapon-rule notes, so a printed name
-    # shared across the two namespaces cannot claim the other's note.
-    rerolls = effective_rerolls(attacker.loadout.rules, conditions, seat=Side.ATTACKER)
-    weapon_rerolls = effective_rerolls(in_use, conditions, seat=Side.ATTACKER)
-    defender_rerolls = effective_rerolls(defender.loadout.rules, incoming, seat=Side.TARGET)
+    conditions = _engagement_conditions(attacker, chosen, profile, distance, force_short_range)
+    offence = Offence.resolve(
+        profile,
+        weapon_rules=attacker.loadout.weapon_rules,
+        rules=attacker.loadout.rules,
+        grants=attacker.loadout.granted_rules,
+        conditions=conditions,
+    )
+    modifiers = [*offence.modifiers, *defence.modifiers]
     # One volley is one walk from the attacker's seat, so only what that walk
     # factored is claimed: a rule belonging to its other seat is inapplicable
     # and stays reported, since no second compile here covers it.
-    claimed = {*unit_compiled.factored, *rerolls.factored}
+    claimed = {*offence.factored, *offence.rerolls.factored}
 
     notes: list[str] = []
     notes.extend(
@@ -472,10 +416,10 @@ def shoot_unit(
         )
     )
     defender_claimed = {
-        *defender_armour_value.factored,
-        *defender_ward.factored,
-        *defender_rerolls.factored,
-        *defender_compiled.factored,
+        *defence.armour.factored,
+        *defence.ward.factored,
+        *defence.rerolls.factored,
+        *defence.factored,
     }
     notes.extend(
         f"special rule not factored: {rule} ({target.name})"
@@ -492,12 +436,12 @@ def shoot_unit(
     # than in the walk: both are claimed out of the weapon-rule notes. The
     # profile in use is only ever compiled from its shooter's seat, so an
     # inapplicable weapon rule is reported here — no second compile covers it.
-    weapon_claimed = {*weapon_rerolls.factored}
+    weapon_claimed = {*offence.weapon_rerolls.factored}
     if volley_fire:
         weapon_claimed.add("Volley Fire")
     notes.extend(
         f"weapon rule not factored: {rule} ({chosen.name})"
-        for rule in (*weapon_compiled.unfactored, *weapon_compiled.inapplicable)
+        for rule in offence.weapon_unfactored
         if rule not in weapon_claimed
     )
     phase_compiled = compile_rules(sorted(phase_rules), phase_rules, conditions)
@@ -518,14 +462,18 @@ def shoot_unit(
         ballistic_skill=ballistic_skill,
         strength=strength,
         toughness=toughness,
-        armour_value=armour_value,
+        armour_value=defence.armour_value,
         armour_piercing=profile.armour_piercing,
-        ward_target=defender_ward.target,
+        ward_target=defence.ward.target,
         hit_modifier=hit_modifier,
         wounds_per_model=defender_wounds,
         targets=defenders,
         modifiers=modifiers,
-        rerolls=(*rerolls.rerolls, *weapon_rerolls.rerolls, *defender_rerolls.rerolls),
+        rerolls=(
+            *offence.rerolls.rerolls,
+            *offence.weapon_rerolls.rerolls,
+            *defence.rerolls.rerolls,
+        ),
         notes=tuple(notes),
     )
 
