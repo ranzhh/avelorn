@@ -1,0 +1,43 @@
+# Source: https://tow.whfb.app/unit/silver-helms
+id: silver-helms
+name: Silver Helms
+points: 23
+unit_size:
+  min: 4
+troop_type: Heavy Cavalry
+base_size:
+  width_mm: 30
+  depth_mm: 60
+profiles:
+  - { name: Silver Helm, M: '-', WS: 4, BS: 4, S: 3, T: 3, W: 1, I: 5, A: 1, Ld: 8 }
+  - { name: High Helm, M: '-', WS: 4, BS: 4, S: 3, T: 3, W: 1, I: 5, A: 2, Ld: 8 }
+  - { name: Barded Elven Steed, role: mount, M: 8, WS: 3, BS: '-', S: 3, T: '-', W: '-', I: 4, A: 1, Ld: '-' }
+equipment:
+  - Hand Weapon
+  - Lance
+  - Heavy Armour
+special_rules:
+  - Close Order
+  - Elven Reflexes
+  - First Charge
+  - Ithilmar Barding
+  - Swiftstride
+  - Valour of Ages
+options:
+  - name: Shield
+    kind: equipment
+    points: 1
+    per_model: true
+    adds_equipment: [Shield]
+  - name: High Helm
+    kind: champion
+    points: 6
+  - name: Standard Bearer
+    kind: standard_bearer
+    points: 6
+  - name: Musician
+    kind: musician
+    points: 6
+  - name: High Helm magic items
+    kind: other
+    points_budget: 25

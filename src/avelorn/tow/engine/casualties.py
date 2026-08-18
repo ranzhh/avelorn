@@ -10,6 +10,8 @@ per-attack probabilities are known, so both phases share this step.
 """
 
 import logging
+from collections.abc import Sequence
+from typing import NamedTuple
 
 from avelorn.core.dice import (
     binomial_distribution,
@@ -17,9 +19,22 @@ from avelorn.core.dice import (
     group_distribution,
     multinomial_outcomes,
 )
-from avelorn.core.distribution import Probability
+from avelorn.core.distribution import Distribution, Probability
 
 logger = logging.getLogger(__name__)
+
+
+class AttackBatch(NamedTuple):
+    """One homogeneous batch of attacks: its count and per-attack probabilities.
+
+    The unit of composition for a heterogeneous strike (#46): a cavalry
+    model's riders and mounts each throw a batch at their own line, and the
+    round folds the batches' wounds together before removing casualties.
+    """
+
+    attacks: int
+    p_unsaved: Probability
+    p_kill: Probability
 
 
 def wound_and_casualties(
@@ -67,6 +82,55 @@ def wound_and_casualties(
         p_kill,
         len(casualties),
     )
+    return distribution, casualties
+
+
+def batched_wound_and_casualties(
+    batches: Sequence[AttackBatch],
+    *,
+    wounds_per_model: int,
+    targets: int | None,
+) -> tuple[list[Probability], list[Probability]]:
+    """Distribute several independent batches' unsaved wounds and casualties.
+
+    The heterogeneous counterpart of :func:`wound_and_casualties`: each batch
+    resolves at its own per-attack probabilities, the batches' (wound, kill)
+    joints convolve — independent counts add — and the fold to models and the
+    size cap run once, on the combined distribution. Folding per batch would
+    be wrong for multi-Wound targets: 2 wounds from one batch and 1 from
+    another fell a whole 3-Wound model, where ``2//3 + 1//3`` fells none.
+
+    Returns:
+        The distribution of unsaved wounds (index k = P(k unsaved wounds))
+        and the casualty distribution (index k = P(k models removed)).
+    """
+    if len(batches) == 1:
+        batch = batches[0]
+        return wound_and_casualties(
+            batch.attacks,
+            p_unsaved=batch.p_unsaved,
+            p_kill=batch.p_kill,
+            wounds_per_model=wounds_per_model,
+            targets=targets,
+        )
+    # Convolve the per-batch (plain wounds, instant kills) joints component-wise
+    # — tuple outcomes, so an explicit component sum, never the concatenating
+    # ``+`` (see avelorn.core.distribution's module docstring).
+    joint: Distribution[tuple[int, int]] = Distribution.pure((0, 0))
+    for batch in batches:
+        outcomes = multinomial_outcomes(
+            batch.attacks, (batch.p_unsaved - batch.p_kill, batch.p_kill)
+        )
+        one = Distribution({counts: mass for counts, mass in outcomes})
+        joint = joint.combine(one, lambda a, b: (a[0] + b[0], a[1] + b[1]))
+    total = sum(batch.attacks for batch in batches)
+    size = total if targets is None else targets
+    zero = sum((batch.p_unsaved for batch in batches), start=0) * 0
+    distribution: list[Probability] = [zero] * (total + 1)
+    casualties: list[Probability] = [zero] * (size + 1)
+    for (wounds, kills), mass in joint.mass.items():
+        distribution[wounds + kills] += mass
+        casualties[min(kills + wounds // wounds_per_model, size)] += mass
     return distribution, casualties
 
 

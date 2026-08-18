@@ -1,0 +1,7 @@
+# Source: https://tow.whfb.app/weapons-of-war/lance
+id: lance
+name: Lance
+profiles:
+  - { R: Combat, S: S+2, AP: -2, special_rules: [Armour Bane (1)] }
+notes: Models whose troop type is cavalry or monster only. A lance can only be used during a turn in which the wielder charged,
+  and its Strength and Armour Piercing modifiers apply only against enemy models the wielder charged that turn.

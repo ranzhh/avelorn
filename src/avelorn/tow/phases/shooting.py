@@ -336,14 +336,14 @@ def shoot_unit(
     profile = chosen.missile_profile
     if profile is None:
         raise ValueError(f"{chosen.name} has no missile profile; it cannot shoot")
-    ballistic_skill = shooter.profiles[0][Characteristic.BALLISTIC_SKILL]
-    toughness = target.profiles[0][Characteristic.TOUGHNESS]
+    ballistic_skill = shooter.main[Characteristic.BALLISTIC_SKILL]
+    toughness = target.main[Characteristic.TOUGHNESS]
     if ballistic_skill is None:
         raise ValueError(f"{shooter.name} has no Ballistic Skill; it cannot shoot")
     if toughness is None:
         raise ValueError(f"{target.name} has no Toughness; it cannot be wounded")
 
-    wielder_strength = shooter.profiles[0][Characteristic.STRENGTH]
+    wielder_strength = shooter.main[Characteristic.STRENGTH]
     if profile.strength.is_relative and wielder_strength is None:
         raise ValueError(
             f"{chosen.name} shoots at the wielder's Strength, but {shooter.name} has none"
@@ -511,7 +511,7 @@ def shoot_unit(
 
     # Wounds accumulate into whole slain models; a profile with no printed
     # Wounds ("-") is treated as a single-Wound model.
-    defender_wounds = target.profiles[0][Characteristic.WOUNDS] or 1
+    defender_wounds = target.main[Characteristic.WOUNDS] or 1
 
     return shoot(
         shots=shooters,

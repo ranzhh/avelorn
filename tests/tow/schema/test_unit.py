@@ -10,6 +10,7 @@ from avelorn.tow.data import DATA_DIR
 from avelorn.tow.schema.unit import (
     Characteristic,
     Profile,
+    ProfileRole,
     Unit,
     UnitOption,
     UnitSize,
@@ -123,3 +124,96 @@ def test_profile_rejects_unknown_abbreviation() -> None:
     stats = {"M": 4, "WS": 3, "BS": 3, "S": 3, "T": 3, "W": 1, "I": 3, "A": 1, "Ld": 7}
     with pytest.raises(ValidationError):
         Profile.model_validate({"name": "Crew", "Sv": 5, **stats})
+
+
+_RIDER = {
+    "name": "Rider",
+    "M": "-",
+    "WS": 4,
+    "BS": 4,
+    "S": 3,
+    "T": 3,
+    "W": 1,
+    "I": 5,
+    "A": 1,
+    "Ld": 8,
+}
+_STEED = {
+    "name": "Steed",
+    "role": "mount",
+    "M": 8,
+    "WS": 3,
+    "BS": "-",
+    "S": 3,
+    "T": "-",
+    "W": "-",
+    "I": 4,
+    "A": 1,
+    "Ld": "-",
+}
+
+
+def _ridden() -> Unit:
+    return Unit.model_validate(
+        {
+            "id": "riders",
+            "name": "Riders",
+            "points": 20,
+            "unit_size": {"min": 5},
+            "troop_type": "Heavy Cavalry",
+            "profiles": [_RIDER, _STEED],
+        }
+    )
+
+
+def test_a_row_defaults_to_rank_and_file() -> None:
+    """A single-row datasheet says nothing about roles and means the plain one."""
+    row = Profile.model_validate(_RIDER)
+    assert row.role is ProfileRole.RANK_AND_FILE
+
+
+def test_main_is_the_rank_and_file_row() -> None:
+    """`Unit.main` is the rider of a cavalry datasheet, whose T and W the model uses."""
+    unit = _ridden()
+    assert unit.main.name == "Rider"
+    assert unit.main[Characteristic.TOUGHNESS] == 3
+
+
+def test_the_mount_row_is_the_one_the_unit_rides() -> None:
+    """`Unit.mount` finds the row every model of the unit sits on."""
+    unit = _ridden()
+    assert unit.mount is not None
+    assert unit.mount.name == "Steed"
+    assert unit.mount[Characteristic.MOVEMENT] == 8
+
+
+def test_a_unit_on_foot_rides_nothing() -> None:
+    """A single-row datasheet has a main and no mount."""
+    unit = Unit.model_validate(
+        {
+            "id": "footmen",
+            "name": "Footmen",
+            "points": 5,
+            "unit_size": {"min": 5},
+            "troop_type": "Regular Infantry",
+            "profiles": [{**_RIDER, "name": "Footman", "M": 5}],
+        }
+    )
+    assert unit.main.name == "Footman"
+    assert unit.mount is None
+
+
+def test_a_datasheet_of_only_a_mount_has_no_main() -> None:
+    """A mount row alone is not a unit anyone can field."""
+    unit = Unit.model_validate(
+        {
+            "id": "steeds",
+            "name": "Steeds",
+            "points": 5,
+            "unit_size": {"min": 5},
+            "troop_type": "War Beast",
+            "profiles": [_STEED],
+        }
+    )
+    with pytest.raises(ValueError, match="no rank-and-file profile row"):
+        _ = unit.main

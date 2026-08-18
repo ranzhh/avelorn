@@ -576,3 +576,41 @@ def test_shoot_unit_denies_the_ward_to_a_magical_volley() -> None:
 
     assert result.ward_target is None
     assert not any("Runes of Protection" in note for note in result.notes)
+
+
+# --- cavalry: a ridden target is shot as its rider; a ridden shooter fires as one ---
+
+
+def test_shoot_unit_at_cavalry_reads_the_riders_row_and_armour() -> None:
+    """A volley at Silver Helms wounds the rider's T3 behind the rider's save.
+
+    The steed's row prints "-" for Toughness and Wounds: the model is shot on
+    the rider's values and saves on the rider's heavy armour (5+)
+    (troop-types-in-detail/split-profile-cavalry). Longbows at S3: 4+ to
+    wound, AP 0.
+    """
+    archers = REPO.units["elven-archers"]
+    helms = Contingent.deploy("silver-helms", 5, data=REPO)
+
+    result = shoot_unit(_fielded(archers, 5).wielding("Longbow"), helms)
+
+    assert result.wound_target == 4  # S3 vs the rider's T3
+    assert result.save_target == 5  # the rider's heavy armour
+    assert result.target_models == 5
+
+
+def test_shoot_unit_with_cavalry_fires_the_riders_ballistic_skill() -> None:
+    """Ellyrian Reavers with shortbows shoot at the rider's BS4; steeds print no BS.
+
+    Light Cavalry ranks 5 wide, so 5 reavers are one firing rank: 5 shots,
+    hitting on 3+ at short range from a standing start.
+    """
+    reavers = Contingent.deploy("ellyrian-reavers", 5, ["Shortbow"], data=REPO).wielding(
+        "Shortbow"
+    )
+    spearmen = _fielded(REPO.units["elven-spearmen"], 10)
+
+    result = shoot_unit(reavers, spearmen, distance=9)
+
+    assert result.shots == 5
+    assert result.hit_target == 3

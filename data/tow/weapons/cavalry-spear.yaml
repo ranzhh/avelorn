@@ -1,0 +1,8 @@
+# Source: https://tow.whfb.app/weapons-of-war/cavalry-spear
+id: cavalry-spear
+name: Cavalry Spear
+profiles:
+  - { R: Combat, S: S+1, AP: -1, special_rules: [Fight In Extra Rank] }
+notes: Models whose troop type is cavalry, monster or chariot only. A cavalry spear's Strength and Armour Piercing modifiers
+  apply only during a turn in which the wielder charged. A model wielding a cavalry spear cannot make a supporting attack
+  during a turn in which it charged.

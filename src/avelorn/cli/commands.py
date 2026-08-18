@@ -12,7 +12,14 @@ import yaml
 
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.schema.rule import Rule
-from avelorn.tow.schema.unit import BaseSize, Characteristic, Unit, UnitOption, UnitSize
+from avelorn.tow.schema.unit import (
+    BaseSize,
+    Characteristic,
+    ProfileRole,
+    Unit,
+    UnitOption,
+    UnitSize,
+)
 from avelorn.tow.views import UnitSummary, rule_summaries, unmodelled_rules
 
 
@@ -51,8 +58,16 @@ def show_unit(data: TOWRepository, slug: str) -> list[str]:
     """
     unit = _unit(data, slug)
     rows = [["", *(characteristic.value for characteristic in Characteristic)]]
+    # A non-default role (the mount row) is data the API serves, so the
+    # terminal names it too rather than leaving it to the shape of the dashes.
     rows.extend(
-        [profile.name, *(_stat(profile[c]) for c in Characteristic)] for profile in unit.profiles
+        [
+            profile.name
+            if profile.role is ProfileRole.RANK_AND_FILE
+            else (f"{profile.name} ({profile.role.value})"),
+            *(_stat(profile[c]) for c in Characteristic),
+        ]
+        for profile in unit.profiles
     )
     lines = [
         f"{unit.name}  ({unit.id})",

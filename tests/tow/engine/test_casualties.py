@@ -5,7 +5,12 @@ from fractions import Fraction
 import pytest
 
 from avelorn.core.dice import binomial_distribution, cap_distribution, group_distribution
-from avelorn.tow.engine.casualties import _remove_casualties, wound_and_casualties
+from avelorn.tow.engine.casualties import (
+    AttackBatch,
+    _remove_casualties,
+    batched_wound_and_casualties,
+    wound_and_casualties,
+)
 
 
 def test_remove_casualties_with_no_kill_mass_matches_binomial_path() -> None:
@@ -96,3 +101,51 @@ def test_casualty_masses_are_all_one_numeric_type(
     assert all(isinstance(p, kind) for p in wounds)
     assert all(isinstance(p, kind) for p in casualties)
     assert sum(casualties) == 1
+
+
+def test_batched_fold_convolves_independent_batches() -> None:
+    """Two one-attack batches' unsaved wounds add: the counts convolve."""
+    distribution, casualties = batched_wound_and_casualties(
+        [AttackBatch(1, 0.5, 0.0), AttackBatch(1, 0.5, 0.0)],
+        wounds_per_model=1,
+        targets=None,
+    )
+    assert distribution == pytest.approx([0.25, 0.5, 0.25])
+    assert casualties == pytest.approx([0.25, 0.5, 0.25])
+
+
+def test_batched_fold_pools_wounds_before_felling_a_multi_wound_model() -> None:
+    """2 wounds from one batch and 1 from another fell a whole 3-Wound model.
+
+    The load-bearing subtlety (#46): the fold to models must run on the
+    combined wound count, never per batch -- 2//3 + 1//3 would fell none.
+    """
+    _, casualties = batched_wound_and_casualties(
+        [AttackBatch(2, 1.0, 0.0), AttackBatch(1, 1.0, 0.0)],
+        wounds_per_model=3,
+        targets=1,
+    )
+    assert casualties == pytest.approx([0.0, 1.0])
+
+
+def test_batched_fold_with_one_batch_matches_the_single_batch_path() -> None:
+    """A lone batch resolves exactly as wound_and_casualties always has."""
+    expected = wound_and_casualties(6, p_unsaved=0.3, p_kill=0.1, wounds_per_model=2, targets=4)
+    folded = batched_wound_and_casualties(
+        [AttackBatch(6, 0.3, 0.1)], wounds_per_model=2, targets=4
+    )
+    assert folded[0] == pytest.approx(expected[0])
+    assert folded[1] == pytest.approx(expected[1])
+
+
+def test_batched_fold_counts_instant_kills_per_model_across_batches() -> None:
+    """A kill removes a whole model; plain wounds pool separately across batches."""
+    # One certain kill in one batch, one certain plain wound in the other:
+    # against 2-Wound models that is one model slain outright plus a wound
+    # carried, never two models.
+    _, casualties = batched_wound_and_casualties(
+        [AttackBatch(1, 1.0, 1.0), AttackBatch(1, 1.0, 0.0)],
+        wounds_per_model=2,
+        targets=2,
+    )
+    assert casualties == pytest.approx([0.0, 1.0, 0.0])
