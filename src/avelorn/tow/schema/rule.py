@@ -41,7 +41,7 @@ from pydantic import (
 
 from avelorn.tow.schema.psychology import Outcome, PanicCause
 from avelorn.tow.schema.stage import Dice, Stage
-from avelorn.tow.schema.unit import Characteristic
+from avelorn.tow.schema.unit import Characteristic, TroopType
 from avelorn.tow.schema.weapon import WeaponType
 
 # The printed convention for a parameterised rule: the name is filed
@@ -345,6 +345,29 @@ class AttackGate(Gate):
     flaming: bool | None = None
 
 
+class FoeGate(Gate):
+    """A gate on the foe of the attack the bearer is making.
+
+    The mirror of :class:`AttackGate` — that subject describes the attack a
+    model *suffers*, this one the model its own attack lands on. Killing
+    Blow and Cleaving Blow read the foe's troop type ("enemy models whose
+    troop type is infantry or cavalry ..."): ``troop_type`` is the printed
+    list, satisfied by any member. A printed category expands to its
+    sub-types when the entry is authored — the rulebook's own reading
+    ("when the rules refer to Infantry units, Monstrous Infantry must also
+    follow", troop-types-at-a-glance) — so the engine matches one closed
+    vocabulary, never a category tree.
+    """
+
+    troop_type: tuple[TroopType, ...] | None = None
+
+    @model_validator(mode="after")
+    def _asks_something(self) -> "FoeGate":
+        if not self.troop_type:
+            raise ValueError("a foe gate must constrain a property (e.g. troop_type)")
+        return self
+
+
 class When(Gate):
     """An effect's gate: the facts that must hold for it to apply.
 
@@ -374,6 +397,7 @@ class When(Gate):
     wielding: WeaponGate | None = None
     worn: ArmourGate | None = None
     target_of: bool | AttackGate | None = None
+    foe: FoeGate | None = None
     natural: NaturalRoll | None = None
 
     @model_validator(mode="after")
@@ -386,12 +410,13 @@ class When(Gate):
                 self.wielding,
                 self.worn,
                 self.target_of,
+                self.foe,
                 self.natural,
             )
         ):
             raise ValueError(
                 "a when must gate on something: combat, movement, shooting, "
-                "wielding, worn, target_of, or natural"
+                "wielding, worn, target_of, foe, or natural"
             )
         return self
 
@@ -790,8 +815,53 @@ class BarEffect(GatedEffect):
     bars: str  # the printed name of the armour piece barred, e.g. "Shield"
 
 
+class BlowEffect(GatedEffect):
+    """The rulebook's "X Blow" shape: a triggered strike the foe cannot save.
+
+    "If a model with this special rule rolls a natural 6 when making a roll
+    To Wound for an attack made in combat ... the enemy is not permitted an
+    armour save (Ward saves can be attempted as normal)": ``denies`` names
+    the save stages the foe may not attempt on the trigger branch, and
+    ``slays`` escalates the unsaved wound to the rulebook's Instant Kill
+    ("loses all of its remaining Wounds") — Killing Blow sets both, Cleaving
+    Blow denies alone. The ``when`` must carry the natural trigger, on a
+    roll before the denied stage; that a die must show a face is also what
+    keeps the printed automatic-wound exception free — an automatic roll
+    shows no die. Self-naming by ``denies``.
+    """
+
+    denies: Annotated[list[Stage], Field(min_length=1)]
+    slays: bool = False
+
+    @model_validator(mode="after")
+    def _denies_the_armour_save(self) -> "BlowEffect":
+        # The printed blows deny the armour (and Regeneration, which does not
+        # exist) save; a ward denial has no printed rule, so it is a data
+        # error until one needs it, not a note going silently wrong.
+        outside = sorted(str(s) for s in self.denies if s is not Stage.MAKE_ARMOUR_SAVES)
+        if outside:
+            raise ValueError(f"a blow denies the armour save; no printed rule denies: {outside}")
+        return self
+
+    @model_validator(mode="after")
+    def _fires_on_a_natural_face(self) -> "BlowEffect":
+        # The shape is triggered ("rolls a natural 6 ..."), and the trigger's
+        # die must come before the save it denies.
+        if self.natural is None:
+            raise ValueError("a blow fires on a natural face; the when must carry one")
+        if self.natural.roll not in (Stage.ROLL_TO_HIT, Stage.ROLL_TO_WOUND):
+            raise ValueError("a blow's trigger must precede the save it denies")
+        return self
+
+
 RuleEffect = (
-    ModifierEffect | RerollEffect | GrantEffect | ChoiceEffect | AttackMarkEffect | BarEffect
+    ModifierEffect
+    | RerollEffect
+    | GrantEffect
+    | ChoiceEffect
+    | AttackMarkEffect
+    | BarEffect
+    | BlowEffect
 )
 
 

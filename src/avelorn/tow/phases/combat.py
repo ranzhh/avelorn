@@ -59,6 +59,7 @@ from avelorn.tow.engine.rules import (
     ChargeEvent,
     CombatFacts,
     EffectiveValue,
+    FoeFacts,
     GateContext,
     MovementFacts,
     ShootingFacts,
@@ -412,6 +413,7 @@ def _engage(
         save,
         defence.ward.target,
         modifiers,
+        transforms=offence.transforms,
         rerolls=(
             *offence.rerolls.rerolls,
             *offence.weapon_rerolls.rerolls,
@@ -556,11 +558,13 @@ def strike_unit(
         combat=CombatFacts(),
         wielding=striker.weapon_facts,
         worn=_worn_in_combat(striker),
+        foe=FoeFacts(troop_type=target.unit.troop_type),
     )
     target_conditions = GateContext(
         combat=CombatFacts(),
         wielding=target.weapon_facts,
         worn=_worn_in_combat(target),
+        foe=FoeFacts(troop_type=striker.unit.troop_type),
         target_of=AttackFacts(
             kind=AttackKind.CLOSE_COMBAT,
             magical=marks.magical,
@@ -820,6 +824,7 @@ def _combat_conditions(first_round: bool | None, side: Contingent, foe: Continge
         shooting=ShootingFacts(at_long_range=False),
         wielding=side.weapon_facts,
         worn=_worn_in_combat(side),
+        foe=FoeFacts(troop_type=foe.unit.troop_type),
         target_of=AttackFacts(
             kind=AttackKind.CLOSE_COMBAT,
             magical=foe_marks.magical,

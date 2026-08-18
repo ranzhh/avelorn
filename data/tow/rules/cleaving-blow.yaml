@@ -1,0 +1,28 @@
+# Source: https://tow.whfb.app/special-rules/cleaving-blow
+id: cleaving-blow
+name: Cleaving Blow
+page: 32
+category: Special Rules
+flavour: A swift and deadly strike can cleave through the thickest of armour.
+paragraphs:
+  - If a model with this special rule rolls a natural 6 when making a roll To Wound for an attack made in combat, it has struck
+    a 'Cleaving Blow'. Enemy models whose troop type is regular infantry, heavy infantry, light cavalry, heavy cavalry or
+    war beasts are not permitted an armour or Regeneration save against a Cleaving Blow (Ward saves can be attempted as normal).
+  - Note that if an attack wounds automatically, this special rule cannot be used.
+# Hand-authored, diffable against the paragraphs above: Killing Blow's
+# save denial without the slaying, against the five printed troop types.
+effects:
+  - when:
+      combat: true
+      natural:
+        face: 6
+        roll: roll-to-wound
+      foe:
+        troop_type:
+          - Regular Infantry
+          - Heavy Infantry
+          - Light Cavalry
+          - Heavy Cavalry
+          - War Beast
+    denies: [make-armour-saves]
+notes: Regeneration saves do not exist to deny.
