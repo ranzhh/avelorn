@@ -630,19 +630,31 @@ class ModifierEffect(GatedEffect):
     @model_validator(mode="after")
     def _enemy_flips_a_flippable_quantity(self) -> "ModifierEffect":
         # The enemy subject flips a quantity to the other seat of the attack.
-        # Two seams resolve that flip: the dice walk (roll quantities) and the
-        # effective-characteristic query, which folds the foe's enemy-subject
-        # operations wherever both sides are in hand. The remaining value folds
-        # (the armour value, ranks, combat-result points, wards) each fold one
-        # side's own values, so an enemy-subject operation there has no
-        # consumer yet. Forbidden loudly at load until a printed rule needs
-        # one, rather than left to go silently unfactored forever.
+        # The dice walk resolves that flip for every roll quantity, but the
+        # characteristic query folds foe rules only where a caller threads
+        # both sides through it: the melee strike's S and WS, the striking
+        # order's I, and the Break test's Ld. Any other characteristic (T, M,
+        # BS, W, A) has no consumer — an authored ``enemy: {T: -1}`` would
+        # load cleanly and apply nowhere — and the remaining value folds (the
+        # armour value, ranks, combat-result points, wards) fold one side's
+        # own values only. Forbidden loudly at load until a seam threads them,
+        # rather than left to go silently unfactored forever.
         if self.enemy:
-            flippable = (Seam.ROLL, Seam.CHARACTERISTIC)
-            offending = sorted(str(q) for q in self.quantities if seam_of(q) not in flippable)
+            threaded = {
+                Characteristic.STRENGTH,
+                Characteristic.WEAPON_SKILL,
+                Characteristic.INITIATIVE,
+                Characteristic.LEADERSHIP,
+            }
+            offending = sorted(
+                str(q)
+                for q in self.quantities
+                if seam_of(q) is not Seam.ROLL and q not in threaded
+            )
             if offending:
                 raise ValueError(
-                    f"enemy flips a roll or characteristic quantity only, not: {offending}"
+                    "enemy flips a roll quantity or a threaded characteristic "
+                    f"(S, WS, I, Ld) only, not: {offending}"
                 )
         return self
 

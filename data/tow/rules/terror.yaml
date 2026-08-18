@@ -7,7 +7,7 @@ flavour: There are creatures so fierce that their mere appearance can cause the 
 paragraphs:
   - 'Models with this special rule cause Terror. Models that cause Terror also cause Fear:'
   - When a unit that causes Terror declares a charge, the charge target must immediately make a Leadership test. If this test
-    is failed, it must Flee. If this test is passed, it can declare its charge reaction normally.If the winning side of a
+    is failed, it must Flee. If this test is passed, it can declare its charge reaction normally. If the winning side of a
     combat includes one or more units that cause Terror, each unit that belongs to the losing side must apply a -1 modifier
     to its Leadership characteristic when making its Break test.
   - Note that if a charged unit cannot choose to Flee, it does not make this Leadership test.

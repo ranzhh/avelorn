@@ -534,20 +534,23 @@ def test_every_quantity_routes_to_a_seam() -> None:
     }
 
 
-def test_enemy_flips_only_a_roll_or_characteristic_quantity() -> None:
+def test_enemy_flips_only_a_roll_or_threaded_characteristic() -> None:
     """The enemy subject flips a quantity to the other seat of the attack.
 
-    The dice walk resolves the flip for roll quantities and the
-    effective-characteristic query for profile characteristics (Enfeebling
-    Cold's -1 Strength on the foe). An enemy-subject armour-value operation
-    has no consumer (the armour fold folds a side's own save), so it is a
-    data error at load, not a silent unfactored note forever.
+    The dice walk resolves the flip for roll quantities; the characteristic
+    query folds foe rules only where a caller threads both sides — S, WS, I
+    and Ld (Enfeebling Cold's -1 Strength on the foe). Any other enemy
+    quantity has no consumer — an ``enemy: {T: -1}`` would load cleanly and
+    apply nowhere — so it is a data error at load, not a silent unfactored
+    note forever.
     """
     _EFFECT.validate_python({"enemy": True, "add": {"S": -1}})
     _EFFECT.validate_python({"enemy": True, "set": {"I": 1}})
-    with pytest.raises(ValidationError, match="enemy flips a roll or characteristic"):
+    with pytest.raises(ValidationError, match="enemy flips a roll quantity or a threaded"):
+        _EFFECT.validate_python({"enemy": True, "add": {"T": -1}})
+    with pytest.raises(ValidationError, match="enemy flips a roll quantity or a threaded"):
         _EFFECT.validate_python({"enemy": True, "add": {"armour-value": 1}})
-    with pytest.raises(ValidationError, match="enemy flips a roll or characteristic"):
+    with pytest.raises(ValidationError, match="enemy flips a roll quantity or a threaded"):
         _EFFECT.validate_python({"enemy": True, "add": {"fighting-ranks": 1}})
 
 
