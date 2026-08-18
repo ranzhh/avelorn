@@ -772,9 +772,7 @@ def _worn_in_combat(side: Contingent) -> "tuple[ArmourFacts, ...]":
     # weapon in its hands bars (Requires Two Hands' shield). Filtered from the
     # facts as well as the folds, so a gate asking "using a shield" is told
     # the truth about a two-handed wielder.
-    barred = barred_worn(
-        side.in_hand_rules(), side.loadout.rules, GateContext(combat=CombatFacts())
-    )
+    barred = barred_worn(side.in_hand_rules(), GateContext(combat=CombatFacts()))
     return tuple(facts for facts in side.armour_facts if facts.name not in barred.names)
 
 

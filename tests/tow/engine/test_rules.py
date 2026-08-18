@@ -45,7 +45,6 @@ from avelorn.tow.schema.rule import (
     RollResult,
     Rule,
     RuleEffect,
-    UnbarEffect,
     When,
 )
 from avelorn.tow.schema.stage import Side, Stage
@@ -1124,25 +1123,15 @@ def test_a_gated_attack_mark_is_left_unconsumed() -> None:
     assert marks.unit_factored == ()
 
 
-def test_barred_worn_withdraws_under_its_gate_and_a_lift_frees_the_piece() -> None:
-    """Requires Two Hands bars the shield in combat only; an unbar overrides any bar."""
+def test_barred_worn_withdraws_under_its_gate() -> None:
+    """Requires Two Hands bars the shield in combat only; the volley never sees a bar."""
     two_hands = REPO.rules["requires-two-hands"]
-    gift = Rule(
-        id="mutant-appendage",
-        name="Mutant Appendage",
-        paragraphs=["…"],
-        effects=[UnbarEffect(unbars="Shield")],
-    )
 
     melee = GateContext(combat=CombatFacts())
-    barred = barred_worn([two_hands], [], melee)
+    barred = barred_worn([two_hands], melee)
     assert barred.names == {"Shield"}
     assert barred.factored == ("Requires Two Hands",)
 
-    at_range = barred_worn([two_hands], [], GateContext())
+    at_range = barred_worn([two_hands], GateContext())
     assert at_range.names == frozenset()  # combat absent: the shield still counts
     assert at_range.factored == ("Requires Two Hands",)  # honoured, so consumed
-
-    lifted = barred_worn([two_hands], [gift], melee)
-    assert lifted.names == frozenset()
-    assert lifted.lifted == ("Mutant Appendage",)

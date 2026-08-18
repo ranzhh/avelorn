@@ -790,26 +790,8 @@ class BarEffect(GatedEffect):
     bars: str  # the printed name of the armour piece barred, e.g. "Shield"
 
 
-class UnbarEffect(GatedEffect):
-    """The bearer may use a piece of armour whatever bars it.
-
-    The bar's counter, for the rules that change what a model's body can
-    hold — a Gift of Chaos growing the extra arm that wields a two-handed
-    weapon and a shield at once. A model rule: it lifts every bar on the
-    named piece, whichever weapon imposed one. Self-naming by ``unbars``.
-    """
-
-    unbars: str  # the printed name of the armour piece freed, e.g. "Shield"
-
-
 RuleEffect = (
-    ModifierEffect
-    | RerollEffect
-    | GrantEffect
-    | ChoiceEffect
-    | AttackMarkEffect
-    | BarEffect
-    | UnbarEffect
+    ModifierEffect | RerollEffect | GrantEffect | ChoiceEffect | AttackMarkEffect | BarEffect
 )
 
 

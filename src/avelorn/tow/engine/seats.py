@@ -149,7 +149,7 @@ class Defence:
         # A barred piece (Requires Two Hands' shield, in combat) is withdrawn
         # from what the target effectively wears before any value is read —
         # its bonus goes with it whole, whatever its size.
-        barred = barred_worn(weapon_rules_in_use, rules, incoming)
+        barred = barred_worn(weapon_rules_in_use, incoming)
         usable = [piece for piece in armour if piece.name not in barred.names]
         printed = defender_armour(usable)
         unit_fold = effective_armour_value(printed, rules, incoming)
@@ -169,7 +169,7 @@ class Defence:
             modifiers=tuple(compiled.modifiers),
             rerolls=effective_rerolls(rules, incoming, seat=Side.TARGET),
             inapplicable=frozenset(compiled.inapplicable),
-            factored=frozenset({*compiled.factored, *barred.lifted}),
+            factored=frozenset(compiled.factored),
             weapon_factored=frozenset(
                 {*weapon_fold.factored, *weapon_ward.factored, *barred.factored}
             ),

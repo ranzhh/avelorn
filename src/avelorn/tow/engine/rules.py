@@ -58,7 +58,6 @@ from avelorn.tow.schema.rule import (
     Rule,
     RuleEffect,
     Seam,
-    UnbarEffect,
     seam_of,
 )
 from avelorn.tow.schema.stage import Dice, Side, Stage
@@ -746,21 +745,14 @@ def effective_armour_value(
 
 @dataclass(frozen=True)
 class BarredWorn:
-    """The armour pieces a bearer cannot use, and the rules on either side of it.
-
-    ``factored`` names the barring rules (the weapon in use's namespace);
-    ``lifted`` names the bearer's rules whose unbars were consumed (the unit
-    namespace) — an extra arm's, whether or not a bar was there to lift.
-    """
+    """The armour pieces a bearer cannot use, by name, and the rules that bar them."""
 
     names: frozenset[str] = frozenset()
     factored: tuple[str, ...] = ()
-    lifted: tuple[str, ...] = ()
 
 
 def barred_worn(
     weapon_rules: Sequence[Rule],
-    unit_rules: Sequence[Rule] = (),
     conditions: "GateContext | None" = None,
 ) -> BarredWorn:
     """The armour pieces the weapon in use bars the bearer from using.
@@ -769,15 +761,14 @@ def barred_worn(
     where a bearer's usable armour is assembled: a barred piece is withdrawn
     whole — its bonus, whatever its size, and its presence to any gate that
     asks — under the effect's own gate (Requires Two Hands bars the shield
-    in close combat and leaves it counting against shooting). The bearer's
-    own rules may lift a bar (:class:`~avelorn.tow.schema.rule.UnbarEffect`
-    — a Gift of Chaos growing the arm that holds both): a lifted piece stays
-    usable whichever weapon barred it. All-or-nothing per rule, as every
-    fold is; a gate the ``conditions`` cannot answer bars or lifts nothing
-    and leaves its rule unconsumed, reported rather than guessed.
+    in close combat and leaves it counting against shooting). All-or-nothing
+    per rule, as every fold is; a gate the ``conditions`` cannot answer bars
+    nothing and leaves its rule unconsumed, reported rather than guessed.
+    A rule *lifting* a bar (an extra limb) has no printed carrier the site
+    reaches, so no counter-word exists yet; one joins when an entry needs it.
 
     Returns:
-        The barred piece names and the consumed rule names, per side.
+        The barred piece names and the consumed rule names.
     """
     context = _as_context(conditions)
     names: set[str] = set()
@@ -791,17 +782,7 @@ def barred_worn(
             continue
         names.update(effect.bars for effect, when in answers if when)
         factored.append(rule.name)
-    lifted: list[str] = []
-    for rule in unit_rules:
-        unbars = [effect for effect in rule.effects if isinstance(effect, UnbarEffect)]
-        if not unbars:
-            continue
-        answers = [(effect, _gate_applies(effect, context)) for effect in unbars]
-        if any(when is None for _, when in answers):
-            continue
-        names.difference_update(effect.unbars for effect, when in answers if when)
-        lifted.append(rule.name)
-    return BarredWorn(frozenset(names), tuple(factored), tuple(lifted))
+    return BarredWorn(frozenset(names), tuple(factored))
 
 
 @dataclass(frozen=True)
