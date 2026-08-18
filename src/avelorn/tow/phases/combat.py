@@ -71,6 +71,7 @@ from avelorn.tow.engine.rules import (
     effective_combat_result_bonus,
     factored_notes,
     forced_outcome,
+    outcome_substitutions,
 )
 from avelorn.tow.engine.seats import Defence, Offence
 from avelorn.tow.phases.movement import Engagement
@@ -1449,6 +1450,13 @@ def break_test(result: CombatResult, a: Contingent, b: Contingent) -> BreakResul
     b_outcome, b_rule = forced_outcome(b.loadout.rules, Decision.BREAK)
     a_forced = a_outcome if isinstance(a_outcome, BreakOutcome) else None
     b_forced = b_outcome if isinstance(b_outcome, BreakOutcome) else None
+    # A rule may instead replace one rolled outcome with another (Shieldwall's
+    # Give Ground rather than Fall Back in Good Order), gated on the break's
+    # own facts: whether the side was charged this turn (the foe's move) and
+    # what it effectively wears beside the weapon in its hands — a two-handed
+    # wielder's shield is withdrawn, so its wall never forms.
+    a_swaps, a_swap_rules = _break_substitutions(a, b)
+    b_swaps, b_swap_rules = _break_substitutions(b, a)
     logger.debug(
         "break test: Ld %d (a, forced=%s) vs Ld %d (b, forced=%s)",
         a_leadership,
@@ -1458,12 +1466,16 @@ def break_test(result: CombatResult, a: Contingent, b: Contingent) -> BreakResul
     )
     # Relay the fixed-outcome rule's own authored notes (its unmodelled scope),
     # the same generic relay every seam shares — never engine-composed prose.
+    a_claimed = sorted({rule.name for rule in (a_rule, *a_swap_rules) if rule is not None})
+    b_claimed = sorted({rule.name for rule in (b_rule, *b_swap_rules) if rule is not None})
     notes = tuple(
-        note
-        for side, rule in ((a, a_rule), (b, b_rule))
-        if rule is not None
-        for note in factored_notes(
-            side.loadout.rules, {rule.name}, side.unit.name, side.loadout.granted_rules
+        dict.fromkeys(
+            note
+            for side, claimed in ((a, a_claimed), (b, b_claimed))
+            for name in claimed
+            for note in factored_notes(
+                side.loadout.rules, {name}, side.unit.name, side.loadout.granted_rules
+            )
         )
     )
     return BreakResult(
@@ -1472,16 +1484,40 @@ def break_test(result: CombatResult, a: Contingent, b: Contingent) -> BreakResul
             a_leadership,
             deficit=lambda lead: -lead if lead < 0 else None,
             forced=a_forced,
+            substitutions=a_swaps,
         ),
         b=_side_break(
             result.margin,
             b_leadership,
             deficit=lambda lead: lead if lead > 0 else None,
             forced=b_forced,
+            substitutions=b_swaps,
         ),
         p_draw=sum(mass for lead, mass in result.margin.items() if lead == 0),
         notes=notes,
     )
+
+
+def _break_substitutions(
+    side: Contingent, foe: Contingent
+) -> tuple[dict[BreakOutcome, BreakOutcome], list[Rule]]:
+    # The side's outcome substitutions at its Break test, under the break's
+    # own facts. Only Break outcomes route here; a foreign outcome in the
+    # data is left to roll, as a foreign forced outcome is.
+    conditions = GateContext(
+        combat=CombatFacts(was_charged=foe.movement.charge is not None),
+        wielding=side.weapon_facts,
+        worn=_worn_in_combat(side),
+    )
+    swaps: dict[BreakOutcome, BreakOutcome] = {}
+    rules: list[Rule] = []
+    for replaced, taken, rule in outcome_substitutions(
+        side.loadout.rules, Decision.BREAK, conditions
+    ):
+        if isinstance(replaced, BreakOutcome) and isinstance(taken, BreakOutcome):
+            swaps.setdefault(replaced, taken)
+            rules.append(rule)
+    return swaps, rules
 
 
 def _side_break(
@@ -1490,29 +1526,36 @@ def _side_break(
     *,
     deficit: Callable[[int], int | None],
     forced: BreakOutcome | None = None,
+    substitutions: Mapping[BreakOutcome, BreakOutcome] | None = None,
 ) -> SideBreak:
     # Aggregate one side's Break-test outcomes over the rounds it loses.
     # ``deficit(lead)`` is this side's losing margin at signed lead ``lead``,
     # or None when it did not lose (it won, or the combat was drawn) and so
     # takes no test. ``forced`` fixes the outcome (Stubborn): the whole losing
-    # mass goes to that result rather than the rolled split.
-    breaks = falls_back = gives_ground = 0
+    # mass goes to that result rather than the rolled split. ``substitutions``
+    # then replace one outcome with another (Shieldwall's Give Ground rather
+    # than Fall Back in Good Order) — applied after the force, so a Stubborn
+    # Shieldwall unit falls back only where its wall does not hold.
+    outcomes: dict[BreakOutcome, Probability] = {outcome: 0 for outcome in BreakOutcome}
     for lead, mass in margin.items():
         loss = deficit(lead)
         if loss is None:
             continue
-        if forced is BreakOutcome.BREAKS:
-            breaks += mass
-        elif forced is BreakOutcome.FALLS_BACK:
-            falls_back += mass
-        elif forced is BreakOutcome.GIVES_GROUND:
-            gives_ground += mass
+        if forced is not None:
+            outcomes[forced] += mass
         else:
             p_break, p_fall, p_give = _break_outcomes(leadership, loss)
-            breaks += mass * p_break
-            falls_back += mass * p_fall
-            gives_ground += mass * p_give
-    return SideBreak(p_gives_ground=gives_ground, p_falls_back=falls_back, p_breaks=breaks)
+            outcomes[BreakOutcome.BREAKS] += mass * p_break
+            outcomes[BreakOutcome.FALLS_BACK] += mass * p_fall
+            outcomes[BreakOutcome.GIVES_GROUND] += mass * p_give
+    for replaced, taken in (substitutions or {}).items():
+        outcomes[taken] += outcomes[replaced]
+        outcomes[replaced] = 0
+    return SideBreak(
+        p_gives_ground=outcomes[BreakOutcome.GIVES_GROUND],
+        p_falls_back=outcomes[BreakOutcome.FALLS_BACK],
+        p_breaks=outcomes[BreakOutcome.BREAKS],
+    )
 
 
 def _break_outcomes(leadership: int, margin: int) -> tuple[Probability, Probability, Probability]:
