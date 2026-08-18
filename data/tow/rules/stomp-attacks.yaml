@@ -1,0 +1,24 @@
+# Source: https://tow.whfb.app/special-rules/stomp-attacks
+id: stomp-attacks
+name: Stomp Attacks (X)
+page: 177
+category: Special Rules
+flavour: Some creatures are so massive that their sheer bulk is a threat all of its own.
+paragraphs:
+  - The number of Stomp Attacks caused varies from model to model, and will be shown in brackets after the name of this special
+    rule (shown here as 'X'). Often, this is determined by the roll of a dice.
+  - Resolving Stomp Attacks
+  - Stomp Attacks can only be made by a model that is in base contact with the enemy. Stomp Attacks are attacks made in combat
+    that must be made last, after all other attacks have been made, including attacks made at Initiative 1. They hit automatically
+    and use the unmodified Strength of the model making them.
+# Hand-authored, diffable against the paragraphs above.
+effects:
+  - when:
+      combat: true
+    hits: X
+    order: last
+notes: >-
+  "In base contact" is read as the engine reads contact everywhere: every
+  front-rank model stomps, an equally wide foe assumed. The hits land after
+  every Initiative step of the round, so a bearer slain earlier in the round
+  never stomps.
