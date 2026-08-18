@@ -53,6 +53,7 @@ from avelorn.tow.engine.rules import (
     compile_rules,
     effective_armour_value,
     effective_rerolls,
+    effective_ward_target,
     factored_notes,
 )
 from avelorn.tow.schema.psychology import PanicCause
@@ -391,6 +392,11 @@ def shoot_unit(
     defender_armour_value = effective_armour_value(armour_value, defender.loadout.rules, incoming)
     if armour_value is not None:
         armour_value = defender_armour_value.value
+    # The defender's rules may also grant it a ward save against this volley
+    # (Runes of Protection's 6+ vs non-magical attacks), gated on the same
+    # incoming-attack facts. Its own seam: the ward is rolled after the armour
+    # save, and Armour Piercing never moves it (the-shooting-phase/ward-saves).
+    defender_ward = effective_ward_target(defender.loadout.rules, incoming)
     conditions = _engagement_conditions(attacker, chosen, profile, distance, force_short_range)
 
     # Weapon rules with compiled effects join the dice walk; the rest are
@@ -467,6 +473,7 @@ def shoot_unit(
     )
     defender_claimed = {
         *defender_armour_value.factored,
+        *defender_ward.factored,
         *defender_rerolls.factored,
         *defender_compiled.factored,
     }
@@ -513,6 +520,7 @@ def shoot_unit(
         toughness=toughness,
         armour_value=armour_value,
         armour_piercing=profile.armour_piercing,
+        ward_target=defender_ward.target,
         hit_modifier=hit_modifier,
         wounds_per_model=defender_wounds,
         targets=defenders,

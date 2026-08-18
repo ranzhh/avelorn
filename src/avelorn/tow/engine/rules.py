@@ -736,6 +736,71 @@ def effective_armour_value(
 
 
 @dataclass(frozen=True)
+class EffectiveWard:
+    """The ward save a contingent's rules grant it, if any.
+
+    The ward fold's result. ``target`` is the Warding value the model saves
+    on (6 for a printed "6+ Ward save"), or None when nothing grants one —
+    unlike a characteristic there is no base to fall back on, so the absent
+    case is a real value, not a zero. ``factored`` and ``unfactored`` read as
+    on :class:`EffectiveValue`.
+    """
+
+    target: int | None
+    factored: tuple[str, ...] = ()
+    unfactored: tuple[str, ...] = ()
+
+
+def effective_ward_target(
+    rules: Sequence[Rule],
+    conditions: "GateContext | None" = None,
+) -> EffectiveWard:
+    """Fold a defender's rules into the ward save it makes, if any.
+
+    The ward fold, the armour fold's sibling with its own combination rule:
+    each ``ward-save`` set a contingent's rules carry (Runes of Protection's
+    6+ against non-magical attacks) grants a ward at its printed Warding
+    value, gated on the ``conditions`` — the incoming attack's kind and
+    magic among them. Wards never stack: where several grants hold, the
+    best (lowest) target applies. Armour modifiers never reach it — "rules
+    that affect armour values do not affect Warding values"
+    (the-shooting-phase/ward-saves) — which is why this is its own seam
+    rather than a fold into the armour value. All-or-nothing per rule; a
+    rule whose facts the conditions cannot answer is reported unfactored.
+
+    Returns:
+        The best granted ward target — None when no grant holds — with the
+        factored and unfactored rule names.
+    """
+    context = _as_context(conditions)
+    best: int | None = None
+    factored: list[str] = []
+    unfactored: list[str] = []
+    for rule in rules:
+        matching = [
+            (effect, (effect.set_ or {})[Quantity.WARD_SAVE])
+            for effect in rule.effects
+            if isinstance(effect, ModifierEffect) and Quantity.WARD_SAVE in (effect.set_ or {})
+        ]
+        if not matching:
+            continue
+        answers = [(effect, amount, _gate_applies(effect, context)) for effect, amount in matching]
+        if any(
+            amount == "X" or when is None or effect.natural is not None
+            for effect, amount, when in answers
+        ):
+            unfactored.append(rule.name)
+            continue
+        for _, amount, when in answers:
+            if not when or not isinstance(amount, int):
+                continue
+            best = amount if best is None else min(best, amount)
+        factored.append(rule.name)
+        logger.debug("ward-save grant factored: %s -> %s", rule.name, best)
+    return EffectiveWard(best, tuple(factored), tuple(unfactored))
+
+
+@dataclass(frozen=True)
 class EffectiveRerolls:
     """The re-roll grants a contingent's rules confer on the attack it makes.
 

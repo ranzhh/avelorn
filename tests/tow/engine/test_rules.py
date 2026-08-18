@@ -26,11 +26,13 @@ from avelorn.tow.engine.rules import (
     effective_fighting_ranks,
     effective_rerolls,
     effective_supporting_ranks,
+    effective_ward_target,
     printed_rule,
 )
 from avelorn.tow.phases.shooting import shoot_unit
 from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.rule import (
+    ArmourGate,
     AttackKind,
     ChargeGate,
     ModifierEffect,
@@ -995,3 +997,86 @@ def test_compile_another_seams_quantity_is_unfactored_whatever_the_gate_answers(
             compiled = compile_rules([rule.name], index, context, seat=seat)
             assert compiled.unfactored == (rule.name,), f"{described}, {seat}"
             assert compiled.modifiers == ()
+
+
+def test_effective_ward_target_grants_the_best_ward_and_never_stacks() -> None:
+    """Two ward grants do not combine; the best (lowest) Warding value applies.
+
+    A different fold from the armour seam's additive one: 5+ beside 6+ is a
+    5+ ward, never a 4+ (the-shooting-phase/ward-saves; #131).
+    """
+    five = Rule(
+        id="five",
+        name="Five",
+        paragraphs=["…"],
+        effects=[ModifierEffect(set={Quantity.WARD_SAVE: 5})],
+    )
+    six = Rule(
+        id="six",
+        name="Six",
+        paragraphs=["…"],
+        effects=[ModifierEffect(set={Quantity.WARD_SAVE: 6})],
+    )
+    ward = effective_ward_target([six, five])
+    assert ward.target == 5
+    assert set(ward.factored) == {"Five", "Six"}
+    assert ward.unfactored == ()
+
+
+def test_effective_ward_target_is_none_when_nothing_grants_one() -> None:
+    """A unit whose rules grant no ward has no ward, not a ward of zero."""
+    ward = effective_ward_target([REPO.rules["stubborn"]])
+    assert ward.target is None
+    assert ward.factored == ()
+    assert ward.unfactored == ()
+
+
+def test_runes_of_protection_ward_reads_the_incoming_attacks_magic() -> None:
+    """The real entry: a 6+ ward against a non-magical attack, none against a magical one.
+
+    A magical volley (the Bow of Avelorn) answers the gate False: honoured,
+    factored, and no ward granted. An attack whose magic is unknown leaves the
+    rule unfactored, reported rather than guessed.
+    """
+    rule = REPO.rules["runes-of-protection"]
+
+    mundane = GateContext(target_of=AttackFacts(kind=AttackKind.SHOOTING, magical=False))
+    warded = effective_ward_target([rule], mundane)
+    assert warded.target == 6
+    assert warded.factored == ("Runes of Protection",)
+
+    magical = GateContext(target_of=AttackFacts(kind=AttackKind.SHOOTING, magical=True))
+    unwarded = effective_ward_target([rule], magical)
+    assert unwarded.target is None
+    assert unwarded.factored == ("Runes of Protection",)
+
+    unknown = effective_ward_target([rule], GateContext(target_of=AttackFacts()))
+    assert unknown.target is None
+    assert unknown.unfactored == ("Runes of Protection",)
+
+
+def test_a_worn_gated_ward_reads_the_equipment_like_any_other_gate() -> None:
+    """A ward granted by a piece of equipment gates on the armour worn.
+
+    The equipment path of #131: a talisman-shaped rule whose gate names a worn
+    piece grants the ward only while that piece is worn -- the same worn
+    subject Parry reads, so items file as rules and need no armour-schema word.
+    """
+    talisman = Rule(
+        id="talisman",
+        name="Talisman",
+        paragraphs=["…"],
+        effects=[
+            ModifierEffect(
+                set={Quantity.WARD_SAVE: 6},
+                when=When(worn=ArmourGate(name="Shield")),
+            )
+        ],
+    )
+    shielded = GateContext(worn=(ArmourFacts(name="Shield"),))
+    assert effective_ward_target([talisman], shielded).target == 6
+
+    bare = GateContext(worn=())
+    honoured = effective_ward_target([talisman], bare)
+    assert honoured.target is None
+    assert honoured.factored == ("Talisman",)

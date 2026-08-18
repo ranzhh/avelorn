@@ -443,10 +443,11 @@ def test_shoot_unit_gromril_armour_re_rolls_the_targets_save_against_arrows() ->
     Archers (BS4; longbow S3, Armour Bane (1)) shoot Ironbreakers (T4,
     save 3+): hit 3+, wound 5+, and a wound's natural 6 improves Armour
     Piercing by one, so the save is 4+ on that branch and 3+ on the
-    natural 5. Stripped of the rule,
-    p_unsaved = 2/3 * (1/6 * 1/2 + 1/6 * 1/3) = 5/54; re-rolling the
-    save's natural 1s lifts the passes to 7/12 and 7/9, so
-    p_unsaved = 2/3 * (1/6 * 5/12 + 1/6 * 2/9) = 23/324.
+    natural 5, and Runes of Protection wards what passes them on a 6+
+    against the mundane arrows (a further 5/6 factor). Stripped of the
+    re-roll, p_unsaved = 2/3 * (1/6 * 1/2 + 1/6 * 1/3) * 5/6 = 25/324;
+    re-rolling the save's natural 1s lifts the passes to 7/12 and 7/9, so
+    p_unsaved = 2/3 * (1/6 * 5/12 + 1/6 * 2/9) * 5/6 = 115/1944.
     """
     archers, ironbreakers = REPO.units["elven-archers"], REPO.units["ironbreakers"]
     stripped = ironbreakers.model_copy(
@@ -456,8 +457,8 @@ def test_shoot_unit_gromril_armour_re_rolls_the_targets_save_against_arrows() ->
 
     plain = shoot_unit(shooter, _fielded(stripped, 10))
     gromril = shoot_unit(shooter, _fielded(ironbreakers, 10))
-    assert plain.p_unsaved == pytest.approx(5 / 54)
-    assert gromril.p_unsaved == pytest.approx(23 / 324)
+    assert plain.p_unsaved == pytest.approx(25 / 324)
+    assert gromril.p_unsaved == pytest.approx(115 / 1944)
     assert not any("Gromril Armour" in note for note in gromril.notes)
 
 
@@ -533,3 +534,45 @@ def test_shoot_unit_factors_a_missile_profiles_own_re_roll_grant() -> None:
     assert magic.save_target == 4  # a re-roll shifts the probability, not the target
     assert magic.p_unsaved == pytest.approx(43 / 162)
     assert not any("Doctored Bow" in note for note in magic.notes)
+
+
+def test_shoot_unit_grants_the_defenders_ward_against_a_mundane_volley() -> None:
+    """Runes of Protection wards Ironbreakers on a 6+ against ordinary arrows.
+
+    The real entry from the data: a 6+ ward fails 5/6 of the time, so the
+    per-shot unsaved probability is exactly 5/6 of the unwarded one, and the
+    rule is claimed out of the notes -- it is in the math.
+    """
+    archers = REPO.units["elven-archers"]
+    breakers = Contingent.deploy("ironbreakers", 10, data=REPO)
+    stripped_unit = REPO.units["ironbreakers"].model_copy(
+        update={
+            "special_rules": [
+                r for r in REPO.units["ironbreakers"].special_rules if r != "Runes of Protection"
+            ]
+        }
+    )
+    stripped = Contingent.field(stripped_unit, 10, data=REPO)
+
+    warded = shoot_unit(_fielded(archers, 5).wielding("Longbow"), breakers)
+    unwarded = shoot_unit(_fielded(archers, 5).wielding("Longbow"), stripped)
+
+    assert warded.ward_target == 6
+    assert unwarded.ward_target is None
+    assert warded.p_unsaved == pytest.approx(unwarded.p_unsaved * 5 / 6)
+    assert not any("Runes of Protection" in note for note in warded.notes)
+
+
+def test_shoot_unit_denies_the_ward_to_a_magical_volley() -> None:
+    """Runes of Protection reads the incoming attack: the Bow of Avelorn turns it off.
+
+    A magical volley answers the gate False -- honoured, not unfactored -- so
+    no ward is rolled and the rule still never reaches the notes.
+    """
+    sisters = REPO.units["sisters-of-avelorn"]
+    breakers = Contingent.deploy("ironbreakers", 10, data=REPO)
+
+    result = shoot_unit(_fielded(sisters, 5).wielding("Bow of Avelorn"), breakers)
+
+    assert result.ward_target is None
+    assert not any("Runes of Protection" in note for note in result.notes)

@@ -56,6 +56,7 @@ from avelorn.tow.engine.rules import (
     CombatFacts,
     EffectiveRerolls,
     EffectiveValue,
+    EffectiveWard,
     GateContext,
     MovementFacts,
     ShootingFacts,
@@ -64,6 +65,7 @@ from avelorn.tow.engine.rules import (
     effective_characteristic,
     effective_combat_result_bonus,
     effective_rerolls,
+    effective_ward_target,
     factored_notes,
     forced_outcome,
 )
@@ -244,6 +246,10 @@ class _Engagement:
     striker: Contingent
     weapon_skill: EffectiveValue
     target_armour: EffectiveValue
+    # The ward the target's own rules grant it against this strike, folded
+    # from its seat exactly as its armour is: the walk rolls it after the
+    # armour save, untouched by Armour Piercing.
+    target_ward: EffectiveWard
     rerolls: EffectiveRerolls
     # The target's rules read from its seat of this walk — its own save
     # re-rolls, its enemy-subject maluses on the striker's dice.
@@ -263,6 +269,7 @@ class _Engagement:
     hit_target: int
     wound_target: int | None
     save_target: int | None
+    ward_target: int | None
     p_hit: Probability
     p_wound: Probability
     notes: tuple[str, ...]
@@ -330,6 +337,12 @@ def _engage(
     printed_armour = defender_armour(target.loadout.armour)
     target_armour = effective_armour_value(printed_armour, target.loadout.rules, target_conditions)
     armour_value = None if printed_armour is None else target_armour.value
+    # The target's rules may also grant it a ward save against this strike
+    # (Runes of Protection's 6+ vs non-magical attacks), gated on the same
+    # incoming-attack facts its armour rules read. Its own seam: a ward is
+    # rolled after the armour save and Armour Piercing never moves it
+    # (the-shooting-phase/ward-saves).
+    target_ward = effective_ward_target(target.loadout.rules, target_conditions)
     notes: list[str] = []
     # This striker's engagement conditions gate its rules, exactly as a
     # volley's do: a weapon rule whose condition the facts answer is
@@ -428,7 +441,7 @@ def _engage(
         hit,
         wound,
         save,
-        None,
+        target_ward.target,
         modifiers,
         rerolls=(*rerolls.rerolls, *weapon_rerolls.rerolls, *target_rerolls.rerolls),
     )
@@ -449,6 +462,7 @@ def _engage(
         striker=striker,
         weapon_skill=striker_ws,
         target_armour=target_armour,
+        target_ward=target_ward,
         rerolls=rerolls,
         target_rerolls=target_rerolls,
         walk_factored=frozenset(unit_compiled.factored),
@@ -461,6 +475,7 @@ def _engage(
         hit_target=hit,
         wound_target=wound,
         save_target=save,
+        ward_target=target_ward.target,
         p_hit=melee_hit_probability(hit),
         p_wound=wound_probability(wound),
         notes=tuple(notes),
@@ -546,7 +561,7 @@ def strike_unit(
         hit_target=engagement.hit_target,
         wound_target=engagement.wound_target,
         save_target=engagement.save_target,
-        ward_target=None,
+        ward_target=engagement.ward_target,
         p_hit=engagement.p_hit,
         p_wound=engagement.p_wound,
         p_unsaved=engagement.p_unsaved,
@@ -582,6 +597,7 @@ def strike_unit(
                 target,
                 claimed={
                     *engagement.target_armour.factored,
+                    *engagement.target_ward.factored,
                     *engagement.target_rerolls.factored,
                     *engagement.target_walk_factored,
                 },
@@ -1009,6 +1025,7 @@ def fight(
                         *a_combat_result.factored,
                         # a's defensive rules are read while it is b's target
                         *b_strikes.target_armour.factored,
+                        *b_strikes.target_ward.factored,
                         *b_strikes.target_rerolls.factored,
                         *b_strikes.target_rerolls.inapplicable,
                         *b_strikes.target_walk_factored,
@@ -1028,6 +1045,7 @@ def fight(
                         *b_strikes.walk_inapplicable,
                         *b_combat_result.factored,
                         *a_strikes.target_armour.factored,
+                        *a_strikes.target_ward.factored,
                         *a_strikes.target_rerolls.factored,
                         *a_strikes.target_rerolls.inapplicable,
                         *a_strikes.target_walk_factored,
