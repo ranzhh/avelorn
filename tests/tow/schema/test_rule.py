@@ -584,3 +584,31 @@ def test_an_attack_mark_confers_a_property_and_never_revokes_one() -> None:
         _EFFECT.validate_python({"attack": {}})
     with pytest.raises(ValidationError, match="never revoked"):
         _EFFECT.validate_python({"attack": {"flaming": False}})
+
+
+def test_a_blow_fires_on_a_face_and_denies_only_the_armour_save() -> None:
+    """The X Blow shape is triggered, and no printed rule denies any other save."""
+    _EFFECT.validate_python(
+        {
+            "denies": ["make-armour-saves"],
+            "slays": True,
+            "when": {"natural": {"roll": "roll-to-wound", "face": 6}},
+        }
+    )
+    with pytest.raises(ValidationError, match="fires on a natural face"):
+        _EFFECT.validate_python({"denies": ["make-armour-saves"], "when": {"combat": True}})
+    with pytest.raises(ValidationError, match="no printed rule denies"):
+        _EFFECT.validate_python(
+            {"denies": ["ward-saves"], "when": {"natural": {"roll": "roll-to-wound", "face": 6}}}
+        )
+
+
+def test_a_foe_gate_asks_something() -> None:
+    """A foe subject with no property constrains nothing: a data error."""
+    with pytest.raises(ValidationError, match="foe gate must constrain"):
+        _EFFECT.validate_python(
+            {
+                "denies": ["make-armour-saves"],
+                "when": {"natural": {"roll": "roll-to-wound", "face": 6}, "foe": {}},
+            }
+        )

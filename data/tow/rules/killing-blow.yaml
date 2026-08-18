@@ -1,0 +1,37 @@
+# Source: https://tow.whfb.app/special-rules/killing-blow
+id: killing-blow
+name: Killing Blow
+page: 172
+category: Special Rules
+flavour: The most skilled of warriors can slay their enemies with a single deadly blow.
+paragraphs:
+  - If a model with this special rule rolls a natural 6 when making a roll To Wound for an attack made in combat, it has struck
+    a 'Killing Blow'. Enemy models whose troop type is infantry or cavalry are not permitted an armour or Regeneration save
+    against a Killing Blow (Ward saves can be attempted as normal). If an enemy model whose troop type is infantry or cavalry
+    suffers an unsaved wound from a Killing Blow, it loses all of its remaining Wounds.
+  - Note that if an attack wounds automatically, this special rule cannot be used.
+# Hand-authored, diffable against the paragraphs above. "Infantry or
+# cavalry" expands to the categories' printed sub-types (troop-types-in-
+# detail/infantry and /cavalry): the rulebook's own reading is that a
+# category names its sub-types unless excepted. The ward rolls untouched
+# after the denied armour save, and an automatic wound shows no die for
+# the trigger -- both printed clauses fall out of the walk.
+effects:
+  - when:
+      combat: true
+      natural:
+        face: 6
+        roll: roll-to-wound
+      foe:
+        troop_type:
+          - Regular Infantry
+          - Heavy Infantry
+          - Monstrous Infantry
+          - Swarm
+          - Light Cavalry
+          - Heavy Cavalry
+          - Monstrous Cavalry
+          - War Beast
+    denies: [make-armour-saves]
+    slays: true
+notes: Regeneration saves do not exist to deny.

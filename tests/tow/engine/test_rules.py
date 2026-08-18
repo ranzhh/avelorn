@@ -14,6 +14,7 @@ from avelorn.tow.engine.rules import (
     ChargeEvent,
     CombatFacts,
     EffectiveValue,
+    FoeFacts,
     GateContext,
     MovementFacts,
     ShootingFacts,
@@ -48,7 +49,7 @@ from avelorn.tow.schema.rule import (
     When,
 )
 from avelorn.tow.schema.stage import Side, Stage
-from avelorn.tow.schema.unit import Characteristic, Unit
+from avelorn.tow.schema.unit import Characteristic, TroopType, Unit
 from avelorn.tow.schema.weapon import WeaponType
 
 REPO = TOWRepository()
@@ -1163,3 +1164,52 @@ def test_the_phoenix_guards_wards_read_the_attacks_flame_and_take_the_best() -> 
     part = effective_ward_target(rules, unknown_flame)
     assert part.target == 6  # Witness still holds
     assert part.unfactored == ("Blessings of Asuryan",)
+
+
+def test_killing_blow_compiles_by_seat_gate_and_foe() -> None:
+    """The real entry: a transform from the attacker's seat, honoured off its list.
+
+    In combat against infantry it compiles to a walk hook; against a
+    Monstrous Creature (outside the printed "infantry or cavalry") it is
+    honoured with none; a foe never met leaves it unfactored; and from the
+    target's seat it is the other side's business — inapplicable.
+    """
+    index = {"Killing Blow": REPO.rules["killing-blow"]}
+
+    infantry = GateContext(
+        combat=CombatFacts(), foe=FoeFacts(troop_type=TroopType.REGULAR_INFANTRY)
+    )
+    compiled = compile_rules(["Killing Blow"], index, infantry)
+    assert compiled.factored == ("Killing Blow",)
+    assert len(compiled.transforms) == 1
+
+    monster = GateContext(
+        combat=CombatFacts(), foe=FoeFacts(troop_type=TroopType.MONSTROUS_CREATURE)
+    )
+    honoured = compile_rules(["Killing Blow"], index, monster)
+    assert honoured.factored == ("Killing Blow",)
+    assert honoured.transforms == ()
+
+    unknown_foe = compile_rules(["Killing Blow"], index, GateContext(combat=CombatFacts()))
+    assert unknown_foe.unfactored == ("Killing Blow",)
+
+    other_seat = compile_rules(["Killing Blow"], index, infantry, seat=Side.TARGET)
+    assert other_seat.inapplicable == ("Killing Blow",)
+
+
+def test_deflect_shots_wards_only_a_non_magical_shooting_attack() -> None:
+    """The real entry: a 6+ ward against mundane arrows, none in close combat.
+
+    Deflect Shots gates on the incoming attack's kind as well as its magic --
+    what sets it apart from Witness to Destiny's any-attack ward. A melee blow
+    answers the gate False: honoured, factored, and no ward granted.
+    """
+    rule = REPO.rules["deflect-shots"]
+
+    arrows = GateContext(target_of=AttackFacts(kind=AttackKind.SHOOTING, magical=False))
+    assert effective_ward_target([rule], arrows).target == 6
+
+    blows = GateContext(target_of=AttackFacts(kind=AttackKind.CLOSE_COMBAT, magical=False))
+    unwarded = effective_ward_target([rule], blows)
+    assert unwarded.target is None
+    assert unwarded.factored == ("Deflect Shots",)
