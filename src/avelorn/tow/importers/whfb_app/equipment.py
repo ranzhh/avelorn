@@ -175,8 +175,8 @@ def _profile_name(weapon_name: str, raw: str) -> str | None:
 
 def _parse_range(slug: str, raw: object) -> object:
     text = str(raw).strip()
-    if text == "Combat":
-        return "Combat"
+    if text in ("Combat", "N/A"):
+        return text
     if m := _RANGE_INCHES_RE.fullmatch(text):
         return int(m.group(1))
     # e.g. min-max bands ('12"-60"'): not in the schema yet — fail loudly.
