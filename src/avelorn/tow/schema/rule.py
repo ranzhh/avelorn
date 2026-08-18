@@ -373,13 +373,17 @@ class AttackGate(Gate):
     The incoming attack, from the defender's side: its ``kind`` (Lion Cloak
     fires only ``against ... shooting attacks``), whether it is ``magical``
     (Lion Cloak wants non-magical, the reason it does not help against a magical
-    bow), and whether it is ``flaming`` — carries the Flaming Attacks rule.
-    Orthogonal facts — a shooting or a close-combat attack may be either.
+    bow), whether it is ``flaming`` — carries the Flaming Attacks rule — and
+    whether it was fired ``at_long_range`` (Abyssal Cloak deepens the long-range
+    penalty). Orthogonal facts — a shooting or a close-combat attack may be
+    either; the range band belongs to a shot, so the phase fills it there and
+    leaves it unknown elsewhere.
     """
 
     kind: AttackKind | None = None
     magical: bool | None = None
     flaming: bool | None = None
+    at_long_range: bool | None = None
 
 
 class FoeGate(Gate):

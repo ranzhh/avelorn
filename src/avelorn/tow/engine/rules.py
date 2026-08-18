@@ -178,12 +178,14 @@ class AttackFacts:
 
     ``magical`` and ``flaming`` are read from the striker's resolved rules —
     the profile in use's and the unit's own alike (:func:`attack_marks`), as
-    the printed sentences confer either way.
+    the printed sentences confer either way. ``at_long_range`` is the shot's
+    range band, filled by the shooting phase (a close-combat attack has none).
     """
 
     kind: AttackKind | None = None
     magical: bool | None = None
     flaming: bool | None = None
+    at_long_range: bool | None = None
 
 
 @dataclass(frozen=True)
