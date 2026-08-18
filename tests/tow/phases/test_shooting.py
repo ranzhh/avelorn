@@ -576,6 +576,8 @@ def test_shoot_unit_denies_the_ward_to_a_magical_volley() -> None:
 
     assert result.ward_target is None
     assert not any("Runes of Protection" in note for note in result.notes)
+    # The bow's mark is in the facts, so it is claimed, never "not factored".
+    assert not any("not factored: Magical Attacks" in note for note in result.notes)
 
 
 # --- cavalry: a ridden target is shot as its rider; a ridden shooter fires as one ---
@@ -614,3 +616,18 @@ def test_shoot_unit_with_cavalry_fires_the_riders_ballistic_skill() -> None:
 
     assert result.shots == 5
     assert result.hit_target == 3
+
+
+def test_shoot_unit_leaves_a_two_handed_wielders_shield_counting() -> None:
+    """Requires Two Hands withdraws the shield in the Combat phase alone.
+
+    "(a shield can still be used against wounds caused by shooting)": the
+    same doctored great-weapon wielder saves arrows on its full 5+.
+    """
+    spearmen = REPO.units["elven-spearmen"]
+    two_handed = spearmen.model_copy(update={"equipment": [*spearmen.equipment, "Great Weapon"]})
+    greatswords = Contingent.field(two_handed, 10, data=REPO).wielding("Great Weapon")
+
+    result = shoot_unit(_fielded(REPO.units["elven-archers"], 5).wielding("Longbow"), greatswords)
+
+    assert result.save_target == 5

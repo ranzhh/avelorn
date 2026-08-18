@@ -1,0 +1,23 @@
+# Source: https://tow.whfb.app/special-rules/requires-two-hands
+id: requires-two-hands
+name: Requires Two Hands
+page: 176
+category: Special Rules
+flavour: Many weapons are unwieldy, requiring a firm two-handed grip in order to use effectively.
+paragraphs:
+  - A model cannot use a shield alongside a weapon with this special rule during the Combat phase (a shield can still be used
+    against wounds caused by shooting or magic during other phases of the game).
+# Hand-authored, diffable against the paragraph above: while the weapon is
+# in use in the Combat phase, the shield does not count -- expressed as
+# undoing its +1 armour value improvement, exact for the one printed Shield.
+# Consumed from the bearer's weapon in use, so no gate names the weapon.
+effects:
+  - when:
+      combat: true
+      worn:
+        name: Shield
+    add:
+      armour-value: -1
+notes: That the model simply cannot use the shield alongside the weapon is equipment
+  legality (#17); here the shield's bonus is withdrawn in combat and kept against
+  shooting, as printed.

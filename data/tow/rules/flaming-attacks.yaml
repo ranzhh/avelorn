@@ -1,0 +1,21 @@
+# Source: https://tow.whfb.app/special-rules/flaming-attacks
+id: flaming-attacks
+name: Flaming Attacks
+page: 169
+category: Special Rules
+flavour: Fire is a fearsome thing on the battlefield, but some creatures are more vulnerable to it than others.
+paragraphs:
+  - Any attack made or hits caused by a model with this special rule, or made using a weapon or spell with this special rule,
+    is a 'Flaming' attack. In addition, a model with this special rule causes Fear in models whose troop type is war beasts
+    or swarms.
+  - Unless otherwise stated, a model with this special rule makes Flaming attacks both when shooting and in combat (though
+    any spells cast by the model are unaffected, as are any attacks made with magic weapons they might be wielding).
+# Hand-authored, diffable against the paragraph above: the bearer's attacks
+# are Flaming, read by the incoming-attack gates from the profile in use and
+# the unit's rules alike.
+effects:
+  - attack:
+      flaming: true
+notes: The Fear it causes in war beasts and swarms is psychology, not modelled. A model-level
+  carrier wielding a magic weapon should not make Flaming attacks with that weapon, which
+  nothing expresses yet; the corpus prints the rule on weapons alone, where no caveat applies.

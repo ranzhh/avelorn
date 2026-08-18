@@ -21,10 +21,12 @@ from dataclasses import dataclass
 from avelorn.tow.engine.armour import defender_armour
 from avelorn.tow.engine.attack import Modifier
 from avelorn.tow.engine.rules import (
+    EffectiveMarks,
     EffectiveRerolls,
     EffectiveValue,
     EffectiveWard,
     GateContext,
+    attack_marks,
     compile_rules,
     effective_armour_value,
     effective_rerolls,
@@ -47,6 +49,11 @@ class Offence:
     ``weapon_unfactored`` are the weapon rules the walk could not factor;
     the caller filters them against what its other seams claimed (the
     attack count, the Initiative read, the shot count) before noting.
+    ``marks`` is what the attacks *are* — magical, Flaming — read from the
+    same two sources (:func:`~avelorn.tow.engine.rules.attack_marks`); the
+    consumed rules are already claimed out of ``factored`` and
+    ``weapon_unfactored``, so a mark in the facts is never also reported
+    unfactored.
     """
 
     modifiers: tuple[Modifier, ...]
@@ -55,6 +62,7 @@ class Offence:
     factored: frozenset[str]
     inapplicable: frozenset[str]
     weapon_unfactored: tuple[str, ...]
+    marks: EffectiveMarks
 
     @classmethod
     def resolve(
@@ -75,13 +83,19 @@ class Offence:
         index = {rule.name: rule for rule in rules}
         unit_compiled = compile_rules(list(index), index, conditions, grants=grants)
         in_use = [weapon_rules[name] for name in profile.special_rules if name in weapon_rules]
+        marks = attack_marks(profile.special_rules, weapon_rules, rules)
         return cls(
             modifiers=(*weapon_compiled.modifiers, *unit_compiled.modifiers),
             rerolls=effective_rerolls(rules, conditions, seat=Side.ATTACKER),
             weapon_rerolls=effective_rerolls(in_use, conditions, seat=Side.ATTACKER),
-            factored=frozenset(unit_compiled.factored),
+            factored=frozenset({*unit_compiled.factored, *marks.unit_factored}),
             inapplicable=frozenset(unit_compiled.inapplicable),
-            weapon_unfactored=(*weapon_compiled.unfactored, *weapon_compiled.inapplicable),
+            weapon_unfactored=tuple(
+                name
+                for name in (*weapon_compiled.unfactored, *weapon_compiled.inapplicable)
+                if name not in marks.weapon_factored
+            ),
+            marks=marks,
         )
 
 
@@ -103,6 +117,11 @@ class Defence:
     rerolls: EffectiveRerolls
     factored: frozenset[str]
     inapplicable: frozenset[str]
+    # The rules of the target's own weapon in use this seat consumed — a
+    # two-handed weapon denying the shield (Requires Two Hands), a magic
+    # weapon warding its wielder. A weapon-rule namespace of its own, so the
+    # bearer's weapon notes claim these, never the unit-rule notes.
+    weapon_factored: frozenset[str] = frozenset()
 
     @classmethod
     def resolve(
@@ -112,26 +131,38 @@ class Defence:
         rules: Sequence[Rule],
         grants: Mapping[str, Rule],
         incoming: "GateContext | None" = None,
+        weapon_rules_in_use: Sequence[Rule] = (),
     ) -> "Defence":
         """Resolve a target's seat against an incoming attack.
 
         Every fold runs even for a bare target — each is the seam that
         owns its rules' disposition, and skipping one would leave a rule
-        unspoken for.
+        unspoken for. The unit's rules fold first and the weapon in use's
+        (``weapon_rules_in_use`` — Requires Two Hands lives there) on the
+        result, each in its own claim namespace; wards never stack, so the
+        best of the two sources' grants applies.
 
         Returns:
             The seat, folded under the target's ``incoming`` facts.
         """
         printed = defender_armour(armour)
-        armour_fold = effective_armour_value(printed, rules, incoming)
+        unit_fold = effective_armour_value(printed, rules, incoming)
+        after_unit = None if printed is None else unit_fold.value
+        weapon_fold = effective_armour_value(after_unit, weapon_rules_in_use, incoming)
+        unit_ward = effective_ward_target(rules, incoming)
+        weapon_ward = effective_ward_target(weapon_rules_in_use, incoming)
+        granted = [t for t in (unit_ward.target, weapon_ward.target) if t is not None]
         index = {rule.name: rule for rule in rules}
         compiled = compile_rules(list(index), index, incoming, seat=Side.TARGET, grants=grants)
         return cls(
-            armour_value=None if printed is None else armour_fold.value,
-            armour=armour_fold,
-            ward=effective_ward_target(rules, incoming),
+            armour_value=None if printed is None else weapon_fold.value,
+            armour=EffectiveValue(weapon_fold.value, unit_fold.factored, unit_fold.unfactored),
+            ward=EffectiveWard(
+                min(granted) if granted else None, unit_ward.factored, unit_ward.unfactored
+            ),
             modifiers=tuple(compiled.modifiers),
             rerolls=effective_rerolls(rules, incoming, seat=Side.TARGET),
             factored=frozenset(compiled.factored),
             inapplicable=frozenset(compiled.inapplicable),
+            weapon_factored=frozenset({*weapon_fold.factored, *weapon_ward.factored}),
         )

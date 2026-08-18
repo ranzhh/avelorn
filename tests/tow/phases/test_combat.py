@@ -1496,3 +1496,48 @@ def test_mount_initiative_reads_the_mount_row_plus_the_charge_bonus() -> None:
     spearmen = _fielded(REPO.units["elven-spearmen"], 5)
     with pytest.raises(ValueError, match="rides nothing"):
         mount_initiative(spearmen)
+
+
+def test_a_unit_whose_own_rule_marks_its_attacks_magical_denies_the_ward() -> None:
+    """Magical Attacks as a unit rule reaches the blows of any weapon it swings.
+
+    The printed sentence confers from the model as well as the weapon. A
+    doctored unit carrying the rule strikes Ironbreakers: Runes of
+    Protection's non-magical gate answers False, so no ward -- where the
+    plain unit faces the 6+.
+    """
+    spearmen = REPO.units["elven-spearmen"]
+    marked = spearmen.model_copy(
+        update={"special_rules": [*spearmen.special_rules, "Magical Attacks"]}
+    )
+    breakers = Contingent.deploy("ironbreakers", 10, data=REPO).wielding("Hand Weapon")
+
+    enchanted = strike_unit(_fielded(marked, 10).wielding("Thrusting Spear"), breakers)
+    plain = strike_unit(_fielded(spearmen, 10).wielding("Thrusting Spear"), breakers)
+
+    assert enchanted.ward_target is None
+    assert plain.ward_target == 6
+    assert not any("not factored: Magical Attacks" in n for n in enchanted.notes)
+
+
+def test_requires_two_hands_withdraws_the_shield_in_combat_only() -> None:
+    """A two-handed wielder loses its shield's +1 in melee and keeps it against arrows.
+
+    The real entry, consumed from the bearer's weapon in use: shielded
+    spearmen (5+) wielding a Great Weapon save on 6+ against blows. In a
+    full round the rule is in the math and claimed; a one-sided strike never
+    resolves the striker's own defence, so there it honestly stays noted.
+    """
+    spearmen = REPO.units["elven-spearmen"]
+    two_handed = spearmen.model_copy(update={"equipment": [*spearmen.equipment, "Great Weapon"]})
+    greatswords = _fielded(two_handed, 10).wielding("Great Weapon")
+    spears = _fielded(spearmen, 10).wielding("Thrusting Spear")
+
+    struck = strike_unit(spears, greatswords)
+    assert struck.save_target == 6  # the shield's +1 withdrawn in combat
+
+    both = fight(greatswords, spears)
+    assert not any("Requires Two Hands" in note for note in both.notes)
+
+    one_sided = strike_unit(greatswords, spears)
+    assert any("weapon rule not factored: Requires Two Hands" in note for note in one_sided.notes)

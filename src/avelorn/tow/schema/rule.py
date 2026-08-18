@@ -334,13 +334,15 @@ class AttackGate(Gate):
     """A gate on the attack a model is the target of.
 
     The incoming attack, from the defender's side: its ``kind`` (Lion Cloak
-    fires only ``against ... shooting attacks``) and whether it is ``magical``
+    fires only ``against ... shooting attacks``), whether it is ``magical``
     (Lion Cloak wants non-magical, the reason it does not help against a magical
-    bow). Orthogonal facts — a shooting or a close-combat attack may be magical.
+    bow), and whether it is ``flaming`` — carries the Flaming Attacks rule.
+    Orthogonal facts — a shooting or a close-combat attack may be either.
     """
 
     kind: AttackKind | None = None
     magical: bool | None = None
+    flaming: bool | None = None
 
 
 class When(Gate):
@@ -730,7 +732,48 @@ class ChoiceEffect(GatedEffect):
         return {decision.value: outcome.value for decision, outcome in forces.items()}
 
 
-RuleEffect = ModifierEffect | RerollEffect | GrantEffect | ChoiceEffect
+class AttackMarks(BaseModel):
+    """The properties a rule stamps on the attacks its bearer makes.
+
+    One optional flag per property of the incoming-attack facts a defender's
+    gates read (:class:`AttackGate`, ``kind`` excepted — what kind an attack
+    is belongs to the phase resolving it, never to a rule). A mark is only
+    ever conferred: an unmarked attack is already not magical, so a False
+    here would say nothing and is a data error.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    magical: bool | None = None
+    flaming: bool | None = None
+
+    @model_validator(mode="after")
+    def _confers_something(self) -> "AttackMarks":
+        set_flags = [flag for flag in (self.magical, self.flaming) if flag is not None]
+        if not set_flags:
+            raise ValueError("a mark must confer a property: magical or flaming")
+        if not all(set_flags):
+            raise ValueError("a mark is conferred, never revoked: only true is meaningful")
+        return self
+
+
+class AttackMarkEffect(GatedEffect):
+    """Classify the attacks the bearer makes: they are Magical, or Flaming.
+
+    The vocabulary for the rules that modify no quantity but change what an
+    attack *is* — "any attack made by a model with this special rule, or
+    made using a weapon with this special rule, is a 'Magical' attack". The
+    fact producers consume it when they build the incoming-attack facts a
+    defender's gates read (Lion Cloak's non-magical armour bonus, a ward's
+    flame gate), from the striker's unit rules and the profile in use
+    alike. Self-naming by ``attack`` (the peer of ``add`` / ``reroll`` /
+    ``grants`` / ``forces``); each model forbids the others' keys.
+    """
+
+    attack: AttackMarks
+
+
+RuleEffect = ModifierEffect | RerollEffect | GrantEffect | ChoiceEffect | AttackMarkEffect
 
 
 def references_parameter(effect: RuleEffect) -> bool:

@@ -19,6 +19,7 @@ from avelorn.tow.engine.rules import (
     ShootingFacts,
     WeaponFacts,
     _gate_applies,
+    attack_marks,
     compile_rules,
     effective_armour_value,
     effective_characteristic,
@@ -34,6 +35,8 @@ from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.rule import (
     ArmourGate,
     AttackKind,
+    AttackMarkEffect,
+    AttackMarks,
     ChargeGate,
     ModifierEffect,
     NaturalRoll,
@@ -1080,3 +1083,40 @@ def test_a_worn_gated_ward_reads_the_equipment_like_any_other_gate() -> None:
     honoured = effective_ward_target([talisman], bare)
     assert honoured.target is None
     assert honoured.factored == ("Talisman",)
+
+
+def test_attack_marks_read_the_profile_in_use_and_the_unit_rules_alike() -> None:
+    """The printed sentence confers either way: a marked weapon, or a marked model.
+
+    Real entries: the Bow of Avelorn's profile prints Magical Attacks, and the
+    Drakegun's prints Flaming Attacks. A unit whose own special rule is the
+    mark carries it onto any weapon it swings. The consumed names come back
+    per source, so each claims its own namespace's note.
+    """
+    magical = REPO.rules["magical-attacks"]
+    weapon_rules = {"Magical Attacks": magical}
+
+    by_weapon = attack_marks(["Magical Attacks"], weapon_rules, [])
+    assert by_weapon.magical and not by_weapon.flaming
+    assert by_weapon.weapon_factored == ("Magical Attacks",)
+    assert by_weapon.unit_factored == ()
+
+    by_unit = attack_marks([], {}, [REPO.rules["flaming-attacks"]])
+    assert by_unit.flaming and not by_unit.magical
+    assert by_unit.unit_factored == ("Flaming Attacks",)
+
+    unmarked = attack_marks([], {}, [REPO.rules["stubborn"]])
+    assert not unmarked.magical and not unmarked.flaming
+
+
+def test_a_gated_attack_mark_is_left_unconsumed() -> None:
+    """A mark carrying a `when` cannot be honoured while the facts are being built."""
+    gated = Rule(
+        id="doctored",
+        name="Doctored",
+        paragraphs=["…"],
+        effects=[AttackMarkEffect(attack=AttackMarks(magical=True), when=When(combat=True))],
+    )
+    marks = attack_marks([], {}, [gated])
+    assert not marks.magical
+    assert marks.unit_factored == ()
