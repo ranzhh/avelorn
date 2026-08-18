@@ -1,0 +1,19 @@
+# Source: https://tow.whfb.app/special-rules/blessings-of-asuryan
+id: blessings-of-asuryan
+name: Blessings of Asuryan
+page: 184
+category: Special Rules
+flavour: The most devoted servants of Asuryan seem to blaze with a fiery intensity borne of unshakeable faith. In battle,
+  such faith is rewarded by the Creator God of the Elves.
+paragraphs:
+  - A model with this special rule has a 5+ Ward save against any wounds suffered that were caused by an attack that has the
+    Flaming Attacks special rule.
+# Hand-authored, diffable against the paragraph above: a 5+ ward granted
+# against an attack carrying the Flaming Attacks rule, read off the
+# attacking profile's printed names as the magical fact is.
+effects:
+  - when:
+      target_of:
+        flaming: true
+    set:
+      ward-save: 5

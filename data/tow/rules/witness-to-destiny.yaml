@@ -1,0 +1,19 @@
+# Source: https://tow.whfb.app/special-rules/witness-to-destiny
+id: witness-to-destiny
+name: Witness to Destiny
+page: 165
+category: Special Rules
+flavour: Cursed with the knowledge of their own demise, the Phoenix Guard are able to effortlessly avoid the mundane weapons
+  of the enemy with a disturbing ease.
+paragraphs:
+  - This unit has a 6+ Ward save against any wounds suffered that were caused by a non-magical enemy attack.
+# Hand-authored, diffable against the paragraph above: a 6+ ward granted
+# against a non-magical attack. Every attack the engine resolves is an
+# enemy's, so the sentence's "enemy attack" adds no further gate; wounds
+# from spells are not modelled at all, so nothing over-applies.
+effects:
+  - when:
+      target_of:
+        magical: false
+    set:
+      ward-save: 6
