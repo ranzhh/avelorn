@@ -33,6 +33,7 @@ from avelorn.tow.engine.attack import (
     Outcome,
     Reroll,
     Roll,
+    RollState,
     RollToHitCombat,
     RollToWound,
     Transform,
@@ -58,6 +59,7 @@ from avelorn.tow.engine.rules import (
     AttackFacts,
     ChargeEvent,
     CombatFacts,
+    EffectiveHits,
     EffectiveValue,
     FoeFacts,
     GateContext,
@@ -67,6 +69,7 @@ from avelorn.tow.engine.rules import (
     attack_marks,
     barred_worn,
     compile_rules,
+    effective_automatic_hits,
     effective_characteristic,
     effective_combat_result_bonus,
     factored_notes,
@@ -76,7 +79,7 @@ from avelorn.tow.engine.rules import (
 from avelorn.tow.engine.seats import Defence, Offence
 from avelorn.tow.phases.movement import Engagement
 from avelorn.tow.schema.psychology import BreakOutcome
-from avelorn.tow.schema.rule import AttackKind, Decision, Rule
+from avelorn.tow.schema.rule import AttackKind, Decision, HitOrder, Rule
 from avelorn.tow.schema.unit import Characteristic, Profile, ProfileRole
 from avelorn.tow.schema.weapon import Weapon
 
@@ -300,6 +303,17 @@ class _Engagement:
         thinned = self.striker.remove_casualties(self.striker.models - survivors)
         return thinned.mount_attacks() if self.as_mount else thinned.melee_attacks()
 
+    def attack_counts(self, survivors: int) -> Distribution[int]:
+        """The blows as a distribution — certain here, dice-driven for an automatic batch.
+
+        The shape the Initiative walk consumes (see
+        :class:`_AutomaticEngagement`, whose counts genuinely vary).
+
+        Returns:
+            The certainty of :meth:`attacks`.
+        """
+        return Distribution.pure(self.attacks(survivors))
+
 
 def _engage(
     striker: Contingent,
@@ -498,6 +512,99 @@ def _as_conditions(conditions: "GateContext | None") -> GateContext:
     # A context to derive the mount's from; None (all facts unknown) stands in
     # as the empty context, exactly as the evaluator reads it.
     return conditions if conditions is not None else GateContext()
+
+
+@dataclass(frozen=True)
+class _AutomaticEngagement:
+    """One side's batch of automatic hits, landing outside the Initiative-ordered blows.
+
+    The Stomp Attacks / Impact Hits batch: every front-rank model — the
+    engine's "in base contact", as everywhere — causes ``per_model`` hits
+    that skip the Roll to Hit and wound at the model's unmodified Strength
+    against the foe's resolved defence. The walk consumes it through the
+    same shape as an :class:`_Engagement` (:meth:`attack_counts`,
+    ``p_unsaved`` / ``p_kill`` / ``target_wounds``); what differs is that
+    the count is genuinely a distribution, dice-driven where a printed
+    Attacks value is certain.
+    """
+
+    striker: Contingent
+    per_model: Distribution[int]
+    p_unsaved: Probability
+    p_kill: Probability
+    target_wounds: int
+
+    def attack_counts(self, survivors: int) -> Distribution[int]:
+        """The hits ``survivors`` of the striking models cause.
+
+        The front rank of the thinned body stomps — each model's counts
+        summing as independent dice, so two chariots' D6s convolve rather
+        than double one die.
+
+        Returns:
+            The exact hit-count distribution.
+        """
+        thinned = self.striker.remove_casualties(self.striker.models - survivors)
+        models = thinned.formation.front_ranks(1)
+        counts: Distribution[int] = Distribution.pure(0)
+        for _ in range(models):
+            counts = counts + self.per_model
+        return counts
+
+
+def _automatic_engage(
+    striker: Contingent,
+    target: Contingent,
+    order: HitOrder,
+    *,
+    conditions: "GateContext | None" = None,
+    target_conditions: "GateContext | None" = None,
+) -> "tuple[_AutomaticEngagement | None, EffectiveHits]":
+    # The automatic-hits batch a side's rules land at ``order`` (Impact Hits
+    # ahead of every Initiative step, Stomp Attacks after them all), or None
+    # when no hits hold. The hits skip the Roll to Hit and wound at the
+    # model's unmodified Strength — the printed characteristic, no weapon
+    # profile and no modifier — with no Armour Piercing (the rules print
+    # none); the target's resolved defence (armour improved by its own
+    # rules, ward, save re-rolls, enemy-subject maluses) stands as for any
+    # attack it suffers. The fold comes back whole so the caller claims its
+    # factored names and reports its unfactored ones.
+    fold = effective_automatic_hits(striker.loadout.rules, order, conditions)
+    if all(count == 0 for count in fold.per_model.mass):
+        return None, fold
+    strength = striker.unit.main[Characteristic.STRENGTH]
+    toughness = target.unit.main[Characteristic.TOUGHNESS]
+    if strength is None:
+        raise ValueError(f"{striker.unit.name} has no Strength; its automatic hits cannot wound")
+    if toughness is None:
+        raise ValueError(f"{target.unit.name} has no Toughness; it cannot be wounded")
+    defence = Defence.resolve(
+        armour=target.loadout.armour,
+        rules=target.loadout.rules,
+        grants=target.loadout.granted_rules,
+        incoming=target_conditions,
+        weapon_rules_in_use=target.in_hand_rules(),
+    )
+    resolution = resolve_attack(
+        AttackProfile.melee(
+            hit_target=RollState.AUTOMATIC,
+            wound_target=roll_target(wound_target(strength, toughness)),
+            save_target=roll_target(armour_save_target(defence.armour_value, 0)),
+            ward_target=roll_target(defence.ward.target),
+        ),
+        defence.modifiers,
+        rerolls=defence.rerolls.rerolls,
+    )
+    return (
+        _AutomaticEngagement(
+            striker=striker,
+            per_model=fold.per_model,
+            p_unsaved=resolution.p_unsaved,
+            p_kill=resolution.p_of(Outcome.INSTANT_KILL),
+            target_wounds=target.unit.main[Characteristic.WOUNDS] or 1,
+        ),
+        fold,
+    )
 
 
 def strike_unit(
@@ -1097,12 +1204,33 @@ def fight(
     # file at the side's effective Initiative, the mounts — a second set of
     # attacks the walk resolves when their value is reached
     # (the-combat-phase/split-profiles-combat) — at the mount row's own.
-    a_batches: list[tuple[int, _Engagement]] = [(a_initiative.value, a_strikes)]
+    a_batches: list[tuple[int, _Engagement | _AutomaticEngagement]] = [
+        (a_initiative.value, a_strikes)
+    ]
     if a_mount_strikes is not None:
         a_batches.append((mount_initiative(a, a_bonus).value, a_mount_strikes))
-    b_batches: list[tuple[int, _Engagement]] = [(b_initiative.value, b_strikes)]
+    b_batches: list[tuple[int, _Engagement | _AutomaticEngagement]] = [
+        (b_initiative.value, b_strikes)
+    ]
     if b_mount_strikes is not None:
         b_batches.append((mount_initiative(b, b_bonus).value, b_mount_strikes))
+    # The automatic-hits batches a side's rules land outside the Initiative
+    # order (Impact Hits, Stomp Attacks), each at its printed point of the
+    # round — the sentinel steps the walk sorts with every other batch. The
+    # folds come back whole so each side claims what they factored below.
+    a_hits_folds: list[EffectiveHits] = []
+    b_hits_folds: list[EffectiveHits] = []
+    for batches, folds, side, foe, conditions, foe_conditions in (
+        (a_batches, a_hits_folds, a, b, a_conditions, b_conditions),
+        (b_batches, b_hits_folds, b, a, b_conditions, a_conditions),
+    ):
+        for order, step in ((HitOrder.FIRST, _OPENING_STEP), (HitOrder.LAST, _CLOSING_STEP)):
+            batch, fold = _automatic_engage(
+                side, foe, order, conditions=conditions, target_conditions=foe_conditions
+            )
+            folds.append(fold)
+            if batch is not None:
+                batches.append((step, batch))
     # Each side's rule-granted combat-result points, summed under its facts
     # (Massed Infantry's +1 when it outnumbers): folded here, added to the
     # score in combat_result, and claimed out of the notes below.
@@ -1160,6 +1288,7 @@ def fight(
                         *(name for s in a_own for name in s.offence.rerolls.inapplicable),
                         *(name for s in a_own for name in s.offence.factored),
                         *(name for s in a_own for name in s.offence.inapplicable),
+                        *(name for fold in a_hits_folds for name in fold.factored),
                         *a_combat_result.factored,
                         # a's defensive rules are read while it is b's target
                         *(name for s in b_own for name in s.defence.armour.factored),
@@ -1181,6 +1310,7 @@ def fight(
                         *(name for s in b_own for name in s.offence.rerolls.inapplicable),
                         *(name for s in b_own for name in s.offence.factored),
                         *(name for s in b_own for name in s.offence.inapplicable),
+                        *(name for fold in b_hits_folds for name in fold.factored),
                         *b_combat_result.factored,
                         *(name for s in a_own for name in s.defence.armour.factored),
                         *(name for s in a_own for name in s.defence.ward.factored),
@@ -1231,25 +1361,36 @@ def fight(
     )
 
 
-def _fell(engagements: Sequence[_Engagement], fighters: int, *, targets: int) -> Distribution[int]:
+def _fell(
+    engagements: "Sequence[_Engagement | _AutomaticEngagement]", fighters: int, *, targets: int
+) -> Distribution[int]:
     # Casualties inflicted on the target by ``fighters`` models striking, over
     # every batch the models throw at this step (a lone rank-and-file batch,
-    # or riders and mounts sharing an Initiative). The batches' wounds pool
-    # before the fold to models and the size cap — the unit-level steps.
-    # Zero-mass counts drop on the way in, which is what lets the folds below
-    # skip unreachable branches without testing for them.
+    # or riders and mounts sharing an Initiative). Each batch's attack count
+    # is a distribution — certain for a printed Attacks value, dice-driven for
+    # an automatic-hits batch — so the counts' joint mixes over the batched
+    # fold: wounds pool before the fold to models and the size cap, the
+    # unit-level steps. Zero-mass counts drop on the way in, which is what
+    # lets the folds below skip unreachable branches without testing for them.
     if not engagements:
         return Distribution.pure(0)
-    batches = [
-        AttackBatch(e.attacks(fighters), p_unsaved=e.p_unsaved, p_kill=e.p_kill)
-        for e in engagements
-    ]
-    _, casualties = batched_wound_and_casualties(
-        batches,
-        wounds_per_model=engagements[0].target_wounds,
-        targets=targets,
-    )
-    return Distribution.from_counts(casualties)
+    counts: Distribution[tuple[int, ...]] = Distribution.pure(())
+    for engagement in engagements:
+        counts = counts.combine(engagement.attack_counts(fighters), lambda ns, n: (*ns, n))
+
+    def felled(ns: tuple[int, ...]) -> Distribution[int]:
+        batches = [
+            AttackBatch(n, p_unsaved=e.p_unsaved, p_kill=e.p_kill)
+            for e, n in zip(engagements, ns, strict=True)
+        ]
+        _, casualties = batched_wound_and_casualties(
+            batches,
+            wounds_per_model=engagements[0].target_wounds,
+            targets=targets,
+        )
+        return Distribution.from_counts(casualties)
+
+    return counts >> felled
 
 
 def _strikes_first(initiative_a: int, initiative_b: int) -> bool | None:
@@ -1261,10 +1402,20 @@ def _strikes_first(initiative_a: int, initiative_b: int) -> bool | None:
 
 
 # One side's attack batches, each at the Initiative it strikes at: the
-# rank-and-file batch, plus the mount batch for a ridden unit. The round
+# rank-and-file batch, plus the mount batch for a ridden unit, plus any
+# automatic-hits batch a rule lands outside the Initiative order. The round
 # walks the Initiative values downward and resolves every batch when its
 # value is reached (the-combat-phase/who-strikes-first; split-profiles-combat).
-_Batches = Sequence[tuple[int, _Engagement]]
+_Batches = Sequence[tuple[int, "_Engagement | _AutomaticEngagement"]]
+
+# Where the automatic-hits batches land in that walk. Effective Initiative is
+# capped at 10 and floored at 0, so the sentinels sort clear of every real
+# step: Impact Hits ahead of them all — "resolved against the charged unit
+# when the combat is chosen ... before issuing challenges" — and Stomp
+# Attacks after them all — "must be made last, after all other attacks have
+# been made, including attacks made at Initiative 1".
+_OPENING_STEP = 11
+_CLOSING_STEP = -1
 
 
 class _Alive(NamedTuple):
@@ -1296,7 +1447,9 @@ def _round_joint(
 
 
 def _step_joint(
-    alive: _Alive, a_now: Sequence[_Engagement], b_now: Sequence[_Engagement]
+    alive: _Alive,
+    a_now: "Sequence[_Engagement | _AutomaticEngagement]",
+    b_now: "Sequence[_Engagement | _AutomaticEngagement]",
 ) -> Distribution[_Alive]:
     # One Initiative step from one branch of the round: every batch whose value
     # is reached strikes at once, from the models its side still has, so the two
