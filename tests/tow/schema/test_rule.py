@@ -704,11 +704,18 @@ def test_dice_quantity_rejects_other_text(printed: str) -> None:
 
 
 def test_a_wound_multiplier_is_a_constant_a_die_or_the_parameter() -> None:
-    """Multiple Wounds' shape: a printed number, a per-wound die, or the "X"."""
+    """Multiple Wounds' shape: a printed number, a per-wound die, or the "X".
+
+    A dice multiplier is a :class:`DiceQuantity`, bound from the bracketed
+    parameter exactly as an automatic-hits count is — bare dice text is no
+    value at all.
+    """
     assert _EFFECT.validate_python({"multiplies": 2}).multiplies == 2
-    assert _EFFECT.validate_python({"multiplies": "D3"}).multiplies == "D3"
     assert _EFFECT.validate_python({"multiplies": "X"}).multiplies == "X"
+    assert _EFFECT.validate_python(
+        {"multiplies": DiceQuantity(sides=3)}
+    ).multiplies == DiceQuantity(sides=3)
     with pytest.raises(ValidationError, match="says nothing"):
         _EFFECT.validate_python({"multiplies": 1})
     with pytest.raises(ValidationError):
-        _EFFECT.validate_python({"multiplies": "D4"})
+        _EFFECT.validate_python({"multiplies": "D3"})

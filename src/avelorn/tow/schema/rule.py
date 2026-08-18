@@ -989,10 +989,10 @@ class WoundMultiplierEffect(GatedEffect):
 
     "Each unsaved wound inflicted by an attack with this special rule is
     multiplied by the number shown in brackets" — ``multiplies`` is that
-    number: a printed constant, a die ("D3", rolled separately for each
-    unsaved wound, so a distribution and never an expectation), or the
-    rule's "X" parameter, bound from the bracketed value exactly as a
-    modifier's amounts are. The printed cap — "excess wounds caused to a
+    number: a printed constant, a :class:`DiceQuantity` ("D3", rolled
+    separately for each unsaved wound, so a distribution and never an
+    expectation), or the rule's "X" parameter, bound from the bracketed
+    value exactly as an automatic-hits count is. The printed cap — "excess wounds caused to a
     model will have no additional effect", and they "do not 'spill over'
     onto other models" — is not authored here: it is the Remove Casualties
     fold's own knowledge, where a wound lands on a model with so many
@@ -1000,7 +1000,7 @@ class WoundMultiplierEffect(GatedEffect):
     the others' keys.
     """
 
-    multiplies: int | Literal["D3", "D6", "X"]
+    multiplies: int | DiceQuantity | Literal["X"]
 
     @model_validator(mode="after")
     def _multiplies_meaningfully(self) -> "WoundMultiplierEffect":

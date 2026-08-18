@@ -4,7 +4,9 @@ from fractions import Fraction
 from typing import Literal
 
 import pytest
+from pydantic import ValidationError
 
+from avelorn.core.distribution import Distribution
 from avelorn.core.registry import Registry
 from avelorn.tow.contingent import Contingent, Movement
 from avelorn.tow.data import TOWRepository
@@ -32,6 +34,7 @@ from avelorn.tow.engine.rules import (
     effective_rerolls,
     effective_supporting_ranks,
     effective_ward_target,
+    effective_wound_multiplier,
     printed_rule,
 )
 from avelorn.tow.phases.shooting import shoot_unit
@@ -53,6 +56,7 @@ from avelorn.tow.schema.rule import (
     Rule,
     RuleEffect,
     When,
+    WoundMultiplierEffect,
 )
 from avelorn.tow.schema.stage import Side, Stage
 from avelorn.tow.schema.unit import Characteristic, TroopType, Unit
@@ -1421,3 +1425,36 @@ def test_effective_automatic_hits_unbound_parameter_is_unfactored() -> None:
     )
     assert fold.unfactored == ("Stomp Attacks (X)",)
     assert fold.per_model.mass == {0: 1}
+
+
+def test_printed_rule_substitutes_a_dice_multiplier() -> None:
+    """A dice parameter binds the multiplier; a numeric-only amount stays unbound."""
+    rule = printed_rule("Multiple Wounds (D3)", REPO.rules)
+    assert rule is not None
+    assert rule.name == "Multiple Wounds (D3)"
+    effect = rule.effects[0]
+    assert isinstance(effect, WoundMultiplierEffect)
+    assert effect.multiplies == DiceQuantity(sides=3)
+    # A die has no place in a modifier's numeric amount: the "X" stays
+    # unbound and the rule rides along unfactored, never misread.
+    bane = printed_rule("Armour Bane (D3)", REPO.rules)
+    assert bane is not None
+    assert "X" in bane.effects[0].add.values()
+
+
+def test_effective_wound_multiplier_reads_the_printed_value() -> None:
+    """The casualty seam's fold: a constant is certain, a D3 uniform, a bare X unfactored."""
+    two = printed_rule("Multiple Wounds (2)", REPO.rules)
+    d3 = printed_rule("Multiple Wounds (D3)", REPO.rules)
+    assert two is not None and d3 is not None
+
+    constant = effective_wound_multiplier([two])
+    assert constant.wounds == Distribution.pure(2)
+    assert constant.factored == ("Multiple Wounds (2)",)
+
+    die = effective_wound_multiplier([d3])
+    assert die.wounds == Distribution({1: Fraction(1, 3), 2: Fraction(1, 3), 3: Fraction(1, 3)})
+
+    unbound = effective_wound_multiplier([REPO.rules["multiple-wounds"]])
+    assert unbound.wounds is None
+    assert unbound.unfactored == ("Multiple Wounds (X)",)
