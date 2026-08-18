@@ -984,6 +984,33 @@ class BlowEffect(GatedEffect):
         return self
 
 
+class WoundMultiplierEffect(GatedEffect):
+    """The rulebook's Multiple Wounds shape: each unsaved wound is multiplied.
+
+    "Each unsaved wound inflicted by an attack with this special rule is
+    multiplied by the number shown in brackets" — ``multiplies`` is that
+    number: a printed constant, a die ("D3", rolled separately for each
+    unsaved wound, so a distribution and never an expectation), or the
+    rule's "X" parameter, bound from the bracketed value exactly as a
+    modifier's amounts are. The printed cap — "excess wounds caused to a
+    model will have no additional effect", and they "do not 'spill over'
+    onto other models" — is not authored here: it is the Remove Casualties
+    fold's own knowledge, where a wound lands on a model with so many
+    Wounds remaining. Self-naming by ``multiplies``; each model forbids
+    the others' keys.
+    """
+
+    multiplies: int | Literal["D3", "D6", "X"]
+
+    @model_validator(mode="after")
+    def _multiplies_meaningfully(self) -> "WoundMultiplierEffect":
+        # Multiplying each wound by one changes nothing — a data error, not
+        # a rule honoured silently as a no-op.
+        if isinstance(self.multiplies, int) and self.multiplies < 2:
+            raise ValueError("multiplying each unsaved wound by less than 2 says nothing")
+        return self
+
+
 class VolleyEffect(GatedEffect):
     """Volley Fire's printed mechanic: rear ranks join the volley by halves.
 
@@ -1091,6 +1118,7 @@ RuleEffect = (
     | AttackMarkEffect
     | BarEffect
     | BlowEffect
+    | WoundMultiplierEffect
     | VolleyEffect
     | ReplaceEffect
     | HitsEffect

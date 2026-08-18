@@ -701,3 +701,14 @@ def test_dice_quantity_parses_the_printed_forms(printed: str, sides: int, plus: 
 def test_dice_quantity_rejects_other_text(printed: str) -> None:
     """Text outside the printed dice forms is no quantity at all."""
     assert DiceQuantity.parse(printed) is None
+
+
+def test_a_wound_multiplier_is_a_constant_a_die_or_the_parameter() -> None:
+    """Multiple Wounds' shape: a printed number, a per-wound die, or the "X"."""
+    assert _EFFECT.validate_python({"multiplies": 2}).multiplies == 2
+    assert _EFFECT.validate_python({"multiplies": "D3"}).multiplies == "D3"
+    assert _EFFECT.validate_python({"multiplies": "X"}).multiplies == "X"
+    with pytest.raises(ValidationError, match="says nothing"):
+        _EFFECT.validate_python({"multiplies": 1})
+    with pytest.raises(ValidationError):
+        _EFFECT.validate_python({"multiplies": "D4"})
