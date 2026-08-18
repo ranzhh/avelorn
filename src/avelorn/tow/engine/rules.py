@@ -66,6 +66,7 @@ from avelorn.tow.schema.rule import (
     Rule,
     RuleEffect,
     Seam,
+    VolleyEffect,
     seam_of,
 )
 from avelorn.tow.schema.stage import Dice, Side, Stage
@@ -119,6 +120,7 @@ class ShootingFacts:
     """The evaluated facts of the volley — the values behind a ShootingGate."""
 
     at_long_range: bool | None = None
+    stand_and_shoot: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -854,6 +856,52 @@ def barred_worn(
         names.update(effect.bars for effect, when in answers if when)
         factored.append(rule.name)
     return BarredWorn(frozenset(names), tuple(factored))
+
+
+@dataclass(frozen=True)
+class EffectiveVolley:
+    """Whether the rear ranks join the volley, and the rules behind the answer.
+
+    ``fires`` holds when a consumed :class:`~avelorn.tow.schema.rule.VolleyEffect`'s
+    gate does; ``factored`` / ``unfactored`` read as on
+    :class:`EffectiveValue` — a factored rule includes one honoured with no
+    extra shots (the unit moved, or the volley is a Stand & Shoot).
+    """
+
+    fires: bool = False
+    factored: tuple[str, ...] = ()
+    unfactored: tuple[str, ...] = ()
+
+
+def effective_volley(
+    rules: Sequence[Rule], conditions: "GateContext | None" = None
+) -> EffectiveVolley:
+    """Fold the weapon in use's rules into the volley's rear-rank participation.
+
+    The shot-count sibling of the supporting-rank query: Volley Fire lands
+    on how many models fire, never on the dice, so the volley resolver reads
+    it here and adds half of each rear rank, rounding up, when it holds.
+    All-or-nothing per rule; a gate the ``conditions`` cannot answer is
+    reported unfactored.
+
+    Returns:
+        The participation with the factored and unfactored rule names.
+    """
+    context = _as_context(conditions)
+    fires = False
+    factored: list[str] = []
+    unfactored: list[str] = []
+    for rule in rules:
+        volleys = [effect for effect in rule.effects if isinstance(effect, VolleyEffect)]
+        if not volleys:
+            continue
+        answers = [_gate_applies(effect, context) for effect in volleys]
+        if any(answer is None for answer in answers):
+            unfactored.append(rule.name)
+            continue
+        fires = fires or any(answers)
+        factored.append(rule.name)
+    return EffectiveVolley(fires, tuple(factored), tuple(unfactored))
 
 
 @dataclass(frozen=True)
