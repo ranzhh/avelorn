@@ -7,6 +7,7 @@ import pytest
 from avelorn.tow.contingent import Contingent, Movement
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.engine.attack import AttackProfile, Outcome, RollState, Transform
+from avelorn.tow.muster import Complement
 from avelorn.tow.phases.shooting import _engagement_conditions, shoot, shoot_unit
 from avelorn.tow.schema.rule import RerollEffect, RollResult, Rule
 from avelorn.tow.schema.stage import Stage
@@ -436,6 +437,25 @@ def test_shoot_unit_skirmishers_impose_minus_one_to_hit_on_the_shooter() -> None
     # lives only in granted_rules, and its Unit Strength scope is authored
     # there, not on the granting rule.
     assert any("Unit Strength 1" in note for note in skirmishing.notes)
+
+
+def test_shoot_unit_skirmish_formation_option_imposes_the_same_penalty() -> None:
+    """The Skirmish Formation option reaches Enemy Fire (Skirmishers) too.
+
+    Ship's Company buys the formation as an option rather than printing the
+    Skirmishers rule, so the grant hangs off the formation's own entry: the
+    mustered unit is a point harder to hit than the same unit without it.
+    """
+    company = REPO.units["ships-company"]
+    shooter = _fielded(REPO.units["elven-archers"], 5).wielding("Longbow")
+    formed = Contingent.field(Complement(unit=company, size=10), data=REPO)
+    skirmishing = Contingent.field(
+        Complement(unit=company, size=10, options=["Skirmish Formation"]), data=REPO
+    )
+
+    assert (
+        shoot_unit(shooter, skirmishing).hit_target == shoot_unit(shooter, formed).hit_target + 1
+    )
 
 
 def test_shoot_unit_gromril_armour_re_rolls_the_targets_save_against_arrows() -> None:

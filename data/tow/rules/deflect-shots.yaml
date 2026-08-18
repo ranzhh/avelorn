@@ -1,0 +1,20 @@
+# Source: https://tow.whfb.app/special-rules/deflect-shots
+id: deflect-shots
+name: Deflect Shots
+page: 164
+category: Special Rules
+flavour: It is said that, as the Swordmasters advance into battle, their blades blur and weave faster than the eyes of the
+  enemy can see, knocking aside arrows in mid-flight.
+paragraphs:
+  - A model with this special rule has a 6+ Ward save against any wounds suffered that were caused by a non-magical shooting
+    attack.
+# Hand-authored, diffable against the paragraph above: a 6+ ward granted
+# against a non-magical shooting attack -- the same incoming-attack gate
+# Lion Cloak reads, on the ward seam instead of the armour value.
+effects:
+  - when:
+      target_of:
+        kind: shooting
+        magical: false
+    set:
+      ward-save: 6
