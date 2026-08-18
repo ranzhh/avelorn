@@ -28,8 +28,6 @@ options:
     points: 2
     per_model: true
     adds_equipment: [Shortbow]
-  # The gained side of "Replace cavalry spears with shortbows" is prose, not a
-  # link, so the importer wrote the plural; corrected to the entry's name (#33).
   - name: Shortbows
     kind: equipment
     points: 1

@@ -81,3 +81,52 @@ def test_copies_that_disagree_fail_the_load_naming_both(tmp_path: Path) -> None:
     stale = TOWRepository(data_dir=tmp_path / "data")
     with pytest.raises(ValueError, match=r"unit 'elven-archers' differs between .*\(on: points\)"):
         _ = stale.units
+
+
+def test_printed_references_are_spelled_as_their_entries() -> None:
+    """A reference that is a loose variant of an existing entry is a data error.
+
+    The engine resolves printed names exactly, on purpose; the importer
+    canonicalises what it writes against the corpus as it stands. What
+    neither can catch is time: an entry imported *after* the files that
+    reference it leaves those files spelling it as the site did. This is
+    where that fails loudly — a reference matching an entry up to case or a
+    trailing plural "s" without matching it exactly names the file to
+    re-import. A reference matching nothing is not an offence: its entry may
+    simply not exist yet, which the coverage and unfactored reports own.
+    """
+    from avelorn.tow.importers.whfb_app.canon import canonical
+    from avelorn.tow.schema.rule import GrantEffect
+
+    equipment = {item.name for item in (*REPO.weapons.values(), *REPO.armoury.values())}
+    rules = {rule.name for rule in REPO.rules.values()}
+
+    references: list[tuple[str, str, set[str]]] = []
+    for unit in REPO.units.values():
+        for name in unit.equipment:
+            references.append((unit.id, name, equipment))
+        for name in unit.special_rules:
+            references.append((unit.id, name, rules))
+        for option in unit.options:
+            for name in (*option.adds_equipment, *option.removes_equipment):
+                references.append((unit.id, name, equipment))
+            for name in (*option.adds_rules, *option.removes_rules):
+                references.append((unit.id, name, rules))
+    for weapon in REPO.weapons.values():
+        for profile in weapon.profiles:
+            for name in profile.special_rules:
+                references.append((weapon.id, name, rules))
+    for troop_type in REPO.troop_types.values():
+        for name in troop_type.special_rules:
+            references.append((troop_type.id, name, rules))
+    for rule in REPO.rules.values():
+        for effect in rule.effects:
+            if isinstance(effect, GrantEffect):
+                references.append((rule.id, effect.grants, rules))
+
+    offences = [
+        f"{owner}: {name!r} should be spelled {found!r}"
+        for owner, name, names in references
+        if name not in names and (found := canonical(name, names)) is not None
+    ]
+    assert offences == []

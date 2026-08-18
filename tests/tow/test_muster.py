@@ -95,3 +95,19 @@ def test_complement_unit_wide_options_unaffected(spearmen_with_a_sentinel_option
     mustered = Complement(unit=spearmen_with_a_sentinel_option, size=10, options=["Shieldwall"])
     assert "Shieldwall" in mustered.special_rules
     assert "Ithilmar Blade" not in mustered.equipment
+
+
+def test_the_reavers_replace_option_swaps_the_spear_for_the_shortbow() -> None:
+    """The canonicalised Shortbows option arms the Shortbow and drops the spear.
+
+    The option is printed "Replace cavalry spears with shortbows"; the
+    importer canonicalises its prose plural against the corpus, so the
+    mustered loadout carries the real entry — the regression that needed a
+    hand-edit before the importer learned to spell references as filed.
+    """
+    from avelorn.tow.contingent import Contingent
+
+    reavers = Contingent.deploy("ellyrian-reavers", 5, ["Shortbows"], data=REPO)
+    carried = [weapon.name for weapon in reavers.loadout.weapons]
+    assert "Shortbow" in carried
+    assert "Cavalry Spear" not in carried
