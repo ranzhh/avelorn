@@ -27,6 +27,8 @@ from pathlib import Path
 
 from avelorn.core.loading import load_yaml
 from avelorn.core.logging import configure_logging
+from avelorn.tow.data import TOWRepository
+from avelorn.tow.importers.whfb_app.canon import canonical_unit, canonical_weapon
 from avelorn.tow.importers.whfb_app.client import BASE_URL, WhfbAppClient, WhfbAppError
 from avelorn.tow.importers.whfb_app.equipment import parse_armour, parse_weapon
 from avelorn.tow.importers.whfb_app.parse import UnsupportedUnit, WhfbParseError, parse_unit
@@ -91,7 +93,7 @@ def main(argv: list[str] | None = None) -> int:
     client = WhfbAppClient()
     try:
         if args.command == "check":
-            ok = _check(client, args.paths or [args.data_dir])
+            ok = _check(client, args.paths or [args.data_dir], data_dir=args.data_dir)
         elif args.command == "unit":
             ok = _import_unit(client, args.slug, args.army, args.data_dir, args.dry_run)
         elif args.command == "army":
@@ -112,6 +114,22 @@ def main(argv: list[str] | None = None) -> int:
 _SOURCE_RE = re.compile(r"\A# Source: (\S+)")
 
 
+def _corpus_names(data_dir: Path) -> tuple[set[str], set[str]]:
+    """The canonical names an import's references are spelt against.
+
+    Loaded fresh from ``data_dir`` so an import canonicalises against the
+    corpus as it stands — including whatever this run already wrote.
+
+    Returns:
+        The equipment names (weapons and armour together) and the rule
+        entry names.
+    """
+    corpus = TOWRepository(data_dir=data_dir)
+    equipment = {item.name for item in (*corpus.weapons.values(), *corpus.armoury.values())}
+    rules = {rule.name for rule in corpus.rules.values()}
+    return equipment, rules
+
+
 def _data_files(paths: Sequence[Path]) -> list[Path]:
     """Expand the requested paths into the YAML files under them.
 
@@ -124,7 +142,9 @@ def _data_files(paths: Sequence[Path]) -> list[Path]:
     return files
 
 
-def _rerender(client: WhfbAppClient, path: Path, url: str) -> tuple[str, str, list[str]] | None:
+def _rerender(
+    client: WhfbAppClient, path: Path, url: str, *, data_dir: Path
+) -> tuple[str, str, list[str]] | None:
     """Render one data file both as held and as the site now states it.
 
     The kind comes from where the file sits in the tree, and the page from
@@ -143,14 +163,22 @@ def _rerender(client: WhfbAppClient, path: Path, url: str) -> tuple[str, str, li
     kind = path.parent.name
     slug = url.rsplit("/", 1)[-1]
     if kind == "units":
-        unit = parse_unit(client.unit_entry(slug))
+        result = parse_unit(client.unit_entry(slug))
+        equipment, rules = _corpus_names(data_dir)
+        unit, fixes = canonical_unit(result.unit, equipment=equipment, rules=rules)
         held = unit_to_yaml(load_yaml(path, Unit), source_url=url)
-        return held, unit_to_yaml(unit.unit, source_url=url), unit.warnings
+        return held, unit_to_yaml(unit, source_url=url), [*result.warnings, *fixes]
     if kind == "weapons":
         result = parse_weapon(client.weapons_of_war_entry(slug))
-        weapon, merge_warnings = with_hand_authored(result.weapon, path)
+        _, rules = _corpus_names(data_dir)
+        fresh, fixes = canonical_weapon(result.weapon, rules=rules)
+        weapon, merge_warnings = with_hand_authored(fresh, path)
         held = weapon_to_yaml(load_yaml(path, Weapon), source_url=url)
-        return held, weapon_to_yaml(weapon, source_url=url), [*result.warnings, *merge_warnings]
+        return (
+            held,
+            weapon_to_yaml(weapon, source_url=url),
+            [*result.warnings, *fixes, *merge_warnings],
+        )
     if kind == "armour":
         armour = parse_armour(client.weapons_of_war_entry(slug))
         held = armour_to_yaml(load_yaml(path, Armour), source_url=url)
@@ -168,7 +196,7 @@ def _rerender(client: WhfbAppClient, path: Path, url: str) -> tuple[str, str, li
     return None
 
 
-def _check(client: WhfbAppClient, paths: Sequence[Path]) -> bool:
+def _check(client: WhfbAppClient, paths: Sequence[Path], *, data_dir: Path) -> bool:
     """Report which files a re-import would change, writing nothing.
 
     Each file is re-imported into memory and compared with what is on
@@ -195,7 +223,7 @@ def _check(client: WhfbAppClient, paths: Sequence[Path]) -> bool:
             continue
         url = source.group(1)
         try:
-            rendered = _rerender(client, path, url)
+            rendered = _rerender(client, path, url, data_dir=data_dir)
         except (WhfbAppError, WhfbParseError, UnsupportedUnit) as err:
             # A finding, not a crash: one line rather than a traceback, since
             # on a sweep the file and the reason are the whole report. The
@@ -247,7 +275,11 @@ def _import_equipment(
     try:
         if kind == "weapon":
             result = parse_weapon(entry)
-            weapon, merge_warnings = with_hand_authored(result.weapon, path)
+            _, rules = _corpus_names(data_dir)
+            fresh, fixes = canonical_weapon(result.weapon, rules=rules)
+            for fix in fixes:
+                logger.info("%s: %s", slug, fix)
+            weapon, merge_warnings = with_hand_authored(fresh, path)
             text = weapon_to_yaml(weapon, source_url=url)
         else:
             result = parse_armour(entry)
@@ -326,7 +358,11 @@ def _write_unit(entry: dict, army: str, data_dir: Path, dry_run: bool) -> bool:
         return False
     for warning in result.warnings:
         logger.warning("%s: %s", slug, warning)
-    text = unit_to_yaml(result.unit, source_url=f"{BASE_URL}/unit/{slug}")
+    equipment, rules = _corpus_names(data_dir)
+    unit, fixes = canonical_unit(result.unit, equipment=equipment, rules=rules)
+    for fix in fixes:
+        logger.info("%s: %s", slug, fix)
+    text = unit_to_yaml(unit, source_url=f"{BASE_URL}/unit/{slug}")
     if dry_run:
         print(text)  # generated YAML is the program's payload -> stdout
         return True

@@ -62,13 +62,13 @@ def held(tmp_path: Path) -> Path:
 
 def test_check_passes_when_the_page_still_matches(held: Path, capsys) -> None:
     """A file the site still agrees with reports no drift and prints nothing."""
-    assert importer._check(_StubClient(6), [held.parent]) is True
+    assert importer._check(_StubClient(6), [held.parent], data_dir=held.parents[2]) is True
     assert capsys.readouterr().out == ""
 
 
 def test_check_reports_a_changed_page_as_a_diff(held: Path, capsys) -> None:
     """A changed value fails the check and shows the difference both ways."""
-    assert importer._check(_StubClient(5), [held]) is False
+    assert importer._check(_StubClient(5), [held], data_dir=held.parents[2]) is False
     printed = capsys.readouterr().out
     assert "-armour_value: 6" in printed
     assert "+armour_value: 5" in printed
@@ -86,7 +86,7 @@ def test_check_ignores_formatting_and_hand_authored_comments(tmp_path: Path, cap
         "id: light-armour\n"  # same data, different order, quoting and comments
         "armour_value:   6\n"
     )
-    assert importer._check(_StubClient(6), [path]) is True
+    assert importer._check(_StubClient(6), [path], data_dir=tmp_path) is True
     assert capsys.readouterr().out == ""
 
 
@@ -95,14 +95,14 @@ def test_check_leaves_hand_authored_files_alone(tmp_path: Path) -> None:
     path = tmp_path / "troop-type.yaml"
     path.write_text("name: Heavy Infantry\n")
     client = _StubClient(6)
-    assert importer._check(client, [path]) is True
+    assert importer._check(client, [path], data_dir=tmp_path) is True
     assert client.calls == 0
 
 
 def test_check_writes_nothing(held: Path) -> None:
     """The check is read-only: the file on disk is untouched by drift."""
     before = held.read_text()
-    importer._check(_StubClient(5), [held])
+    importer._check(_StubClient(5), [held], data_dir=held.parents[2])
     assert held.read_text() == before
 
 
