@@ -628,6 +628,92 @@ def test_effective_characteristic_agreeing_sets_apply_once() -> None:
     assert set(result.factored) == {"A", "B"}
 
 
+# --- the foe's enemy-subject operations, folded into the bearer's read ---
+
+
+def _enemy_strength_malus(
+    name: str = "Doctored Cold", when: dict[str, object] | None = None
+) -> Rule:
+    # The Enfeebling Cold shape: "enemy models suffer a -1 modifier to their
+    # Strength characteristic (to a minimum of 1)".
+    payload: dict[str, object] = {
+        "enemy": True,
+        "add": {Characteristic.STRENGTH: -1},
+        "minimum": 1,
+    }
+    if when is not None:
+        payload["when"] = when
+    effect = ModifierEffect.model_validate(payload)
+    return Rule(id="doctored-cold", name=name, paragraphs=["…"], effects=[effect])
+
+
+def test_effective_characteristic_folds_the_foes_enemy_malus() -> None:
+    """A foe's enemy-subject malus lands on this read, named apart for the foe."""
+    result = effective_characteristic(
+        3, Characteristic.STRENGTH, [], foe_rules=[_enemy_strength_malus()]
+    )
+    assert result.value == 2
+    assert result.factored == ()
+    assert result.foe_factored == ("Doctored Cold",)
+    assert result.foe_unfactored == ()
+
+
+def test_effective_characteristic_minimum_floors_the_malus() -> None:
+    """The printed "(to a minimum of 1)" stops the malus at the floor."""
+    result = effective_characteristic(
+        1, Characteristic.STRENGTH, [], foe_rules=[_enemy_strength_malus()]
+    )
+    assert result.value == 1
+
+
+def test_effective_characteristic_own_fold_skips_enemy_subject_effects() -> None:
+    """A bearer's own enemy-subject effect is the foe's business, not its own read.
+
+    Carried in ``rules``, it moves nothing and appears in neither own list —
+    the fold that offers it as ``foe_rules`` is the one that owns it.
+    """
+    result = effective_characteristic(3, Characteristic.STRENGTH, [_enemy_strength_malus()])
+    assert result.value == 3
+    assert result.factored == ()
+    assert result.unfactored == ()
+
+
+def test_effective_characteristic_foe_set_cancels_own_set() -> None:
+    """A foe's enemy-subject set disagrees with the bearer's own: both cancel.
+
+    Strike First (own, to 10) against an aura's Strike Last on its foes
+    (enemy-subject, to 1): the two resolve as one fold, so the base stands —
+    each honoured, just to no effect.
+    """
+    aura = Rule(
+        id="doctored-aura",
+        name="Doctored Aura",
+        paragraphs=["…"],
+        effects=[ModifierEffect.model_validate({"enemy": True, "set": {"I": 1}})],
+    )
+    result = effective_characteristic(
+        4, Characteristic.INITIATIVE, [_set_initiative(10, "Set High")], foe_rules=[aura]
+    )
+    assert result.value == 4
+    assert result.factored == ("Set High",)
+    assert result.foe_factored == ("Doctored Aura",)
+
+
+def test_effective_characteristic_foe_unknown_gate_is_foe_unfactored() -> None:
+    """A foe's malus gated on a fact its own conditions cannot answer is reported."""
+    gated = _enemy_strength_malus(when={"combat": {"first_round": True}})
+    result = effective_characteristic(
+        3,
+        Characteristic.STRENGTH,
+        [],
+        foe_rules=[gated],
+        foe_conditions=GateContext(combat=CombatFacts()),
+    )
+    assert result.value == 3
+    assert result.foe_factored == ()
+    assert result.foe_unfactored == ("Doctored Cold",)
+
+
 def test_set_is_unfactored_at_the_walk() -> None:
     """A set reaching the dice walk belongs to another seam — unfactored, not applied.
 

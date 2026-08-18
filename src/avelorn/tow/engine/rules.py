@@ -715,11 +715,19 @@ class EffectiveValue:
     False). ``unfactored`` names the rules with a matching modifier the
     conditions could not answer (or an unbound parameter); their change
     is *not* in the value, and the caller reports them.
+
+    ``foe_factored`` / ``foe_unfactored`` are the same two lists for the
+    *foe's* enemy-subject modifiers ("enemy models suffer a -1 modifier to
+    their Strength characteristic"), folded into the same value when the
+    caller offers the foe's rules — names of the foe's rules, so the caller
+    routes them to the foe's claim set, never the bearer's.
     """
 
     value: int
     factored: tuple[str, ...] = ()
     unfactored: tuple[str, ...] = ()
+    foe_factored: tuple[str, ...] = ()
+    foe_unfactored: tuple[str, ...] = ()
 
 
 def effective_characteristic(
@@ -727,6 +735,9 @@ def effective_characteristic(
     characteristic: Characteristic,
     rules: Sequence[Rule],
     conditions: "GateContext | None" = None,
+    *,
+    foe_rules: Sequence[Rule] = (),
+    foe_conditions: "GateContext | None" = None,
 ) -> EffectiveValue:
     """Apply the rules' modifiers to one characteristic read.
 
@@ -735,17 +746,31 @@ def effective_characteristic(
     resolved loadout rules) for characteristic modifiers naming
     ``characteristic`` and folds them over ``base`` — each gated on the
     evaluated engagement ``conditions``, each capped by its own printed
-    ``maximum``. Rules touching other characteristics are not this
-    query's business and appear in neither name list.
+    ``maximum`` and floored at its ``minimum``. Rules touching other
+    characteristics are not this query's business and appear in neither
+    name list.
+
+    ``foe_rules`` are the *other side's* rules, offered where the caller has
+    the foe in hand (a combat's two seats): their *enemy-subject* modifiers
+    naming ``characteristic`` — "enemy models suffer a -1 modifier to their
+    Strength characteristic" — fold into the same value, each gated on the
+    bearer's own ``foe_conditions``, their names reported apart
+    (``foe_factored`` / ``foe_unfactored``) so the caller claims them for
+    the foe. Both sources resolve as one fold, so a foe's enemy-subject set
+    cancels the bearer's own disagreeing set exactly as two of the bearer's
+    would (Strike First against an aura's Strike Last).
 
     All-or-nothing per rule, as at compile: if any matching modifier
     needs an unknown fact or an unbound parameter, none of that rule's
     modifiers apply and the rule is reported unfactored.
 
     Returns:
-        The effective value with the factored and unfactored rule names.
+        The effective value with the factored and unfactored rule names,
+        the foe's apart.
     """
-    return _effective_quantity(base, characteristic, rules, conditions)
+    return _effective_quantity(
+        base, characteristic, rules, conditions, foe_rules=foe_rules, foe_conditions=foe_conditions
+    )
 
 
 def effective_fighting_ranks(
@@ -1238,36 +1263,82 @@ def effective_rerolls(
     return EffectiveRerolls(tuple(grants), tuple(factored), tuple(unfactored), tuple(inapplicable))
 
 
+# One additive operation gathered for the value fold: the amount, and the
+# effect's printed maximum (ceiling) and minimum (floor), where the seam caps.
+_Add = tuple[int, int | None, int | None]
+
+
 def _effective_quantity(
     base: int,
     key: Quantity | Characteristic,
     rules: Sequence[Rule],
     conditions: "GateContext | None" = None,
+    *,
+    foe_rules: Sequence[Rule] = (),
+    foe_conditions: "GateContext | None" = None,
 ) -> EffectiveValue:
     # One base value folded over the ``key`` operations a contingent's rules
     # carry — shared by the characteristic, fighting-rank, and combat-result
-    # queries, which differ only in the ``key`` they read. All-or-nothing
-    # per rule; a rule needing an unknown fact, an unbound parameter, or an
-    # event face (no die is rolled at a query) is reported unfactored. A
-    # printed maximum caps only the characteristic seam — the one that prints
-    # one — so ranks and combat-result points accumulate uncapped.
+    # queries, which differ only in the ``key`` they read. The bearer's own
+    # rules contribute their bearer-subject operations; the foe's rules — when
+    # the caller has the foe in hand — their *enemy-subject* ones, gated on the
+    # foe's own facts and reported apart, into one shared resolution.
+    # All-or-nothing per rule; a rule needing an unknown fact, an unbound
+    # parameter, or an event face (no die is rolled at a query) is reported
+    # unfactored. A printed maximum or minimum bounds only the characteristic
+    # seam — the one that prints them — so ranks and combat-result points
+    # accumulate unbounded.
     #
     # Two passes, because a `set` replaces the base "before any other
     # modifiers are applied": every applicable set is resolved first, then the
     # additive folds stack on top. Sets that disagree on the target cancel one
-    # another (Strike First's 10 against Strike Last's 1), leaving the base to
-    # stand — each still honoured, just to no effect.
-    context = _as_context(conditions)
+    # another (Strike First's 10 against Strike Last's 1) whichever side each
+    # came from, leaving the base to stand — each still honoured, just to no
+    # effect.
+    sets: list[int] = []
+    adds: list[_Add] = []
+    factored, unfactored = _gather_operations(
+        key, rules, _as_context(conditions), enemy=False, sets=sets, adds=adds
+    )
+    foe_factored, foe_unfactored = _gather_operations(
+        key, foe_rules, _as_context(foe_conditions), enemy=True, sets=sets, adds=adds
+    )
+    value = base
+    targets = set(sets)
+    if len(targets) == 1:
+        value = targets.pop()  # a single agreed target replaces the base
+    # no set leaves the base; conflicting sets cancel, and the base stands
+    for amount, maximum, minimum in adds:
+        value += amount
+        if maximum is not None:
+            value = min(value, maximum)
+        if minimum is not None:
+            value = max(value, minimum)
+    logger.debug("%s -> %d (%d rule(s) factored)", key, value, len(factored) + len(foe_factored))
+    return EffectiveValue(value, factored, unfactored, foe_factored, foe_unfactored)
+
+
+def _gather_operations(
+    key: Quantity | Characteristic,
+    rules: Sequence[Rule],
+    context: GateContext,
+    *,
+    enemy: bool,
+    sets: list[int],
+    adds: list[_Add],
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    # One source's contribution to a value fold: the ``key`` operations of the
+    # given subject (the bearer's own, or — flipped by the printed ``enemy``
+    # word — the foe's), gated on that source's own context, gathered into the
+    # shared set/add pools. Returns the source's (factored, unfactored) names.
     caps = seam_of(key) is Seam.CHARACTERISTIC
     factored: list[str] = []
     unfactored: list[str] = []
-    sets: list[int] = []
-    adds: list[tuple[int, int | None]] = []  # (amount, the effect's printed maximum)
     for rule in rules:
         matching = [
             (effect, op, operations[key])
             for effect in rule.effects
-            if isinstance(effect, ModifierEffect)
+            if isinstance(effect, ModifierEffect) and effect.enemy is enemy
             for op, operations in (("add", effect.add or {}), ("set", effect.set_ or {}))
             if key in operations
         ]
@@ -1291,19 +1362,11 @@ def _effective_quantity(
             if op == "set":
                 sets.append(amount)
             else:
-                adds.append((amount, effect.maximum if caps else None))
+                adds.append(
+                    (amount, effect.maximum if caps else None, effect.minimum if caps else None)
+                )
         factored.append(rule.name)
-    value = base
-    targets = set(sets)
-    if len(targets) == 1:
-        value = targets.pop()  # a single agreed target replaces the base
-    # no set leaves the base; conflicting sets cancel, and the base stands
-    for amount, maximum in adds:
-        value += amount
-        if maximum is not None:
-            value = min(value, maximum)
-    logger.debug("%s -> %d (%d rule(s) factored)", key, value, len(factored))
-    return EffectiveValue(value, tuple(factored), tuple(unfactored))
+    return tuple(factored), tuple(unfactored)
 
 
 def _gate_applies(effect: GatedEffect, context: GateContext) -> bool | None:
