@@ -534,15 +534,28 @@ def test_every_quantity_routes_to_a_seam() -> None:
     }
 
 
-def test_enemy_flips_only_a_roll_quantity() -> None:
-    """The enemy subject flips a quantity to the other seat, which only the walk resolves.
+def test_enemy_flips_only_a_roll_or_characteristic_quantity() -> None:
+    """The enemy subject flips a quantity to the other seat of the attack.
 
-    An enemy-subject armour-value operation has no consumer (the armour fold
-    folds a side's own save), so it is a data error at load, not a silent
-    unfactored note forever.
+    The dice walk resolves the flip for roll quantities and the
+    effective-characteristic query for profile characteristics (Enfeebling
+    Cold's -1 Strength on the foe). An enemy-subject armour-value operation
+    has no consumer (the armour fold folds a side's own save), so it is a
+    data error at load, not a silent unfactored note forever.
     """
-    with pytest.raises(ValidationError, match="enemy flips a roll quantity"):
+    _EFFECT.validate_python({"enemy": True, "add": {"S": -1}})
+    _EFFECT.validate_python({"enemy": True, "set": {"I": 1}})
+    with pytest.raises(ValidationError, match="enemy flips a roll or characteristic"):
         _EFFECT.validate_python({"enemy": True, "add": {"armour-value": 1}})
+    with pytest.raises(ValidationError, match="enemy flips a roll or characteristic"):
+        _EFFECT.validate_python({"enemy": True, "add": {"fighting-ranks": 1}})
+
+
+def test_a_minimum_floors_a_characteristic_only() -> None:
+    """The printed "(to a minimum of 1)" floors a characteristic malus, nothing else."""
+    _EFFECT.validate_python({"add": {"S": -1}, "minimum": 1})
+    with pytest.raises(ValidationError, match="minimum floors a characteristic"):
+        _EFFECT.validate_python({"add": {"to-hit": -1}, "minimum": 1})
 
 
 def test_successful_dice_re_roll_names_a_per_attack_die() -> None:

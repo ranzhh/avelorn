@@ -531,7 +531,8 @@ class ModifierEffect(GatedEffect):
     the loadout the consuming seam has in its context. ``maximum`` is a printed
     limit on the modified value ("to a maximum of 10" / "to a maximum of 3+"): a
     ceiling on a characteristic, the best attainable save (a floor) on an armour
-    value.
+    value. ``minimum`` is its printed opposite ("to a minimum of 1"): the floor
+    a malus cannot push a characteristic below.
 
     ``enemy`` transcribes the printed sentence's subject when it is the
     other party: "enemy units ... suffer a -1 To Hit modifier" moves the
@@ -539,10 +540,14 @@ class ModifierEffect(GatedEffect):
     moves the bearer's own. Whose quantity it then is in a given attack
     follows from the quantity's owner side — the rulebook's constant,
     never authored — flipped by this word: a bearer's ``to-hit`` shapes
-    the attacks it makes, an enemy's the attacks it suffers. Only roll
-    quantities can be flipped today; every other seam folds a side's own
-    values, so ``enemy`` there is a data error until a printed rule
-    needs it.
+    the attacks it makes, an enemy's the attacks it suffers. Two seams
+    resolve the flip today: the dice walk (roll quantities), and the
+    effective-characteristic query, which folds the *foe's* enemy-subject
+    operations beside the bearer's own wherever both sides are in hand
+    ("enemy models suffer a -1 modifier to their Strength characteristic",
+    "enemy models become subject to ... Strike Last"). Every other seam
+    folds a side's own values, so ``enemy`` there is a data error until a
+    printed rule needs it.
     """
 
     add: (
@@ -552,6 +557,7 @@ class ModifierEffect(GatedEffect):
         Annotated[dict[Quantity | Characteristic, int | Literal["X"]], Field(min_length=1)] | None
     ) = Field(default=None, alias="set")
     maximum: int | None = None
+    minimum: int | None = None
     enemy: bool = False
 
     @property
@@ -611,17 +617,33 @@ class ModifierEffect(GatedEffect):
         return self
 
     @model_validator(mode="after")
-    def _enemy_flips_a_roll_quantity(self) -> "ModifierEffect":
-        # The enemy subject flips a quantity to the other seat of the attack,
-        # which only the dice walk resolves; the value folds (a characteristic,
-        # the armour value, ranks, combat-result points) each fold one side's
-        # own values, so an enemy-subject operation there has no consumer yet.
-        # Forbidden loudly at load until a printed rule needs one, rather than
-        # left to go silently unfactored forever.
+    def _minimum_floors_a_characteristic(self) -> "ModifierEffect":
+        # A printed floor ("to a minimum of 1") is only ever printed on a
+        # characteristic malus; on any other quantity it is meaningless, so a
+        # data error.
+        if self.minimum is not None and not any(
+            isinstance(quantity, Characteristic) for quantity in self.quantities
+        ):
+            raise ValueError("minimum floors a characteristic; the operation moves none")
+        return self
+
+    @model_validator(mode="after")
+    def _enemy_flips_a_flippable_quantity(self) -> "ModifierEffect":
+        # The enemy subject flips a quantity to the other seat of the attack.
+        # Two seams resolve that flip: the dice walk (roll quantities) and the
+        # effective-characteristic query, which folds the foe's enemy-subject
+        # operations wherever both sides are in hand. The remaining value folds
+        # (the armour value, ranks, combat-result points, wards) each fold one
+        # side's own values, so an enemy-subject operation there has no
+        # consumer yet. Forbidden loudly at load until a printed rule needs
+        # one, rather than left to go silently unfactored forever.
         if self.enemy:
-            offending = sorted(str(q) for q in self.quantities if seam_of(q) is not Seam.ROLL)
+            flippable = (Seam.ROLL, Seam.CHARACTERISTIC)
+            offending = sorted(str(q) for q in self.quantities if seam_of(q) not in flippable)
             if offending:
-                raise ValueError(f"enemy flips a roll quantity only, not: {offending}")
+                raise ValueError(
+                    f"enemy flips a roll or characteristic quantity only, not: {offending}"
+                )
         return self
 
     @model_validator(mode="after")
