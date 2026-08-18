@@ -259,6 +259,14 @@ class _Engagement:
     striker: Contingent
     as_mount: bool
     weapon_skill: EffectiveValue
+    # The two other characteristic reads of this batch's walk, kept whole for
+    # their name lists: the striker's effective Strength (the foe's
+    # enemy-subject maluses fold into it — Enfeebling Cold) and the target's
+    # effective Weapon Skill (the striker's would). Their ``foe_factored``
+    # names belong to the *other* side's claim set, which only the caller
+    # holding both sides can route.
+    strength: EffectiveValue
+    target_weapon_skill: EffectiveValue
     # The walk's two seats, resolved once each: the striker's compiled
     # weapon and unit rules, and the target's armour, ward, re-rolls and
     # enemy-subject maluses. What each seat factored is claimed by the
@@ -359,7 +367,26 @@ def _engage(
     wielder_strength = row[Characteristic.STRENGTH]
     if profile.strength.is_relative and wielder_strength is None:
         raise ValueError(f"{weapon.name} strikes at the wielder's Strength, but {who} has none")
-    strength = profile.strength.resolve(wielder_strength or 0)
+    # The wielder's Strength is read effective before the weapon resolves its
+    # own: the bearer's S modifiers and the foe's enemy-subject maluses
+    # (Enfeebling Cold's -1) both land on the characteristic, so a weapon
+    # striking at the wielder's Strength (S, S+2) strikes from the modified
+    # value, while one that prints its own is untouched — as printed. A mount
+    # row is read printed, as its Weapon Skill is below: no schema word says
+    # which element a modifier reaches yet.
+    strength_fold = (
+        effective_characteristic(
+            wielder_strength or 0,
+            Characteristic.STRENGTH,
+            striker.loadout.rules,
+            conditions,
+            foe_rules=target.loadout.rules,
+            foe_conditions=target_conditions,
+        )
+        if element is None
+        else EffectiveValue(wielder_strength or 0)
+    )
+    strength = profile.strength.resolve(strength_fold.value)
 
     # The walk's two seats, resolved once each (engine/seats): the striker's
     # weapon and unit rules compiled under its own conditions, and the
@@ -409,16 +436,21 @@ def _engage(
     # Each side's Weapon Skill is read effective, not raw: a rule that
     # modifies it (Martial Prowess's +1 in the first round) shapes both the
     # striker's To Hit and, as the target's WS, the roll against it — each
-    # gated on that side's own engagement conditions. A mount's is read
-    # printed: the corpus's characteristic modifiers are the rider's own
-    # (Elven Reflexes says "(but not its mount)"), and no schema word says
-    # which element a modifier reaches yet.
+    # gated on that side's own engagement conditions, each folding the other
+    # side's enemy-subject WS operations gated on that other side's own. A
+    # mount's is read printed: the corpus's characteristic modifiers are the
+    # rider's own (Elven Reflexes says "(but not its mount)"), and no schema
+    # word says which element a modifier reaches yet.
     striker_ws = (
-        effective_weapon_skill(striker, conditions)
+        effective_weapon_skill(
+            striker, conditions, foe_rules=target.loadout.rules, foe_conditions=target_conditions
+        )
         if element is None
         else EffectiveValue(weapon_skill)
     )
-    target_ws = effective_weapon_skill(target, target_conditions)
+    target_ws = effective_weapon_skill(
+        target, target_conditions, foe_rules=striker.loadout.rules, foe_conditions=conditions
+    )
     hit = melee_hit_target(striker_ws.value, target_ws.value, hit_modifier)
     wound = wound_target(strength, toughness)
     save = armour_save_target(defence.armour_value, profile.armour_piercing)
@@ -454,6 +486,8 @@ def _engage(
         striker=striker,
         as_mount=element is not None and element.role is ProfileRole.MOUNT,
         weapon_skill=striker_ws,
+        strength=strength_fold,
+        target_weapon_skill=target_ws,
         offence=offence,
         defence=defence,
         weapon_name=weapon.name,
@@ -775,6 +809,10 @@ def strike_unit(
                     *striker.fighting_ranks().factored,
                     *striker.effective_attacks().factored,
                     *(name for e in engagements for name in e.weapon_skill.factored),
+                    *(name for e in engagements for name in e.strength.factored),
+                    # the striker's enemy-subject maluses land on the target's
+                    # characteristic reads, so those folds claim them for it
+                    *(name for e in engagements for name in e.target_weapon_skill.foe_factored),
                     *(name for e in engagements for name in e.offence.rerolls.factored),
                     *(name for e in engagements for name in e.offence.factored),
                 },
@@ -792,6 +830,10 @@ def strike_unit(
                     *(name for e in engagements for name in e.defence.ward.factored),
                     *(name for e in engagements for name in e.defence.rerolls.factored),
                     *(name for e in engagements for name in e.defence.factored),
+                    # the target's enemy-subject maluses land on the striker's
+                    # characteristic reads (Enfeebling Cold's -1 Strength)
+                    *(name for e in engagements for name in e.weapon_skill.foe_factored),
+                    *(name for e in engagements for name in e.strength.foe_factored),
                 },
             ),
             *dict.fromkeys(
@@ -975,6 +1017,9 @@ def effective_initiative(
     contingent: Contingent,
     charge_bonus: int = 0,
     conditions: "GateContext | None" = None,
+    *,
+    foe_rules: Sequence[Rule] = (),
+    foe_conditions: "GateContext | None" = None,
 ) -> EffectiveValue:
     """The Initiative a contingent strikes at, all printed modifiers included.
 
@@ -1000,6 +1045,13 @@ def effective_initiative(
     contribution as ``charge_bonus`` — the :class:`Charge` object is not
     passed, so it cannot arrive twice.
 
+    ``foe_rules`` are the other side's rules, offered by a caller that has
+    the foe in hand (:func:`fight`): their enemy-subject Initiative
+    operations — Blizzard Aura's "enemy models become subject to ... Strike
+    Last" — fold into the same read, gated on the bearer's own
+    ``foe_conditions``, reported apart for the foe's claim set. The foe's
+    set lands before the charge bonus exactly as the bearer's own would.
+
     Returns:
         The Initiative that decides striking order in :func:`fight`,
         with the rule names factored into it and those left unfactored —
@@ -1007,7 +1059,14 @@ def effective_initiative(
     """
     base = contingent.unit.main[Characteristic.INITIATIVE] or 0
     rules = [*contingent.loadout.rules, *contingent.in_hand_rules()]
-    modified = effective_characteristic(base, Characteristic.INITIATIVE, rules, conditions)
+    modified = effective_characteristic(
+        base,
+        Characteristic.INITIATIVE,
+        rules,
+        conditions,
+        foe_rules=foe_rules,
+        foe_conditions=foe_conditions,
+    )
     return replace(modified, value=min(modified.value + charge_bonus, 10))
 
 
@@ -1039,16 +1098,22 @@ def mount_initiative(contingent: Contingent, charge_bonus: int = 0) -> Effective
 def effective_weapon_skill(
     contingent: Contingent,
     conditions: "GateContext | None" = None,
+    *,
+    foe_rules: Sequence[Rule] = (),
+    foe_conditions: "GateContext | None" = None,
 ) -> EffectiveValue:
     """The Weapon Skill a contingent fights at, all printed modifiers included.
 
     The sibling of :func:`effective_initiative` for the To Hit chart: the
     rank-and-file Weapon Skill, modified by the loadout's rule-granted
     characteristic modifiers under the evaluated ``conditions`` (Martial
-    Prowess's +1 in the first round of combat). A profile with no printed
-    Weapon Skill counts as 0 — the caller validates that a fighter has one
-    before reaching here. Read for both sides of a strike: the striker's own
-    To Hit, and the target's WS the roll is made against.
+    Prowess's +1 in the first round of combat), plus the foe's enemy-subject
+    WS operations when the caller offers ``foe_rules`` — gated on the
+    bearer's own ``foe_conditions``, reported apart for the foe's claim set.
+    A profile with no printed Weapon Skill counts as 0 — the caller
+    validates that a fighter has one before reaching here. Read for both
+    sides of a strike: the striker's own To Hit, and the target's WS the
+    roll is made against.
 
     Returns:
         The effective Weapon Skill, with the rule names factored into it and
@@ -1056,7 +1121,12 @@ def effective_weapon_skill(
     """
     base = contingent.unit.main[Characteristic.WEAPON_SKILL] or 0
     return effective_characteristic(
-        base, Characteristic.WEAPON_SKILL, contingent.loadout.rules, conditions
+        base,
+        Characteristic.WEAPON_SKILL,
+        contingent.loadout.rules,
+        conditions,
+        foe_rules=foe_rules,
+        foe_conditions=foe_conditions,
     )
 
 
@@ -1227,8 +1297,15 @@ def fight(
     )
     a_bonus = 0 if a.movement.charge is None else a.movement.charge.initiative_bonus
     b_bonus = 0 if b.movement.charge is None else b.movement.charge.initiative_bonus
-    a_initiative = effective_initiative(a, a_bonus, a_conditions)
-    b_initiative = effective_initiative(b, b_bonus, b_conditions)
+    # Each side's striking order folds the foe's enemy-subject Initiative
+    # operations too (Blizzard Aura's Strike Last on its foes), gated on the
+    # foe's own facts — the round is the seam with both sides in hand.
+    a_initiative = effective_initiative(
+        a, a_bonus, a_conditions, foe_rules=b.loadout.rules, foe_conditions=b_conditions
+    )
+    b_initiative = effective_initiative(
+        b, b_bonus, b_conditions, foe_rules=a.loadout.rules, foe_conditions=a_conditions
+    )
     a_first = _strikes_first(a_initiative.value, b_initiative.value)
     # Each side's batches at the Initiative each strikes at: the rank and
     # file at the side's effective Initiative, the mounts — a second set of
@@ -1314,6 +1391,7 @@ def fight(
                         *a.fighting_ranks().factored,
                         *a.effective_attacks().factored,
                         *(name for s in a_own for name in s.weapon_skill.factored),
+                        *(name for s in a_own for name in s.strength.factored),
                         *(name for s in a_own for name in s.offence.rerolls.factored),
                         *(name for s in a_own for name in s.offence.rerolls.inapplicable),
                         *(name for s in a_own for name in s.offence.factored),
@@ -1327,6 +1405,14 @@ def fight(
                         *(name for s in b_own for name in s.defence.rerolls.inapplicable),
                         *(name for s in b_own for name in s.defence.factored),
                         *(name for s in b_own for name in s.defence.inapplicable),
+                        # a's enemy-subject maluses land on b's characteristic
+                        # reads (Blizzard Aura's Initiative, Enfeebling Cold's
+                        # Strength, an enemy WS malus), so those folds claim
+                        # them for a
+                        *b_initiative.foe_factored,
+                        *(name for s in b_own for name in s.weapon_skill.foe_factored),
+                        *(name for s in b_own for name in s.strength.foe_factored),
+                        *(name for s in a_own for name in s.target_weapon_skill.foe_factored),
                     },
                 ),
                 *_unit_rule_notes(
@@ -1336,6 +1422,7 @@ def fight(
                         *b.fighting_ranks().factored,
                         *b.effective_attacks().factored,
                         *(name for s in b_own for name in s.weapon_skill.factored),
+                        *(name for s in b_own for name in s.strength.factored),
                         *(name for s in b_own for name in s.offence.rerolls.factored),
                         *(name for s in b_own for name in s.offence.rerolls.inapplicable),
                         *(name for s in b_own for name in s.offence.factored),
@@ -1348,6 +1435,10 @@ def fight(
                         *(name for s in a_own for name in s.defence.rerolls.inapplicable),
                         *(name for s in a_own for name in s.defence.factored),
                         *(name for s in a_own for name in s.defence.inapplicable),
+                        *a_initiative.foe_factored,
+                        *(name for s in a_own for name in s.weapon_skill.foe_factored),
+                        *(name for s in a_own for name in s.strength.foe_factored),
+                        *(name for s in b_own for name in s.target_weapon_skill.foe_factored),
                     },
                 ),
                 *(
@@ -1610,6 +1701,14 @@ def break_test(result: CombatResult, a: Contingent, b: Contingent) -> BreakResul
     winner takes no Break test (its follow-up and pursuit choices are not
     modelled here), and a drawn combat tests neither side.
 
+    The Leadership each side would test against is read effective: its own
+    rules' Ld modifiers and the *foe's* enemy-subject ones (Terror's -1 on
+    the losing side's Break test) fold in, each gated on its bearer's own
+    facts. Only a loser's Leadership is ever rolled against, and its foe is
+    then the winner — the printed "if the winning side ... includes one or
+    more units that cause Terror" is the seam's own structure, never a
+    separate fact.
+
     A side's resolved rules may force its outcome instead of rolling: Stubborn's
     :class:`~avelorn.tow.schema.rule.ChoiceEffect` sends its whole losing mass to
     Fall Back in Good Order (it never Breaks). What that model leaves out — the
@@ -1624,8 +1723,8 @@ def break_test(result: CombatResult, a: Contingent, b: Contingent) -> BreakResul
         Each side's Break-test outcomes for the rounds it loses, the
         drawn-combat probability, and the notes for any fixed-outcome rule.
     """
-    a_leadership = a.unit.highest(Characteristic.LEADERSHIP) or 0
-    b_leadership = b.unit.highest(Characteristic.LEADERSHIP) or 0
+    a_leadership = _break_leadership(a, b)
+    b_leadership = _break_leadership(b, a)
     # The break decision's outcomes are BreakOutcomes; narrow the base the seam
     # returns to the set this test routes (a foreign outcome under break, a data
     # slip, is left to roll).
@@ -1642,15 +1741,24 @@ def break_test(result: CombatResult, a: Contingent, b: Contingent) -> BreakResul
     b_swaps, b_swap_rules = _break_substitutions(b, a)
     logger.debug(
         "break test: Ld %d (a, forced=%s) vs Ld %d (b, forced=%s)",
-        a_leadership,
+        a_leadership.value,
         a_forced,
-        b_leadership,
+        b_leadership.value,
         b_forced,
     )
-    # Relay the fixed-outcome rule's own authored notes (its unmodelled scope),
+    # Relay the consumed rules' own authored notes (their unmodelled scope),
     # the same generic relay every seam shares — never engine-composed prose.
-    a_claimed = sorted({rule.name for rule in (a_rule, *a_swap_rules) if rule is not None})
-    b_claimed = sorted({rule.name for rule in (b_rule, *b_swap_rules) if rule is not None})
+    # A fixed-outcome or substitution rule is the side's own; an enemy-subject
+    # Ld malus folded into a side's Leadership is the *foe's* rule (Terror),
+    # so its name is claimed — and its notes relayed — for the foe.
+    a_claimed = sorted(
+        {rule.name for rule in (a_rule, *a_swap_rules) if rule is not None}
+        | {*a_leadership.factored, *b_leadership.foe_factored}
+    )
+    b_claimed = sorted(
+        {rule.name for rule in (b_rule, *b_swap_rules) if rule is not None}
+        | {*b_leadership.factored, *a_leadership.foe_factored}
+    )
     notes = tuple(
         dict.fromkeys(
             note
@@ -1664,14 +1772,14 @@ def break_test(result: CombatResult, a: Contingent, b: Contingent) -> BreakResul
     return BreakResult(
         a=_side_break(
             result.margin,
-            a_leadership,
+            a_leadership.value,
             deficit=lambda lead: -lead if lead < 0 else None,
             forced=a_forced,
             substitutions=a_swaps,
         ),
         b=_side_break(
             result.margin,
-            b_leadership,
+            b_leadership.value,
             deficit=lambda lead: lead if lead > 0 else None,
             forced=b_forced,
             substitutions=b_swaps,
@@ -1681,17 +1789,40 @@ def break_test(result: CombatResult, a: Contingent, b: Contingent) -> BreakResul
     )
 
 
+def _break_conditions(side: Contingent, foe: Contingent) -> GateContext:
+    # The break's own facts, from one side's seat: it is engaged in the combat
+    # being scored, ``was_charged`` reads the foe's move, and its equipment in
+    # use rides along — a two-handed wielder's shield is withdrawn, so a gate
+    # asking for one is told the truth.
+    return GateContext(
+        combat=CombatFacts(was_charged=foe.movement.charge is not None),
+        wielding=side.weapon_facts,
+        worn=_worn_in_combat(side),
+    )
+
+
+def _break_leadership(side: Contingent, foe: Contingent) -> EffectiveValue:
+    # The Leadership a side's Break test rolls against (highest in the unit),
+    # read effective: its own rules' Ld modifiers under its own break facts,
+    # and the foe's enemy-subject maluses (Terror's -1) under the foe's.
+    base = side.unit.highest(Characteristic.LEADERSHIP) or 0
+    return effective_characteristic(
+        base,
+        Characteristic.LEADERSHIP,
+        side.loadout.rules,
+        _break_conditions(side, foe),
+        foe_rules=foe.loadout.rules,
+        foe_conditions=_break_conditions(foe, side),
+    )
+
+
 def _break_substitutions(
     side: Contingent, foe: Contingent
 ) -> tuple[dict[BreakOutcome, BreakOutcome], list[Rule]]:
     # The side's outcome substitutions at its Break test, under the break's
     # own facts. Only Break outcomes route here; a foreign outcome in the
     # data is left to roll, as a foreign forced outcome is.
-    conditions = GateContext(
-        combat=CombatFacts(was_charged=foe.movement.charge is not None),
-        wielding=side.weapon_facts,
-        worn=_worn_in_combat(side),
-    )
+    conditions = _break_conditions(side, foe)
     swaps: dict[BreakOutcome, BreakOutcome] = {}
     rules: list[Rule] = []
     for replaced, taken, rule in outcome_substitutions(
