@@ -2,5 +2,5 @@
 id: ceremonial-halberd
 name: Ceremonial Halberd
 profiles:
-  - { R: Combat, S: S+1, AP: -1, special_rules: [Armour Bane (1), Fight in Extra Rank, Magical Attacks, Requires Two Hands] }
+  - { R: Combat, S: S+1, AP: -1, special_rules: [Armour Bane (1), Fight In Extra Rank, Magical Attacks, Requires Two Hands] }
 notes: A model wielding a ceremonial halberd cannot make a supporting attacks during a turn in which it charged.
