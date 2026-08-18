@@ -19,7 +19,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from avelorn.tow.engine.armour import defender_armour
-from avelorn.tow.engine.attack import Modifier
+from avelorn.tow.engine.attack import Modifier, Transform
 from avelorn.tow.engine.rules import (
     EffectiveMarks,
     EffectiveRerolls,
@@ -58,6 +58,10 @@ class Offence:
     """
 
     modifiers: tuple[Modifier, ...]
+    # The bespoke hooks the compiles emitted beside the records — a blow's
+    # save denial and escalation — weapon profile's first, unit's after,
+    # matching the modifiers' order.
+    transforms: tuple[Transform, ...]
     rerolls: EffectiveRerolls
     weapon_rerolls: EffectiveRerolls
     factored: frozenset[str]
@@ -87,6 +91,7 @@ class Offence:
         marks = attack_marks(profile.special_rules, weapon_rules, rules)
         return cls(
             modifiers=(*weapon_compiled.modifiers, *unit_compiled.modifiers),
+            transforms=(*weapon_compiled.transforms, *unit_compiled.transforms),
             rerolls=effective_rerolls(rules, conditions, seat=Side.ATTACKER),
             weapon_rerolls=effective_rerolls(in_use, conditions, seat=Side.ATTACKER),
             factored=frozenset({*unit_compiled.factored, *marks.unit_factored}),

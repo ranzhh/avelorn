@@ -631,3 +631,16 @@ def test_shoot_unit_leaves_a_two_handed_wielders_shield_counting() -> None:
     result = shoot_unit(_fielded(REPO.units["elven-archers"], 5).wielding("Longbow"), greatswords)
 
     assert result.save_target == 5
+
+
+def test_a_blow_never_fires_in_a_volley() -> None:
+    """Killing Blow reads "an attack made in combat": a volley leaves it honoured inert."""
+    archers = REPO.units["elven-archers"]
+    marked = archers.model_copy(update={"special_rules": [*archers.special_rules, "Killing Blow"]})
+    target = _fielded(REPO.units["elven-spearmen"], 10)
+
+    blow = shoot_unit(_fielded(marked, 5).wielding("Longbow"), target, distance=10)
+    plain = shoot_unit(_fielded(archers, 5).wielding("Longbow"), target, distance=10)
+
+    assert blow.p_unsaved == plain.p_unsaved
+    assert not any("not factored: Killing Blow" in n for n in blow.notes)

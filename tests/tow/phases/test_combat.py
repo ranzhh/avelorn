@@ -1585,3 +1585,96 @@ def test_a_barred_piece_is_withdrawn_whole_not_compensated() -> None:
 
     assert at_rest.save_target == 4  # 6+ light armour bettered 2 by the tower shield
     assert struck.save_target == 6  # the whole piece withdrawn, not one point of it
+
+
+def _with_rule(unit: Unit, rule: str) -> Unit:
+    return unit.model_copy(update={"special_rules": [*unit.special_rules, rule]})
+
+
+def test_killing_blow_denies_the_save_and_slays_on_a_natural_six_to_wound() -> None:
+    """The real entry, every printed clause on the dice.
+
+    Spearmen with Killing Blow strike spearmen (WS4 vs WS4: 4+; S3 vs T3:
+    4+; 5+ save): the wound die's 4 and 5 save as normal, the natural 6 is
+    a Killing Blow — no armour save — so
+    p_unsaved = 1/2 * (2/6 * 2/3 + 1/6) = 7/36 against the plain 1/6.
+    Against a 3-Wound target the blow removes the model whole, where plain
+    wounds pool three to a kill. Against a Monstrous Creature (outside the
+    printed "infantry or cavalry") the numbers are the plain ones — the
+    rule honoured, never noted as unfactored.
+    """
+    spearmen = REPO.units["elven-spearmen"]
+    killers = _fielded(_with_rule(spearmen, "Killing Blow"), 10).wielding("Hand Weapon")
+    plain = _fielded(spearmen, 10).wielding("Hand Weapon")
+    target = _fielded(spearmen, 10).wielding("Thrusting Spear")
+
+    blow = strike_unit(killers, target)
+    base = strike_unit(plain, target)
+    assert blow.p_unsaved == pytest.approx(7 / 36)
+    assert base.p_unsaved == pytest.approx(1 / 6)
+    assert not any("not factored: Killing Blow" in n for n in blow.notes)
+
+    ogre_unit = spearmen.model_copy(
+        update={"id": "ogres", "name": "Ogres", "troop_type": "Monstrous Infantry"}
+    )
+    ogre_unit.profiles[0].characteristics[Characteristic.WOUNDS] = 3
+    ogres = _fielded(ogre_unit.with_troop_type(REPO.troop_types), 3).wielding("Hand Weapon")
+    assert float(strike_unit(killers, ogres).expected_casualties) > 4 * float(
+        strike_unit(plain, ogres).expected_casualties
+    )
+
+    monster_unit = spearmen.model_copy(
+        update={"id": "monster", "name": "Monster", "troop_type": "Monstrous Creature"}
+    )
+    monster = _fielded(monster_unit.with_troop_type(REPO.troop_types), 1).wielding("Hand Weapon")
+    off_list = strike_unit(killers, monster)
+    assert off_list.p_unsaved == pytest.approx(1 / 6)
+    assert not any("not factored: Killing Blow" in n for n in off_list.notes)
+
+
+def test_a_killing_blow_still_rolls_the_targets_ward() -> None:
+    """The printed "(Ward saves can be attempted as normal)": the ward stage stands.
+
+    Against the Phoenix Guard, Witness to Destiny's 6+ ward scales every
+    branch — the Killing Blow ones included — by exactly 5/6.
+    """
+    killers = _fielded(_with_rule(REPO.units["elven-spearmen"], "Killing Blow"), 10).wielding(
+        "Hand Weapon"
+    )
+    guard = Contingent.deploy("phoenix-guard", 10, data=REPO).wielding("Ceremonial Halberd")
+    unwarded_unit = REPO.units["phoenix-guard"].model_copy(
+        update={
+            "special_rules": [
+                r
+                for r in REPO.units["phoenix-guard"].special_rules
+                if r not in ("Witness to Destiny", "Blessings of Asuryan")
+            ]
+        }
+    )
+    unwarded = _fielded(unwarded_unit, 10).wielding("Ceremonial Halberd")
+
+    warded_p = strike_unit(killers, guard).p_unsaved
+    bare_p = strike_unit(killers, unwarded).p_unsaved
+    assert warded_p == pytest.approx(bare_p * 5 / 6)
+
+
+def test_cleaving_blow_denies_without_slaying_and_reads_its_own_list() -> None:
+    """Cleaving Blow: Killing Blow's denial, no instant kill, five troop types.
+
+    Against Regular Infantry the per-attack numbers match Killing Blow's
+    exactly (the denial is the same); against Monstrous Infantry — on
+    Killing Blow's list but not Cleaving Blow's — it is honoured inert. And
+    with no ``slays``, a 3-Wound model pools its wounds as ever.
+    """
+    spearmen = REPO.units["elven-spearmen"]
+    cleavers = _fielded(_with_rule(spearmen, "Cleaving Blow"), 10).wielding("Hand Weapon")
+    target = _fielded(spearmen, 10).wielding("Thrusting Spear")
+    assert strike_unit(cleavers, target).p_unsaved == pytest.approx(7 / 36)
+
+    ogre_unit = spearmen.model_copy(
+        update={"id": "ogres", "name": "Ogres", "troop_type": "Monstrous Infantry"}
+    )
+    ogre_unit.profiles[0].characteristics[Characteristic.WOUNDS] = 3
+    ogres = _fielded(ogre_unit.with_troop_type(REPO.troop_types), 3).wielding("Hand Weapon")
+    plain = _fielded(spearmen, 10).wielding("Hand Weapon")
+    assert strike_unit(cleavers, ogres).p_unsaved == strike_unit(plain, ogres).p_unsaved

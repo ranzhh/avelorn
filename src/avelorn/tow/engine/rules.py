@@ -30,20 +30,28 @@ import logging
 import re
 from collections.abc import Collection, Mapping, Sequence
 from contextlib import suppress
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from typing import get_args
 
 from pydantic.fields import FieldInfo
 
 from avelorn.core.registry import Registry, UnknownNameError
-from avelorn.tow.engine.attack import Modifier, Reroll
+from avelorn.tow.engine.attack import (
+    AttackProfile,
+    Modifier,
+    Reroll,
+    RollState,
+    Transform,
+)
+from avelorn.tow.engine.attack import Outcome as AttackOutcome
 from avelorn.tow.schema.psychology import Outcome
 from avelorn.tow.schema.rule import (
     PARAMETER_SUFFIX,
     AttackKind,
     AttackMarkEffect,
     BarEffect,
+    BlowEffect,
     ChoiceEffect,
     Comparison,
     Decision,
@@ -61,7 +69,7 @@ from avelorn.tow.schema.rule import (
     seam_of,
 )
 from avelorn.tow.schema.stage import Dice, Side, Stage
-from avelorn.tow.schema.unit import Characteristic
+from avelorn.tow.schema.unit import Characteristic, TroopType
 from avelorn.tow.schema.weapon import WeaponType
 
 logger = logging.getLogger(__name__)
@@ -140,6 +148,19 @@ class ArmourFacts:
 
 
 @dataclass(frozen=True)
+class FoeFacts:
+    """The evaluated facts of the foe the bearer's attack lands on — behind a FoeGate.
+
+    Produced where the foe is in hand (the combat contexts, which already
+    weigh it for outnumbering); a context that never met one leaves the
+    subject None, and a foe-gated rule there is settled by its other
+    conjuncts or reported.
+    """
+
+    troop_type: TroopType | None = None
+
+
+@dataclass(frozen=True)
 class AttackFacts:
     """The evaluated facts of the incoming attack — the values behind an AttackGate.
 
@@ -187,6 +208,10 @@ class GateContext:
     wielding: WeaponFacts = field(default_factory=WeaponFacts)
     worn: tuple[ArmourFacts, ...] | None = None
     target_of: AttackFacts | None = None
+    # An attack always has a foe, so the subject is always present — like
+    # ``wielding``, default facts a producer never filled read as unknown,
+    # never as a foe that did not occur.
+    foe: FoeFacts = field(default_factory=FoeFacts)
 
 
 def _as_context(context: GateContext | None) -> GateContext:
@@ -257,7 +282,7 @@ class _Disposition(Enum):
 
 # One compile step's verdict: the bucket, and whatever modifiers it produced
 # (none for every bucket but a factored effect that also applies).
-_Verdict = tuple[_Disposition, Sequence[Modifier]]
+_Verdict = tuple[_Disposition, Sequence[Modifier | Transform]]
 _UNFACTORED: _Verdict = (_Disposition.UNFACTORED, ())
 _INAPPLICABLE: _Verdict = (_Disposition.INAPPLICABLE, ())
 _HONOURED: _Verdict = (_Disposition.FACTORED, ())
@@ -288,6 +313,9 @@ class CompiledRules:
     """
 
     modifiers: tuple[Modifier, ...] = ()
+    # Bespoke walk hooks a declarative effect compiled to (a blow's denial
+    # and escalation) — applied beside the modifiers, claimed the same way.
+    transforms: tuple[Transform, ...] = ()
     factored: tuple[str, ...] = ()
     unfactored: tuple[str, ...] = ()
     inapplicable: tuple[str, ...] = ()
@@ -331,6 +359,7 @@ def compile_rules(
     """
     context = _as_context(conditions)
     modifiers: list[Modifier] = []
+    transforms: list[Transform] = []
     buckets: dict[_Disposition, list[str]] = {disposition: [] for disposition in _Disposition}
     for printed in printed_rules:
         rule = resolved.get(printed)
@@ -340,10 +369,15 @@ def compile_rules(
         disposition, compiled = _compile(rule, context, grants, seat)
         buckets[disposition].append(printed)
         if compiled:
-            logger.debug("rule factored: %s -> %d modifier(s)", printed, len(compiled))
-        modifiers.extend(compiled)
+            logger.debug("rule factored: %s -> %d record(s)", printed, len(compiled))
+        for record in compiled:
+            if isinstance(record, Modifier):
+                modifiers.append(record)
+            else:
+                transforms.append(record)
     return CompiledRules(
         tuple(modifiers),
+        tuple(transforms),
         tuple(buckets[_Disposition.FACTORED]),
         tuple(buckets[_Disposition.UNFACTORED]),
         tuple(buckets[_Disposition.INAPPLICABLE]),
@@ -428,17 +462,17 @@ def _compile(
     # condition evaluates False: honoured with no modifiers, not unfactored.
     if not rule.effects:
         return _UNFACTORED
-    modifiers: list[Modifier] = []
+    records: list[Modifier | Transform] = []
     dispositions: set[_Disposition] = set()
     for effect in rule.effects:
         disposition, compiled = _compile_effect(effect, context, grants, seat)
         if disposition is _Disposition.UNFACTORED:
             return _UNFACTORED
         dispositions.add(disposition)
-        modifiers.extend(compiled)
+        records.extend(compiled)
     if dispositions == {_Disposition.INAPPLICABLE}:
         return _INAPPLICABLE
-    return _Disposition.FACTORED, modifiers
+    return _Disposition.FACTORED, records
 
 
 @dataclass(frozen=True)
@@ -484,6 +518,19 @@ def _compile_effect(
         # A grant confers a named rule under its own outer gate; the granted
         # rule's own effects (kept with their inner gates) compile in its place.
         return _compile_grant(effect, context, grants, seat)
+    if isinstance(effect, BlowEffect):
+        # A blow is the attacker's alone: it denies the foe's save and may
+        # escalate the outcome, so it compiles only from the attacker's seat
+        # — the target's compile of the same rule is inapplicable, exactly
+        # as an enemy-subject modifier's would be.
+        if seat is not Side.ATTACKER:
+            return _INAPPLICABLE
+        applies = _gate_applies(effect, context)
+        if applies is None:
+            return _UNFACTORED
+        if not applies:
+            return _HONOURED
+        return _Disposition.FACTORED, [_blow_transform(effect)]
     if not isinstance(effect, ModifierEffect):
         # Effects for other seams (e.g. re-rolls on make-panic-tests)
         # are not attack modifiers; their seams consume them directly.
@@ -545,6 +592,30 @@ def _compile_effect(
             for roll, amount in zip(rolls, amounts, strict=True)
         ],
     )
+
+
+def _blow_transform(effect: BlowEffect) -> Transform:
+    # The blow as the walk speaks it: on the trigger's face, the denied save
+    # takes no roll for the rest of this attack, and — for a slaying blow —
+    # an unsaved wound resolves as the rulebook's Instant Kill. The walk
+    # rolls the ward after the armour save untouched, which is the printed
+    # "(Ward saves can be attempted as normal)"; an automatic roll shows no
+    # face, so the trigger cannot fire — the printed automatic-wound
+    # exception, emerging from the model.
+    trigger = effect.natural
+    assert trigger is not None  # the schema requires the trigger
+    denied, slays = tuple(effect.denies), effect.slays
+
+    def on_success(face: int, profile: AttackProfile) -> AttackProfile:
+        if face != trigger.face:
+            return profile
+        for stage in denied:
+            profile = profile.with_target(stage, RollState.IMPOSSIBLE)
+        if slays:
+            profile = replace(profile, unsaved_outcome=AttackOutcome.INSTANT_KILL)
+        return profile
+
+    return Transform(stage=trigger.roll, on_success=on_success)
 
 
 def _compile_grant(
@@ -1116,6 +1187,9 @@ def _node_applies(required: object, actual: object, is_branch: bool) -> bool | N
             return None
         assert isinstance(actual, int)  # a Comparison leaf reads a numeric fact
         return required.matches(actual)
+    if isinstance(required, tuple):
+        # A printed list ("infantry or cavalry"): satisfied by any member.
+        return None if actual is None else actual in required
     return None if actual is None else (actual == required)
 
 
