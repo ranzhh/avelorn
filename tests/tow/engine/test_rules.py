@@ -666,6 +666,27 @@ def test_effective_characteristic_minimum_floors_the_malus() -> None:
     assert result.value == 1
 
 
+def test_effective_characteristic_bounds_clamp_the_folded_result() -> None:
+    """A printed bound clamps the folded value, whatever the rule-list order.
+
+    Base S2 under foe maluses of -1 (to a minimum of 1) and -2 (no floor):
+    the adds sum to -3 and the declared floor clamps the result at 1.
+    Clamping per operation would read -1 in one order and 1 in the other.
+    """
+
+    def malus(amount: int, minimum: int | None, name: str) -> Rule:
+        payload: dict[str, object] = {"enemy": True, "add": {Characteristic.STRENGTH: amount}}
+        if minimum is not None:
+            payload["minimum"] = minimum
+        effect = ModifierEffect.model_validate(payload)
+        return Rule(id=name.lower(), name=name, paragraphs=["…"], effects=[effect])
+
+    floored, bare = malus(-1, 1, "Floored"), malus(-2, None, "Bare")
+    for order in ([floored, bare], [bare, floored]):
+        result = effective_characteristic(2, Characteristic.STRENGTH, [], foe_rules=order)
+        assert result.value == 1
+
+
 def test_effective_characteristic_own_fold_skips_enemy_subject_effects() -> None:
     """A bearer's own enemy-subject effect is the foe's business, not its own read.
 

@@ -1308,12 +1308,17 @@ def _effective_quantity(
     if len(targets) == 1:
         value = targets.pop()  # a single agreed target replaces the base
     # no set leaves the base; conflicting sets cancel, and the base stands
-    for amount, maximum, minimum in adds:
-        value += amount
-        if maximum is not None:
-            value = min(value, maximum)
-        if minimum is not None:
-            value = max(value, minimum)
+    value += sum(amount for amount, _, _ in adds)
+    # A printed bound ("to a minimum of 1", "to a maximum of 10") is a property
+    # of the modified value, not of one step of the fold — clamping per
+    # operation would make the result depend on rule-list order. Every declared
+    # bound clamps the finished sum.
+    ceilings = [maximum for _, maximum, _ in adds if maximum is not None]
+    floors = [minimum for _, _, minimum in adds if minimum is not None]
+    if ceilings:
+        value = min(value, *ceilings)
+    if floors:
+        value = max(value, *floors)
     logger.debug("%s -> %d (%d rule(s) factored)", key, value, len(factored) + len(foe_factored))
     return EffectiveValue(value, factored, unfactored, foe_factored, foe_unfactored)
 
