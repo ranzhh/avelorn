@@ -241,13 +241,16 @@ class CombatGate(Gate):
     """A gate on the close combat the model is fighting.
 
     Facts of the combat itself, not the model: ``first_round`` (Elven Reflexes,
-    Martial Prowess) and ``outnumbers`` — whether this side's Unit Strength
-    beats the foe's (Massed Infantry). Both are booleans today; the subject is
-    where a round *number* or a flank/rear facing would join.
+    Martial Prowess), ``outnumbers`` — whether this side's Unit Strength
+    beats the foe's (Massed Infantry) — and ``was_charged``, whether the foe
+    charged the bearer this turn (Shieldwall's "a turn in which it was
+    charged"). Booleans today; the subject is where a round *number* or a
+    flank/rear facing would join.
     """
 
     first_round: bool | None = None
     outnumbers: bool | None = None
+    was_charged: bool | None = None
 
 
 class MovementGate(Gate):
@@ -870,6 +873,51 @@ class VolleyEffect(GatedEffect):
     volley: Literal["half-of-each-rear-rank"]
 
 
+class ReplaceEffect(GatedEffect):
+    """Replace one of a decision's outcomes with another, leaving the rest rolled.
+
+    The sibling of :class:`ChoiceEffect` for a choice narrower than the whole
+    decision: Shieldwall's "may Give Ground rather than Fall Back in Good
+    Order" takes effect only where the Break test would have resolved Fall
+    Back — the Breaks and Gives Ground slices roll as ever, where a *forced*
+    decision sends the whole mass one way. ``replaces`` maps the decision to
+    ``{outcome replaced: outcome taken}``, each resolved by slug against the
+    decision's own outcome set, exactly as ``forces`` values are.
+    Self-naming by ``replaces``; each model forbids the others' keys.
+    """
+
+    replaces: dict[Decision, dict[Outcome, Outcome]]
+
+    @field_validator("replaces", mode="plain")
+    @classmethod
+    def _resolve_replaced(cls, raw: object) -> dict["Decision", dict["Outcome", "Outcome"]]:
+        if not isinstance(raw, dict) or not raw:
+            raise ValueError("replaces maps at least one decision to {replaced: taken}")
+        resolved: dict[Decision, dict[Outcome, Outcome]] = {}
+        for decision, swaps in raw.items():
+            key = decision if isinstance(decision, Decision) else Decision(decision)
+            if not isinstance(swaps, dict) or not swaps:
+                raise ValueError("a replaced decision maps at least one outcome to another")
+            pairs: dict[Outcome, Outcome] = {}
+            for replaced, taken in swaps.items():
+                one = replaced if isinstance(replaced, Outcome) else _as_outcome(replaced)
+                other = taken if isinstance(taken, Outcome) else _as_outcome(taken)
+                if one == other:
+                    raise ValueError(f"replacing {one.value!r} with itself says nothing")
+                pairs[one] = other
+            resolved[key] = pairs
+        return resolved
+
+    @field_serializer("replaces")
+    def _dump_replaced(
+        self, replaces: dict["Decision", dict["Outcome", "Outcome"]]
+    ) -> dict[str, dict[str, str]]:
+        return {
+            decision.value: {replaced.value: taken.value for replaced, taken in swaps.items()}
+            for decision, swaps in replaces.items()
+        }
+
+
 RuleEffect = (
     ModifierEffect
     | RerollEffect
@@ -879,6 +927,7 @@ RuleEffect = (
     | BarEffect
     | BlowEffect
     | VolleyEffect
+    | ReplaceEffect
 )
 
 

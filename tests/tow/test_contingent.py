@@ -236,13 +236,9 @@ def test_deploy_by_slug_matches_fielding_the_datasheet(spearmen_unit: Unit) -> N
 
 
 def test_deploy_folds_options_through_the_complement() -> None:
-    """Options thread through the Complement: Shieldwall rides on unresolved.
-
-    Shieldwall has no rule entry, so it joins the loadout's printed
-    remainder rather than resolving.
-    """
+    """Options thread through the Complement: Shieldwall resolves into the loadout."""
     contingent = Contingent.deploy("elven-spearmen", 10, ["Shieldwall"], data=REPO)
-    assert "Shieldwall" in contingent.loadout.unresolved_rules
+    assert "shieldwall" in [rule.id for rule in contingent.loadout.rules]
 
 
 def test_deploy_musters_a_list_legal_size() -> None:
@@ -270,8 +266,8 @@ def test_default_repository_is_a_cached_singleton() -> None:
 def test_field_tolerates_rules_without_entries(spearmen_unit: Unit) -> None:
     """A special rule with no entry is the norm: carried printed, not lost.
 
-    Option-granted rules resolve on the same terms — Shieldwall has no
-    entry under data/tow/rules/, so it joins the printed remainder that
+    Option-granted rules resolve on the same terms — Shieldwall resolves to
+    its entry, while Close Order (no entry) joins the printed remainder that
     keeps feeding the "not factored" notes.
     """
     mustered = Complement(unit=spearmen_unit, size=10, options=["Shieldwall"])
@@ -281,11 +277,12 @@ def test_field_tolerates_rules_without_entries(spearmen_unit: Unit) -> None:
         "elven-reflexes",
         "martial-prowess",
         "valour-of-ages",
+        "shieldwall",
         "press-of-battle",  # conferred by the Regular Infantry troop type
         "massed-infantry",  # also conferred by the troop type
         "parry",  # also conferred by the troop type
     ]
-    assert "Shieldwall" in contingent.loadout.unresolved_rules
+    assert "Close Order" in contingent.loadout.unresolved_rules
 
 
 def test_field_substitutes_rule_parameters_as_printed(spearmen_unit: Unit) -> None:

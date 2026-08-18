@@ -4,9 +4,15 @@ from fractions import Fraction
 
 import pytest
 
-from avelorn.tow.contingent import Contingent, Loadout
+from avelorn.tow.contingent import Charge, ChargeArc, Contingent, Loadout
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.phases.combat import CombatResult, SideBreak, break_test
+from avelorn.tow.phases.combat import (
+    CombatResult,
+    SideBreak,
+    break_test,
+    combat_result,
+    fight,
+)
 from avelorn.tow.phases.shooting import ShootingResult, make_panic_tests
 from avelorn.tow.schema.psychology import PanicCause
 from avelorn.tow.schema.rule import RerollEffect, Rule
@@ -276,3 +282,44 @@ def test_break_test_scores_whichever_side_lost() -> None:
     b_lost = result.b.p_gives_ground + result.b.p_falls_back + result.b.p_breaks
     assert a_lost == pytest.approx(0.5)  # A is the loser half the time
     assert a_lost + b_lost + result.p_draw == pytest.approx(1.0)
+
+
+def test_shieldwall_gives_ground_where_it_would_fall_back_on_the_turn_it_was_charged() -> None:
+    """The real entry: a charged, shielded wall Gives Ground instead of Falling Back.
+
+    Ironbreakers print Stubborn and Shieldwall both: charged, Stubborn's
+    whole forced Fall Back in Good Order becomes Give Ground, and nothing
+    Breaks. Stripped of Shieldwall — or not charged at all, the wall never
+    forming — Stubborn's Fall Back stands. Both rules' authored caveats are
+    relayed in the notes.
+    """
+    lions = Contingent.deploy("white-lions-of-chrace", 20, data=REPO).wielding(
+        "Chracian Great Blade"
+    )
+    charger = lions.charging(Charge(6, ChargeArc.FRONT))
+    breakers = Contingent.deploy("ironbreakers", 15, data=REPO).wielding("Hand Weapon")
+
+    charged = break_test(
+        combat_result(fight(charger, breakers, first_round=True)), charger, breakers
+    )
+    assert charged.b.p_falls_back == 0
+    assert charged.b.p_breaks == 0
+    assert float(charged.b.p_gives_ground) > 0.5
+    assert any("Shieldwall" in note for note in charged.notes)
+
+    no_wall_unit = REPO.units["ironbreakers"].model_copy(
+        update={
+            "special_rules": [
+                r for r in REPO.units["ironbreakers"].special_rules if r != "Shieldwall"
+            ]
+        }
+    )
+    no_wall = Contingent.field(no_wall_unit, 15, data=REPO).wielding("Hand Weapon")
+    stripped = break_test(
+        combat_result(fight(charger, no_wall, first_round=True)), charger, no_wall
+    )
+    assert stripped.b.p_gives_ground == 0
+    assert stripped.b.p_falls_back == charged.b.p_gives_ground  # the same mass, unconverted
+
+    standing = break_test(combat_result(fight(lions, breakers)), lions, breakers)
+    assert standing.b.p_gives_ground == 0  # not charged: the wall never forms

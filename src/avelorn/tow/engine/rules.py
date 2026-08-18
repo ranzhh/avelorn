@@ -62,6 +62,7 @@ from avelorn.tow.schema.rule import (
     ModifierEffect,
     NaturalRoll,
     Quantity,
+    ReplaceEffect,
     RerollEffect,
     Rule,
     RuleEffect,
@@ -100,6 +101,7 @@ class CombatFacts:
 
     first_round: bool | None = None
     outnumbers: bool | None = None
+    was_charged: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -449,6 +451,39 @@ def forced_outcome(
             ):
                 return effect.forces[decision], rule
     return None, None
+
+
+def outcome_substitutions(
+    rules: Sequence[Rule],
+    decision: Decision,
+    conditions: "GateContext | None" = None,
+) -> list[tuple[Outcome, Outcome, Rule]]:
+    """The outcome substitutions a contingent's rules make at ``decision``.
+
+    The reader of :class:`~avelorn.tow.schema.rule.ReplaceEffect` — a choice
+    that replaces one outcome with another and leaves the rest rolled,
+    Shieldwall's "may Give Ground rather than Fall Back in Good Order" —
+    gated on the evaluated ``conditions`` (a gate the facts cannot answer
+    leaves the rule unapplied, reported by the caller as ever). Each entry
+    reads (replaced, taken, rule).
+
+    Returns:
+        The substitutions whose gates hold, in rule order.
+    """
+    context = _as_context(conditions)
+    found: list[tuple[Outcome, Outcome, Rule]] = []
+    for rule in rules:
+        for effect in rule.effects:
+            if (
+                isinstance(effect, ReplaceEffect)
+                and decision in effect.replaces
+                and _gate_applies(effect, context) is True
+            ):
+                found.extend(
+                    (replaced, taken, rule)
+                    for replaced, taken in effect.replaces[decision].items()
+                )
+    return found
 
 
 def _compile(
