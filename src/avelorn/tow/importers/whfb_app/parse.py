@@ -420,11 +420,13 @@ def _parse_option_line(
             applies_to=stated.applies_to or group.applies_to,
         )
 
-    option = _matched_option(slug, body, points, per_model, scope, warnings)
+    option = _matched_option(slug, body, points, per_model, scope, line.rules, warnings)
     if option is None and group.verb:
         # The header stated the action for the whole group, so this line is
         # a bare name: "take" + "Great Weapon".
-        option = _matched_option(slug, f"{group.verb} {body}", points, per_model, scope, warnings)
+        option = _matched_option(
+            slug, f"{group.verb} {body}", points, per_model, scope, line.rules, warnings
+        )
     if option is not None:
         return option
 
@@ -439,12 +441,27 @@ def _parse_option_line(
     )
 
 
+def _equipment_names(gained: str, linked: list[str]) -> list[str]:
+    """Read the equipment an option's gained side names.
+
+    Returns:
+        One name per entry the phrase joins with "and", or the whole
+        phrase when its parts are not all linked entries ("Replace
+        Cavalry Spear with shortbows" gains plain text, not an entry).
+    """
+    parts = [part.strip() for part in re.split(r"\s+and\s+", gained)]
+    if len(parts) > 1 and all(part in linked for part in parts):
+        return parts
+    return [gained]
+
+
 def _matched_option(
     slug: str,
     body: str,
     points: int | None,
     per_model: bool,
     scope: OptionGroup,
+    linked: list[str],
     warnings: list[str],
 ) -> UnitOption | None:
     """Match one option line against the printed forms the grammar knows.
@@ -489,7 +506,7 @@ def _matched_option(
             kind=OptionKind.EQUIPMENT,
             points=points,
             per_model=per_model,
-            adds_equipment=[m.group(1)],
+            adds_equipment=_equipment_names(m.group(1), linked),
             applies_to=scope.applies_to,
             limit=scope.limit,
         )
@@ -503,7 +520,7 @@ def _matched_option(
             kind=OptionKind.EQUIPMENT,
             points=points,
             per_model=per_model,
-            adds_equipment=[gained],
+            adds_equipment=_equipment_names(gained, linked),
             removes_equipment=[m.group(1)],
             applies_to=scope.applies_to,
             limit=scope.limit,
