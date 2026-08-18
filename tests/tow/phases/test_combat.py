@@ -1198,10 +1198,12 @@ def test_strike_unit_gromril_armour_re_rolls_the_dwarfs_own_save_natural_ones() 
     """Gromril Armour betters the Ironbreakers' save while they defend.
 
     Spearmen (WS4, S3) strike Ironbreakers (WS5, T4, Full Plate and Shield):
-    hit 4+, wound 5+, save 3+, so p_unsaved = 1/2 * 1/3 * 1/3 = 1/18 with the
-    rule stripped. Re-rolling the save's natural 1s lifts P(save) to
-    4/6 + 1/6 * 4/6 = 7/9, so p_unsaved = 1/2 * 1/3 * 2/9 = 1/27 — read
-    straight from the unit's printed rules, claimed rather than noted.
+    hit 4+, wound 5+, save 3+, and Runes of Protection wards what passes
+    them on a 6+ against the mundane spears (a further 5/6 factor), so
+    p_unsaved = 1/2 * 1/3 * 1/3 * 5/6 = 5/108 with the re-roll stripped.
+    Re-rolling the save's natural 1s lifts P(save) to 4/6 + 1/6 * 4/6 = 7/9,
+    so p_unsaved = 1/2 * 1/3 * 2/9 * 5/6 = 5/162 — read straight from the
+    unit's printed rules, claimed rather than noted.
     """
     spearmen, ironbreakers = REPO.units["elven-spearmen"], REPO.units["ironbreakers"]
     stripped = ironbreakers.model_copy(
@@ -1211,8 +1213,8 @@ def test_strike_unit_gromril_armour_re_rolls_the_dwarfs_own_save_natural_ones() 
 
     plain = strike_unit(attacker, _fielded(stripped, 10).wielding("Hand Weapon"))
     gromril = strike_unit(attacker, _fielded(ironbreakers, 10).wielding("Hand Weapon"))
-    assert plain.p_unsaved == pytest.approx(1 / 18)
-    assert gromril.p_unsaved == pytest.approx(1 / 27)
+    assert plain.p_unsaved == pytest.approx(5 / 108)
+    assert gromril.p_unsaved == pytest.approx(5 / 162)
     assert not any("Gromril Armour" in note for note in gromril.notes)
 
 
@@ -1294,3 +1296,41 @@ def test_strike_unit_notes_the_strikers_save_re_roll_nothing_saves_against() -> 
 
     both = fight(striking, struck)
     assert not any("Gromril Armour" in note for note in both.notes)
+
+
+def test_strike_unit_rolls_the_targets_rule_granted_ward_after_its_armour() -> None:
+    """Runes of Protection wards Ironbreakers on a 6+ in melee too.
+
+    The ward is its own stage after the armour save, so the per-attack
+    unsaved probability is exactly 5/6 of the unwarded one whatever the
+    armour did, and the reported ward target is the granted 6+.
+    """
+    spearmen = REPO.units["elven-spearmen"]
+    breakers = Contingent.deploy("ironbreakers", 10, data=REPO)
+    stripped_unit = REPO.units["ironbreakers"].model_copy(
+        update={
+            "special_rules": [
+                r for r in REPO.units["ironbreakers"].special_rules if r != "Runes of Protection"
+            ]
+        }
+    )
+    stripped = Contingent.field(stripped_unit, 10, data=REPO)
+    striker = _fielded(spearmen, 5).wielding("Thrusting Spear")
+
+    warded = strike_unit(striker, breakers)
+    unwarded = strike_unit(striker, stripped)
+
+    assert warded.ward_target == 6
+    assert unwarded.ward_target is None
+    assert warded.p_unsaved == pytest.approx(unwarded.p_unsaved * 5 / 6)
+    assert not any("Runes of Protection" in note for note in warded.notes)
+
+
+def test_fight_claims_each_sides_ward_from_its_own_seat() -> None:
+    """A full round reads both wards: each side's fold is in the math, never noted."""
+    breakers = Contingent.deploy("ironbreakers", 10, data=REPO).wielding("Hand Weapon")
+    spearmen = _fielded(REPO.units["elven-spearmen"], 10).wielding("Thrusting Spear")
+
+    result = fight(spearmen, breakers, first_round=True)
+
+    assert not any("Runes of Protection" in note for note in result.notes)

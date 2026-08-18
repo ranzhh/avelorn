@@ -1031,6 +1031,30 @@ def test_effective_ward_target_is_none_when_nothing_grants_one() -> None:
     assert ward.unfactored == ()
 
 
+def test_runes_of_protection_ward_reads_the_incoming_attacks_magic() -> None:
+    """The real entry: a 6+ ward against a non-magical attack, none against a magical one.
+
+    A magical volley (the Bow of Avelorn) answers the gate False: honoured,
+    factored, and no ward granted. An attack whose magic is unknown leaves the
+    rule unfactored, reported rather than guessed.
+    """
+    rule = REPO.rules["runes-of-protection"]
+
+    mundane = GateContext(target_of=AttackFacts(kind=AttackKind.SHOOTING, magical=False))
+    warded = effective_ward_target([rule], mundane)
+    assert warded.target == 6
+    assert warded.factored == ("Runes of Protection",)
+
+    magical = GateContext(target_of=AttackFacts(kind=AttackKind.SHOOTING, magical=True))
+    unwarded = effective_ward_target([rule], magical)
+    assert unwarded.target is None
+    assert unwarded.factored == ("Runes of Protection",)
+
+    unknown = effective_ward_target([rule], GateContext(target_of=AttackFacts()))
+    assert unknown.target is None
+    assert unknown.unfactored == ("Runes of Protection",)
+
+
 def test_a_worn_gated_ward_reads_the_equipment_like_any_other_gate() -> None:
     """A ward granted by a piece of equipment gates on the armour worn.
 
