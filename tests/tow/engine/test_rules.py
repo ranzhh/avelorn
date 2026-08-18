@@ -4,7 +4,6 @@ from fractions import Fraction
 from typing import Literal
 
 import pytest
-from pydantic import ValidationError
 
 from avelorn.core.distribution import Distribution
 from avelorn.core.registry import Registry
@@ -1439,7 +1438,9 @@ def test_printed_rule_substitutes_a_dice_multiplier() -> None:
     # unbound and the rule rides along unfactored, never misread.
     bane = printed_rule("Armour Bane (D3)", REPO.rules)
     assert bane is not None
-    assert "X" in bane.effects[0].add.values()
+    effect = bane.effects[0]
+    assert isinstance(effect, ModifierEffect)
+    assert effect.add is not None and "X" in effect.add.values()
 
 
 def test_effective_wound_multiplier_reads_the_printed_value() -> None:

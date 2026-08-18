@@ -72,6 +72,7 @@ from avelorn.tow.engine.rules import (
     effective_automatic_hits,
     effective_characteristic,
     effective_combat_result_bonus,
+    effective_wound_multiplier,
     factored_notes,
     forced_outcome,
     outcome_substitutions,
@@ -286,6 +287,13 @@ class _Engagement:
     p_unsaved: Probability
     p_kill: Probability
     target_wounds: int
+    # The wounds each unsaved wound of this batch inflicts (Multiple
+    # Wounds (X)'s multiplier, uncapped — the casualty fold owns the cap), or
+    # None for the plain single wound; and the multiplier rules behind it.
+    # The names are claimed only where a fold actually honours the multiplier
+    # (_pooled_damage) — a pool it cannot enter exactly leaves them noted.
+    damage: Distribution[int] | None
+    multiplier_factored: frozenset[str]
     hit_target: int
     wound_target: int | None
     save_target: int | None
@@ -472,6 +480,16 @@ def _engage(
     # are the rider's (the-combat-phase/split-profile-cavalry: the rider at
     # zero Wounds removes the whole model), which main already is.
     target_wounds = target_unit.main[Characteristic.WOUNDS] or 1
+    # Multiple Wounds (X): what each unsaved wound is worth lands on the
+    # casualty fold, never on the dice, so the multiplier is read here from
+    # the profile in use's resolved entries. Whether a fold can honour it —
+    # and so claim it — is decided where batches pool (_pooled_damage).
+    in_use = [
+        striker.loadout.weapon_rules[name]
+        for name in profile.special_rules
+        if name in striker.loadout.weapon_rules
+    ]
+    multiplier = effective_wound_multiplier(in_use, conditions)
     logger.debug(
         "%s (WS %d, A %d) vs %s (WS %d, T %d): per-attack unsaved p=%.3f",
         who,
@@ -495,6 +513,8 @@ def _engage(
         p_unsaved=p_unsaved,
         p_kill=p_kill,
         target_wounds=target_wounds,
+        damage=multiplier.wounds,
+        multiplier_factored=frozenset(multiplier.factored),
         hit_target=hit,
         wound_target=wound,
         save_target=save,
@@ -567,6 +587,10 @@ class _AutomaticEngagement:
     p_unsaved: Probability
     p_kill: Probability
     target_wounds: int
+    # Weaponless hits carry no wound multiplier: each wound is worth one,
+    # the pooled fold's plain reading.
+    damage: "Distribution[int] | None" = None
+    multiplier_factored: frozenset[str] = frozenset()
 
     def attack_counts(self, survivors: int) -> Distribution[int]:
         """The hits ``survivors`` of the striking models cause.
@@ -769,10 +793,15 @@ def strike_unit(
         for e in engagements
     ]
     attacks = sum(batch.attacks for batch in batches)
+    # A one-sided strike pools its batches' wounds into one fold, so the
+    # multiplier enters (and its rules are claimed) only where that pool is
+    # exact — see _pooled_damage.
+    damage, multiplier_claimed = _pooled_damage(engagements, engagement.target_wounds)
     distribution, casualties = batched_wound_and_casualties(
         batches,
         wounds_per_model=engagement.target_wounds,
         targets=targets,
+        damage=damage,
     )
     mount_notes = ()
     if mount_engagement is not None:
@@ -837,7 +866,9 @@ def strike_unit(
                 },
             ),
             *dict.fromkeys(
-                note for e in engagements for note in (*_weapon_rule_notes(e), *e.notes)
+                note
+                for e in engagements
+                for note in (*_weapon_rule_notes(e, claimed=multiplier_claimed), *e.notes)
             ),
             *mount_notes,
         ),
@@ -1381,6 +1412,11 @@ def fight(
     # and file's; a side with no mount contributes empty sets.
     a_own = [s for s in (a_strikes, a_mount_strikes) if s is not None]
     b_own = [s for s in (b_strikes, b_mount_strikes) if s is not None]
+    # A side's wound multipliers are honoured (or not) by the folds its
+    # batches pool into — one per Initiative step — so what each step's group
+    # can claim is read off the same grouping the round resolves with.
+    a_multipliers = _multiplier_claims(a_batches)
+    b_multipliers = _multiplier_claims(b_batches)
     notes = tuple(
         dict.fromkeys(
             [
@@ -1445,14 +1481,22 @@ def fight(
                     note
                     for s in a_own
                     for note in _weapon_rule_notes(
-                        s, claimed=[n for o in b_own for n in o.defence.weapon_factored]
+                        s,
+                        claimed=[
+                            *(n for o in b_own for n in o.defence.weapon_factored),
+                            *a_multipliers,
+                        ],
                     )
                 ),
                 *(
                     note
                     for s in b_own
                     for note in _weapon_rule_notes(
-                        s, claimed=[n for o in a_own for n in o.defence.weapon_factored]
+                        s,
+                        claimed=[
+                            *(n for o in a_own for n in o.defence.weapon_factored),
+                            *b_multipliers,
+                        ],
                     )
                 ),
                 *(note for s in a_own for note in s.notes),
@@ -1482,6 +1526,45 @@ def fight(
     )
 
 
+def _pooled_damage(
+    engagements: "Sequence[_Engagement | _AutomaticEngagement]", wounds_per_model: int
+) -> tuple[Distribution[int] | None, frozenset[str]]:
+    # The one damage distribution a pooled casualty fold may apply, and the
+    # multiplier rules it thereby honours. Batches pooled into one fold share
+    # a wound pool, so a multiplier folds exactly only when every batch's
+    # wounds are worth the same once capped at the target's Wounds — a lone
+    # batch, peers sharing the multiplier, or a cap that levels them (any
+    # multiplier against a 1-Wound model is a single wound). A pool mixing
+    # plain and multiplied wounds has no printed allocation order, so the
+    # multiplier there stays out of the math and its rule rides noted — the
+    # honest verdict — rather than an order being picked silently.
+    plain: Distribution[int] = Distribution.pure(1)
+    capped = [
+        plain
+        if engagement.damage is None
+        else engagement.damage.map(lambda dealt: min(dealt, wounds_per_model))
+        for engagement in engagements
+    ]
+    if any(damage != capped[0] for damage in capped):
+        return None, frozenset()
+    claimed = frozenset(
+        name for engagement in engagements for name in engagement.multiplier_factored
+    )
+    return (None if capped[0] == plain else capped[0]), claimed
+
+
+def _multiplier_claims(batches: "_Batches") -> frozenset[str]:
+    # The multiplier rules a side's round honours: its batches strike — and
+    # pool — per Initiative step, so each step's group answers for itself
+    # through the same read the fold makes (_pooled_damage).
+    claimed: set[str] = set()
+    for step in {initiative for initiative, _ in batches}:
+        group = [e for initiative, e in batches if initiative == step]
+        _, names = _pooled_damage(group, group[0].target_wounds)
+        claimed |= names
+    return frozenset(claimed)
+
+
 def _fell(
     engagements: "Sequence[_Engagement | _AutomaticEngagement]", fighters: int, *, targets: int
 ) -> Distribution[int]:
@@ -1498,6 +1581,7 @@ def _fell(
     counts: Distribution[tuple[int, ...]] = Distribution.pure(())
     for engagement in engagements:
         counts = counts.combine(engagement.attack_counts(fighters), lambda ns, n: (*ns, n))
+    damage, _ = _pooled_damage(engagements, engagements[0].target_wounds)
 
     def felled(ns: tuple[int, ...]) -> Distribution[int]:
         batches = [
@@ -1508,6 +1592,7 @@ def _fell(
             batches,
             wounds_per_model=engagements[0].target_wounds,
             targets=targets,
+            damage=damage,
         )
         return Distribution.from_counts(casualties)
 

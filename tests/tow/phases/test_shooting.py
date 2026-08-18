@@ -1,6 +1,7 @@
 """Shooting chain tests, golden values hand-computed from the rulebook charts."""
 
 from dataclasses import replace
+from fractions import Fraction
 
 import pytest
 
@@ -665,3 +666,45 @@ def test_a_blow_never_fires_in_a_volley() -> None:
 
     assert blow.p_unsaved == plain.p_unsaved
     assert not any("not factored: Killing Blow" in n for n in blow.notes)
+
+
+def test_multiple_wounds_d3_shoots_as_a_distribution_not_an_expectation() -> None:
+    """The real entry over a volley: MW (D3) rolled separately per unsaved wound.
+
+    One archer with a doctored Maw Bow (S3, Multiple Wounds (D3)) at an
+    unarmoured 3-Wound target: BS4 (3+), S3 vs T3 (4+), no save —
+    p_unsaved = 1/3, and the single model falls only on the D3's 3, so
+    P(casualty) = 1/3 * 1/3 = 1/9, exactly. The plain bow never fells it.
+    """
+    from avelorn.core.registry import Registry
+    from avelorn.tow.schema.weapon import Weapon, WeaponProfile
+
+    bow = Weapon(
+        id="maw-bow",
+        name="Maw Bow",
+        profiles=[
+            WeaponProfile.model_validate(
+                {"R": 30, "S": 3, "AP": "-", "special_rules": ["Multiple Wounds (D3)"]}
+            )
+        ],
+    )
+    repo = TOWRepository()
+    repo.weapons = Registry([*REPO.weapons.values(), bow], kind="weapon")
+    archers = REPO.units["elven-archers"]
+    armed = archers.model_copy(update={"equipment": [*archers.equipment, "Maw Bow"]})
+    spearmen = REPO.units["elven-spearmen"]
+    monster = spearmen.model_copy(
+        deep=True, update={"id": "w3", "name": "W3 Target", "equipment": ["Hand Weapon"]}
+    )
+    monster.profiles[0].characteristics[Characteristic.WOUNDS] = 3
+    target = Contingent.field(monster, 1, data=repo)
+
+    volley = shoot_unit(Contingent.field(armed, 1, data=repo).wielding("Maw Bow"), target)
+
+    assert volley.shots == 1
+    assert volley.p_unsaved == pytest.approx(1 / 3)
+    assert volley.casualties == [Fraction(8, 9), Fraction(1, 9)]
+    assert not any("not factored: Multiple Wounds" in note for note in volley.notes)
+
+    plain = shoot_unit(Contingent.field(archers, 1, data=repo).wielding("Longbow"), target)
+    assert plain.casualties == [1]  # one wound never fells a 3-Wound model
