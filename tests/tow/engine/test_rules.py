@@ -1195,3 +1195,21 @@ def test_killing_blow_compiles_by_seat_gate_and_foe() -> None:
 
     other_seat = compile_rules(["Killing Blow"], index, infantry, seat=Side.TARGET)
     assert other_seat.inapplicable == ("Killing Blow",)
+
+
+def test_deflect_shots_wards_only_a_non_magical_shooting_attack() -> None:
+    """The real entry: a 6+ ward against mundane arrows, none in close combat.
+
+    Deflect Shots gates on the incoming attack's kind as well as its magic --
+    what sets it apart from Witness to Destiny's any-attack ward. A melee blow
+    answers the gate False: honoured, factored, and no ward granted.
+    """
+    rule = REPO.rules["deflect-shots"]
+
+    arrows = GateContext(target_of=AttackFacts(kind=AttackKind.SHOOTING, magical=False))
+    assert effective_ward_target([rule], arrows).target == 6
+
+    blows = GateContext(target_of=AttackFacts(kind=AttackKind.CLOSE_COMBAT, magical=False))
+    unwarded = effective_ward_target([rule], blows)
+    assert unwarded.target is None
+    assert unwarded.factored == ("Deflect Shots",)
