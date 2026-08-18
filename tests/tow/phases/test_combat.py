@@ -1081,6 +1081,77 @@ def test_fight_refuses_automatic_hits_on_a_split_profile_of_differing_strength()
     assert not any("not factored: Stomp Attacks" in note for note in resolved.notes)
 
 
+# --- Enemy-subject effects: a rule of one side landing on the other's numbers ---
+
+
+def test_strike_unit_enfeebling_cold_drops_the_strikers_wound_line() -> None:
+    """A target with Enfeebling Cold saps the striker's Strength by one step.
+
+    Elven Spearmen strike with thrusting spears at the wielder's Strength:
+    S3 vs T3 wounds on 4+; against the cold, S2 vs T3 wounds on 5+ — hit
+    1/2, so p_unsaved falls from 1/4 to 1/6 (no armour on the doctored
+    target). The rule is in the math — claimed, its authored scope note
+    relayed, never listed as not factored.
+    """
+    striker = _fielded(REPO.units["elven-spearmen"], 5).wielding("Thrusting Spear")
+    chilled = strike_unit(striker, _carrying("enfeebling-cold"))
+    plain = strike_unit(striker, _carrying())
+    assert plain.wound_target == 4
+    assert chilled.wound_target == 5
+    assert plain.p_unsaved == pytest.approx(1 / 4)
+    assert chilled.p_unsaved == pytest.approx(1 / 6)
+    assert not any("not factored: Enfeebling Cold" in note for note in chilled.notes)
+    assert any("Enfeebling Cold" in note and "base contact" in note for note in chilled.notes)
+
+
+def test_fight_enfeebling_cold_thins_the_blows_it_suffers() -> None:
+    """In a full round the cold side takes fewer wounds: the foe's S is folded down.
+
+    One plain spearman against one carrying Enfeebling Cold, equal Initiative:
+    the cold side's expected losses are the foe's per-attack 1/6 instead of the
+    unchilled 1/4 (S3 -> S2 against T3, unarmoured).
+    """
+    with_rule = fight(_plain_spearman(), _carrying("enfeebling-cold"), first_round=True)
+    without = fight(_plain_spearman(), _carrying(), first_round=True)
+    assert expected_value(with_rule.b_casualties) == pytest.approx(1 / 6)
+    assert expected_value(without.b_casualties) == pytest.approx(1 / 4)
+    assert not any("not factored: Enfeebling Cold" in note for note in with_rule.notes)
+
+
+def test_fight_blizzard_aura_forces_the_foe_to_strike_last() -> None:
+    """Blizzard Aura: the foe becomes subject to Strike Last, so it strikes at I1.
+
+    The aura bearer's rule folds into the *foe's* Initiative read — the foe's
+    base 4 is replaced by Strike Last's 1, the bearer keeps its own 4 and
+    strikes first. Stripped of the rule the mirror match is simultaneous.
+    """
+    aura = _carrying("blizzard-aura")
+    result = fight(aura, _plain_spearman(), first_round=True)
+    assert result.a_initiative.value == 4
+    assert result.b_initiative.value == 1
+    assert result.first_striker is aura
+    assert not any("not factored: Blizzard Aura" in note for note in result.notes)
+    assert any("Blizzard Aura" in note and "base contact" in note for note in result.notes)
+
+    stripped = fight(_carrying(), _plain_spearman(), first_round=True)
+    assert stripped.b_initiative.value == 4
+    assert stripped.first_striker is None
+
+
+def test_fight_blizzard_aura_cancels_the_foes_strike_first() -> None:
+    """An aura's Strike Last on the foe cancels the foe's own Strike First.
+
+    Two disagreeing sets — the foe's own 10 and the aura's enemy-subject 1 —
+    wash out in one fold, so the foe's base Initiative stands and the round
+    is simultaneous: the printed cancellation, across the two sides' rules.
+    """
+    result = fight(_carrying("blizzard-aura"), _carrying("strike-first"), first_round=True)
+    assert result.b_initiative.value == 4
+    assert result.first_striker is None
+    assert not any("not factored: Blizzard Aura" in note for note in result.notes)
+    assert not any("not factored: Strike First" in note for note in result.notes)
+
+
 # --- Elven Reflexes, end to end from data/ ---
 
 

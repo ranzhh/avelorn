@@ -1,0 +1,31 @@
+# Source: https://tow.whfb.app/special-rules/terror
+id: terror
+name: Terror
+page: 179
+category: Special Rules
+flavour: There are creatures so fierce that their mere appearance can cause the bravest to flee.
+paragraphs:
+  - 'Models with this special rule cause Terror. Models that cause Terror also cause Fear:'
+  - When a unit that causes Terror declares a charge, the charge target must immediately make a Leadership test. If this test
+    is failed, it must Flee. If this test is passed, it can declare its charge reaction normally.If the winning side of a
+    combat includes one or more units that cause Terror, each unit that belongs to the losing side must apply a -1 modifier
+    to its Leadership characteristic when making its Break test.
+  - Note that if a charged unit cannot choose to Flee, it does not make this Leadership test.
+  - Models with the Fear special rule Fear models that cause Terror. Models that cause Terror are immune to Terror. A unit
+    that does not cause Terror does not become immune to Terror when joined by a character that does.
+# Hand-authored, diffable against the paragraphs above. Only the Break-test
+# clause is expressed: "each unit that belongs to the losing side must apply a
+# -1 modifier to its Leadership characteristic when making its Break test" is
+# an enemy-subject Leadership malus, folded into the foe's Leadership where
+# the Break test reads it. The printed "if the winning side ... includes one
+# or more units that cause Terror" is the seam's own structure: only a loser
+# ever rolls against its Leadership, and its foe is then the winner.
+effects:
+  - enemy: true
+    when:
+      combat: true
+    add:
+      Ld: -1
+notes: only the Break-test Leadership malus is modelled — the Leadership test
+  on declaring a charge against a Terror-causer (and the Flee it forces), the
+  Fear interplay, and immunity to Terror are not.

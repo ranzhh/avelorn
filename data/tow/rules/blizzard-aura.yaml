@@ -1,0 +1,25 @@
+# Source: https://tow.whfb.app/special-rules/blizzard-aura
+id: blizzard-aura
+name: Blizzard Aura
+page: 176
+category: Special Rules
+flavour: The ice that sheathes a Frostheart Phoenix is as hard as glass, and enemies find their own strength and resolve eaten
+  away by its chill presence.
+paragraphs:
+  - Whilst in base contact with this model, enemy models become subject to the Strike Last special rule.
+# Hand-authored, diffable against the paragraph above. The sentence's subject
+# is the enemy ("enemy models become subject to ..."), and the rule it confers
+# is inlined as its printed effect: Strike Last reduces the Initiative
+# characteristic to 1 before any other modifiers (see strike-last.yaml), so
+# this is that set with the enemy subject, folded into the foe's Initiative
+# read. A foe of its own carrying Strike First has the two sets cancel
+# structurally, exactly as a model printing both rules would.
+effects:
+  - enemy: true
+    when:
+      combat: true
+    set:
+      I: 1
+notes: base contact is read as being engaged in the combat — the whole engaged
+  enemy unit strikes last, not only the models touching this one; mount rows
+  are read printed, so an engaged foe's mounts keep their own Initiative.
