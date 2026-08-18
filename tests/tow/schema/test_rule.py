@@ -521,6 +521,7 @@ def test_every_quantity_routes_to_a_seam() -> None:
         Seam.RANK,
         Seam.COMBAT_RESULT,
         Seam.ARMOUR,
+        Seam.WARD,
     }
 
 
@@ -561,3 +562,16 @@ def test_every_rule_entry_carries_effects() -> None:
     """
     idle = sorted(rule.id for rule in TOWRepository().rules.values() if not rule.effects)
     assert idle == []
+
+
+def test_a_ward_save_is_granted_at_a_value_never_moved() -> None:
+    """A ward is granted whole ("has a 6+ Ward save"), so a set; an add has no printed form."""
+    _EFFECT.validate_python({"set": {"ward-save": 6}})
+    with pytest.raises(ValidationError, match="granted at a value"):
+        _EFFECT.validate_python({"add": {"ward-save": 1}})
+
+
+def test_a_ward_save_takes_no_maximum() -> None:
+    """A printed ceiling caps a characteristic or the armour value, never a ward."""
+    with pytest.raises(ValidationError, match="maximum bounds"):
+        _EFFECT.validate_python({"set": {"ward-save": 6}, "maximum": 4})

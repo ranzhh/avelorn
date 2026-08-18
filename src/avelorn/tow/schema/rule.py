@@ -56,8 +56,9 @@ class Seam(StrEnum):
 
     A modifier's quantity lands in exactly one place, and the seam names it:
     the dice walk (roll quantities); the effective-characteristic query; the
-    fighting-rank query; the combat-result fold; or the armour fold, which
-    improves the defender's armour value before its save.
+    fighting-rank query; the combat-result fold; the armour fold, which
+    improves the defender's armour value before its save; or the ward fold,
+    which grants the defender the best warding value its rules confer.
     :meth:`ModifierEffect._ops_speak_to_one_seam` holds a single effect to
     one seam, so all-or-nothing reporting stays per consumer. The
     characteristic and armour seams cap a value at a printed maximum — a
@@ -69,6 +70,7 @@ class Seam(StrEnum):
     RANK = "rank"
     COMBAT_RESULT = "combat-result"
     ARMOUR = "armour"
+    WARD = "ward"
 
 
 class Quantity(StrEnum):
@@ -92,6 +94,7 @@ class Quantity(StrEnum):
     SUPPORTING_RANKS = "supporting-ranks"
     COMBAT_RESULT = "combat-result"
     ARMOUR_VALUE = "armour-value"
+    WARD_SAVE = "ward-save"
 
     @property
     def seam(self) -> Seam:
@@ -105,6 +108,8 @@ class Quantity(StrEnum):
                 return Seam.COMBAT_RESULT
             case Quantity.ARMOUR_VALUE:
                 return Seam.ARMOUR
+            case Quantity.WARD_SAVE:
+                return Seam.WARD
             case unhandled:
                 assert_never(unhandled)
 
@@ -450,7 +455,10 @@ class ModifierEffect(GatedEffect):
     consumed by the fighting-rank query), a combat-result point
     (``add: {combat-result: 1}``, summed into the round's score), or an
     armour-value improvement (``add: {armour-value: 1}``, folded into the
-    defender's save). The literal ``"X"`` means the rule's bracketed
+    defender's save), or a ward save at its printed Warding value
+    ("has a 6+ Ward save" is ``set: {ward-save: 6}``, folded into the
+    defender's ward — the best of the values granted, since wards never
+    stack). The literal ``"X"`` means the rule's bracketed
     parameter ("the amount shown in brackets after the name of this
     special rule").
     Where a change lands follows from its quantity, so no stage is spelled
@@ -504,14 +512,26 @@ class ModifierEffect(GatedEffect):
     def _set_replaces_a_base(self) -> "ModifierEffect":
         # A set replaces a base value, so it is meaningful only where a base is
         # read: the effective-value fold's seams (a characteristic, a rank
-        # depth, a combat-result running total). The dice walk *moves* a roll's
-        # target and the armour fold *improves* a value — neither has a base to
-        # replace, so a set there is a data error caught loudly at load, not a
-        # note that would go silently unfactored forever.
+        # depth, a combat-result running total), and the ward fold, where the
+        # set *is* the printed Warding value a rule grants. The dice walk
+        # *moves* a roll's target and the armour fold *improves* a value —
+        # neither has a base to replace, so a set there is a data error caught
+        # loudly at load, not a note that would go silently unfactored forever.
         forbidden = {Seam.ROLL, Seam.ARMOUR}
         offending = sorted(seam_of(q) for q in (self.set_ or {}) if seam_of(q) in forbidden)
         if offending:
             raise ValueError(f"a set cannot replace a roll or armour quantity: {offending}")
+        return self
+
+    @model_validator(mode="after")
+    def _ward_is_granted_at_a_value(self) -> "ModifierEffect":
+        # A Warding value "is always given in the description of the item or
+        # spell that grants it, or shown after the name of a special rule"
+        # (the-shooting-phase/ward-saves): a ward is granted whole, as a set.
+        # No printed rule adds to one, so an add is a data error caught loudly
+        # at load rather than a note going silently unfactored forever.
+        if any(seam_of(quantity) is Seam.WARD for quantity in (self.add or {})):
+            raise ValueError("a ward save is granted at a value (set), never moved (add)")
         return self
 
     @model_validator(mode="after")
@@ -553,7 +573,7 @@ class ModifierEffect(GatedEffect):
         if len(seams) > 1:
             raise ValueError(
                 "an operation may not mix quantities across seams "
-                f"(roll / characteristic / rank / combat-result / armour): {sorted(seams)}"
+                f"(roll / characteristic / rank / combat-result / armour / ward): {sorted(seams)}"
             )
         return self
 
