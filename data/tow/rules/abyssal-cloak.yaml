@@ -1,0 +1,19 @@
+# Source: https://tow.whfb.app/special-rules/abyssal-cloak
+id: abyssal-cloak
+name: Abyssal Cloak
+page: 45
+category: Special Rules
+flavour: The crushing darkness of the deepest ocean surrounds the Merwyrm in battle.
+paragraphs:
+  - Any enemy model that targets this model during the Shooting phase suffers a -2 To Hit modifier for firing at long range,
+    rather than the usual -1.
+# The printed -2 is authored as -1: it deepens the standing -1 from Firing at
+# Long Range rather than replacing it.
+effects:
+  - enemy: true
+    when:
+      target_of:
+        kind: shooting
+        at_long_range: true
+    add:
+      to-hit: -1

@@ -708,3 +708,27 @@ def test_multiple_wounds_d3_shoots_as_a_distribution_not_an_expectation() -> Non
 
     plain = shoot_unit(Contingent.field(archers, 1, data=repo).wielding("Longbow"), target)
     assert plain.casualties == [1]  # one wound never fells a 3-Wound model
+
+
+def test_shoot_unit_abyssal_cloak_deepens_the_long_range_penalty() -> None:
+    """Abyssal Cloak: a further -1 To Hit on the shooter, at long range only.
+
+    Shooting the Merwyrm at long range is one point harder to hit than the
+    same unit stripped of the rule; forced to short range the cloak is a
+    known no-op. Claimed either way — never listed as not factored.
+    """
+    merwyrm = REPO.units["merwyrm"]
+    bare = merwyrm.model_copy(
+        update={"special_rules": [r for r in merwyrm.special_rules if r != "Abyssal Cloak"]}
+    )
+    shooter = _fielded(REPO.units["elven-archers"], 5).wielding("Longbow")
+
+    cloaked = shoot_unit(shooter, _fielded(merwyrm, 1), distance=20)
+    stripped = shoot_unit(shooter, _fielded(bare, 1), distance=20)
+    assert cloaked.hit_target == stripped.hit_target + 1
+    assert not any("not factored: Abyssal Cloak" in note for note in cloaked.notes)
+
+    close = shoot_unit(shooter, _fielded(merwyrm, 1), force_short_range=True)
+    plain_shot = shoot_unit(shooter, _fielded(bare, 1), force_short_range=True)
+    assert close.hit_target == plain_shot.hit_target
+    assert not any("not factored: Abyssal Cloak" in note for note in close.notes)
