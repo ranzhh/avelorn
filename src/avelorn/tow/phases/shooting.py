@@ -50,6 +50,7 @@ from avelorn.tow.engine.rules import (
     ShootingFacts,
     WeaponFacts,
     compile_rules,
+    effective_volley,
     factored_notes,
 )
 from avelorn.tow.engine.seats import Defence, Offence
@@ -241,6 +242,7 @@ def _engagement_conditions(
     profile: WeaponProfile,
     distance: int | None,
     force_short_range: bool,
+    stand_and_shoot: bool,
 ) -> GateContext:
     # The gate facts for the shooter's volley: the weapon it fires (its family
     # and name, for Arrows of Isha's "any bow"), the armour it wears, whether the
@@ -257,7 +259,8 @@ def _engagement_conditions(
         # a shooter never charged: charge stays None
         movement=MovementFacts(moved=shooter.movement.moved),
         shooting=ShootingFacts(
-            at_long_range=False if force_short_range else _at_long_range(profile, distance)
+            at_long_range=False if force_short_range else _at_long_range(profile, distance),
+            stand_and_shoot=stand_and_shoot,
         ),
     )
 
@@ -347,16 +350,23 @@ def shoot_unit(
         )
     strength = profile.strength.resolve(wielder_strength or 0)
 
+    conditions = _engagement_conditions(
+        attacker, chosen, profile, distance, force_short_range, stand_and_shoot
+    )
     # Volley Fire: half of each rank behind the front (rounding up) also
-    # fires, but only while the unit is stationary and never on a Stand &
-    # Shoot reaction (special-rules/volley-fire) — its own fact, not the
-    # short-range one (a future ability could force short range without
-    # being a reaction). It is a rank rule, not a dice modifier, so it
-    # lands here on the shot count, not in the walk. The unit's movement
-    # is always known, so its use is always settled: it fires, or is
-    # honoured with no extra shots, and is claimed out of the notes below.
-    volley_fire = "Volley Fire" in profile.special_rules
-    if volley_fire and not stand_and_shoot and not attacker.movement.moved:
+    # fires — a rank rule, not a dice modifier, so it lands here on the shot
+    # count, not in the walk. Read from the profile in use's resolved entries
+    # under the volley's own facts (the entry gates on no move this turn and
+    # on the volley not being a Stand & Shoot reaction, both always known),
+    # so it fires or is honoured with no extra shots, and is claimed out of
+    # the weapon-rule notes below.
+    in_use = [
+        attacker.loadout.weapon_rules[name]
+        for name in profile.special_rules
+        if name in attacker.loadout.weapon_rules
+    ]
+    volley = effective_volley(in_use, conditions)
+    if volley.fires:
         shooters += sum((rank + 1) // 2 for rank in attacker.formation.rear_rank_sizes)
     logger.debug(
         "resolving %d %s (BS %d) shooting %s at %s (T %d), S %d AP %d",
@@ -376,7 +386,6 @@ def shoot_unit(
     # the incoming attack's — whose marks (magical, Flaming) are the
     # attacker's seat's to say (Parry stays inert here: it gates on close
     # combat). The same two resolutions a melee strike makes.
-    conditions = _engagement_conditions(attacker, chosen, profile, distance, force_short_range)
     offence = Offence.resolve(
         profile,
         weapon_rules=attacker.loadout.weapon_rules,
@@ -438,9 +447,7 @@ def shoot_unit(
     # than in the walk: both are claimed out of the weapon-rule notes. The
     # profile in use is only ever compiled from its shooter's seat, so an
     # inapplicable weapon rule is reported here — no second compile covers it.
-    weapon_claimed = {*offence.weapon_rerolls.factored}
-    if volley_fire:
-        weapon_claimed.add("Volley Fire")
+    weapon_claimed = {*offence.weapon_rerolls.factored, *volley.factored}
     notes.extend(
         f"weapon rule not factored: {rule} ({chosen.name})"
         for rule in offence.weapon_unfactored

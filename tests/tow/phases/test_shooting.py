@@ -384,12 +384,13 @@ def test_engagement_conditions_build_the_shooting_facts() -> None:
     profile = longbow.missile_profile
     assert profile is not None
     context = _engagement_conditions(
-        archers, longbow, profile, distance=None, force_short_range=False
+        archers, longbow, profile, distance=None, force_short_range=False, stand_and_shoot=False
     )
     assert context.wielding.type is WeaponType.BOW
     assert context.worn == ()  # unarmoured, and known so — not left unknown
     assert context.movement.moved is True
     assert context.shooting.at_long_range is None  # no distance -> unknown band
+    assert context.shooting.stand_and_shoot is False  # an ordinary volley, known
     assert context.combat is None
     assert context.target_of is None
     assert context.movement.charge is None

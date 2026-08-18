@@ -267,11 +267,13 @@ class ShootingGate(Gate):
     """A gate on the volley the model is firing.
 
     ``at_long_range`` is whether the target sits beyond half the weapon's
-    maximum range (Firing at Long Range). The subject is where a range band or
-    a cover fact would join.
+    maximum range (Firing at Long Range); ``stand_and_shoot`` whether the
+    volley is a Stand & Shoot charge reaction (which Volley Fire forbids).
+    The subject is where a range band or a cover fact would join.
     """
 
     at_long_range: bool | None = None
+    stand_and_shoot: bool | None = None
 
 
 class WeaponGate(Gate):
@@ -854,6 +856,20 @@ class BlowEffect(GatedEffect):
         return self
 
 
+class VolleyEffect(GatedEffect):
+    """Volley Fire's printed mechanic: rear ranks join the volley by halves.
+
+    "Half of the models in each rank other than the front rank, rounding
+    up, can shoot" — a shot-count rule, landing on how many models fire,
+    never on the dice. The one printed fraction is the closed vocabulary;
+    a variant joins when a rule prints one. Gated as the page gates it
+    (no move this turn, never on a Stand & Shoot); the hill variant is
+    terrain and stays in the entry's notes. Self-naming by ``volley``.
+    """
+
+    volley: Literal["half-of-each-rear-rank"]
+
+
 RuleEffect = (
     ModifierEffect
     | RerollEffect
@@ -862,6 +878,7 @@ RuleEffect = (
     | AttackMarkEffect
     | BarEffect
     | BlowEffect
+    | VolleyEffect
 )
 
 

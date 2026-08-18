@@ -320,9 +320,9 @@ def test_loadout_answers_the_weapon_choice_by_printed_name(spearmen_unit: Unit) 
 def test_loadout_resolves_the_carried_weapons_rules(spearmen_unit: Unit) -> None:
     """Weapon-rule names with entries resolve into the loadout's index.
 
-    The archers' longbow prints Armour Bane (1) and Volley Fire: the
-    first has an entry and resolves as printed; the second has none and
-    is simply absent — the per-action compile reports it unfactored.
+    The archers' longbow prints Armour Bane (1) and Volley Fire, and both
+    now resolve as printed — the parameterised name through its "(X)"
+    entry, Volley Fire through its own.
     """
     archers = Contingent.field(
         REPO.units["elven-archers"],
@@ -330,7 +330,7 @@ def test_loadout_resolves_the_carried_weapons_rules(spearmen_unit: Unit) -> None
         data=REPO,
     )
     index = archers.loadout.weapon_rules
-    assert set(index) == {"Armour Bane (1)"}
+    assert set(index) == {"Armour Bane (1)", "Volley Fire"}
     assert index["Armour Bane (1)"].name == "Armour Bane (1)"
 
 

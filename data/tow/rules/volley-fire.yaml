@@ -1,0 +1,28 @@
+# Source: https://tow.whfb.app/special-rules/volley-fire
+id: volley-fire
+name: Volley Fire
+page: 180
+category: Special Rules
+flavour: Bows and other weapons can loose their projectiles in a high-arcing volley. Even warriors who cannot see the foe
+  can shoot in their general direction.
+paragraphs:
+  - When a unit with this special rule makes a shooting attack, half of the models in each rank other than the front rank
+    (or front two ranks if the unit is on a hill), rounding up, can shoot (in addition to the usual models that shoot from
+    the front rank, or front two ranks if the unit is on a hill). A unit cannot Volley Fire if it has moved for any reason
+    during this turn (including reforming), or when making a Stand & Shoot charge reaction.
+  - Note that models in rear ranks use the line of sight of the model at the front of their file.
+# Hand-authored, diffable against the paragraph above: half of each rank
+# behind the front, rounding up, joins the volley -- a shot-count effect
+# the volley resolver reads, gated as the page gates it: no move this
+# turn (for any reason), never on a Stand & Shoot charge reaction.
+effects:
+  - when:
+      movement:
+        moved: false
+      shooting:
+        stand_and_shoot: false
+    volley: half-of-each-rear-rank
+notes: >-
+  The hill variant (the front two ranks shoot, the volley counted behind them) is
+  terrain, which is not modelled; rear ranks' line of sight is assumed, as the
+  front rank's already is.
