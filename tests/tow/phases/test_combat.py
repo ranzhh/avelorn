@@ -979,6 +979,71 @@ def test_fight_impact_hits_are_inert_without_the_printed_charge() -> None:
     assert short.losses == stripped_short.losses
 
 
+def _sword_stomper(*extra_rules: str) -> Contingent:
+    # One armourless spearman with Stomp Attacks (2), swinging the Sword of
+    # Hoeth — a magical S+2 blade, so the weapon leg and the weaponless
+    # stomps carry different marks.
+    unit = REPO.units["elven-spearmen"].model_copy(
+        update={
+            "special_rules": ["Stomp Attacks (2)", *extra_rules],
+            "equipment": ["Sword of Hoeth"],
+        }
+    )
+    return _fielded(unit, 1).wielding("Sword of Hoeth")
+
+
+def _magic_warded_footman() -> Contingent:
+    # A bare footman whose one rule grants a 4+ ward against magical attacks
+    # only — the mirror of Runes of Protection, built here because no army's
+    # data prints one yet.
+    rule = Rule(
+        id="doctored-magic-ward",
+        name="Doctored Magic Ward",
+        paragraphs=["…"],
+        effects=[
+            ModifierEffect(
+                when=When.model_validate({"target_of": {"magical": True}}),
+                set={Quantity.WARD_SAVE: 4},
+            )
+        ],
+    )
+    unit = _foot_unit(initiative=4).model_copy(update={"special_rules": [rule.name]})
+    hand_weapon = REPO.weapons["hand-weapon"]
+    contingent = Contingent(unit, 1, Loadout((hand_weapon,), (), (rule,), ()), frontage=1)
+    return contingent.wielding("Hand Weapon")
+
+
+def test_fight_stomps_of_a_magic_sword_bearer_are_not_magical_golden() -> None:
+    """The weaponless hits drop the wielded weapon's marks; the weapon leg keeps them.
+
+    A stomper swinging the Sword of Hoeth (magical, S+2) against a footman
+    warded 4+ against magical attacks only. The sword leg is magical, so the
+    ward stands: hit 4+ (WS4 vs WS4), wound 2+ (S5 vs T3), ward 4+ —
+    pw = (1/2)(5/6)(1/2) = 5/24. The foe's blow back fells the armourless
+    stomper at (1/2)(1/2) = 1/4, simultaneous at I4. The stomps carry no
+    weapon, so they are not magical and the ward never fires: each of the two
+    hits fells at the unmodified S3's 1/2, from a stomper the I4 blows spared,
+    on a foe still standing:
+    P(foe removed) = 5/24 + (19/24)(3/4)(1 - (1/2)^2) = 251/384. Stomps read
+    as magical (the bug) would give 5/24 + (19/24)(3/4)(1 - (3/4)^2) =
+    719/1536.
+    """
+    result = fight(_sword_stomper(), _magic_warded_footman())
+    assert result.b_casualties[1] == Fraction(251, 384)
+    assert result.a_casualties[1] == Fraction(1, 4)
+
+
+def test_fight_unit_printed_magical_attacks_reaches_the_stomps() -> None:
+    """A datasheet's own Magical Attacks marks ALL its attacks, stomps included.
+
+    The same matchup with Magical Attacks printed on the stomper's unit: the
+    ward now stands against the stomps too, each felling at (1/2)(1/2) = 1/4 —
+    P(foe removed) = 5/24 + (19/24)(3/4)(1 - (3/4)^2) = 719/1536.
+    """
+    result = fight(_sword_stomper("Magical Attacks"), _magic_warded_footman())
+    assert result.b_casualties[1] == Fraction(719, 1536)
+
+
 # --- Elven Reflexes, end to end from data/ ---
 
 

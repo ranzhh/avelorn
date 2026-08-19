@@ -578,11 +578,28 @@ def _automatic_engage(
         raise ValueError(f"{striker.unit.name} has no Strength; its automatic hits cannot wound")
     if toughness is None:
         raise ValueError(f"{target.unit.name} has no Toughness; it cannot be wounded")
+    # The batch carries no weapon — no profile, no modifier — so what the
+    # hits *are* is the unit rules' say alone: a magical sword in the
+    # striker's hand does not make its stomps magical, while a datasheet
+    # printing Magical Attacks marks every attack it makes, these included.
+    marks = attack_marks([], {}, striker.loadout.rules)
+    incoming = (
+        replace(
+            target_conditions,
+            target_of=AttackFacts(
+                kind=AttackKind.CLOSE_COMBAT,
+                magical=marks.magical,
+                flaming=marks.flaming,
+            ),
+        )
+        if target_conditions is not None
+        else None
+    )
     defence = Defence.resolve(
         armour=target.loadout.armour,
         rules=target.loadout.rules,
         grants=target.loadout.granted_rules,
-        incoming=target_conditions,
+        incoming=incoming,
         weapon_rules_in_use=target.in_hand_rules(),
     )
     resolution = resolve_attack(
