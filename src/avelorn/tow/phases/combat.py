@@ -578,6 +578,19 @@ def _automatic_engage(
         raise ValueError(f"{striker.unit.name} has no Strength; its automatic hits cannot wound")
     if toughness is None:
         raise ValueError(f"{target.unit.name} has no Toughness; it cannot be wounded")
+    # "The model making them" — but a datasheet's rules are unit-wide
+    # (Unit.special_rules), so a split profile cannot say which row makes
+    # the hits. Where the rows agree the ambiguity is harmless; where the
+    # mount's Strength differs, refuse loudly rather than resolve at the
+    # rank and file's row.
+    mount = striker.unit.mount
+    if mount is not None and mount[Characteristic.STRENGTH] != strength:
+        raise ValueError(
+            f"{striker.unit.name}: automatic hits use the Strength of the model making "
+            f"them, but datasheet rules are unit-wide and the mount row's Strength "
+            f"({mount[Characteristic.STRENGTH]}) differs from the rank and file's "
+            f"({strength}); the hits cannot be attributed to a row"
+        )
     # The batch carries no weapon — no profile, no modifier — so what the
     # hits *are* is the unit rules' say alone: a magical sword in the
     # striker's hand does not make its stomps magical, while a datasheet

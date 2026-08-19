@@ -21,7 +21,7 @@ from avelorn.tow.phases.combat import (
 )
 from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.rule import ModifierEffect, Quantity, Rule, WeaponGate, When
-from avelorn.tow.schema.unit import Characteristic, Unit
+from avelorn.tow.schema.unit import Characteristic, ProfileRole, Unit
 from avelorn.tow.schema.weapon import Weapon
 
 REPO = TOWRepository()
@@ -1042,6 +1042,43 @@ def test_fight_unit_printed_magical_attacks_reaches_the_stomps() -> None:
     """
     result = fight(_sword_stomper("Magical Attacks"), _magic_warded_footman())
     assert result.b_casualties[1] == Fraction(719, 1536)
+
+
+def test_fight_refuses_automatic_hits_on_a_split_profile_of_differing_strength() -> None:
+    """A stomping unit whose mount row prints another Strength is refused loudly.
+
+    Datasheet rules are unit-wide, so "the model making them" cannot be
+    named on a split profile: where the rows agree the ambiguity is harmless
+    and the fight resolves; where the mount's Strength differs, resolving at
+    the rank and file's row would be silently wrong, so the fight raises.
+    """
+    stomping = _cavalry_unit(rider_i=5, mount_i=3).model_copy(
+        update={"special_rules": ["Stomp Attacks (2)"]}
+    )
+    differing = stomping.model_copy(
+        update={
+            "profiles": [
+                row
+                if row.role is not ProfileRole.MOUNT
+                else row.model_copy(
+                    update={
+                        "characteristics": {
+                            **row.characteristics,
+                            Characteristic.STRENGTH: 5,
+                        }
+                    }
+                )
+                for row in stomping.profiles
+            ]
+        }
+    )
+    foe = Contingent.field(_foot_unit(initiative=4), 1, data=REPO).wielding("Hand Weapon")
+
+    with pytest.raises(ValueError, match="cannot be attributed"):
+        fight(Contingent.field(differing, 1, data=REPO).wielding("Hand Weapon"), foe)
+
+    resolved = fight(Contingent.field(stomping, 1, data=REPO).wielding("Hand Weapon"), foe)
+    assert not any("not factored: Stomp Attacks" in note for note in resolved.notes)
 
 
 # --- Elven Reflexes, end to end from data/ ---
