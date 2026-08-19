@@ -24,6 +24,7 @@ from avelorn.tow.engine.rules import (
     barred_worn,
     compile_rules,
     effective_armour_value,
+    effective_automatic_hits,
     effective_characteristic,
     effective_combat_result_bonus,
     effective_fighting_ranks,
@@ -40,6 +41,9 @@ from avelorn.tow.schema.rule import (
     AttackMarkEffect,
     AttackMarks,
     ChargeGate,
+    DiceQuantity,
+    HitOrder,
+    HitsEffect,
     ModifierEffect,
     NaturalRoll,
     Quantity,
@@ -1213,3 +1217,68 @@ def test_deflect_shots_wards_only_a_non_magical_shooting_attack() -> None:
     unwarded = effective_ward_target([rule], blows)
     assert unwarded.target is None
     assert unwarded.factored == ("Deflect Shots",)
+
+
+# --- automatic hits: Stomp Attacks / Impact Hits, from the real entries ---
+
+
+def test_printed_rule_substitutes_a_dice_parameter() -> None:
+    """A bracketed dice quantity binds the (X) entry's parameter as dice.
+
+    "Impact Hits (D6)" resolves against "Impact Hits (X)" with the count a
+    :class:`DiceQuantity`, not a number — the seam folds it as its exact
+    distribution. "Stomp Attacks (D3+1)" carries the flat addend.
+    """
+    rule = printed_rule("Impact Hits (D6)", REPO.rules)
+    assert rule is not None and rule.name == "Impact Hits (D6)"
+    effect = rule.effects[0]
+    assert isinstance(effect, HitsEffect)
+    assert effect.hits == DiceQuantity(sides=6)
+
+    stomp = printed_rule("Stomp Attacks (D3+1)", REPO.rules)
+    assert stomp is not None
+    flat = stomp.effects[0]
+    assert isinstance(flat, HitsEffect)
+    assert flat.hits == DiceQuantity(sides=3, plus=1)
+
+
+def test_effective_automatic_hits_fixed_count_is_certain() -> None:
+    """Stomp Attacks (2) in combat: exactly two hits per model, no dice."""
+    rule = printed_rule("Stomp Attacks (2)", REPO.rules)
+    assert rule is not None
+    fold = effective_automatic_hits([rule], HitOrder.LAST, GateContext(combat=CombatFacts()))
+    assert fold.factored == ("Stomp Attacks (2)",)
+    assert fold.per_model.mass == {2: 1}
+
+
+def test_effective_automatic_hits_folds_the_dice_exactly() -> None:
+    """Impact Hits (D6) on a 3"+ charge: one hit count per face, a sixth each.
+
+    A charge short of the printed 3" answers the gate False — honoured,
+    factored, no hits — and the read at the other order leaves the rule to
+    its own order's read, in neither name list.
+    """
+    rule = printed_rule("Impact Hits (D6)", REPO.rules)
+    assert rule is not None
+    charging = GateContext(movement=MovementFacts(moved=True, charge=ChargeEvent(distance=6)))
+    fold = effective_automatic_hits([rule], HitOrder.FIRST, charging)
+    assert fold.factored == ("Impact Hits (D6)",)
+    assert fold.per_model.mass == {count: Fraction(1, 6) for count in range(1, 7)}
+
+    short = GateContext(movement=MovementFacts(moved=True, charge=ChargeEvent(distance=2)))
+    honoured = effective_automatic_hits([rule], HitOrder.FIRST, short)
+    assert honoured.factored == ("Impact Hits (D6)",)
+    assert honoured.per_model.mass == {0: 1}
+
+    other_order = effective_automatic_hits([rule], HitOrder.LAST, charging)
+    assert other_order.factored == ()
+    assert other_order.unfactored == ()
+
+
+def test_effective_automatic_hits_unbound_parameter_is_unfactored() -> None:
+    """The filed (X) entry itself carries no count: reported, never guessed."""
+    fold = effective_automatic_hits(
+        [REPO.rules["stomp-attacks"]], HitOrder.LAST, GateContext(combat=CombatFacts())
+    )
+    assert fold.unfactored == ("Stomp Attacks (X)",)
+    assert fold.per_model.mass == {0: 1}

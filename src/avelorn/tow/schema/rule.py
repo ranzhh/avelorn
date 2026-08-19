@@ -25,6 +25,7 @@ stays unmodelled (and is reported by the engine) rather than
 approximated.
 """
 
+import re
 from collections.abc import Mapping
 from contextlib import suppress
 from enum import StrEnum
@@ -49,6 +50,36 @@ from avelorn.tow.schema.weapon import WeaponType
 # the parameter as the literal "X" ("the amount shown in brackets after
 # the name of this special rule").
 PARAMETER_SUFFIX = " (X)"
+
+_DICE_QUANTITY = re.compile(r"^D(?P<sides>[36])(?:\+(?P<plus>\d+))?$")
+
+
+class DiceQuantity(BaseModel):
+    """A printed quantity decided by a dice roll: "D6", "D3", "D3+1".
+
+    The dice form of a rule's bracketed parameter — "Often, this is
+    determined by the roll of a dice" (Stomp Attacks, Impact Hits). One
+    die plus a flat addend covers every printed instance; a wider form
+    (2D6, say) joins when a rule prints one.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    sides: Literal[3, 6]
+    plus: int = Field(default=0, ge=0)
+
+    @classmethod
+    def parse(cls, printed: str) -> "DiceQuantity | None":
+        """Read a printed dice quantity off its text.
+
+        Returns:
+            The parsed quantity, or None when the text is not one.
+        """
+        match = _DICE_QUANTITY.match(printed)
+        if match is None:
+            return None
+        sides: Literal[3, 6] = 3 if match.group("sides") == "3" else 6
+        return cls(sides=sides, plus=int(match.group("plus") or 0))
 
 
 class Seam(StrEnum):
@@ -918,6 +949,46 @@ class ReplaceEffect(GatedEffect):
         }
 
 
+class HitOrder(StrEnum):
+    """When a rule's extra hits land in a round of close combat.
+
+    The two printed timings: ``first`` — "resolved against the charged
+    unit when the combat is chosen ... before issuing challenges"
+    (Impact Hits), ahead of every Initiative step — and ``last`` — "must
+    be made last, after all other attacks have been made, including
+    attacks made at Initiative 1" (Stomp Attacks). A member joins when a
+    rule prints a third timing.
+    """
+
+    FIRST = "first"
+    LAST = "last"
+
+
+class HitsEffect(GatedEffect):
+    """Extra hits that land automatically, outside the Initiative-ordered blows.
+
+    The "X automatic hits" shape Stomp Attacks and Impact Hits share: each
+    model with the rule causes ``hits`` hits — a number or a
+    :class:`DiceQuantity`, usually the bracketed parameter — that skip the
+    Roll to Hit ("they hit automatically") and wound at the unmodified
+    Strength of the model making them, at the point of the round ``order``
+    names. Consumed by the combat round, which folds the batch in at that
+    point, a dice quantity as its exact distribution. Self-naming by
+    ``hits``; each model forbids the others' keys.
+    """
+
+    hits: int | DiceQuantity | Literal["X"]
+    order: HitOrder
+
+    @model_validator(mode="after")
+    def _lands_something(self) -> "HitsEffect":
+        # Zero hits would say nothing — a rule granting none simply has no
+        # effect — so a numeric count must be at least one.
+        if isinstance(self.hits, int) and self.hits < 1:
+            raise ValueError("an automatic-hits effect lands at least one hit")
+        return self
+
+
 RuleEffect = (
     ModifierEffect
     | RerollEffect
@@ -928,6 +999,7 @@ RuleEffect = (
     | BlowEffect
     | VolleyEffect
     | ReplaceEffect
+    | HitsEffect
 )
 
 

@@ -1,0 +1,32 @@
+# Source: https://tow.whfb.app/special-rules/impact-hits
+id: impact-hits
+name: Impact Hits (X)
+page: 172
+category: Special Rules
+flavour: The impact of a charge can itself cause severe casualties amongst the foe.
+paragraphs:
+  - The number of Impact Hits caused varies from model to model, and will be shown in brackets after the name of this special
+    rule (shown here as 'X'). Often, this is determined by the roll of a dice.
+  - Resolving Impact Hits
+  - Impact Hits can only be made by a charging model that moved 3" or more and that is in base contact with the enemy. Impact
+    Hits are resolved against the charged unit when the combat is chosen during Step 1.1 of the Choose Combat & Fight sub-phase,
+    before issuing challenges. They hit automatically and use the unmodified Strength of the model making them.
+# Hand-authored, diffable against the paragraphs above. The charge
+# qualifier is honoured: the charge event carries its distance, so a
+# standing unit or a charge shorter than 3" causes no Impact Hits.
+effects:
+  - when:
+      movement:
+        charge:
+          distance:
+            at_least: 3
+    hits: X
+    order: first
+notes: >-
+  "In base contact" is read as the engine reads contact everywhere: every
+  front-rank model causes its hits, an equally wide foe assumed. The hits are
+  resolved ahead of every Initiative step of the round; challenges are not
+  modelled, so "before issuing challenges" has no bearing. "The model making
+  them" cannot be named on a split profile — datasheet rules are unit-wide —
+  so a bearer whose mount row prints a different Strength is refused loudly
+  rather than resolved at the rank and file's row.

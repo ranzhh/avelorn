@@ -1,5 +1,7 @@
 """Close-combat strike tests, golden values hand-computed from the charts."""
 
+from fractions import Fraction
+
 import pytest
 
 from avelorn.core.dice import binomial_distribution, expected_value
@@ -19,7 +21,7 @@ from avelorn.tow.phases.combat import (
 )
 from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.rule import ModifierEffect, Quantity, Rule, WeaponGate, When
-from avelorn.tow.schema.unit import Characteristic, Unit
+from avelorn.tow.schema.unit import Characteristic, ProfileRole, Unit
 from avelorn.tow.schema.weapon import Weapon
 
 REPO = TOWRepository()
@@ -903,6 +905,180 @@ def test_fight_furious_charge_is_factored_not_noted() -> None:
     charging = _carrying("furious-charge").charging(Charge(6, ChargeArc.FRONT))
     result = fight(charging, _plain_spearman(), first_round=True)
     assert not any("Furious Charge" in note for note in result.notes)
+
+
+# --- Stomp Attacks / Impact Hits: automatic-hit batches outside the Initiative order ---
+
+
+def _one_spearman(*special_rules: str) -> Contingent:
+    # A single spearman fielded with exactly the given printed rules — the
+    # end-to-end path (field resolves a parameterised name against its (X)
+    # entry) with everything else stripped, so the goldens stay hand-sized.
+    unit = REPO.units["elven-spearmen"].model_copy(update={"special_rules": list(special_rules)})
+    return _fielded(unit, 1).wielding("Hand Weapon")
+
+
+def test_fight_stomp_attacks_land_last_golden() -> None:
+    """Stomp Attacks (2): two automatic hits, after all other attacks.
+
+    One spearman with only Stomp Attacks (2) fights one bare spearman, hand
+    weapons both: hit 4+ (WS4 vs WS4), wound 4+ (S3 vs T3), save 4+ (light
+    armour + shield, Parry), so a normal attack fells with p = 1/8 and a
+    stomp — an automatic hit at the unmodified S3 — with p = 1/4. The
+    Initiative-4 blows are simultaneous; the two stomps land only from a
+    stomper those blows spared (7/8), on a foe not already felled:
+    P(foe removed) = 1/8 + (7/8)(7/8)(1 - (3/4)^2) = 471/1024. Thrown with
+    the Initiative-4 blows instead, it would read 520/1024 — the printed
+    "after all other attacks" is what the figure verifies. The stomps never
+    fly back, so the stomper's own losses stay at the bare 1/8.
+    """
+    result = fight(_one_spearman("Stomp Attacks (2)"), _one_spearman())
+    assert result.b_casualties[1] == Fraction(471, 1024)
+    assert result.a_casualties[1] == Fraction(1, 8)
+    assert not any("not factored: Stomp Attacks" in note for note in result.notes)
+    # The factored rule's authored scope (the base-contact reading) surfaces.
+    assert any(note.startswith("Stomp Attacks (2)") for note in result.notes)
+
+
+def test_fight_impact_hits_d6_land_before_every_blow_golden() -> None:
+    """Impact Hits (D6): a dice-driven batch resolved when the combat is chosen.
+
+    One spearman with only Impact Hits (D6) charges 6" into a bare spearman's
+    front: each impact hit is automatic at the unmodified S3 (p = 1/4, as the
+    stomp golden reads), the count uniform on 1..6. The batch lands before
+    any blow: P(foe survives it) = E[(3/4)^n] = 3367/8192, then the charger's
+    own attack (at I7, the charge bonus) fells at 1/8 —
+    P(foe removed) = 4825/8192 + (3367/8192)(1/8) = 41967/65536. The foe
+    strikes back only if alive after both:
+    P(charger removed) = (3367/8192)(7/8)(1/8) = 23569/524288 — the impact
+    batch preceding the foe's Initiative step is what that factor verifies.
+    """
+    charger = _one_spearman("Impact Hits (D6)").charging(Charge(6, ChargeArc.FRONT))
+    result = fight(charger, _one_spearman(), first_round=True)
+    assert result.b_casualties[1] == Fraction(41967, 65536)
+    assert result.a_casualties[1] == Fraction(23569, 524288)
+    assert not any("not factored: Impact Hits" in note for note in result.notes)
+
+
+def test_fight_impact_hits_are_inert_without_the_printed_charge() -> None:
+    """A standing bearer, or one whose charge fell short of 3", causes no Impact Hits.
+
+    The printed gate — "a charging model that moved 3" or more" — answers
+    False: honoured, factored (no "not factored" note), and the round's joint
+    equals the same fight with the rule stripped entirely.
+    """
+    foe = _one_spearman()
+    stripped = fight(_one_spearman(), foe)
+    standing = fight(_one_spearman("Impact Hits (D6)"), foe)
+    assert standing.losses == stripped.losses
+    assert not any("not factored: Impact Hits" in note for note in standing.notes)
+
+    short_move = Charge(2, ChargeArc.FRONT)
+    short = fight(_one_spearman("Impact Hits (D6)").charging(short_move), foe, first_round=True)
+    stripped_short = fight(_one_spearman().charging(short_move), foe, first_round=True)
+    assert short.losses == stripped_short.losses
+
+
+def _sword_stomper(*extra_rules: str) -> Contingent:
+    # One armourless spearman with Stomp Attacks (2), swinging the Sword of
+    # Hoeth — a magical S+2 blade, so the weapon leg and the weaponless
+    # stomps carry different marks.
+    unit = REPO.units["elven-spearmen"].model_copy(
+        update={
+            "special_rules": ["Stomp Attacks (2)", *extra_rules],
+            "equipment": ["Sword of Hoeth"],
+        }
+    )
+    return _fielded(unit, 1).wielding("Sword of Hoeth")
+
+
+def _magic_warded_footman() -> Contingent:
+    # A bare footman whose one rule grants a 4+ ward against magical attacks
+    # only — the mirror of Runes of Protection, built here because no army's
+    # data prints one yet.
+    rule = Rule(
+        id="doctored-magic-ward",
+        name="Doctored Magic Ward",
+        paragraphs=["…"],
+        effects=[
+            ModifierEffect(
+                when=When.model_validate({"target_of": {"magical": True}}),
+                set={Quantity.WARD_SAVE: 4},
+            )
+        ],
+    )
+    unit = _foot_unit(initiative=4).model_copy(update={"special_rules": [rule.name]})
+    hand_weapon = REPO.weapons["hand-weapon"]
+    contingent = Contingent(unit, 1, Loadout((hand_weapon,), (), (rule,), ()), frontage=1)
+    return contingent.wielding("Hand Weapon")
+
+
+def test_fight_stomps_of_a_magic_sword_bearer_are_not_magical_golden() -> None:
+    """The weaponless hits drop the wielded weapon's marks; the weapon leg keeps them.
+
+    A stomper swinging the Sword of Hoeth (magical, S+2) against a footman
+    warded 4+ against magical attacks only. The sword leg is magical, so the
+    ward stands: hit 4+ (WS4 vs WS4), wound 2+ (S5 vs T3), ward 4+ —
+    pw = (1/2)(5/6)(1/2) = 5/24. The foe's blow back fells the armourless
+    stomper at (1/2)(1/2) = 1/4, simultaneous at I4. The stomps carry no
+    weapon, so they are not magical and the ward never fires: each of the two
+    hits fells at the unmodified S3's 1/2, from a stomper the I4 blows spared,
+    on a foe still standing:
+    P(foe removed) = 5/24 + (19/24)(3/4)(1 - (1/2)^2) = 251/384. Stomps read
+    as magical (the bug) would give 5/24 + (19/24)(3/4)(1 - (3/4)^2) =
+    719/1536.
+    """
+    result = fight(_sword_stomper(), _magic_warded_footman())
+    assert result.b_casualties[1] == Fraction(251, 384)
+    assert result.a_casualties[1] == Fraction(1, 4)
+
+
+def test_fight_unit_printed_magical_attacks_reaches_the_stomps() -> None:
+    """A datasheet's own Magical Attacks marks ALL its attacks, stomps included.
+
+    The same matchup with Magical Attacks printed on the stomper's unit: the
+    ward now stands against the stomps too, each felling at (1/2)(1/2) = 1/4 —
+    P(foe removed) = 5/24 + (19/24)(3/4)(1 - (3/4)^2) = 719/1536.
+    """
+    result = fight(_sword_stomper("Magical Attacks"), _magic_warded_footman())
+    assert result.b_casualties[1] == Fraction(719, 1536)
+
+
+def test_fight_refuses_automatic_hits_on_a_split_profile_of_differing_strength() -> None:
+    """A stomping unit whose mount row prints another Strength is refused loudly.
+
+    Datasheet rules are unit-wide, so "the model making them" cannot be
+    named on a split profile: where the rows agree the ambiguity is harmless
+    and the fight resolves; where the mount's Strength differs, resolving at
+    the rank and file's row would be silently wrong, so the fight raises.
+    """
+    stomping = _cavalry_unit(rider_i=5, mount_i=3).model_copy(
+        update={"special_rules": ["Stomp Attacks (2)"]}
+    )
+    differing = stomping.model_copy(
+        update={
+            "profiles": [
+                row
+                if row.role is not ProfileRole.MOUNT
+                else row.model_copy(
+                    update={
+                        "characteristics": {
+                            **row.characteristics,
+                            Characteristic.STRENGTH: 5,
+                        }
+                    }
+                )
+                for row in stomping.profiles
+            ]
+        }
+    )
+    foe = Contingent.field(_foot_unit(initiative=4), 1, data=REPO).wielding("Hand Weapon")
+
+    with pytest.raises(ValueError, match="cannot be attributed"):
+        fight(Contingent.field(differing, 1, data=REPO).wielding("Hand Weapon"), foe)
+
+    resolved = fight(Contingent.field(stomping, 1, data=REPO).wielding("Hand Weapon"), foe)
+    assert not any("not factored: Stomp Attacks" in note for note in resolved.notes)
 
 
 # --- Elven Reflexes, end to end from data/ ---

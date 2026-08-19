@@ -32,10 +32,12 @@ from collections.abc import Collection, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from enum import Enum, auto
+from fractions import Fraction
 from typing import get_args
 
 from pydantic.fields import FieldInfo
 
+from avelorn.core.distribution import Distribution
 from avelorn.core.registry import Registry, UnknownNameError
 from avelorn.tow.engine.attack import (
     AttackProfile,
@@ -55,9 +57,12 @@ from avelorn.tow.schema.rule import (
     ChoiceEffect,
     Comparison,
     Decision,
+    DiceQuantity,
     Gate,
     GatedEffect,
     GrantEffect,
+    HitOrder,
+    HitsEffect,
     MembershipGate,
     ModifierEffect,
     NaturalRoll,
@@ -76,7 +81,7 @@ from avelorn.tow.schema.weapon import WeaponType
 
 logger = logging.getLogger(__name__)
 
-_PARAMETERISED = re.compile(r"^(?P<base>.+) \((?P<value>\d+)\)$")
+_PARAMETERISED = re.compile(r"^(?P<base>.+) \((?P<value>[^()]+)\)$")
 
 # The attack sequence's order, for "can this die still shape that roll".
 _SEQUENCE = {stage: position for position, stage in enumerate(Stage)}
@@ -249,23 +254,37 @@ def printed_rule(printed: str, rules: Registry[Rule]) -> Rule | None:
     if match := _PARAMETERISED.match(printed):
         with suppress(UnknownNameError):
             entry = rules.by_name(match.group("base") + PARAMETER_SUFFIX)
-            parameter = int(match.group("value"))
+            parameter = _parameter(match.group("value"))
+            if parameter is None:
+                return None
             effects = [_with_parameter(effect, parameter) for effect in entry.effects]
             return entry.model_copy(update={"name": printed, "effects": effects})
     return None
 
 
-def _with_parameter(effect: RuleEffect, parameter: int) -> RuleEffect:
+def _parameter(printed: str) -> int | DiceQuantity | None:
+    # The bracketed parameter as printed: a number ("Armour Bane (1)") or a
+    # dice quantity ("Impact Hits (D6)", "Stomp Attacks (D3+1)"). Any other
+    # text is no parameter at all — the name does not resolve.
+    if printed.isdigit():
+        return int(printed)
+    return DiceQuantity.parse(printed)
+
+
+def _with_parameter(effect: RuleEffect, parameter: int | DiceQuantity) -> RuleEffect:
     # Substitute the printed parameter into every "X" placeholder the
     # effect carries, looking inside mappings (an operation's amounts).
     # Introspects the effect's fields, so a new X-bearing field
-    # participates automatically.
+    # participates automatically. An operation's amounts are numbers, so a
+    # dice parameter substitutes into bare fields only — a mapping's "X"
+    # then stays unbound, and the rule reports unfactored rather than
+    # carrying a quantity its seam cannot read.
     placeholders: dict = {}
     for name in type(effect).model_fields:
         value = getattr(effect, name)
         if value == "X":
             placeholders[name] = parameter
-        elif isinstance(value, Mapping) and "X" in value.values():
+        elif isinstance(value, Mapping) and "X" in value.values() and isinstance(parameter, int):
             placeholders[name] = {
                 key: parameter if amount == "X" else amount for key, amount in value.items()
             }
@@ -937,6 +956,80 @@ def effective_volley(
         fires = fires or any(answers)
         factored.append(rule.name)
     return EffectiveVolley(fires, tuple(factored), tuple(unfactored))
+
+
+@dataclass(frozen=True)
+class EffectiveHits:
+    """The extra automatic hits a contingent's rules land at one point of the round.
+
+    The evaluated half of :class:`~avelorn.tow.schema.rule.HitsEffect` for one
+    :class:`~avelorn.tow.schema.rule.HitOrder`: ``per_model`` is the exact
+    distribution of hits each model causes — the certainty of 0 when no effect
+    holds, a dice quantity folded face by face otherwise. ``factored`` /
+    ``unfactored`` read as on :class:`EffectiveValue` — a factored rule
+    includes one honoured with no hits (a non-charging bearer of Impact Hits).
+    """
+
+    per_model: Distribution[int]
+    factored: tuple[str, ...] = ()
+    unfactored: tuple[str, ...] = ()
+
+
+def effective_automatic_hits(
+    rules: Sequence[Rule],
+    order: HitOrder,
+    conditions: "GateContext | None" = None,
+) -> EffectiveHits:
+    """Fold a contingent's rules into the automatic hits landing at ``order``.
+
+    The automatic-hits seam: every :class:`~avelorn.tow.schema.rule.HitsEffect`
+    whose ``order`` matches is gated on the evaluated ``conditions`` (Impact
+    Hits' charge of 3" or more), and the holding effects' counts convolve into
+    one per-model distribution — a printed number as a certainty, a dice
+    quantity uniform over its faces plus the flat addend. All-or-nothing per
+    rule, as every fold is; a gate the conditions cannot answer, or an unbound
+    "X" parameter, is reported unfactored. A rule whose effects land at the
+    *other* order is left for that order's read — neither factored nor
+    unfactored here.
+
+    Returns:
+        The per-model hit-count distribution with the factored and unfactored
+        rule names.
+    """
+    context = _as_context(conditions)
+    per_model: Distribution[int] = Distribution.pure(0)
+    factored: list[str] = []
+    unfactored: list[str] = []
+    for rule in rules:
+        matching = [
+            effect
+            for effect in rule.effects
+            if isinstance(effect, HitsEffect) and effect.order is order
+        ]
+        if not matching:
+            continue
+        answers = [(effect, _gate_applies(effect, context)) for effect in matching]
+        if any(effect.hits == "X" or when is None for effect, when in answers):
+            unfactored.append(rule.name)
+            continue
+        for effect, when in answers:
+            if when:
+                per_model = per_model + _hit_count(effect.hits)
+        factored.append(rule.name)
+        logger.debug("automatic hits factored: %s at %s", rule.name, order)
+    return EffectiveHits(per_model, tuple(factored), tuple(unfactored))
+
+
+def _hit_count(hits: "int | DiceQuantity | str") -> Distribution[int]:
+    # A hit count as its exact distribution: a number is certain, a dice
+    # quantity uniform over its faces shifted by the flat addend. The caller
+    # guards the unbound "X".
+    if isinstance(hits, int):
+        return Distribution.pure(hits)
+    assert isinstance(hits, DiceQuantity)  # "X" is guarded by the caller
+    return Distribution(
+        {face + hits.plus: Fraction(1, hits.sides) for face in range(1, hits.sides + 1)}
+    )
 
 
 @dataclass(frozen=True)

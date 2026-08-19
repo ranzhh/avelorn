@@ -7,7 +7,16 @@ from pydantic import TypeAdapter, ValidationError
 
 from avelorn.core.loading import load_yaml
 from avelorn.tow.data import TOWRepository, rule_paths
-from avelorn.tow.schema.rule import ModifierEffect, Quantity, RerollEffect, Rule, RuleEffect
+from avelorn.tow.schema.rule import (
+    DiceQuantity,
+    HitOrder,
+    HitsEffect,
+    ModifierEffect,
+    Quantity,
+    RerollEffect,
+    Rule,
+    RuleEffect,
+)
 from avelorn.tow.schema.unit import Characteristic
 
 _EFFECT = TypeAdapter(RuleEffect)
@@ -612,3 +621,34 @@ def test_a_foe_gate_asks_something() -> None:
                 "when": {"natural": {"roll": "roll-to-wound", "face": 6}, "foe": {}},
             }
         )
+
+
+def test_a_hits_effect_parses_the_automatic_hits_shape() -> None:
+    """The Stomp Attacks / Impact Hits shape: a count and a printed order."""
+    effect = _EFFECT.validate_python({"when": {"combat": True}, "hits": "X", "order": "last"})
+    assert isinstance(effect, HitsEffect)
+    assert effect.hits == "X"
+    assert effect.order is HitOrder.LAST
+
+
+def test_a_hits_effect_lands_at_least_one_hit() -> None:
+    """A numeric count of zero says nothing: a data error, not a no-op."""
+    with pytest.raises(ValidationError, match="at least one hit"):
+        _EFFECT.validate_python({"hits": 0, "order": "last"})
+
+
+@pytest.mark.parametrize(
+    ("printed", "sides", "plus"),
+    [("D6", 6, 0), ("D3", 3, 0), ("D3+1", 3, 1)],
+)
+def test_dice_quantity_parses_the_printed_forms(printed: str, sides: int, plus: int) -> None:
+    """Every dice quantity the army book prints parses to its die and addend."""
+    quantity = DiceQuantity.parse(printed)
+    assert quantity is not None
+    assert (quantity.sides, quantity.plus) == (sides, plus)
+
+
+@pytest.mark.parametrize("printed", ["2D6", "D4", "3", "Skirmishers", "D6-1"])
+def test_dice_quantity_rejects_other_text(printed: str) -> None:
+    """Text outside the printed dice forms is no quantity at all."""
+    assert DiceQuantity.parse(printed) is None
