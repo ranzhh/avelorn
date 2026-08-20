@@ -17,5 +17,4 @@ effects:
         kind: shooting
         magical: false
     add:
-      armour-value: 1
-    maximum: 2
+      armour-value: { amount: 1, maximum: 2 }

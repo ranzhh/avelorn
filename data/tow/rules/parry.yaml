@@ -16,5 +16,4 @@ effects:
       worn:
         name: Shield
     add:
-      armour-value: 1
-    maximum: 3
+      armour-value: { amount: 1, maximum: 3 }

@@ -1,0 +1,21 @@
+# Source: https://tow.whfb.app/special-rules/enfeebling-cold
+id: enfeebling-cold
+name: Enfeebling Cold
+page: 45
+category: Special Rules
+flavour: An aura of cold clings to the Merwyrm, sapping the strength of those who linger too close.
+paragraphs:
+  - Whilst in base contact with this model, enemy models suffer a - 1 modifier to their Strength characteristic (to a minimum
+    of 1).
+# Read before a weapon resolves its own Strength, so a weapon striking at the
+# wielder's Strength (S, S+2) strikes from the lowered value while one that
+# prints its own is untouched, as printed.
+effects:
+  - enemy: true
+    when:
+      combat: true
+    add:
+      S: { amount: -1, minimum: 1 }
+notes: base contact is read as being engaged in the combat — the whole engaged
+  enemy unit suffers the malus, not only the models touching this one; mount
+  rows are read printed, so an engaged foe's mounts keep their own Strength.

@@ -5,6 +5,7 @@ from typing import Literal
 
 import pytest
 
+from avelorn.core.registry import Registry
 from avelorn.tow.contingent import Contingent, Movement
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.engine.attack import AttackProfile, RollState, resolve_attack
@@ -36,6 +37,7 @@ from avelorn.tow.engine.rules import (
 from avelorn.tow.phases.shooting import shoot_unit
 from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.rule import (
+    Add,
     ArmourGate,
     AttackKind,
     AttackMarkEffect,
@@ -99,6 +101,36 @@ def test_printed_rule_substitutes_the_parameter() -> None:
     filed = REPO.rules["armour-bane"].effects[0]
     assert isinstance(filed, ModifierEffect)
     assert filed.add == {"armour-piercing": "X"}
+
+
+def test_printed_rule_substitutes_under_a_printed_bound() -> None:
+    """A bracketed parameter binds inside a bounded amount, where "X" sits a level down.
+
+    No printed rule prints both a parameter and a bound today, but the
+    substituter promises every X-bearing shape participates — a placeholder
+    hiding under a bound would go quietly unfactored forever.
+    """
+    entry = Rule(
+        id="doctored",
+        name="Doctored (X)",
+        paragraphs=["…"],
+        effects=[ModifierEffect.model_validate({"add": {"S": {"amount": "X", "minimum": 1}}})],
+    )
+    rules: Registry[Rule] = Registry([entry], kind="rule")
+
+    bound = printed_rule("Doctored (2)", rules)
+    assert bound is not None
+    effect = bound.effects[0]
+    assert isinstance(effect, ModifierEffect)
+    assert effect.added(Characteristic.STRENGTH) == Add(2, None, 1)
+
+    # A dice parameter cannot be an operation's amount, bound or bare: it
+    # stays unbound, and the seam reports the rule unfactored.
+    dice = printed_rule("Doctored (D3)", rules)
+    assert dice is not None
+    diced = dice.effects[0]
+    assert isinstance(diced, ModifierEffect)
+    assert diced.added(Characteristic.STRENGTH).amount == "X"
 
 
 def test_printed_rule_unknown_name() -> None:
@@ -497,7 +529,8 @@ def _initiative_rule(
     when: dict[str, object] | None = None,
     characteristic: Characteristic = Characteristic.INITIATIVE,
 ) -> Rule:
-    payload: dict[str, object] = {"add": {characteristic: amount}, "maximum": maximum}
+    bounded: object = amount if maximum is None else {"amount": amount, "maximum": maximum}
+    payload: dict[str, object] = {"add": {characteristic: bounded}}
     if when is not None:
         payload["when"] = when
     effect = ModifierEffect.model_validate(payload)
@@ -626,6 +659,112 @@ def test_effective_characteristic_agreeing_sets_apply_once() -> None:
     )
     assert result.value == 10
     assert set(result.factored) == {"A", "B"}
+
+
+# --- the foe's enemy-subject operations, folded into the bearer's read ---
+
+
+def _enemy_strength_malus(
+    name: str = "Doctored Cold", when: dict[str, object] | None = None
+) -> Rule:
+    # The Enfeebling Cold shape: "enemy models suffer a -1 modifier to their
+    # Strength characteristic (to a minimum of 1)".
+    payload: dict[str, object] = {
+        "enemy": True,
+        "add": {Characteristic.STRENGTH: {"amount": -1, "minimum": 1}},
+    }
+    if when is not None:
+        payload["when"] = when
+    effect = ModifierEffect.model_validate(payload)
+    return Rule(id="doctored-cold", name=name, paragraphs=["…"], effects=[effect])
+
+
+def test_effective_characteristic_folds_the_foes_enemy_malus() -> None:
+    """A foe's enemy-subject malus lands on this read, named apart for the foe."""
+    result = effective_characteristic(
+        3, Characteristic.STRENGTH, [], foe_rules=[_enemy_strength_malus()]
+    )
+    assert result.value == 2
+    assert result.factored == ()
+    assert result.foe_factored == ("Doctored Cold",)
+    assert result.foe_unfactored == ()
+
+
+def test_effective_characteristic_minimum_floors_the_malus() -> None:
+    """The printed "(to a minimum of 1)" stops the malus at the floor."""
+    result = effective_characteristic(
+        1, Characteristic.STRENGTH, [], foe_rules=[_enemy_strength_malus()]
+    )
+    assert result.value == 1
+
+
+def test_effective_characteristic_bounds_clamp_the_folded_result() -> None:
+    """A printed bound clamps the folded value, whatever the rule-list order.
+
+    Base S2 under foe maluses of -1 (to a minimum of 1) and -2 (no floor):
+    the adds sum to -3 and the declared floor clamps the result at 1.
+    Clamping per operation would read -1 in one order and 1 in the other.
+    """
+
+    def malus(amount: int, minimum: int | None, name: str) -> Rule:
+        bounded: object = amount if minimum is None else {"amount": amount, "minimum": minimum}
+        effect = ModifierEffect.model_validate(
+            {"enemy": True, "add": {Characteristic.STRENGTH: bounded}}
+        )
+        return Rule(id=name.lower(), name=name, paragraphs=["…"], effects=[effect])
+
+    floored, bare = malus(-1, 1, "Floored"), malus(-2, None, "Bare")
+    for order in ([floored, bare], [bare, floored]):
+        result = effective_characteristic(2, Characteristic.STRENGTH, [], foe_rules=order)
+        assert result.value == 1
+
+
+def test_effective_characteristic_own_fold_skips_enemy_subject_effects() -> None:
+    """A bearer's own enemy-subject effect is the foe's business, not its own read.
+
+    Carried in ``rules``, it moves nothing and appears in neither own list —
+    the fold that offers it as ``foe_rules`` is the one that owns it.
+    """
+    result = effective_characteristic(3, Characteristic.STRENGTH, [_enemy_strength_malus()])
+    assert result.value == 3
+    assert result.factored == ()
+    assert result.unfactored == ()
+
+
+def test_effective_characteristic_foe_set_cancels_own_set() -> None:
+    """A foe's enemy-subject set disagrees with the bearer's own: both cancel.
+
+    Strike First (own, to 10) against an aura's Strike Last on its foes
+    (enemy-subject, to 1): the two resolve as one fold, so the base stands —
+    each honoured, just to no effect.
+    """
+    aura = Rule(
+        id="doctored-aura",
+        name="Doctored Aura",
+        paragraphs=["…"],
+        effects=[ModifierEffect.model_validate({"enemy": True, "set": {"I": 1}})],
+    )
+    result = effective_characteristic(
+        4, Characteristic.INITIATIVE, [_set_initiative(10, "Set High")], foe_rules=[aura]
+    )
+    assert result.value == 4
+    assert result.factored == ("Set High",)
+    assert result.foe_factored == ("Doctored Aura",)
+
+
+def test_effective_characteristic_foe_unknown_gate_is_foe_unfactored() -> None:
+    """A foe's malus gated on a fact its own conditions cannot answer is reported."""
+    gated = _enemy_strength_malus(when={"combat": {"first_round": True}})
+    result = effective_characteristic(
+        3,
+        Characteristic.STRENGTH,
+        [],
+        foe_rules=[gated],
+        foe_conditions=GateContext(combat=CombatFacts()),
+    )
+    assert result.value == 3
+    assert result.foe_factored == ()
+    assert result.foe_unfactored == ("Doctored Cold",)
 
 
 def test_set_is_unfactored_at_the_walk() -> None:
