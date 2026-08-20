@@ -9,7 +9,6 @@ paragraphs:
     its weapon is improved by the amount shown in brackets after the name of this special rule (shown here as 'X').
   - For example, if a natural 6 is rolled when rolling To Wound with a weapon that has an AP of ' - ' and the Armour Bane
     (1) special rule, its AP counts as being -1 when making an Armour Save roll against that wound.
-# Hand-authored, diffable against the paragraphs above.
 effects:
   - when:
       natural:

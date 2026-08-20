@@ -5,15 +5,9 @@ category: Special Rules
 paragraphs:
   - Whilst engaged in close combat, a model with this rule that is equipped with and chooses to use a hand weapon and shield
     improves its armour value by 1, to a maximum of 3+.
-# Hand-authored, diffable against the paragraph above: +1 armour value (a
-# better save, so the save target lowers by one), capped at the best save of
-# 3+, while a hand weapon and a shield are the equipment in use. "Whilst engaged
-# in close combat" is the `combat` presence gate — a state of the model, not a
-# property of the attack (a shot at a unit locked in combat would still benefit,
-# RAW), which is why it is not a `target_of` gate like Lion Cloak's. The gear is
-# gated the same way: `wielding` names the one weapon in hand, `worn` a piece
-# among all the armour worn. The printed restriction to infantry is not
-# expressed — the engine fields only infantry in close combat today.
+# `combat` is a presence gate, not `target_of` like Lion Cloak's: RAW a shot at
+# a unit locked in combat still benefits. The printed infantry restriction is
+# unexpressed — the engine fields only infantry in close combat today.
 effects:
   - when:
       combat: true

@@ -6,12 +6,9 @@ category: Special Rules
 flavour: Units of skirmishers move quickly and freely, harassing the enemy's flanks.
 paragraphs:
   - A unit consisting of models with this special rule may adopt a Skirmish formation.
-# Hand-authored, diffable against the paragraph above: the rule itself only
-# licenses the Skirmish formation; the -1 To Hit against a skirmishing unit is
-# the formation's own rule, "Enemy Fire (Skirmishers)". Formations are not
-# modelled yet, so a unit with this rule is taken to be skirmishing, and the
-# formation's rule is conferred by a grant — its effects (and the enemy
-# subject they carry) stay authored on its own entry.
+# Formations are not modelled yet, so a unit with this rule is taken to be
+# skirmishing. The -1 To Hit is the formation's own rule, conferred by a grant
+# so its effects stay authored on that entry.
 effects:
   - grants: Enemy Fire (Skirmishers)
 notes: the Skirmish formation is not modelled; a unit with this rule is taken

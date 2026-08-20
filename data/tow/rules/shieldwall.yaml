@@ -7,10 +7,7 @@ flavour: Presenting an impenetrable wall of shields to the foe, a regiment becom
 paragraphs:
   - Once per game, during a turn in which it was charged, a unit with this special rule that is arrayed in a Close Order formation,
     and that is equipped with and chooses to use shields, may Give Ground rather than Fall Back in Good Order.
-# Hand-authored, diffable against the paragraph above: on a turn the unit
-# was charged, with a shield in effective use (a two-handed wielder's is
-# withdrawn, so its wall never forms), a would-be Fall Back in Good Order
-# becomes Give Ground. The rest of the Break split rolls as ever.
+# A two-handed wielder's shield is withdrawn, so its wall never forms.
 effects:
   - when:
       combat:

@@ -6,7 +6,6 @@ category: The Shooting Phase
 paragraphs:
   - Models that have moved for any reason during this turn (including rallying and reforming) have less time to aim and suffer
     a -1 To Hit modifier.
-# Hand-authored, diffable against the paragraphs above.
 effects:
   - when:
       movement:

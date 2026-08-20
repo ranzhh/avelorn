@@ -11,12 +11,9 @@ flavour: Elven warriors spend many hours mastering the art of war, wielding thei
 paragraphs:
   - During the first round of combat, a unit with this special rule gains a +1 modifier to its Weapon Skill characteristic. In
     addition, a unit with this special rule can make supporting attacks to its flank or rear, as well as to its front.
-# Hand-authored, diffable against the paragraph above. Only the first clause is
-# modelled: the +1 Weapon Skill in the first round of combat, read by the
-# effective-characteristic query. The flank/rear supporting-attacks clause has
-# no effect on the frontal, whole-front-rank combat the engine models today; it
-# waits on a flank/rear combat model (#28) and is deliberately left unexpressed
-# rather than approximated with a kind bespoke to one rule.
+# The flank/rear supporting-attacks clause is unexpressed: it has no effect on
+# the frontal combat modelled today and waits on #28, rather than being
+# approximated with a kind bespoke to one rule.
 effects:
   - when:
       combat:

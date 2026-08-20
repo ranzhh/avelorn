@@ -11,7 +11,6 @@ paragraphs:
   - Stomp Attacks can only be made by a model that is in base contact with the enemy. Stomp Attacks are attacks made in combat
     that must be made last, after all other attacks have been made, including attacks made at Initiative 1. They hit automatically
     and use the unmodified Strength of the model making them.
-# Hand-authored, diffable against the paragraphs above.
 effects:
   - when:
       combat: true

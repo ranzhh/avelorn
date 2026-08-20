@@ -78,8 +78,7 @@ For each, read the printed text -- `WhfbAppClient().rule_entry(slug)["fields"]["
 is the plain prose -- and decide.
 
 **If it folds into something the engine models, author it.** Import the entry,
-then hand-author `effects:` beneath a `# Hand-authored, diffable against the
-paragraphs above.` comment. Read `src/avelorn/tow/schema/rule.py` for the
+then hand-author `effects:`. Read `src/avelorn/tow/schema/rule.py` for the
 vocabulary first. Templates in `data/tow/rules/`:
 
 | shape | template |
@@ -93,6 +92,13 @@ vocabulary first. Templates in `data/tow/rules/`:
 
 Where the effect leaves part of the printed rule out, say so in `notes:` --
 the seam surfaces it to the user (`gromril-weapons.yaml`, `stubborn.yaml`).
+
+**Comment only what the data cannot say**: a modelling decision (why this gate
+and not another) or a deliberate omission. The reader has the printed paragraph
+above and the YAML below, so never paraphrase the effect, and never restate
+schema vocabulary -- that belongs in the schema's own docstrings. Most rules
+need no comment at all (`dragon-armour.yaml`, `press-of-battle.yaml`); where one
+earns its place it is a line or three (`parry.yaml`, `killing-blow.yaml`).
 
 **If it cannot fold, do not create a file at all.** No entry means the rule
 rides along printed and reports `special rule not factored`, which is the

@@ -8,10 +8,8 @@ flavour: Ironbreakers venture into the dark beneath the world protected from the
 paragraphs:
   - Models with this special rule have a 6+ Ward save against any wounds suffered that were caused by a non-magical enemy
     attack.
-# Hand-authored, diffable against the paragraph above: a 6+ ward granted
-# against a non-magical attack. Every attack the engine resolves is an
-# enemy's, so the sentence's "enemy attack" adds no further gate; wounds
-# from spells are not modelled at all, so nothing over-applies.
+# Every attack the engine resolves is an enemy's, so "enemy attack" adds no
+# further gate; wounds from spells are not modelled, so nothing over-applies.
 effects:
   - when:
       target_of:

@@ -7,12 +7,8 @@ flavour: Some warriors charge home with such fury that their first blows land wi
 paragraphs:
   - During a turn in which it made a charge move of 3" or more, a model with this special rule gains a +1 modifier to
     its Attacks characteristic.
-# Hand-authored, diffable against the paragraphs above.
-# A +1 Attacks modifier gated on the charge event's distance — read by the
-# effective-Attacks query, which shapes the fighting rank's blows (a supporting
-# attack is one each regardless). The "3\" or more" qualifier is honoured: the
-# charging event carries the charge's distance, so a charge shorter than 3"
-# does not factor this.
+# A supporting attack is one each regardless, so the +1 shapes the fighting
+# rank's blows only.
 effects:
   - when:
       movement:

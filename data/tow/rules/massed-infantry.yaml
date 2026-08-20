@@ -6,10 +6,8 @@ flavour: Numbers alone can sometimes overcome the foe.
 paragraphs:
   - When determining combat results, if one side has a higher Unit Strength than the other and includes one or more units
     with this rule, that side may claim a bonus of +1 combat result point.
-# Hand-authored, diffable against the paragraph above: +1 combat result point
-# to the side with the higher Unit Strength (the "outnumbers" condition), read
-# by the combat-result fold. In the one-on-one combats modelled today, "one or
-# more units with this rule" is simply the side that carries it.
+# In the one-on-one combats modelled today, "one or more units with this rule"
+# is simply the side that carries it.
 effects:
   - when:
       combat:

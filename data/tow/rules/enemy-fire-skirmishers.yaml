@@ -6,11 +6,6 @@ category: Unusual Formations
 paragraphs:
   - Due to their comparatively small size and ability to make use of all available cover, enemy units shooting at a unit of
     Skirmishers that consists entirely of models with a Unit Strength of 1 suffer a -1 To Hit modifier.
-# Hand-authored, diffable against the paragraph above: the sentence's subject
-# is the enemy ("enemy units ... suffer a -1 To Hit modifier"), so the
-# modifier moves the enemy's To Hit (`enemy: true`) and fires on the attacks
-# this unit is the target of, when they are shooting (the `target_of` gate,
-# as Lion Cloak reads the incoming attack).
 effects:
   - enemy: true
     when:

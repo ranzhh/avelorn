@@ -9,8 +9,6 @@ flavour: Dragon armour is forged in the heart of a volcano by the most skilled o
 paragraphs:
   - A model with this special rule has a 6+ Ward save against any wounds suffered. In addition, a Wizard with this special
     rule may wear armour without penalty.
-# Hand-authored, diffable against the paragraphs above: a 6+ ward against
-# any wounds suffered, ungated.
 effects:
   - set:
       ward-save: 6

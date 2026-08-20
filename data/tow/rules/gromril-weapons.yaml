@@ -9,9 +9,6 @@ paragraphs:
   - A hand weapon carried by a model with this special rule has an Armour Piercing characteristic of -1.
   - Note that this special rule only applies to a single, ordinary hand weapon. If the model is using two hand weapons or
     any other sort of weapon, or if their hand weapon is inscribed with any Weapon runes, this special rule ceases to apply.
-# Hand-authored, diffable against the paragraphs above: an Armour Piercing
-# characteristic of -1 on the hand weapon in use — AP improvements are
-# positive in the modifier vocabulary — gated on wielding it.
 effects:
   - when:
       wielding:
