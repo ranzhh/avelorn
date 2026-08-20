@@ -12,12 +12,8 @@ flavour: Amongst the most finely crafted weapons in all Athel Loren, this blade 
   without pause.
 paragraphs:
   - 'Notes: Enemy models must re-roll any successful Armour Save rolls against wounds caused by this weapon.'
-# Hand-authored, diffable against the paragraph above: the sentence's
-# subject is the enemy and the covered dice are its successful ones, both
-# transcribed. The enemy flip puts the grant on the attacks the bearer
-# makes; "against wounds caused by this weapon" is the weapon-rules
-# scope — the entry is referenced from the weapon's own profile, so it
-# compiles only when the Reaper is in use.
+# "against wounds caused by this weapon" needs no gate: the entry is referenced
+# from the weapon's own profile, so it compiles only when the Reaper is in use.
 effects:
   - reroll: make-armour-saves
     of: successful
