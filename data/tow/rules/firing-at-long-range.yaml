@@ -6,7 +6,6 @@ category: The Shooting Phase
 paragraphs:
   - Missiles lose power and accuracy at long range, so any shots taken at an enemy that is further away than half the weapon's
     maximum range suffer a -1 To Hit modifier.
-# Hand-authored, diffable against the paragraphs above.
 effects:
   - when:
       shooting:

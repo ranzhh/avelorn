@@ -10,12 +10,9 @@ paragraphs:
     against a Killing Blow (Ward saves can be attempted as normal). If an enemy model whose troop type is infantry or cavalry
     suffers an unsaved wound from a Killing Blow, it loses all of its remaining Wounds.
   - Note that if an attack wounds automatically, this special rule cannot be used.
-# Hand-authored, diffable against the paragraphs above. "Infantry or
-# cavalry" expands to the categories' printed sub-types (troop-types-in-
-# detail/infantry and /cavalry): the rulebook's own reading is that a
-# category names its sub-types unless excepted. The ward rolls untouched
-# after the denied armour save, and an automatic wound shows no die for
-# the trigger -- both printed clauses fall out of the walk.
+# "Infantry or cavalry" expands to the categories' printed sub-types
+# (troop-types-in-detail): the rulebook's own reading is that a category names
+# its sub-types unless excepted.
 effects:
   - when:
       combat: true

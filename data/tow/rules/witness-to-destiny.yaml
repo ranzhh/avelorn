@@ -7,10 +7,8 @@ flavour: Cursed with the knowledge of their own demise, the Phoenix Guard are ab
   of the enemy with a disturbing ease.
 paragraphs:
   - This unit has a 6+ Ward save against any wounds suffered that were caused by a non-magical enemy attack.
-# Hand-authored, diffable against the paragraph above: a 6+ ward granted
-# against a non-magical attack. Every attack the engine resolves is an
-# enemy's, so the sentence's "enemy attack" adds no further gate; wounds
-# from spells are not modelled at all, so nothing over-applies.
+# Every attack the engine resolves is an enemy's, so "enemy attack" adds no
+# further gate; wounds from spells are not modelled, so nothing over-applies.
 effects:
   - when:
       target_of:

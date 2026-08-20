@@ -11,10 +11,8 @@ paragraphs:
     the front rank, or front two ranks if the unit is on a hill). A unit cannot Volley Fire if it has moved for any reason
     during this turn (including reforming), or when making a Stand & Shoot charge reaction.
   - Note that models in rear ranks use the line of sight of the model at the front of their file.
-# Hand-authored, diffable against the paragraph above: half of each rank
-# behind the front, rounding up, joins the volley -- a shot-count effect
-# the volley resolver reads, gated as the page gates it: no move this
-# turn (for any reason), never on a Stand & Shoot charge reaction.
+# "Has not moved" is read as no move this turn for any reason, and never on a
+# Stand & Shoot charge reaction.
 effects:
   - when:
       movement:

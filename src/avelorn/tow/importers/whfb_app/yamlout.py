@@ -125,11 +125,7 @@ def rule_to_yaml(rule: Rule, source_url: str | None = None) -> str:
         doc["effects"] = [
             e.model_dump(mode="json", exclude_none=True, by_alias=True) for e in rule.effects
         ]
-    text = _dump(doc, source_url)
-    # Effects are hand-authored, not scraped; mark them as such in the file.
-    return text.replace(
-        "\neffects:", "\n# Hand-authored, diffable against the paragraphs above.\neffects:"
-    )
+    return _dump(doc, source_url)
 
 
 def _dump(doc: dict, source_url: str | None) -> str:

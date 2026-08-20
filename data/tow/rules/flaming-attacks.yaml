@@ -10,9 +10,6 @@ paragraphs:
     or swarms.
   - Unless otherwise stated, a model with this special rule makes Flaming attacks both when shooting and in combat (though
     any spells cast by the model are unaffected, as are any attacks made with magic weapons they might be wielding).
-# Hand-authored, diffable against the paragraph above: the bearer's attacks
-# are Flaming, read by the incoming-attack gates from the profile in use and
-# the unit's rules alike.
 effects:
   - attack:
       flaming: true

@@ -8,10 +8,6 @@ paragraphs:
   - Any attack made or hit caused by a model with this special rule, or made using a weapon with this special rule, is a 'Magical'
     attack.
   - Note that all spells are considered to have this special rule, as are any hits caused by magic items.
-# Hand-authored, diffable against the paragraph above: the bearer's attacks
-# are magical, read by the incoming-attack gates (Lion Cloak, Runes of
-# Protection, Witness to Destiny) from the profile in use and the unit's
-# rules alike.
 effects:
   - attack:
       magical: true

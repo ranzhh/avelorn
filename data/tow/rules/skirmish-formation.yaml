@@ -7,12 +7,8 @@ paragraphs:
   - A unit of models in Skirmish formation (often referred to as 'Skirmishers' in the rules that follow) never consists of
     rigid ranks and files. Instead, it moves as a single loose group or rough line. This enables Skirmishers to move quickly
     and take advantage of terrain to shelter from the enemy.
-# Hand-authored, diffable against the paragraph above: the paragraph names the
-# formation's models "Skirmishers", which is who the formation's own rule
-# "Enemy Fire (Skirmishers)" speaks about, so the -1 To Hit is conferred by a
-# grant -- its effects (and the enemy subject they carry) stay authored on its
-# own entry. Same shape as skirmishers.yaml, the special rule that licenses
-# this formation.
+# The -1 To Hit is conferred by a grant, so "Enemy Fire (Skirmishers)" keeps
+# its effects on its own entry. Same shape as skirmishers.yaml.
 effects:
   - grants: Enemy Fire (Skirmishers)
 notes: only the formation's Enemy Fire rule is modelled; the loose group's

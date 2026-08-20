@@ -11,9 +11,6 @@ paragraphs:
   - Impact Hits can only be made by a charging model that moved 3" or more and that is in base contact with the enemy. Impact
     Hits are resolved against the charged unit when the combat is chosen during Step 1.1 of the Choose Combat & Fight sub-phase,
     before issuing challenges. They hit automatically and use the unmodified Strength of the model making them.
-# Hand-authored, diffable against the paragraphs above. The charge
-# qualifier is honoured: the charge event carries its distance, so a
-# standing unit or a charge shorter than 3" causes no Impact Hits.
 effects:
   - when:
       movement:

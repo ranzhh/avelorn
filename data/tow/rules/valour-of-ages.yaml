@@ -9,7 +9,6 @@ flavour: Throughout the ages, the High Elves of Ulthuan have stood firm against 
 paragraphs:
   - A unit with this special rule may re-roll any failed Panic test caused by taking heavy casualties or by being fled through
     by a friendly unit.
-# Hand-authored, diffable against the paragraphs above.
 effects:
   - reroll: make-panic-tests
     causes: [heavy-casualties, fled-through]
