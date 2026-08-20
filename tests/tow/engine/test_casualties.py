@@ -174,8 +174,8 @@ def test_a_dice_multiplier_rolls_separately_per_wound() -> None:
     """Multiple Wounds (D3) against 3-Wound models: the per-wound die, enumerated.
 
     Two certain wounds, each rolling a D3 against a fresh or damaged model:
-    of the nine (d1, d2) pairs, only (3, 3) fells two; (1, 1) fells none —
-    a 1 then any, or a 3 then a miss of 3, fells exactly one (7/9).
+    of the nine (d1, d2) pairs only (3, 3) fells two, and only (1, 1) fells
+    none — leaving the other seven to fell exactly one (7/9).
     """
     d3 = Distribution({1: Fraction(1, 3), 2: Fraction(1, 3), 3: Fraction(1, 3)})
     _, casualties = wound_and_casualties(
