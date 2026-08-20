@@ -13,5 +13,4 @@ effects:
       combat:
         first_round: true
     add:
-      I: 1
-    maximum: 10
+      I: { amount: 1, maximum: 10 }

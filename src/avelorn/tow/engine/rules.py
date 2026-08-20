@@ -50,10 +50,12 @@ from avelorn.tow.engine.attack import Outcome as AttackOutcome
 from avelorn.tow.schema.psychology import Outcome
 from avelorn.tow.schema.rule import (
     PARAMETER_SUFFIX,
+    Add,
     AttackKind,
     AttackMarkEffect,
     BarEffect,
     BlowEffect,
+    Bounded,
     ChoiceEffect,
     Comparison,
     Decision,
@@ -284,11 +286,22 @@ def _with_parameter(effect: RuleEffect, parameter: int | DiceQuantity) -> RuleEf
         value = getattr(effect, name)
         if value == "X":
             placeholders[name] = parameter
-        elif isinstance(value, Mapping) and "X" in value.values() and isinstance(parameter, int):
-            placeholders[name] = {
-                key: parameter if amount == "X" else amount for key, amount in value.items()
-            }
+        elif isinstance(value, Mapping) and isinstance(parameter, int):
+            bound = {key: _bind(amount, parameter) for key, amount in value.items()}
+            if bound != dict(value):
+                placeholders[name] = bound
     return effect.model_copy(update=placeholders) if placeholders else effect
+
+
+def _bind(amount: object, parameter: int) -> object:
+    # One operation amount with the parameter bound into its "X", in either
+    # spelling: a bare amount, or one carrying a printed bound, where the
+    # placeholder sits a level down and would otherwise never be found.
+    if amount == "X":
+        return parameter
+    if isinstance(amount, Bounded) and amount.amount == "X":
+        return amount.model_copy(update={"amount": parameter})
+    return amount
 
 
 class _Disposition(Enum):
@@ -866,16 +879,16 @@ def effective_armour_value(
     unfactored: list[str] = []
     for rule in rules:
         matching = [
-            (effect, (effect.add or {})[Quantity.ARMOUR_VALUE])
+            (effect, effect.added(Quantity.ARMOUR_VALUE))
             for effect in rule.effects
             if isinstance(effect, ModifierEffect) and Quantity.ARMOUR_VALUE in (effect.add or {})
         ]
         if not matching:
             continue
-        answers = [(effect, amount, _gate_applies(effect, context)) for effect, amount in matching]
+        answers = [(effect, add, _gate_applies(effect, context)) for effect, add in matching]
         if any(
-            amount == "X" or when is None or effect.natural is not None
-            for effect, amount, when in answers
+            add.amount == "X" or when is None or effect.natural is not None
+            for effect, add, when in answers
         ):
             unfactored.append(rule.name)
             continue
@@ -884,12 +897,12 @@ def effective_armour_value(
             # a value the defender does not have. Reported, never assumed.
             unfactored.append(rule.name)
             continue
-        for effect, amount, when in answers:
-            if not when or not isinstance(amount, int):
+        for _, add, when in answers:
+            if not when or not isinstance(add.amount, int):
                 continue
-            value -= amount  # a lower armour value is a better save
-            if effect.maximum is not None:
-                value = max(value, effect.maximum)  # cannot improve past the best save
+            value -= add.amount  # a lower armour value is a better save
+            if add.maximum is not None:
+                value = max(value, add.maximum)  # cannot improve past the best save
         factored.append(rule.name)
         logger.debug("armour-value modifier factored: %s -> %d", rule.name, value)
     return EffectiveValue(value, tuple(factored), tuple(unfactored))
@@ -1264,7 +1277,7 @@ def effective_rerolls(
 
 
 # One additive operation gathered for the value fold: the amount, and the
-# effect's printed maximum (ceiling) and minimum (floor), where the seam caps.
+# amount's printed maximum (ceiling) and minimum (floor), where the seam caps.
 _Add = tuple[int, int | None, int | None]
 
 
@@ -1340,35 +1353,38 @@ def _gather_operations(
     factored: list[str] = []
     unfactored: list[str] = []
     for rule in rules:
-        matching = [
-            (effect, op, operations[key])
-            for effect in rule.effects
-            if isinstance(effect, ModifierEffect) and effect.enemy is enemy
-            for op, operations in (("add", effect.add or {}), ("set", effect.set_ or {}))
-            if key in operations
-        ]
+        # A set carries no bound (only an add can), so both read as an ``Add``
+        # and the fold below asks one question of either.
+        matching: list[tuple[ModifierEffect, str, Add]] = []
+        for effect in rule.effects:
+            if not isinstance(effect, ModifierEffect) or effect.enemy is not enemy:
+                continue
+            if key in (effect.add or {}):
+                matching.append((effect, "add", effect.added(key)))
+            if key in (effect.set_ or {}):
+                matching.append((effect, "set", Add((effect.set_ or {})[key])))
         if not matching:
             continue
         answers = [
-            (effect, op, amount, _gate_applies(effect, context)) for effect, op, amount in matching
+            (effect, op, add, _gate_applies(effect, context)) for effect, op, add in matching
         ]
         if any(
-            amount == "X" or answer is None or effect.natural is not None
-            for effect, op, amount, answer in answers
+            add.amount == "X" or answer is None or effect.natural is not None
+            for effect, op, add, answer in answers
         ):
             # A rule gated on equipment the caller's conditions do not carry
             # answers None, so it lands here — reported unfactored rather than
             # applied blind, exactly as an unanswerable engagement fact does.
             unfactored.append(rule.name)
             continue
-        for effect, op, amount, answer in answers:
-            if not answer or not isinstance(amount, int):
+        for _, op, add, answer in answers:
+            if not answer or not isinstance(add.amount, int):
                 continue
             if op == "set":
-                sets.append(amount)
+                sets.append(add.amount)
             else:
                 adds.append(
-                    (amount, effect.maximum if caps else None, effect.minimum if caps else None)
+                    (add.amount, add.maximum if caps else None, add.minimum if caps else None)
                 )
         factored.append(rule.name)
     return tuple(factored), tuple(unfactored)

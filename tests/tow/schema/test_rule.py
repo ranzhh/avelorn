@@ -8,6 +8,7 @@ from pydantic import TypeAdapter, ValidationError
 from avelorn.core.loading import load_yaml
 from avelorn.tow.data import TOWRepository, rule_paths
 from avelorn.tow.schema.rule import (
+    Add,
     DiceQuantity,
     HitOrder,
     HitsEffect,
@@ -290,10 +291,34 @@ def test_an_operation_must_move_something() -> None:
 
 def test_add_moves_a_characteristic() -> None:
     """A profile characteristic is one more quantity an add can move."""
-    effect = _EFFECT.validate_python({"add": {"I": 1}, "maximum": 10})
+    effect = _EFFECT.validate_python({"add": {"I": {"amount": 1, "maximum": 10}}})
     assert isinstance(effect, ModifierEffect)
-    assert effect.add == {Characteristic.INITIATIVE: 1}
-    assert effect.maximum == 10
+    assert effect.added(Characteristic.INITIATIVE) == Add(1, maximum=10)
+
+
+def test_a_plain_amount_reads_as_an_unbounded_add() -> None:
+    """An amount written plainly reads back with no bounds, so seams ask once."""
+    effect = _EFFECT.validate_python({"add": {"I": 1}})
+    assert isinstance(effect, ModifierEffect)
+    assert effect.added(Characteristic.INITIATIVE) == Add(1, None, None)
+
+
+def test_a_bound_belongs_to_the_quantity_it_bounds() -> None:
+    """Two characteristics in one operation: the floor is the one amount's, not shared.
+
+    The printed parenthetical follows a single characteristic, so an
+    operation moving two cannot lend one's bound to the other.
+    """
+    effect = _EFFECT.validate_python({"add": {"S": {"amount": -1, "minimum": 1}, "I": -1}})
+    assert isinstance(effect, ModifierEffect)
+    assert effect.added(Characteristic.STRENGTH) == Add(-1, None, 1)
+    assert effect.added(Characteristic.INITIATIVE) == Add(-1, None, None)
+
+
+def test_a_bounded_amount_carries_a_bound() -> None:
+    """The long form exists to hold a bound; without one, write the amount plainly."""
+    with pytest.raises(ValidationError, match="needs a maximum or a minimum"):
+        _EFFECT.validate_python({"add": {"I": {"amount": 1}}})
 
 
 def test_set_parses_under_its_alias() -> None:
@@ -332,8 +357,8 @@ def test_set_rejects_a_roll_quantity() -> None:
 
 def test_maximum_requires_a_characteristic() -> None:
     """Only a characteristic prints a ceiling; on a roll it is a data error."""
-    with pytest.raises(ValidationError, match="maximum"):
-        _EFFECT.validate_python({"add": {"to-hit": -1}, "maximum": 10})
+    with pytest.raises(ValidationError, match="maximum bounds a characteristic"):
+        _EFFECT.validate_python({"add": {"to-hit": {"amount": -1, "maximum": 10}}})
 
 
 def test_modifier_rejects_a_spelled_out_stage() -> None:
@@ -556,9 +581,11 @@ def test_enemy_flips_only_a_roll_or_threaded_characteristic() -> None:
 
 def test_a_minimum_floors_a_characteristic_only() -> None:
     """The printed "(to a minimum of 1)" floors a characteristic malus, nothing else."""
-    _EFFECT.validate_python({"add": {"S": -1}, "minimum": 1})
+    _EFFECT.validate_python({"add": {"S": {"amount": -1, "minimum": 1}}})
     with pytest.raises(ValidationError, match="minimum floors a characteristic"):
-        _EFFECT.validate_python({"add": {"to-hit": -1}, "minimum": 1})
+        _EFFECT.validate_python({"add": {"to-hit": {"amount": -1, "minimum": 1}}})
+    with pytest.raises(ValidationError, match="minimum floors a characteristic"):
+        _EFFECT.validate_python({"add": {"armour-value": {"amount": 1, "minimum": 1}}})
 
 
 def test_successful_dice_re_roll_names_a_per_attack_die() -> None:
@@ -596,10 +623,16 @@ def test_a_ward_save_is_granted_at_a_value_never_moved() -> None:
         _EFFECT.validate_python({"add": {"ward-save": 1}})
 
 
-def test_a_ward_save_takes_no_maximum() -> None:
-    """A printed ceiling caps a characteristic or the armour value, never a ward."""
-    with pytest.raises(ValidationError, match="maximum bounds"):
-        _EFFECT.validate_python({"set": {"ward-save": 6}, "maximum": 4})
+def test_a_set_takes_no_bound() -> None:
+    """A bound is printed on a modifier; a set names the value outright.
+
+    So a ward — granted only as a set — cannot be bounded at all, and the
+    schema says so by shape rather than by a validator.
+    """
+    with pytest.raises(ValidationError, match="valid integer"):
+        _EFFECT.validate_python({"set": {"ward-save": {"amount": 6, "maximum": 4}}})
+    with pytest.raises(ValidationError, match="valid integer"):
+        _EFFECT.validate_python({"set": {"I": {"amount": 10, "maximum": 10}}})
 
 
 def test_an_attack_mark_confers_a_property_and_never_revokes_one() -> None:

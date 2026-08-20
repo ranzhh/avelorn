@@ -5,6 +5,7 @@ from typing import Literal
 
 import pytest
 
+from avelorn.core.registry import Registry
 from avelorn.tow.contingent import Contingent, Movement
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.engine.attack import AttackProfile, RollState, resolve_attack
@@ -36,6 +37,7 @@ from avelorn.tow.engine.rules import (
 from avelorn.tow.phases.shooting import shoot_unit
 from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.rule import (
+    Add,
     ArmourGate,
     AttackKind,
     AttackMarkEffect,
@@ -99,6 +101,36 @@ def test_printed_rule_substitutes_the_parameter() -> None:
     filed = REPO.rules["armour-bane"].effects[0]
     assert isinstance(filed, ModifierEffect)
     assert filed.add == {"armour-piercing": "X"}
+
+
+def test_printed_rule_substitutes_under_a_printed_bound() -> None:
+    """A bracketed parameter binds inside a bounded amount, where "X" sits a level down.
+
+    No printed rule prints both a parameter and a bound today, but the
+    substituter promises every X-bearing shape participates — a placeholder
+    hiding under a bound would go quietly unfactored forever.
+    """
+    entry = Rule(
+        id="doctored",
+        name="Doctored (X)",
+        paragraphs=["…"],
+        effects=[ModifierEffect.model_validate({"add": {"S": {"amount": "X", "minimum": 1}}})],
+    )
+    rules: Registry[Rule] = Registry([entry], kind="rule")
+
+    bound = printed_rule("Doctored (2)", rules)
+    assert bound is not None
+    effect = bound.effects[0]
+    assert isinstance(effect, ModifierEffect)
+    assert effect.added(Characteristic.STRENGTH) == Add(2, None, 1)
+
+    # A dice parameter cannot be an operation's amount, bound or bare: it
+    # stays unbound, and the seam reports the rule unfactored.
+    dice = printed_rule("Doctored (D3)", rules)
+    assert dice is not None
+    diced = dice.effects[0]
+    assert isinstance(diced, ModifierEffect)
+    assert diced.added(Characteristic.STRENGTH).amount == "X"
 
 
 def test_printed_rule_unknown_name() -> None:
@@ -497,7 +529,8 @@ def _initiative_rule(
     when: dict[str, object] | None = None,
     characteristic: Characteristic = Characteristic.INITIATIVE,
 ) -> Rule:
-    payload: dict[str, object] = {"add": {characteristic: amount}, "maximum": maximum}
+    bounded: object = amount if maximum is None else {"amount": amount, "maximum": maximum}
+    payload: dict[str, object] = {"add": {characteristic: bounded}}
     if when is not None:
         payload["when"] = when
     effect = ModifierEffect.model_validate(payload)
@@ -638,8 +671,7 @@ def _enemy_strength_malus(
     # Strength characteristic (to a minimum of 1)".
     payload: dict[str, object] = {
         "enemy": True,
-        "add": {Characteristic.STRENGTH: -1},
-        "minimum": 1,
+        "add": {Characteristic.STRENGTH: {"amount": -1, "minimum": 1}},
     }
     if when is not None:
         payload["when"] = when
@@ -675,10 +707,10 @@ def test_effective_characteristic_bounds_clamp_the_folded_result() -> None:
     """
 
     def malus(amount: int, minimum: int | None, name: str) -> Rule:
-        payload: dict[str, object] = {"enemy": True, "add": {Characteristic.STRENGTH: amount}}
-        if minimum is not None:
-            payload["minimum"] = minimum
-        effect = ModifierEffect.model_validate(payload)
+        bounded: object = amount if minimum is None else {"amount": amount, "minimum": minimum}
+        effect = ModifierEffect.model_validate(
+            {"enemy": True, "add": {Characteristic.STRENGTH: bounded}}
+        )
         return Rule(id=name.lower(), name=name, paragraphs=["…"], effects=[effect])
 
     floored, bare = malus(-1, 1, "Floored"), malus(-2, None, "Bare")

@@ -20,7 +20,7 @@ from avelorn.tow.phases.combat import (
     strike_unit,
 )
 from avelorn.tow.schema.phase import Phase
-from avelorn.tow.schema.rule import ModifierEffect, Quantity, Rule, WeaponGate, When
+from avelorn.tow.schema.rule import Bounded, ModifierEffect, Quantity, Rule, WeaponGate, When
 from avelorn.tow.schema.unit import Characteristic, ProfileRole, Unit
 from avelorn.tow.schema.weapon import Weapon
 
@@ -675,8 +675,7 @@ def _reflexive(unit: Unit) -> Contingent:
         effects=[
             ModifierEffect(
                 when=When.model_validate({"combat": {"first_round": True}}),
-                add={Characteristic.INITIATIVE: 1},
-                maximum=10,
+                add={Characteristic.INITIATIVE: Bounded(amount=1, maximum=10)},
             )
         ],
     )

@@ -29,7 +29,7 @@ import re
 from collections.abc import Mapping
 from contextlib import suppress
 from enum import StrEnum
-from typing import Annotated, Literal, assert_never
+from typing import Annotated, Literal, NamedTuple, assert_never
 
 from pydantic import (
     BaseModel,
@@ -92,8 +92,9 @@ class Seam(StrEnum):
     which grants the defender the best warding value its rules confer.
     :meth:`ModifierEffect._ops_speak_to_one_seam` holds a single effect to
     one seam, so all-or-nothing reporting stays per consumer. The
-    characteristic and armour seams cap a value at a printed maximum — a
-    ceiling on a characteristic, a floor (the best save) on the armour value.
+    characteristic and armour seams are the two that honour a printed
+    :class:`Bounded` amount — a ceiling on a characteristic, a floor (the
+    best save) on the armour value.
     """
 
     ROLL = "roll"
@@ -457,6 +458,58 @@ class When(Gate):
         return self
 
 
+# A printed operation's amount: a signed number, or the rule's bracketed X.
+Amount = int | Literal["X"]
+
+
+class Bounded(BaseModel):
+    """An amount with the printed bound on the value it moves.
+
+    The page prints a bound attached to the quantity it bounds, inside the
+    parenthetical that follows it — "improves its armour value by 1 (to a
+    maximum of 2+)", "a -1 modifier to their Strength characteristic (to a
+    minimum of 1)" — so the bound is written on the amount, not beside the
+    operation. An operation moving two quantities then cannot lend one's
+    bound to the other.
+
+    ``maximum`` is the printed limit on the modified value: a ceiling on a
+    characteristic, the best attainable save (so numerically a floor) on an
+    armour value. ``minimum`` is the floor a malus cannot push a
+    characteristic below; an armour value needs none, its own floor being
+    what ``maximum`` already names.
+
+    Write the amount plainly (``S: -1``) where the page prints no bound —
+    the long form exists to carry one.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    amount: Amount
+    maximum: int | None = None
+    minimum: int | None = None
+
+    @model_validator(mode="after")
+    def _carries_a_bound(self) -> "Bounded":
+        # Without a bound this is a plain amount spelled the long way: two
+        # spellings of one thing, and a reader left wondering what the second
+        # means. One way to write it, enforced at load.
+        if self.maximum is None and self.minimum is None:
+            raise ValueError("a bounded amount needs a maximum or a minimum; write it plainly")
+        return self
+
+
+class Add(NamedTuple):
+    """One ``add`` as a seam reads it: the amount, and its printed bounds.
+
+    The authored :class:`Bounded` must carry a bound; a read amount need not,
+    so the two are kept apart rather than one faking the other.
+    """
+
+    amount: Amount
+    maximum: int | None = None
+    minimum: int | None = None
+
+
 class GatedEffect(BaseModel):
     """The gating an effect carries whatever its consequence: the ``when``.
 
@@ -528,11 +581,12 @@ class ModifierEffect(GatedEffect):
     out. Equipment in use is gated in the ``when`` like any other fact — Parry's
     "a hand weapon and a shield" is
     ``{wielding: {name: Hand Weapon}, worn: {name: Shield}}`` — evaluated against
-    the loadout the consuming seam has in its context. ``maximum`` is a printed
-    limit on the modified value ("to a maximum of 10" / "to a maximum of 3+"): a
-    ceiling on a characteristic, the best attainable save (a floor) on an armour
-    value. ``minimum`` is its printed opposite ("to a minimum of 1"): the floor
-    a malus cannot push a characteristic below.
+    the loadout the consuming seam has in its context. A printed bound ("to a
+    maximum of 10", "to a minimum of 1") is written on the amount it bounds, as
+    a :class:`Bounded` — ``add: {S: {amount: -1, minimum: 1}}`` — never beside
+    the operation, where an effect moving two quantities could not say which
+    one it bounds. Only an ``add`` takes a bound: the page prints bounds on
+    modifiers, and a ``set`` names the value outright.
 
     ``enemy`` transcribes the printed sentence's subject when it is the
     other party: "enemy units ... suffer a -1 To Hit modifier" moves the
@@ -551,13 +605,11 @@ class ModifierEffect(GatedEffect):
     """
 
     add: (
-        Annotated[dict[Quantity | Characteristic, int | Literal["X"]], Field(min_length=1)] | None
+        Annotated[dict[Quantity | Characteristic, Amount | Bounded], Field(min_length=1)] | None
     ) = None
-    set_: (
-        Annotated[dict[Quantity | Characteristic, int | Literal["X"]], Field(min_length=1)] | None
-    ) = Field(default=None, alias="set")
-    maximum: int | None = None
-    minimum: int | None = None
+    set_: Annotated[dict[Quantity | Characteristic, Amount], Field(min_length=1)] | None = Field(
+        default=None, alias="set"
+    )
     enemy: bool = False
 
     @property
@@ -568,6 +620,20 @@ class ModifierEffect(GatedEffect):
             The union of the ``add`` and ``set`` keys.
         """
         return {*(self.add or {}), *(self.set_ or {})}
+
+    def added(self, quantity: "Quantity | Characteristic") -> "Add":
+        """The ``add`` on one quantity, with its printed bounds.
+
+        Both spellings — a plain amount and a :class:`Bounded` one — read
+        alike here, so a consuming seam never asks which was authored.
+
+        Returns:
+            The amount and its bounds, the latter None where none is printed.
+        """
+        amount = (self.add or {})[quantity]
+        if isinstance(amount, Bounded):
+            return Add(amount.amount, amount.maximum, amount.minimum)
+        return Add(amount)
 
     @model_validator(mode="after")
     def _carries_an_operation(self) -> "ModifierEffect":
@@ -604,27 +670,21 @@ class ModifierEffect(GatedEffect):
         return self
 
     @model_validator(mode="after")
-    def _maximum_bounds_a_capped_quantity(self) -> "ModifierEffect":
-        # A printed ceiling caps a characteristic or the armour value; on any
-        # other quantity it is meaningless, so a data error.
-        if self.maximum is not None and not any(
-            isinstance(quantity, Characteristic) or quantity == Quantity.ARMOUR_VALUE
-            for quantity in self.quantities
-        ):
-            raise ValueError(
-                "maximum bounds a characteristic or armour value; the operation moves neither"
-            )
-        return self
-
-    @model_validator(mode="after")
-    def _minimum_floors_a_characteristic(self) -> "ModifierEffect":
-        # A printed floor ("to a minimum of 1") is only ever printed on a
-        # characteristic malus; on any other quantity it is meaningless, so a
-        # data error.
-        if self.minimum is not None and not any(
-            isinstance(quantity, Characteristic) for quantity in self.quantities
-        ):
-            raise ValueError("minimum floors a characteristic; the operation moves none")
+    def _bounds_belong_to_a_capped_quantity(self) -> "ModifierEffect":
+        # A bound is checked against the quantity carrying it: a ceiling caps a
+        # characteristic or the armour value, a floor is only ever printed on a
+        # characteristic malus. On any other quantity a bound is meaningless,
+        # so a data error caught loudly at load.
+        for quantity, amount in (self.add or {}).items():
+            if not isinstance(amount, Bounded):
+                continue
+            seam = seam_of(quantity)
+            if amount.maximum is not None and seam not in {Seam.CHARACTERISTIC, Seam.ARMOUR}:
+                raise ValueError(
+                    f"maximum bounds a characteristic or armour value, not {quantity}"
+                )
+            if amount.minimum is not None and seam is not Seam.CHARACTERISTIC:
+                raise ValueError(f"minimum floors a characteristic, not {quantity}")
         return self
 
     @model_validator(mode="after")
