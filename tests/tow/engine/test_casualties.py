@@ -8,22 +8,30 @@ from avelorn.core.dice import binomial_distribution, cap_distribution, group_dis
 from avelorn.core.distribution import Distribution
 from avelorn.tow.engine.casualties import (
     AttackBatch,
-    _remove_casualties,
+    Toll,
     batched_wound_and_casualties,
+    strike_toll,
     wound_and_casualties,
 )
 
 
-def test_remove_casualties_with_no_kill_mass_matches_binomial_path() -> None:
-    """The class-aware fold degenerates to binomial -> group -> cap."""
+def test_the_convolving_path_agrees_with_the_binomial_one() -> None:
+    """Two batches take the convolve; one takes the closed form. They must agree.
+
+    Same total attacks at the same per-attack chance, so the pooled wound
+    distribution is the one binomial either way — the guard that the fast
+    path is an optimisation and not a second answer.
+    """
     p = 2 / 9
-    distribution, casualties = _remove_casualties(
-        10, p_wound_only=p, p_kill=0.0, wounds_per_model=3, targets=2
+    convolved = batched_wound_and_casualties(
+        [AttackBatch(5, p, 0.0), AttackBatch(5, p, 0.0)],
+        wounds_per_model=3,
+        targets=2,
     )
-    expected_distribution = binomial_distribution(10, p)
-    expected_casualties = cap_distribution(group_distribution(expected_distribution, 3), 2)
-    assert distribution == pytest.approx(expected_distribution)
-    assert casualties == pytest.approx(expected_casualties)
+    closed = wound_and_casualties(10, p_unsaved=p, p_kill=0.0, wounds_per_model=3, targets=2)
+    assert convolved[0] == pytest.approx(binomial_distribution(10, p))
+    assert convolved[0] == pytest.approx(closed[0])
+    assert convolved[1] == pytest.approx(closed[1])
 
 
 def test_no_kill_mass_takes_the_binomial_path() -> None:
@@ -92,9 +100,9 @@ def test_casualty_masses_are_all_one_numeric_type(
     never added to. Seeding them with a bare integer would leave a `list[float]`
     holding ints, which anything dispatching on a mass's type would mishandle.
     """
-    wounds, casualties = _remove_casualties(
+    wounds, casualties = wound_and_casualties(
         1,
-        p_wound_only=p_wound_only,
+        p_unsaved=p_wound_only + p_kill,
         p_kill=p_kill,
         wounds_per_model=1,
         targets=5,
@@ -213,3 +221,46 @@ def test_batched_fold_pools_a_shared_multiplier_with_kills_additive() -> None:
     )
     assert distribution == [0, 0, 1]
     assert casualties == [0, 0, 1]
+
+
+def test_the_toll_counts_wounds_a_model_could_lose_not_the_damage_rolled() -> None:
+    """Multiple Wounds (2), two certain wounds, 3-Wound models: 3 Wounds, one model.
+
+    The second wound is worth 2 but meets a model with 1 left, so it takes
+    that 1 and the excess is discarded rather than spilt. The combat-result
+    figure is the 3 the target actually lost, never the 4 rolled.
+    """
+    toll = strike_toll(
+        [AttackBatch(2, Fraction(1), Fraction(0))],
+        wounds_per_model=3,
+        targets=5,
+        damage=Distribution.pure(2),
+    )
+    assert _support(toll) == (Toll(wounds=2, felled=1, inflicted=3),)
+
+
+def test_a_model_slain_outright_scores_its_whole_allotment() -> None:
+    """An instant kill on a 3-Wound model counts 3 Wounds, as it slew the model."""
+    toll = strike_toll([AttackBatch(1, Fraction(1), Fraction(1))], wounds_per_model=3, targets=5)
+    assert _support(toll) == (Toll(wounds=1, felled=1, inflicted=3),)
+
+
+def test_wounds_inflicted_stop_at_what_the_unit_has_to_give() -> None:
+    """A wiped unit scores its Wounds, not the overkill: 5 wounds on one W3 model."""
+    toll = strike_toll([AttackBatch(5, Fraction(1), Fraction(0))], wounds_per_model=3, targets=1)
+    assert _support(toll) == (Toll(wounds=5, felled=1, inflicted=3),)
+
+
+def test_a_plain_wound_is_never_excess() -> None:
+    """Without a multiplier every unsaved wound lands whole, so it always scores.
+
+    Four wounds on 3-Wound models fell one and wound the next — 4 Wounds
+    inflicted, none discarded, where the multiplier case can lose some.
+    """
+    toll = strike_toll([AttackBatch(4, Fraction(1), Fraction(0))], wounds_per_model=3, targets=5)
+    assert _support(toll) == (Toll(wounds=4, felled=1, inflicted=4),)
+
+
+def _support(toll: Distribution[Toll]) -> tuple[Toll, ...]:
+    # The outcomes a toll actually reaches; Distribution keeps zero-mass keys.
+    return tuple(entry for entry, mass in toll.mass.items() if mass)
