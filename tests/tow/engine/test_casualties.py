@@ -5,6 +5,7 @@ from fractions import Fraction
 import pytest
 
 from avelorn.core.dice import binomial_distribution, cap_distribution, group_distribution
+from avelorn.core.distribution import Distribution
 from avelorn.tow.engine.casualties import (
     AttackBatch,
     _remove_casualties,
@@ -149,3 +150,66 @@ def test_batched_fold_counts_instant_kills_per_model_across_batches() -> None:
         targets=2,
     )
     assert casualties == pytest.approx([0.0, 1.0, 0.0])
+
+
+def test_a_wound_worth_the_model_fells_one_per_wound() -> None:
+    """Multiple Wounds (2) against 2-Wound models: every unsaved wound fells one.
+
+    Two attacks at p = 1/2: the casualty distribution IS the wound
+    distribution — where the plain pool needs two wounds per model
+    (P(1 model) = P(2 wounds) = 1/4).
+    """
+    half = Fraction(1, 2)
+    two = Distribution.pure(2)
+    distribution, casualties = wound_and_casualties(
+        2, p_unsaved=half, p_kill=0, wounds_per_model=2, targets=None, damage=two
+    )
+    assert distribution == [Fraction(1, 4), half, Fraction(1, 4)]
+    assert casualties == [Fraction(1, 4), half, Fraction(1, 4)]
+    _, pooled = wound_and_casualties(2, p_unsaved=half, p_kill=0, wounds_per_model=2, targets=None)
+    assert pooled == [Fraction(3, 4), Fraction(1, 4)]
+
+
+def test_a_dice_multiplier_rolls_separately_per_wound() -> None:
+    """Multiple Wounds (D3) against 3-Wound models: the per-wound die, enumerated.
+
+    Two certain wounds, each rolling a D3 against a fresh or damaged model:
+    of the nine (d1, d2) pairs only (3, 3) fells two, and only (1, 1) fells
+    none — leaving the other seven to fell exactly one (7/9).
+    """
+    d3 = Distribution({1: Fraction(1, 3), 2: Fraction(1, 3), 3: Fraction(1, 3)})
+    _, casualties = wound_and_casualties(
+        2, p_unsaved=Fraction(1), p_kill=0, wounds_per_model=3, targets=None, damage=d3
+    )
+    assert casualties == [Fraction(1, 9), Fraction(7, 9), Fraction(1, 9)]
+
+
+def test_excess_wounds_do_not_spill_over() -> None:
+    """Damage past the model's Wounds is discarded: 5 wounds fell one 3-Wound model each."""
+    _, casualties = wound_and_casualties(
+        2,
+        p_unsaved=Fraction(1),
+        p_kill=0,
+        wounds_per_model=3,
+        targets=None,
+        damage=Distribution.pure(5),
+    )
+    assert casualties == [0, 0, 1]
+
+
+def test_batched_fold_pools_a_shared_multiplier_with_kills_additive() -> None:
+    """Two certain-wound batches share a multiplier; an instant kill adds a model.
+
+    One batch's wound carries the kill class instead: the kill removes a
+    model outright while the other batch's multiplied wound fells its own.
+    """
+    two = Distribution.pure(2)
+    batches = [
+        AttackBatch(1, p_unsaved=Fraction(1), p_kill=Fraction(0)),
+        AttackBatch(1, p_unsaved=Fraction(1), p_kill=Fraction(1)),
+    ]
+    distribution, casualties = batched_wound_and_casualties(
+        batches, wounds_per_model=2, targets=None, damage=two
+    )
+    assert distribution == [0, 0, 1]
+    assert casualties == [0, 0, 1]

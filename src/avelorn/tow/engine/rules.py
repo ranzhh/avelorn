@@ -75,6 +75,7 @@ from avelorn.tow.schema.rule import (
     RuleEffect,
     Seam,
     VolleyEffect,
+    WoundMultiplierEffect,
     seam_of,
 )
 from avelorn.tow.schema.stage import Dice, Side, Stage
@@ -280,7 +281,10 @@ def _with_parameter(effect: RuleEffect, parameter: int | DiceQuantity) -> RuleEf
     # participates automatically. An operation's amounts are numbers, so a
     # dice parameter substitutes into bare fields only — a mapping's "X"
     # then stays unbound, and the rule reports unfactored rather than
-    # carrying a quantity its seam cannot read.
+    # carrying a quantity its seam cannot read. What does bind revalidates
+    # through the effect's own model, so a bound value the field's own
+    # validators reject ("Multiple Wounds (1)") fails loudly rather than
+    # slipping past them on a copy.
     placeholders: dict = {}
     for name in type(effect).model_fields:
         value = getattr(effect, name)
@@ -290,7 +294,14 @@ def _with_parameter(effect: RuleEffect, parameter: int | DiceQuantity) -> RuleEf
             bound = {key: _bind(amount, parameter) for key, amount in value.items()}
             if bound != dict(value):
                 placeholders[name] = bound
-    return effect.model_copy(update=placeholders) if placeholders else effect
+    if not placeholders:
+        return effect
+    fields = type(effect).model_fields
+    substituted = {
+        **effect.model_dump(by_alias=True),
+        **{fields[name].alias or name: value for name, value in placeholders.items()},
+    }
+    return type(effect).model_validate(substituted)
 
 
 def _bind(amount: object, parameter: int) -> object:
@@ -996,6 +1007,69 @@ def effective_volley(
     return EffectiveVolley(fires, tuple(factored), tuple(unfactored))
 
 
+# The dice a wound multiplier may be printed as, each a uniform die rolled
+# separately for each unsaved wound — a distribution, never an expectation.
+
+
+@dataclass(frozen=True)
+class EffectiveWoundMultiplier:
+    """The wounds each unsaved wound inflicts, before the model's own cap.
+
+    The wound-multiplier fold's result: ``wounds`` is the distribution of
+    wounds one unsaved wound becomes (Multiple Wounds (2) is a certain 2, a
+    D3 the uniform die, rolled separately per unsaved wound), or None when
+    nothing multiplies — the Remove Casualties fold then pools plain wounds
+    as ever. The printed cap at the model's remaining Wounds is that fold's
+    to apply, since only it knows the target. ``factored`` / ``unfactored``
+    read as on :class:`EffectiveValue`.
+    """
+
+    wounds: Distribution[int] | None = None
+    factored: tuple[str, ...] = ()
+    unfactored: tuple[str, ...] = ()
+
+
+def effective_wound_multiplier(
+    rules: Sequence[Rule], conditions: "GateContext | None" = None
+) -> EffectiveWoundMultiplier:
+    """Fold the profile in use's rules into the wounds each unsaved wound inflicts.
+
+    The Remove Casualties seam's read, the casualty-side sibling of the
+    volley fold: a wound multiplier lands on what an unsaved wound *is
+    worth*, never on the dice, so the casualty fold consumes it here rather
+    than in the walk. All-or-nothing per rule; a gate the ``conditions``
+    cannot answer, or an unbound "X", is reported unfactored.
+
+    Returns:
+        The multiplier with the factored and unfactored rule names.
+
+    Raises:
+        ValueError: two rules multiply the same attack's wounds — no printed
+            rule stacks multipliers, so this is a data error, not a fold.
+    """
+    context = _as_context(conditions)
+    wounds: Distribution[int] | None = None
+    factored: list[str] = []
+    unfactored: list[str] = []
+    for rule in rules:
+        matching = [e for e in rule.effects if isinstance(e, WoundMultiplierEffect)]
+        if not matching:
+            continue
+        answers = [(effect, _gate_applies(effect, context)) for effect in matching]
+        if any(effect.multiplies == "X" or applies is None for effect, applies in answers):
+            unfactored.append(rule.name)
+            continue
+        for effect, applies in answers:
+            if not applies:
+                continue
+            if wounds is not None:
+                raise ValueError(f"{rule.name}: a second wound multiplier applies; none stack")
+            wounds = _quantity_distribution(effect.multiplies)
+        factored.append(rule.name)
+        logger.debug("wound multiplier factored: %s -> %s", rule.name, wounds)
+    return EffectiveWoundMultiplier(wounds, tuple(factored), tuple(unfactored))
+
+
 @dataclass(frozen=True)
 class EffectiveHits:
     """The extra automatic hits a contingent's rules land at one point of the round.
@@ -1052,14 +1126,14 @@ def effective_automatic_hits(
             continue
         for effect, when in answers:
             if when:
-                per_model = per_model + _hit_count(effect.hits)
+                per_model = per_model + _quantity_distribution(effect.hits)
         factored.append(rule.name)
         logger.debug("automatic hits factored: %s at %s", rule.name, order)
     return EffectiveHits(per_model, tuple(factored), tuple(unfactored))
 
 
-def _hit_count(hits: "int | DiceQuantity | str") -> Distribution[int]:
-    # A hit count as its exact distribution: a number is certain, a dice
+def _quantity_distribution(hits: "int | DiceQuantity | str") -> Distribution[int]:
+    # A printed quantity as its exact distribution: a number is certain, a dice
     # quantity uniform over its faces shifted by the flat addend. The caller
     # guards the unbound "X".
     if isinstance(hits, int):

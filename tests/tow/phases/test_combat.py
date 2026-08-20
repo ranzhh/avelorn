@@ -5,6 +5,7 @@ from fractions import Fraction
 import pytest
 
 from avelorn.core.dice import binomial_distribution, expected_value
+from avelorn.core.distribution import Distribution
 from avelorn.tow.contingent import Charge, ChargeArc, Contingent, Loadout
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.engine.rules import CombatFacts, GateContext
@@ -1924,3 +1925,129 @@ def test_cleaving_blow_denies_without_slaying_and_reads_its_own_list() -> None:
     ogres = _fielded(ogre_unit.with_troop_type(REPO.troop_types), 3).wielding("Hand Weapon")
     plain = _fielded(spearmen, 10).wielding("Hand Weapon")
     assert strike_unit(cleavers, ogres).p_unsaved == strike_unit(plain, ogres).p_unsaved
+
+
+def _mw_repo() -> TOWRepository:
+    # The real registries plus one doctored blade printing the real rule.
+    from avelorn.core.registry import Registry
+    from avelorn.tow.schema.weapon import WeaponProfile
+
+    blade = Weapon(
+        id="serrated-blade",
+        name="Serrated Blade",
+        profiles=[
+            WeaponProfile.model_validate(
+                {"R": "Combat", "S": "S", "AP": "-", "special_rules": ["Multiple Wounds (2)"]}
+            )
+        ],
+    )
+    doctored = TOWRepository()
+    doctored.weapons = Registry([*REPO.weapons.values(), blade], kind="weapon")
+    return doctored
+
+
+def _wounds(unit: Unit, wounds: int, *, unarmoured: bool = True) -> Unit:
+    # A target of ``wounds``-Wound models, stripped to its hand weapon so the
+    # per-attack chance stays the bare chart figure.
+    equipment = ["Hand Weapon"] if unarmoured else unit.equipment
+    doctored = unit.model_copy(
+        deep=True, update={"id": f"w{wounds}", "name": f"W{wounds} Target", "equipment": equipment}
+    )
+    doctored.profiles[0].characteristics[Characteristic.WOUNDS] = wounds
+    return doctored
+
+
+def test_multiple_wounds_fells_a_two_wound_model_per_unsaved_wound() -> None:
+    """The real entry end to end: MW (2) against W2 halves the wounds-per-kill math.
+
+    Spearmen swing a doctored Serrated Blade (S3, Multiple Wounds (2)) at
+    unarmoured W2 spearmen: WS4 vs WS4 (4+), S3 vs T3 (4+), no save —
+    p_unsaved = 1/4 over 5 attacks (a single rank — no supporters). Each
+    unsaved wound is worth two, the model's whole allotment, so the casualty
+    distribution IS the binomial wound distribution — where the stripped
+    fight pools two wounds per kill.
+    """
+    repo = _mw_repo()
+    spearmen = REPO.units["elven-spearmen"]
+    armed = spearmen.model_copy(update={"equipment": [*spearmen.equipment, "Serrated Blade"]})
+    strikers = Contingent.field(armed, 5, data=repo).wielding("Serrated Blade")
+    plain = Contingent.field(spearmen, 5, data=repo).wielding("Hand Weapon")
+    target = Contingent.field(_wounds(spearmen, 2), 10, data=repo).wielding("Hand Weapon")
+
+    mw = strike_unit(strikers, target)
+    base = strike_unit(plain, target)
+
+    assert mw.attacks == 5
+    assert mw.p_unsaved == pytest.approx(1 / 4)
+    assert mw.distribution == pytest.approx(binomial_distribution(5, 0.25))
+    wounds = Distribution.from_counts(mw.distribution)
+    assert Distribution.from_counts(mw.casualties) == wounds  # one model per wound
+    assert Distribution.from_counts(base.casualties) == wounds // 2  # two wounds per model
+    assert float(mw.expected_casualties) > 2 * float(base.expected_casualties)
+    assert not any("not factored: Multiple Wounds" in note for note in mw.notes)
+
+
+def test_multiple_wounds_is_inert_against_a_single_wound_model() -> None:
+    """The printed cap: against W1 the excess is discarded, and the rule still claimed."""
+    repo = _mw_repo()
+    spearmen = REPO.units["elven-spearmen"]
+    armed = spearmen.model_copy(update={"equipment": [*spearmen.equipment, "Serrated Blade"]})
+    strikers = Contingent.field(armed, 10, data=repo).wielding("Serrated Blade")
+    plain = Contingent.field(spearmen, 10, data=repo).wielding("Hand Weapon")
+    target = Contingent.field(_wounds(spearmen, 1), 10, data=repo).wielding("Hand Weapon")
+
+    mw = strike_unit(strikers, target)
+    base = strike_unit(plain, target)
+
+    assert mw.casualties == base.casualties
+    assert not any("not factored: Multiple Wounds" in note for note in mw.notes)
+
+
+def test_a_pool_mixing_plain_and_multiplied_wounds_leaves_the_rule_noted() -> None:
+    """A one-sided ridden strike pools rider and mount wounds: no printed order mixes them.
+
+    Silver Helms' riders swing the Serrated Blade while their steeds kick
+    plain hooves at a W2 line — the pooled fold cannot place the multiplier
+    exactly, so the math stays plain and the rule rides noted. Against W1
+    models the cap levels the pool and the rule is honoured (inert) instead.
+    """
+    repo = _mw_repo()
+    helms = REPO.units["silver-helms"]
+    armed = helms.model_copy(update={"equipment": [*helms.equipment, "Serrated Blade"]})
+    riders = Contingent.field(armed, 5, data=repo).wielding("Serrated Blade")
+    plain = Contingent.field(helms, 5, data=repo).wielding("Hand Weapon")
+    spearmen = REPO.units["elven-spearmen"]
+    w2 = Contingent.field(_wounds(spearmen, 2), 10, data=repo).wielding("Hand Weapon")
+    w1 = Contingent.field(_wounds(spearmen, 1), 10, data=repo).wielding("Hand Weapon")
+
+    mixed = strike_unit(riders, w2)
+    assert any(
+        "weapon rule not factored: Multiple Wounds (2) (Serrated Blade)" in note
+        for note in mixed.notes
+    )
+    assert mixed.casualties == strike_unit(plain, w2).casualties  # blade otherwise a hand weapon
+
+    capped = strike_unit(riders, w1)
+    assert not any("not factored: Multiple Wounds" in note for note in capped.notes)
+
+
+def test_a_round_honours_a_multiplier_whose_batch_strikes_alone_at_its_step() -> None:
+    """fight(): riders at I5 fold apart from their I4 steeds, so the multiplier lands.
+
+    The same blade against the same W2 line, in a full round: each
+    Initiative step pools only its own batches, the rider batch folds
+    exactly, the rule is claimed — and the A/B numbers move.
+    """
+    repo = _mw_repo()
+    helms = REPO.units["silver-helms"]
+    armed = helms.model_copy(update={"equipment": [*helms.equipment, "Serrated Blade"]})
+    riders = Contingent.field(armed, 5, data=repo).wielding("Serrated Blade")
+    plain = Contingent.field(helms, 5, data=repo).wielding("Hand Weapon")
+    spearmen = REPO.units["elven-spearmen"]
+    target = Contingent.field(_wounds(spearmen, 2), 10, data=repo).wielding("Hand Weapon")
+
+    mw = fight(riders, target)
+    base = fight(plain, target)
+
+    assert not any("not factored: Multiple Wounds" in note for note in mw.notes)
+    assert float(expected_value(mw.b_casualties)) > float(expected_value(base.b_casualties))

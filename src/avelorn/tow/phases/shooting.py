@@ -16,7 +16,7 @@ from fractions import Fraction
 from typing import ClassVar
 
 from avelorn.core.dice import expected_value
-from avelorn.core.distribution import Probability
+from avelorn.core.distribution import Distribution, Probability
 from avelorn.core.game import Phase
 from avelorn.tow.contingent import Contingent, Loadout
 from avelorn.tow.engine.attack import (
@@ -51,6 +51,7 @@ from avelorn.tow.engine.rules import (
     WeaponFacts,
     compile_rules,
     effective_volley,
+    effective_wound_multiplier,
     factored_notes,
 )
 from avelorn.tow.engine.seats import Defence, Offence
@@ -123,6 +124,7 @@ def shoot(
     modifiers: Sequence[Modifier] = (),
     transforms: Sequence[Transform] = (),
     rerolls: Sequence[Reroll] = (),
+    damage: Distribution[int] | None = None,
     notes: tuple[str, ...] = (),
 ) -> ShootingResult:
     """Resolve a volley of identical shooting attacks probabilistically.
@@ -134,6 +136,9 @@ def shoot(
     unit; when given, casualties cap at it — a volley cannot remove more
     models than the unit contains. The unsaved-wound ``distribution`` is
     unaffected by either; it never depends on the receiving unit.
+    ``damage`` is the wounds each unsaved wound inflicts (Multiple
+    Wounds (X)'s multiplier, a distribution); None is the plain single
+    wound, and the fold caps what one model can lose either way.
 
     ``modifiers`` are the compiled records of printed conditional
     modifiers, applied to each attack's dice walk; ``transforms`` are
@@ -209,6 +214,7 @@ def shoot(
         p_kill=p_kill,
         wounds_per_model=wounds_per_model,
         targets=targets,
+        damage=damage,
     )
 
     return ShootingResult(
@@ -366,6 +372,11 @@ def shoot_unit(
         if name in attacker.loadout.weapon_rules
     ]
     volley = effective_volley(in_use, conditions)
+    # Multiple Wounds (X): what each unsaved wound is worth lands on the
+    # casualty fold, never on the dice, so the multiplier is read here from
+    # the profile in use's resolved entries — a volley is a single batch, so
+    # the fold is exact — and claimed out of the weapon-rule notes below.
+    multiplier = effective_wound_multiplier(in_use, conditions)
     if volley.fires:
         shooters += sum((rank + 1) // 2 for rank in attacker.formation.rear_rank_sizes)
     logger.debug(
@@ -447,7 +458,7 @@ def shoot_unit(
     # than in the walk: both are claimed out of the weapon-rule notes. The
     # profile in use is only ever compiled from its shooter's seat, so an
     # inapplicable weapon rule is reported here — no second compile covers it.
-    weapon_claimed = {*offence.weapon_rerolls.factored, *volley.factored}
+    weapon_claimed = {*offence.weapon_rerolls.factored, *volley.factored, *multiplier.factored}
     notes.extend(
         f"weapon rule not factored: {rule} ({chosen.name})"
         for rule in offence.weapon_unfactored
@@ -477,6 +488,7 @@ def shoot_unit(
         hit_modifier=hit_modifier,
         wounds_per_model=defender_wounds,
         targets=defenders,
+        damage=multiplier.wounds,
         modifiers=modifiers,
         rerolls=(
             *offence.rerolls.rerolls,
