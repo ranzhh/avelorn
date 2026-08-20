@@ -7,12 +7,9 @@ flavour: An aura of cold clings to the Merwyrm, sapping the strength of those wh
 paragraphs:
   - Whilst in base contact with this model, enemy models suffer a - 1 modifier to their Strength characteristic (to a minimum
     of 1).
-# Hand-authored, diffable against the paragraph above. The sentence's subject
-# is the enemy ("enemy models suffer ..."), so the -1 lands on the foe's
-# Strength characteristic — read before a weapon resolves its own Strength,
-# so a weapon striking at the wielder's Strength (S, S+2) strikes from the
-# lowered value, while one that prints its own is untouched, as printed.
-# "(to a minimum of 1)" is the printed floor.
+# Read before a weapon resolves its own Strength, so a weapon striking at the
+# wielder's Strength (S, S+2) strikes from the lowered value while one that
+# prints its own is untouched, as printed.
 effects:
   - enemy: true
     when:

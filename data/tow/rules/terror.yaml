@@ -13,13 +13,9 @@ paragraphs:
   - Note that if a charged unit cannot choose to Flee, it does not make this Leadership test.
   - Models with the Fear special rule Fear models that cause Terror. Models that cause Terror are immune to Terror. A unit
     that does not cause Terror does not become immune to Terror when joined by a character that does.
-# Hand-authored, diffable against the paragraphs above. Only the Break-test
-# clause is expressed: "each unit that belongs to the losing side must apply a
-# -1 modifier to its Leadership characteristic when making its Break test" is
-# an enemy-subject Leadership malus, folded into the foe's Leadership where
-# the Break test reads it. The printed "if the winning side ... includes one
-# or more units that cause Terror" is the seam's own structure: only a loser
-# ever rolls against its Leadership, and its foe is then the winner.
+# The printed "if the winning side ... includes one or more units that cause
+# Terror" is the seam's own structure: only a loser rolls against its
+# Leadership, and its foe is then the winner.
 effects:
   - enemy: true
     when:

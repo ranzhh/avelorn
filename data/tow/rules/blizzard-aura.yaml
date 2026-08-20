@@ -7,13 +7,10 @@ flavour: The ice that sheathes a Frostheart Phoenix is as hard as glass, and ene
   away by its chill presence.
 paragraphs:
   - Whilst in base contact with this model, enemy models become subject to the Strike Last special rule.
-# Hand-authored, diffable against the paragraph above. The sentence's subject
-# is the enemy ("enemy models become subject to ..."), and the rule it confers
-# is inlined as its printed effect: Strike Last reduces the Initiative
-# characteristic to 1 before any other modifiers (see strike-last.yaml), so
-# this is that set with the enemy subject, folded into the foe's Initiative
-# read. A foe of its own carrying Strike First has the two sets cancel
-# structurally, exactly as a model printing both rules would.
+# Strike Last is inlined as its printed set (see strike-last.yaml) rather than
+# granted, because a grant confers to the bearer, not the enemy. A foe carrying
+# Strike First has the two sets cancel structurally, as a model printing both
+# rules would.
 effects:
   - enemy: true
     when:
