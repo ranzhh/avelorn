@@ -43,7 +43,9 @@ from avelorn.tow.engine.attack import (
 )
 from avelorn.tow.engine.casualties import (
     AttackBatch,
+    Toll,
     batched_wound_and_casualties,
+    strike_toll,
     wound_and_casualties,
 )
 from avelorn.tow.engine.charts import (
@@ -888,8 +890,8 @@ class FightResult:
     ``b_casualties`` are its marginals (melee only — a Stand & Shoot volley's
     casualties are reported on the volley itself). ``wound_margin`` is the
     signed distribution combat-result scoring reads (see :attr:`scoring_wounds`):
-    the melee wound difference *plus* any Stand & Shoot wounds, which the
-    rulebook counts toward the shooting side's combat result. ``first_striker``
+    the melee's Wounds-inflicted difference *plus* any Stand & Shoot wounds,
+    which the rulebook counts toward the shooting side's combat result. ``first_striker``
     is the
     :class:`Contingent` that struck first by Initiative, or None when equal
     Initiative made the blows simultaneous. ``a_initiative`` and
@@ -938,9 +940,9 @@ class FightResult:
     def scoring_wounds(self) -> Mapping[int, Probability]:
         """The signed distribution of (A's minus B's) combat-result wounds.
 
-        Each side's wounds are the unsaved wounds it inflicted this round plus
-        any it caused by a Stand & Shoot charge reaction this turn — the Wounds
-        line of the combat-result score (a Stand & Shoot's wounds count for the
+        Each side's wounds are the Wounds it inflicted this round plus any it
+        caused by a Stand & Shoot charge reaction this turn — the Wounds line
+        of the combat-result score (a Stand & Shoot's wounds count for the
         shooter). :func:`fight` populates ``wound_margin`` with this, since only
         it holds the joint of the volley's thinning and the melee that thinning
         shaped. A FightResult built without it (a scoring fixture) falls back to
@@ -1183,6 +1185,16 @@ class _Priors(NamedTuple):
     b: int
 
 
+class _Melee(NamedTuple):
+    # What one branch of the melee came to: each side's losses, and the Wounds
+    # each inflicted. For 1-Wound models the two agree; they part company as
+    # soon as a target has Wounds to spare or an attack multiplies them.
+    a_lost: int
+    b_lost: int
+    a_inflicted: int
+    b_inflicted: int
+
+
 class _RoundOutcome(NamedTuple):
     # One whole branch of a round: what each side had already lost before blows
     # (a Stand & Shoot volley on the chargers) and what the melee then removed.
@@ -1193,6 +1205,8 @@ class _RoundOutcome(NamedTuple):
     pre_b: int
     a_lost: int
     b_lost: int
+    a_inflicted: int = 0
+    b_inflicted: int = 0
 
 
 def _loss_grid(
@@ -1382,22 +1396,24 @@ def fight(
     priors = a_lost_before.combine(b_lost_before, _Priors)
     outcomes = priors >> (
         lambda pre: _round_joint(a_batches, a.models - pre.a, b_batches, b.models - pre.b).map(
-            lambda lost: _RoundOutcome(pre.a, pre.b, *lost)
+            lambda melee: _RoundOutcome(pre.a, pre.b, *melee)
         )
     )
     # Both figures fight() reports are relabels of that one joint. ``losses``
     # keeps the melee alone, since a Stand & Shoot volley's casualties are
     # reported on the volley. ``wound_margin`` is the combat-result wound
-    # difference, which counts the volley's wounds too: a side's pre-melee losses
-    # were the *other* side's volley, so they credit that other side (rulebook:
-    # unsaved wounds inflicted, including by a Stand & Shoot this turn). Reading
-    # both off the same outcomes is what keeps the credit correlated with the
-    # thinning it caused. (Counts models removed, = wounds for the 1-Wound models
-    # the engine fields; a multi-Wound Stand & Shoot would credit wounds, not
-    # casualties.)
+    # difference — the Wounds each side inflicted, which is what the rulebook
+    # scores — and it counts the volley too: a side's pre-melee losses were the
+    # *other* side's volley, so they credit that other side. Reading both off
+    # the same outcomes is what keeps the credit correlated with the thinning it
+    # caused. The volley's credit is still its casualties, exact while every
+    # profile the corpus fields has one Wound; a multi-Wound Stand & Shoot would
+    # need the volley's own inflicted count threaded here.
     zero = (a_strikes.p_unsaved + b_strikes.p_unsaved) * 0
     losses = _loss_grid(outcomes.map(lambda o: (o.a_lost, o.b_lost)), a.models, b.models, zero)
-    wound_margin = outcomes.map(lambda o: (o.b_lost + o.pre_b) - (o.a_lost + o.pre_a)).mass
+    wound_margin = outcomes.map(
+        lambda o: (o.a_inflicted + o.pre_b) - (o.b_inflicted + o.pre_a)
+    ).mass
 
     first_striker = None if a_first is None else (a if a_first else b)
     # A rule factored into the striking order, the fighting-rank depth, the
@@ -1565,10 +1581,10 @@ def _multiplier_claims(batches: "_Batches") -> frozenset[str]:
     return frozenset(claimed)
 
 
-def _fell(
+def _toll(
     engagements: "Sequence[_Engagement | _AutomaticEngagement]", fighters: int, *, targets: int
-) -> Distribution[int]:
-    # Casualties inflicted on the target by ``fighters`` models striking, over
+) -> Distribution[Toll]:
+    # What ``fighters`` models striking cost the target, over
     # every batch the models throw at this step (a lone rank-and-file batch,
     # or riders and mounts sharing an Initiative). Each batch's attack count
     # is a distribution — certain for a printed Attacks value, dice-driven for
@@ -1577,26 +1593,25 @@ def _fell(
     # unit-level steps. Zero-mass counts drop on the way in, which is what
     # lets the folds below skip unreachable branches without testing for them.
     if not engagements:
-        return Distribution.pure(0)
+        return Distribution.pure(Toll(0, 0, 0))
     counts: Distribution[tuple[int, ...]] = Distribution.pure(())
     for engagement in engagements:
         counts = counts.combine(engagement.attack_counts(fighters), lambda ns, n: (*ns, n))
     damage, _ = _pooled_damage(engagements, engagements[0].target_wounds)
 
-    def felled(ns: tuple[int, ...]) -> Distribution[int]:
+    def toll(ns: tuple[int, ...]) -> Distribution[Toll]:
         batches = [
             AttackBatch(n, p_unsaved=e.p_unsaved, p_kill=e.p_kill)
             for e, n in zip(engagements, ns, strict=True)
         ]
-        _, casualties = batched_wound_and_casualties(
+        return strike_toll(
             batches,
             wounds_per_model=engagements[0].target_wounds,
             targets=targets,
             damage=damage,
         )
-        return Distribution.from_counts(casualties)
 
-    return counts >> felled
+    return counts >> toll
 
 
 def _strikes_first(initiative_a: int, initiative_b: int) -> bool | None:
@@ -1624,11 +1639,16 @@ _OPENING_STEP = 11
 _CLOSING_STEP = -1
 
 
-class _Alive(NamedTuple):
-    # The models each side still has standing mid-round, the state the
-    # Initiative walk threads: batches yet to strike swing from these counts.
+class _Standing(NamedTuple):
+    # The state the Initiative walk threads: the models each side still has
+    # standing (batches yet to strike swing from these counts), and the Wounds
+    # each has inflicted on the other so far. The wounds ride along rather than
+    # being recovered afterwards because they are correlated with the losses —
+    # the same fold produced both — and scoring off a marginal would lose that.
     a: int
     b: int
+    a_inflicted: int = 0
+    b_inflicted: int = 0
 
 
 def _round_joint(
@@ -1636,34 +1656,42 @@ def _round_joint(
     a_models: int,
     b_batches: _Batches,
     b_models: int,
-) -> Distribution[tuple[int, int]]:
-    # One round's joint casualty distribution at fixed model counts, over
-    # outcomes (a_lost, b_lost). The printed sequence: walk the Initiative
+) -> Distribution[_Melee]:
+    # One round's joint outcome at fixed model counts: each side's losses and
+    # the Wounds each inflicted. The printed sequence: walk the Initiative
     # values from highest to lowest; batches at the same value strike
     # simultaneously (independent losses), casualties are removed, and lower
     # batches strike from whatever remains (fight-on) — a model slain before
     # its lower-Initiative batch strikes loses those attacks
     # (the-combat-phase/split-profiles-combat).
-    state = Distribution.pure(_Alive(a_models, b_models))
+    state = Distribution.pure(_Standing(a_models, b_models))
     for step in sorted({i for i, _ in (*a_batches, *b_batches)}, reverse=True):
         a_now = [e for i, e in a_batches if i == step]
         b_now = [e for i, e in b_batches if i == step]
         state = state >> (lambda alive, a_now=a_now, b_now=b_now: _step_joint(alive, a_now, b_now))
-    return state.map(lambda alive: (a_models - alive.a, b_models - alive.b))
+    return state.map(
+        lambda end: _Melee(a_models - end.a, b_models - end.b, end.a_inflicted, end.b_inflicted)
+    )
 
 
 def _step_joint(
-    alive: _Alive,
+    alive: _Standing,
     a_now: "Sequence[_Engagement | _AutomaticEngagement]",
     b_now: "Sequence[_Engagement | _AutomaticEngagement]",
-) -> Distribution[_Alive]:
+) -> Distribution[_Standing]:
     # One Initiative step from one branch of the round: every batch whose value
     # is reached strikes at once, from the models its side still has, so the two
-    # sides' losses this step are independent — the outer product combine takes.
-    b_losses = _fell(a_now, alive.a, targets=alive.b)
-    a_losses = _fell(b_now, alive.b, targets=alive.a)
-    return a_losses.combine(
-        b_losses, lambda a_lost, b_lost: _Alive(alive.a - a_lost, alive.b - b_lost)
+    # sides' tolls this step are independent — the outer product combine takes.
+    on_b = _toll(a_now, alive.a, targets=alive.b)
+    on_a = _toll(b_now, alive.b, targets=alive.a)
+    return on_a.combine(
+        on_b,
+        lambda a, b: _Standing(
+            alive.a - a.felled,
+            alive.b - b.felled,
+            alive.a_inflicted + b.inflicted,
+            alive.b_inflicted + a.inflicted,
+        ),
     )
 
 
@@ -1677,15 +1705,16 @@ _UNMODELLED_COMBAT_RESULT: tuple[str, ...] = (
 
 @dataclass(frozen=True)
 class CombatResult:
-    """Who won a round of close combat, scored on unsaved wounds inflicted.
+    """Who won a round of close combat, scored on the Wounds inflicted.
 
     ``margin`` maps a signed lead ``m`` to P(A's score - B's score == m);
-    positive means A is ahead. A side's score is the unsaved wounds it
-    inflicted plus its Rank Bonus and any rule-granted combat-result points
-    (Massed Infantry's outnumbering +1); the components still unmodelled are
-    listed in ``notes`` (#28). For 1-Wound models wounds inflicted equal
-    models removed; the wound-count for multi-Wound models is not modelled.
-    The signed ``margin`` is what the Break test adds to the loser's roll.
+    positive means A is ahead. A side's score is the Wounds it inflicted plus
+    its Rank Bonus and any rule-granted combat-result points (Massed
+    Infantry's outnumbering +1); the components still unmodelled are listed in
+    ``notes`` (#28). Wounds, not models removed: a multi-Wound model scores
+    every Wound it loses, one felled outright scores its whole allotment, and
+    excess a model cannot lose is discarded. The signed ``margin`` is what the
+    Break test adds to the loser's roll.
     """
 
     p_a_wins: Probability
@@ -1696,10 +1725,10 @@ class CombatResult:
 
 
 def combat_result(result: FightResult) -> CombatResult:
-    """Score a fought round by unsaved wounds inflicted and name the winner.
+    """Score a fought round by the Wounds inflicted and name the winner.
 
     Composes on a :class:`FightResult`'s :attr:`~FightResult.scoring_wounds`:
-    A's score is the unsaved wounds it inflicted — this round's melee plus any
+    A's score is the Wounds it inflicted — this round's melee plus any
     from a Stand & Shoot charge reaction this turn — plus A's Rank Bonus and
     rule-granted combat-result points, B's the reverse. The Rank Bonus and
     points are fixed for the round, so they shift every lead by the same

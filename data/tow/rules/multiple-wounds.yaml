@@ -18,5 +18,7 @@ paragraphs:
 # fold, where each wound meets a model with so many Wounds remaining.
 effects:
   - multiplies: X
-notes: Overkill in a challenge is not modelled, and combat-result wounds
-  against multi-Wound models count models removed, not the wounds inflicted.
+notes: Overkill in a challenge is not modelled. The multiplied wounds do score
+  for combat result — a round counts the Wounds inflicted, capped at what the
+  target could lose — but a Stand & Shoot volley's contribution is still
+  credited as models removed, exact only while every profile has one Wound.
