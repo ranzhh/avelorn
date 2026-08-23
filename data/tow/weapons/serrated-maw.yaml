@@ -1,0 +1,7 @@
+# Source: https://tow.whfb.app/weapons-of-war/serrated-maw
+id: serrated-maw
+name: Serrated Maw
+profiles:
+  - { R: Combat, S: S, AP: '-', special_rules: [Armour Bane (2), Multiple Wounds (2)] }
+notes: In combat, this model must make one of its attacks each turn with this weapon. If this model has Two Heads, it must
+  make two of its attacks each turn with this weapon.
