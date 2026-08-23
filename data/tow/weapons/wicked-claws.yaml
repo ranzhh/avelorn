@@ -1,0 +1,5 @@
+# Source: https://tow.whfb.app/weapons-of-war/wicked-claws
+id: wicked-claws
+name: Wicked Claws
+profiles:
+  - { R: Combat, S: S, AP: -2 }
