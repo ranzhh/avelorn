@@ -1,0 +1,27 @@
+# Source: https://tow.whfb.app/unit/flamespyre-phoenix
+id: flamespyre-phoenix
+name: Flamespyre Phoenix
+points: 170
+unit_size:
+  min: 1
+  max: 1
+troop_type: Monstrous Creature
+base_size:
+  width_mm: 50
+  depth_mm: 100
+profiles:
+  - { name: Flamespyre Phoenix, M: 2, WS: 5, BS: 0, S: 5, T: 5, W: 5, I: 4, A: 3, Ld: 7 }
+equipment:
+  - Wicked Claws
+  - Heavy Armour
+special_rules:
+  - Blessings of Asuryan
+  - Close Order
+  - Fear
+  - Flaming Attacks
+  - Fly (10)
+  - From the Ashes
+  - Large Target
+  - Stomp Attacks (2)
+  - Swiftstride
+  - Wake of Fire
