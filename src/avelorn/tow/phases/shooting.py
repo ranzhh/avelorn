@@ -411,7 +411,7 @@ def shoot_unit(
             kind=AttackKind.SHOOTING,
             magical=offence.marks.magical,
             flaming=offence.marks.flaming,
-            at_long_range=conditions.shooting.at_long_range,
+            at_long_range=conditions.shooting.at_long_range,  # duplicated; see #179
         ),
     )
     defence = Defence.resolve(
