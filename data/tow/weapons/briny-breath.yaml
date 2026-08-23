@@ -1,0 +1,7 @@
+# Source: https://tow.whfb.app/weapons-of-war/briny-breath
+id: briny-breath
+name: Briny Breath
+profiles:
+  - { R: N/A, S: 2, AP: -2, special_rules: [Breath Weapon] }
+notes: Any enemy unit that suffers one or more unsaved Wounds from this weapon suffers a -1 modifier to their Initiative characteristic
+  until your next Start of Turn sub-phase.

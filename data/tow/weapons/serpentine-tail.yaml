@@ -1,0 +1,6 @@
+# Source: https://tow.whfb.app/weapons-of-war/serpentine-tail
+id: serpentine-tail
+name: Serpentine Tail
+profiles:
+  - { R: Combat, S: S+2, AP: -2, special_rules: [Strike Last] }
+notes: In combat, this model must make one of its attacks each turn with this weapon.

@@ -178,12 +178,15 @@ class AttackFacts:
 
     ``magical`` and ``flaming`` are read from the striker's resolved rules —
     the profile in use's and the unit's own alike (:func:`attack_marks`), as
-    the printed sentences confer either way.
+    the printed sentences confer either way. ``at_long_range`` duplicates
+    :attr:`ShootingFacts.at_long_range` so a defender's rule can read it; a
+    mistake kept for now, see #179 before adding a fifth field here.
     """
 
     kind: AttackKind | None = None
     magical: bool | None = None
     flaming: bool | None = None
+    at_long_range: bool | None = None
 
 
 @dataclass(frozen=True)

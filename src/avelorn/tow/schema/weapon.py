@@ -97,10 +97,11 @@ def _dash_to_zero(value: object) -> object:
 # Printed convention: "-" means no armour piercing; negatives worsen saves.
 ArmourPiercing = Annotated[int, BeforeValidator(_dash_to_zero), Field(le=0)]
 
-# "Combat" for close quarters, otherwise a range in inches. Printed
-# min-max bands (e.g. stone throwers' 12"-60") get modeled when the
-# first such weapon is imported.
-WeaponRange = Literal["Combat"] | Annotated[int, Field(gt=0)]
+# "Combat" for close quarters, "N/A" for a weapon with no range row (a
+# breath weapon strikes under its own special rule), otherwise a range in
+# inches. Printed min-max bands (e.g. stone throwers' 12"-60") get modeled
+# when the first such weapon is imported.
+WeaponRange = Literal["Combat", "N/A"] | Annotated[int, Field(gt=0)]
 
 
 class WeaponProfile(BaseModel):
@@ -121,7 +122,7 @@ class WeaponProfile(BaseModel):
     @property
     def is_missile(self) -> bool:
         """Whether this row describes a ranged attack."""
-        return self.range != "Combat"
+        return isinstance(self.range, int)
 
 
 class Weapon(BaseModel):
@@ -151,4 +152,4 @@ class Weapon(BaseModel):
         Returns:
             The first Combat profile, or None for a pure missile weapon.
         """
-        return next((p for p in self.profiles if not p.is_missile), None)
+        return next((p for p in self.profiles if p.range == "Combat"), None)

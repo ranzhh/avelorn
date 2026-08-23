@@ -11,11 +11,8 @@ paragraphs:
     for each unsaved wound.
   - Note that excess wounds caused to a model will have no additional effect unless that model is a character, in which case
     this special rule counts for Overkill. Excess wounds do not 'spill over' onto other models in the unit.
-# Hand-authored, diffable against the paragraphs above. The multiplier is
-# the bracketed value: a number, or a dice (D3) rolled separately for each
-# unsaved wound -- a distribution, never an expectation. Both cap clauses
-# ("no additional effect", no 'spill over') live in the Remove Casualties
-# fold, where each wound meets a model with so many Wounds remaining.
+# Neither cap clause is authored here. Both belong to Remove Casualties, where
+# a wound meets a model with so many Wounds left.
 effects:
   - multiplies: X
 notes: Overkill in a challenge is not modelled. The multiplied wounds do score

@@ -1,0 +1,5 @@
+# Source: https://tow.whfb.app/weapons-of-war/lashing-talons
+id: lashing-talons
+name: Lashing Talons
+profiles:
+  - { R: Combat, S: S, AP: -1, special_rules: [Armour Bane (1)] }
