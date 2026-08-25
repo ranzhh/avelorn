@@ -19,10 +19,13 @@ from importlib.metadata import version
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from avelorn.tow.data import TOWRepository, default_repository
+from avelorn.tow.muster import Complement
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.views import (
+    MusteredUnit,
     RuleSummary,
     UnitDetail,
     UnitSummary,
@@ -79,6 +82,48 @@ def read_unit(slug: str, data: Corpus) -> UnitDetail:
     if unit is None:
         raise HTTPException(status_code=404, detail=f"no unit {slug!r}")
     return UnitDetail.of(unit, data.rules)
+
+
+class Muster(BaseModel):
+    """What a caller asks to field: a datasheet, a model count, and options by name."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    unit: str
+    size: int = Field(ge=1)
+    options: list[str] = Field(default_factory=list)
+
+
+@app.post("/muster", summary="Cost and equip one block of an army list")
+def muster(request: Muster, data: Corpus) -> MusteredUnit:
+    """Size and equip a datasheet, and derive what the block costs.
+
+    Says nothing about whether a list of these is legal -- army composition
+    is not modelled yet. This costs one block and refuses one the datasheet
+    does not allow.
+
+    Returns:
+        The block, its points and effective loadout derived.
+
+    Raises:
+        HTTPException: 404, when no datasheet carries the slug; 422, when the
+            datasheet does not allow the size or the options asked for.
+    """
+    unit = data.units.get(request.unit)
+    if unit is None:
+        raise HTTPException(status_code=404, detail=f"no unit {request.unit!r}")
+    try:
+        complement = Complement(unit=unit, size=request.size, options=request.options)
+    except ValidationError as invalid:
+        raise HTTPException(status_code=422, detail=_first_message(invalid)) from invalid
+    return MusteredUnit.of(complement, data.rules)
+
+
+def _first_message(invalid: ValidationError) -> str:
+    # Complement raises one ValueError at a time, so the first error's message
+    # is the whole reason. Pydantic prefixes it with "Value error, ".
+    message = invalid.errors()[0]["msg"]
+    return message.removeprefix("Value error, ")
 
 
 @app.get("/rules", summary="List every rule entry in the corpus")

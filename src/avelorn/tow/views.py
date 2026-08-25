@@ -32,6 +32,7 @@ from pydantic import BaseModel, ConfigDict
 from avelorn.core.registry import Registry
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.engine.rules import printed_rule
+from avelorn.tow.muster import Complement
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.unit import TroopType, Unit, UnitSize
 
@@ -107,6 +108,45 @@ class UnitDetail(Unit):
                 **unit.model_dump(),
                 "special_rules": [PrintedRule.of(name, rules) for name in unit.special_rules],
             }
+        )
+
+
+class MusteredUnit(BaseModel):
+    """A block of an army list: a datasheet sized and equipped, and what it costs.
+
+    The view over :class:`~avelorn.tow.muster.Complement`. It carries the
+    datasheet by slug rather than whole, because a list is read as a list --
+    a caller wanting the profiles follows ``unit`` to the datasheet route.
+    ``equipment`` and ``special_rules`` are the effective ones, the chosen
+    options' adds and removes already folded in, so a block says what the
+    models actually carry rather than what the datasheet offered.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    unit: str
+    name: str
+    size: int
+    options: list[str]
+    points: int
+    equipment: list[str]
+    special_rules: list[PrintedRule]
+
+    @classmethod
+    def of(cls, complement: Complement, rules: Registry[Rule]) -> "MusteredUnit":
+        """Cost and equip one block.
+
+        Returns:
+            The block's view, its rule names resolved as a datasheet's are.
+        """
+        return cls(
+            unit=complement.unit.id,
+            name=complement.unit.name,
+            size=complement.size,
+            options=list(complement.options),
+            points=complement.points,
+            equipment=complement.equipment,
+            special_rules=[PrintedRule.of(name, rules) for name in complement.special_rules],
         )
 
 
