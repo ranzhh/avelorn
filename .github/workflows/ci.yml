@@ -26,3 +26,46 @@ jobs:
       - run: make lint
 
       - run: make test
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+        working-directory: frontend
+
+      - run: make frontend-lint
+
+      - run: make frontend-check
+
+  types:
+    # The committed TypeScript is generated from the Pydantic models. Drift here
+    # means the frontend is typed against a datasheet shape the API stopped
+    # serving, which nothing else in CI would notice.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: uv sync --locked --extra api
+
+      - run: npm ci
+        working-directory: frontend
+
+      - run: make types-check
