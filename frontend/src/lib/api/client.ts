@@ -14,3 +14,7 @@ export const api = (origin: string, fetch: typeof globalThis.fetch) =>
 export type Unit = paths['/units/{slug}']['get']['responses'][200]['content']['application/json'];
 export type UnitSummary =
 	paths['/units']['get']['responses'][200]['content']['application/json'][number];
+
+export type MusteredUnit =
+	paths['/muster']['post']['responses'][200]['content']['application/json'];
+export type UnitOption = NonNullable<Unit['options']>[number];

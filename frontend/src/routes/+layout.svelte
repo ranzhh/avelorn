@@ -8,6 +8,7 @@
 
 <header>
 	<a href={resolve('/')}>Avelorn</a>
+	<a href={resolve('/list')}>list</a>
 	<span>unit browser</span>
 </header>
 

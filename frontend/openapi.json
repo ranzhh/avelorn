@@ -69,6 +69,45 @@
         }
       }
     },
+    "/muster": {
+      "post": {
+        "summary": "Cost and equip one block of an army list",
+        "description": "Size and equip a datasheet, and derive what the block costs.\n\nSays nothing about whether a list of these is legal -- army composition\nis not modelled yet. This costs one block and refuses one the datasheet\ndoes not allow.\n\nReturns:\n    The block, its points and effective loadout derived.\n\nRaises:\n    HTTPException: 404, when no datasheet carries the slug; 422, when the\n        datasheet does not allow the size or the options asked for.",
+        "operationId": "muster_muster_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Muster"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MusteredUnit"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/rules": {
       "get": {
         "summary": "List every rule entry in the corpus",
@@ -807,6 +846,88 @@
         "type": "object",
         "title": "MovementGate",
         "description": "A gate on how the model moved this turn.\n\n``moved`` is any move (Moving and Shooting's To Hit penalty); ``charge`` is\nthe charge \u2014 ``false`` to require the model did not charge (Press of Battle,\nFight in Extra Rank), or a :class:`ChargeGate` to constrain the charge's\nproperties (Furious Charge's ``{distance: {at_least: 3}}``)."
+      },
+      "Muster": {
+        "properties": {
+          "unit": {
+            "type": "string",
+            "title": "Unit"
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Size"
+          },
+          "options": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Options"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "unit",
+          "size"
+        ],
+        "title": "Muster",
+        "description": "What a caller asks to field: a datasheet, a model count, and options by name."
+      },
+      "MusteredUnit": {
+        "properties": {
+          "unit": {
+            "type": "string",
+            "title": "Unit"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size"
+          },
+          "options": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Options"
+          },
+          "points": {
+            "type": "integer",
+            "title": "Points"
+          },
+          "equipment": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Equipment"
+          },
+          "special_rules": {
+            "items": {
+              "$ref": "#/components/schemas/PrintedRule"
+            },
+            "type": "array",
+            "title": "Special Rules"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "unit",
+          "name",
+          "size",
+          "options",
+          "points",
+          "equipment",
+          "special_rules"
+        ],
+        "title": "MusteredUnit",
+        "description": "A block of an army list: a datasheet sized and equipped, and what it costs.\n\nThe view over :class:`~avelorn.tow.muster.Complement`. It carries the\ndatasheet by slug rather than whole, because a list is read as a list --\na caller wanting the profiles follows ``unit`` to the datasheet route.\n``equipment`` and ``special_rules`` are the effective ones, the chosen\noptions' adds and removes already folded in, so a block says what the\nmodels actually carry rather than what the datasheet offered."
       },
       "NaturalRoll": {
         "properties": {
