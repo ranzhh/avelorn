@@ -1,0 +1,8 @@
+.git
+.venv
+.claude
+.pytest_cache
+**/__pycache__
+**/node_modules
+frontend/.svelte-kit
+frontend/src/lib/api/schema.d.ts
