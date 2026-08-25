@@ -20,3 +20,9 @@ avelorn.db
 
 # git worktrees this session creates for parallel work
 .claude/worktrees/
+
+# Generated from the API; `make types` rebuilds it.
+frontend/openapi.json
+
+# Node
+node_modules/
