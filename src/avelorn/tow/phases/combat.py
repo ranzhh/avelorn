@@ -879,6 +879,38 @@ def strike_unit(
 
 
 @dataclass(frozen=True)
+class CombatPoints:
+    """One side's fixed combat-result points, a field per printed row.
+
+    The rows of the combat-result score the engine models
+    (the-combat-phase/combat-result-score), each named rather than summed
+    into one number, so a caller can read *why* a side is ahead and a term
+    can be asserted on its own. ``rank_bonus`` is the Rank Bonus its
+    formation claims, ``arc`` the points its charge claims for the arc it
+    struck (+1 a flank, +2 a rear), and ``rules`` the signed total the rules
+    it carries grant (Massed Infantry's outnumbering +1). Wounds are not a
+    row here: they are the round's distribution, not a fixed term, and
+    :attr:`FightResult.scoring_wounds` carries them.
+
+    The rows still absent — standards, the high ground, overkill — have no
+    field here and are reported in a scored round's notes.
+    """
+
+    rank_bonus: int = 0
+    arc: int = 0
+    rules: int = 0
+
+    @property
+    def total(self) -> int:
+        """The side's fixed points, every row summed.
+
+        Returns:
+            The signed total :func:`combat_result` scores against the foe's.
+        """
+        return self.rank_bonus + self.arc + self.rules
+
+
+@dataclass(frozen=True)
 class FightResult:
     """Outcome of one round of close combat between two units.
 
@@ -897,15 +929,11 @@ class FightResult:
     Initiative made the blows simultaneous. ``a_initiative`` and
     ``b_initiative`` are the effective Initiatives that ordering compared —
     reported so a caller prints the value the math used, as the shooting
-    result reports its effective To Hit target. ``a_rank_bonus`` and
-    ``b_rank_bonus`` are each side's combat-result Rank Bonus, which
-    :func:`combat_result` adds to that side's score. ``a_unit_strength`` and
-    ``b_unit_strength`` are the Unit Strengths the round compared (reported,
-    and the basis of an outnumbering bonus). ``a_combat_result_bonus`` and
-    ``b_combat_result_bonus`` are the combat-result points each side accrued
-    beyond its Rank Bonus — the rules it carries (Massed Infantry's +1) plus
-    the arc its charge struck (+1 a flank, +2 a rear) — a signed total
-    :func:`combat_result` adds to the score alongside the Rank Bonus.
+    result reports its effective To Hit target. ``a_points`` and ``b_points``
+    are each side's fixed combat-result points broken out row by row
+    (:class:`CombatPoints`), which :func:`combat_result` scores against each
+    other. ``a_unit_strength`` and ``b_unit_strength`` are the Unit Strengths
+    the round compared (reported, and the basis of an outnumbering bonus).
     """
 
     # Covariant, so a caller holding a list[list[float]] can pass it: list is
@@ -915,12 +943,10 @@ class FightResult:
     notes: tuple[str, ...] = ()
     a_initiative: EffectiveValue = EffectiveValue(0)
     b_initiative: EffectiveValue = EffectiveValue(0)
-    a_rank_bonus: int = 0
-    b_rank_bonus: int = 0
+    a_points: CombatPoints = CombatPoints()
+    b_points: CombatPoints = CombatPoints()
     a_unit_strength: int = 0
     b_unit_strength: int = 0
-    a_combat_result_bonus: int = 0
-    b_combat_result_bonus: int = 0
     # The signed distribution of (A's minus B's) combat-result wounds, populated by
     # fight(); empty on a fixture-built result, which then scores off the melee
     # joint alone (see scoring_wounds).
@@ -1534,12 +1560,14 @@ def fight(
         notes=notes,
         a_initiative=a_initiative,
         b_initiative=b_initiative,
-        a_rank_bonus=a.rank_bonus,
-        b_rank_bonus=b.rank_bonus,
+        a_points=CombatPoints(
+            rank_bonus=a.rank_bonus, arc=_arc_bonus(a), rules=a_combat_result.value
+        ),
+        b_points=CombatPoints(
+            rank_bonus=b.rank_bonus, arc=_arc_bonus(b), rules=b_combat_result.value
+        ),
         a_unit_strength=a.unit_strength(),
         b_unit_strength=b.unit_strength(),
-        a_combat_result_bonus=a_combat_result.value + _arc_bonus(a),
-        b_combat_result_bonus=b_combat_result.value + _arc_bonus(b),
         wound_margin=wound_margin,
     )
 
@@ -1716,7 +1744,6 @@ def _step_joint(
 
 _UNMODELLED_COMBAT_RESULT: tuple[str, ...] = (
     "combat result component not factored: standards (#28)",
-    "combat result component not factored: flank & rear attacks (#28)",
     "combat result component not factored: the high ground (#28)",
     "combat result component not factored: overkill (#28)",
 )
@@ -1728,9 +1755,9 @@ class CombatResult:
 
     ``margin`` maps a signed lead ``m`` to P(A's score - B's score == m);
     positive means A is ahead. A side's score is the Wounds it inflicted plus
-    its Rank Bonus and any rule-granted combat-result points (Massed
-    Infantry's outnumbering +1); the components still unmodelled are listed in
-    ``notes`` (#28). Wounds, not models removed: a multi-Wound model scores
+    its fixed points, row by row on the :class:`FightResult` this scored
+    (:class:`CombatPoints`); the rows still unmodelled are listed in
+    ``notes``. Wounds, not models removed: a multi-Wound model scores
     every Wound it loses, one felled outright scores its whole allotment, and
     excess a model cannot lose is discarded. The signed ``margin`` is what the
     Break test adds to the loser's roll.
@@ -1748,10 +1775,10 @@ def combat_result(result: FightResult) -> CombatResult:
 
     Composes on a :class:`FightResult`'s :attr:`~FightResult.scoring_wounds`:
     A's score is the Wounds it inflicted — this round's melee plus any
-    from a Stand & Shoot charge reaction this turn — plus A's Rank Bonus and
-    rule-granted combat-result points, B's the reverse. The Rank Bonus and
-    points are fixed for the round, so they shift every lead by the same
-    constant. Because the two sides are correlated (under Initiative order, and
+    from a Stand & Shoot charge reaction this turn — plus A's fixed points
+    (:class:`CombatPoints`), B's the reverse. Those points are fixed for the
+    round, so they shift every lead by the same constant; the wound difference
+    carries the rest. Because the two sides are correlated (under Initiative order, and
     through a volley that both thins a side and scores for its foe), the
     win/draw/win split and signed margin come from the joint wound distribution,
     not from differencing marginals.
@@ -1761,13 +1788,7 @@ def combat_result(result: FightResult) -> CombatResult:
     """
     margin: Mapping[int, Probability] = {}
     p_a_wins = p_draw = p_b_wins = 0
-    # A's fixed edge over B: Rank Bonus plus the rule-granted combat-result
-    # points (Massed Infantry, ...), each a signed per-side constant that
-    # shifts every lead alike. The wound difference (melee + Stand & Shoot)
-    # carries the rest.
-    static_delta = (result.a_rank_bonus - result.b_rank_bonus) + (
-        result.a_combat_result_bonus - result.b_combat_result_bonus
-    )
+    static_delta = result.a_points.total - result.b_points.total
     for wound_diff, mass in result.scoring_wounds.items():
         if mass == 0:
             continue

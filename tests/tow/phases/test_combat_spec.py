@@ -361,7 +361,7 @@ def _the_rank_bonus_scores(f: _Field) -> tuple:
     # none.
     plain = f.unit()
     fought = f.fight(plain, plain, 15, 5)
-    return (fought.a_rank_bonus, fought.b_rank_bonus), (2, 0)
+    return (fought.a_points.rank_bonus, fought.b_points.rank_bonus), (2, 0)
 
 
 def _outnumbering_scores_massed_infantry(f: _Field) -> tuple:
@@ -370,7 +370,7 @@ def _outnumbering_scores_massed_infantry(f: _Field) -> tuple:
     # and the other does not.
     plain = f.unit()
     fought = f.fight(plain, plain, 15, 5)
-    return (fought.a_combat_result_bonus, fought.b_combat_result_bonus), (1, 0)
+    return (fought.a_points.rules, fought.b_points.rules), (1, 0)
 
 
 def _the_score_adds_the_bonuses_to_the_wounds(f: _Field) -> tuple:
@@ -401,7 +401,7 @@ def _arc_bonus(f: _Field, arc: ChargeArc) -> int:
     with game.turn().movement() as movement:
         engagement = movement.charge(f.field(plain, 5), f.field(plain, 5), Charge(6, arc))
     with game.turn().combat() as combat:
-        return combat.fight(engagement).a_combat_result_bonus
+        return combat.fight(engagement).a_points.arc
 
 
 def _the_break_test_rolls_the_printed_bands(f: _Field) -> tuple:
