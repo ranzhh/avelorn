@@ -20,7 +20,7 @@ from avelorn.tow.schema.unit import (
     UnitOption,
     UnitSize,
 )
-from avelorn.tow.views import UnitSummary, rule_summaries, unmodelled_rules
+from avelorn.tow.views import UnitDetail, UnitSummary, rule_summaries, unmodelled_rules
 
 
 def list_units(data: TOWRepository) -> list[str]:
@@ -78,7 +78,10 @@ def show_unit(data: TOWRepository, slug: str) -> list[str]:
         *_columns(rows),
     ]
     lines.extend(_listing("Equipment", unit.equipment))
-    lines.extend(_listing("Special rules", unit.special_rules))
+    rules = UnitDetail.of(unit, data.rules).special_rules
+    lines.extend(_listing("Special rules", [r.name if r.slug else f"{r.name} *" for r in rules]))
+    if any(r.slug is None for r in rules):
+        lines.append("  * not modelled: the engine holds the text and never applies it")
     lines.extend(_listing("Options", [_option(option) for option in unit.options]))
     return lines
 

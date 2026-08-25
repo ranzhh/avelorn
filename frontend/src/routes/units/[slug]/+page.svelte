@@ -47,7 +47,14 @@
 	<h2>Special rules</h2>
 	<ul>
 		{#each unit.special_rules as rule}
-			<li>{rule}</li>
+			<li>
+				{#if rule.slug}
+					<a href="/rules/{rule.slug}">{rule.name}</a>
+				{:else}
+					<span class="unmodelled">{rule.name}</span>
+					<span class="meta">not modelled</span>
+				{/if}
+			</li>
 		{/each}
 	</ul>
 {/if}
@@ -81,5 +88,10 @@
 	.meta {
 		color: var(--muted);
 		font-size: 0.85rem;
+	}
+
+	.unmodelled {
+		color: var(--muted);
+		text-decoration: underline dotted var(--rule);
 	}
 </style>

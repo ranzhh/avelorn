@@ -39,7 +39,8 @@ export interface paths {
          * @description Read a datasheet in full: its profiles, equipment, rules, and options.
          *
          *     Returns:
-         *         The datasheet, its troop-type profile resolved.
+         *         The datasheet, its troop-type profile resolved and each printed rule
+         *         name carrying the entry it resolves to.
          *
          *     Raises:
          *         HTTPException: 404, when no datasheet carries the slug.
@@ -615,6 +616,23 @@ export interface components {
          */
         PanicCause: "heavy-casualties" | "nearby-friend-destroyed" | "nearby-friend-flees-combat" | "fled-through";
         /**
+         * PrintedRule
+         * @description A rule name as a datasheet prints it, and the entry it resolves to.
+         *
+         *     ``slug`` addresses the entry, so a caller can link to it without knowing
+         *     how a printed name finds its file -- an exact match, or the "(X)" template
+         *     a parameterised name comes from ("Impact Hits (D3)" is filed under
+         *     ``impact-hits``). ``None`` says the corpus prints this name and nothing
+         *     models it: the fact :func:`unmodelled_rules` reports over the whole corpus,
+         *     said here on the datasheet that prints it.
+         */
+        PrintedRule: {
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string | null;
+        };
+        /**
          * Profile
          * @description One row of a characteristic profile, keyed by the printed abbreviations.
          *
@@ -873,10 +891,15 @@ export interface components {
             special_rules: string[];
         };
         /**
-         * Unit
-         * @description A unit entry as printed in an army's list.
+         * UnitDetail
+         * @description A datasheet as reading one shows it: the entry, its rule names resolved.
+         *
+         *     Everything :class:`~avelorn.tow.schema.unit.Unit` prints, except that a
+         *     special rule arrives as a :class:`PrintedRule` rather than a bare string.
+         *     Resolving on the way out is what keeps a caller from re-deriving it: a
+         *     printed name does not become a slug by slugifying it.
          */
-        Unit: {
+        UnitDetail: {
             /** Id */
             id: string;
             /** Name */
@@ -892,7 +915,7 @@ export interface components {
             /** Equipment */
             equipment?: string[];
             /** Special Rules */
-            special_rules?: string[];
+            special_rules: components["schemas"]["PrintedRule"][];
             /** Options */
             options?: components["schemas"]["UnitOption"][];
         };
@@ -1156,7 +1179,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Unit"];
+                    "application/json": components["schemas"]["UnitDetail"];
                 };
             };
             /** @description Validation Error */

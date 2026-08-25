@@ -48,7 +48,34 @@ def test_a_datasheet_is_served_whole(client: TestClient) -> None:
     body = client.get("/units/white-lions-of-chrace").json()
     assert [profile["name"] for profile in body["profiles"]] == ["White Lion", "Guardian"]
     assert "Chracian Great Blade" in body["equipment"]
-    assert "Lion Cloak" in body["special_rules"]
+    assert {"name": "Lion Cloak", "slug": "lion-cloak"} in body["special_rules"]
+
+
+def test_a_printed_rule_carries_the_entry_it_resolves_to(client: TestClient) -> None:
+    """A caller can address the rule without deriving a slug from the name."""
+    body = client.get("/units/white-lions-of-chrace").json()
+    resolved = {r["name"]: r["slug"] for r in body["special_rules"]}
+    assert resolved["Lion Cloak"] == "lion-cloak"
+    assert client.get("/rules/lion-cloak").status_code == 200
+
+
+def test_a_rule_the_corpus_does_not_model_resolves_to_nothing(client: TestClient) -> None:
+    """An unmodelled name is served as printed, with no entry to link to."""
+    body = client.get("/units/dwarf-warriors").json()
+    resolved = {r["name"]: r["slug"] for r in body["special_rules"]}
+    assert resolved["Close Order"] is None
+    reported = {r["name"] for r in client.get("/rules/unmodelled").json()}
+    assert "Close Order" in reported
+
+
+def test_a_parameterised_rule_resolves_to_the_template_it_is_filed_under(
+    client: TestClient,
+) -> None:
+    """The Merwyrm prints Impact Hits (D3); the entry is filed as Impact Hits (X)."""
+    body = client.get("/units/merwyrm").json()
+    resolved = {r["name"]: r["slug"] for r in body["special_rules"]}
+    assert resolved["Impact Hits (D3)"] == "impact-hits"
+    assert client.get("/rules/impact-hits").json()["name"] == "Impact Hits (X)"
 
 
 def test_a_datasheet_carries_its_resolved_troop_type(client: TestClient) -> None:
