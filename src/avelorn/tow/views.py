@@ -8,10 +8,14 @@ behind the other.
 A listing answers "what is in the corpus": :class:`UnitSummary` and
 :class:`RuleSummary`, deliberately not the whole entry, since serving every
 unit's profiles and options at once makes a listing grow with the corpus rather
-than with its length. Reading one entry answers everything else, and its view is
-the schema type itself (:class:`~avelorn.tow.schema.unit.Unit`,
-:class:`~avelorn.tow.schema.rule.Rule`) -- there is nothing to project, so
-projecting it would only create something to drift.
+than with its length. Reading one entry answers everything else. A rule's view is
+the schema type itself (:class:`~avelorn.tow.schema.rule.Rule`) -- nothing to
+project, so projecting it would only create something to drift. A datasheet's is
+:class:`UnitDetail`, the schema type but for one field: the rule names it prints
+arrive resolved, each carrying the entry it addresses. That much has to be
+projected, because a printed name does not become a slug by slugifying it --
+"Impact Hits (D3)" is filed under ``impact-hits`` -- and a caller left to derive
+it would derive it wrong more often than right.
 
 :func:`unmodelled_rules` is the third view and the odd one: not a projection of
 an entry but a report over the whole corpus, naming every rule some unit or
@@ -25,6 +29,7 @@ from collections import defaultdict
 
 from pydantic import BaseModel, ConfigDict
 
+from avelorn.core.registry import Registry
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.engine.rules import printed_rule
 from avelorn.tow.schema.rule import Rule
@@ -50,6 +55,59 @@ class UnitSummary(BaseModel):
             The listing view of ``unit``.
         """
         return cls.model_validate(unit, from_attributes=True)
+
+
+class PrintedRule(BaseModel):
+    """A rule name as a datasheet prints it, and the entry it resolves to.
+
+    ``slug`` addresses the entry, so a caller can link to it without knowing
+    how a printed name finds its file -- an exact match, or the "(X)" template
+    a parameterised name comes from ("Impact Hits (D3)" is filed under
+    ``impact-hits``). ``None`` says the corpus prints this name and nothing
+    models it: the fact :func:`unmodelled_rules` reports over the whole corpus,
+    said here on the datasheet that prints it.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    slug: str | None
+
+    @classmethod
+    def of(cls, printed: str, rules: Registry[Rule]) -> "PrintedRule":
+        """Resolve one printed name.
+
+        Returns:
+            The name, with the slug of the entry it resolves to or ``None``.
+        """
+        entry = printed_rule(printed, rules)
+        return cls(name=printed, slug=None if entry is None else entry.id)
+
+
+class UnitDetail(Unit):
+    """A datasheet as reading one shows it: the entry, its rule names resolved.
+
+    Everything :class:`~avelorn.tow.schema.unit.Unit` prints, except that a
+    special rule arrives as a :class:`PrintedRule` rather than a bare string.
+    Resolving on the way out is what keeps a caller from re-deriving it: a
+    printed name does not become a slug by slugifying it.
+    """
+
+    special_rules: list[PrintedRule]
+
+    @classmethod
+    def of(cls, unit: Unit, rules: Registry[Rule]) -> "UnitDetail":
+        """Resolve a datasheet's printed rule names.
+
+        Returns:
+            The detail view of ``unit``.
+        """
+        return cls.model_validate(
+            {
+                **unit.model_dump(),
+                "special_rules": [PrintedRule.of(name, rules) for name in unit.special_rules],
+            }
+        )
 
 
 class RuleSummary(BaseModel):
