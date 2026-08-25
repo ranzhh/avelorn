@@ -1,4 +1,4 @@
-.PHONY: install test lint demo serve types types-check frontend frontend-lint frontend-check
+.PHONY: install test lint demo serve types types-check frontend frontend-lint frontend-check up down logs
 
 # Which end-to-end demo `make demo` runs — any scripts/<DEMO>_demo.py:
 # shooting, melee, turn, or soften_the_charge.
@@ -36,3 +36,12 @@ frontend-lint: ## prettier and eslint over the frontend
 
 frontend-check: ## type-check the frontend and build it
 	cd frontend && npm run check && npm run build
+
+up: ## bring the whole stack up in containers (API on :8000, browser on :5173)
+	docker compose up --build
+
+down: ## stop the stack and drop its containers
+	docker compose down
+
+logs: ## follow the stack's logs
+	docker compose logs -f

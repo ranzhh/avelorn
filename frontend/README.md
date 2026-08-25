@@ -10,7 +10,13 @@ shows up there as a diff you can read. The TypeScript is generated from it by
 npm and nothing else. `make types` rewrites the document itself, and is what
 you run after changing a model.
 
-Run the API and the front end in two shells:
+Run the whole stack in containers:
+
+```
+make up
+```
+
+Or the two processes natively, in two shells:
 
 ```
 make serve      # FastAPI on :8000
