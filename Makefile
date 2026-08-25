@@ -1,4 +1,4 @@
-.PHONY: install test lint demo serve
+.PHONY: install test lint demo serve types frontend
 
 # Which end-to-end demo `make demo` runs — any scripts/<DEMO>_demo.py:
 # shooting, melee, turn, or soften_the_charge.
@@ -19,3 +19,10 @@ demo: ## end-to-end demo from the data files (DEMO=shooting|melee|charge)
 
 serve: ## serve the unit database over HTTP, with reload (docs at /docs)
 	uv run fastapi dev src/avelorn/api/app.py
+
+types: ## rewrite the committed OpenAPI document from the Pydantic models
+	uv run python scripts/dump_openapi.py frontend/openapi.json
+	cd frontend && npm run types
+
+frontend: ## serve the unit browser, with reload (needs `make serve` in another shell)
+	cd frontend && npm run dev

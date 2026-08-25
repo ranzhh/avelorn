@@ -1,0 +1,31 @@
+{
+	"name": "frontend",
+	"private": true,
+	"version": "0.0.1",
+	"type": "module",
+	"scripts": {
+		"build": "vite build",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+		"dev": "vite dev",
+		"prebuild": "npm run types",
+		"precheck": "npm run types",
+		"predev": "npm run types",
+		"prepare": "npm run types && svelte-kit sync || echo ''",
+		"preview": "vite preview",
+		"types": "openapi-typescript openapi.json -o src/lib/api/schema.d.ts"
+	},
+	"devDependencies": {
+		"@sveltejs/adapter-auto": "^7.0.1",
+		"@sveltejs/kit": "^2.63.0",
+		"@sveltejs/vite-plugin-svelte": "^7.1.2",
+		"openapi-typescript": "^7.13.0",
+		"svelte": "^5.56.1",
+		"svelte-check": "^4.6.0",
+		"typescript": "^5.9.3",
+		"vite": "^8.0.16"
+	},
+	"dependencies": {
+		"openapi-fetch": "^0.17.0"
+	}
+}

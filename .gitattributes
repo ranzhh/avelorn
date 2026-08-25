@@ -1,0 +1,4 @@
+# npm resolves this; nobody reads it. openapi.json is generated too but is
+# deliberately not marked: it is the API contract, and seeing it change is
+# the reason it is committed.
+frontend/package-lock.json linguist-generated=true

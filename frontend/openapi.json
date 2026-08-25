@@ -1,0 +1,1808 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Avelorn",
+    "summary": "The unit and army database for Warhammer: The Old World.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/units": {
+      "get": {
+        "summary": "List every datasheet in the corpus",
+        "description": "List the datasheets, ordered by slug.\n\nReturns:\n    One summary per unit.",
+        "operationId": "list_units_units_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/UnitSummary"
+                  },
+                  "type": "array",
+                  "title": "Response List Units Units Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/units/{slug}": {
+      "get": {
+        "summary": "Read one datasheet",
+        "description": "Read a datasheet in full: its profiles, equipment, rules, and options.\n\nReturns:\n    The datasheet, its troop-type profile resolved.\n\nRaises:\n    HTTPException: 404, when no datasheet carries the slug.",
+        "operationId": "read_unit_units__slug__get",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Unit"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rules": {
+      "get": {
+        "summary": "List every rule entry in the corpus",
+        "description": "List the rule entries, ordered by slug.\n\nReturns:\n    One summary per entry.",
+        "operationId": "list_rules_rules_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RuleSummary"
+                  },
+                  "type": "array",
+                  "title": "Response List Rules Rules Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rules/unmodelled": {
+      "get": {
+        "summary": "Report the printed rules the engine does not apply",
+        "description": "Report every rule the corpus prints that never reaches the maths.\n\nReturns:\n    The report, most-printed first.",
+        "operationId": "list_unmodelled_rules_unmodelled_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/UnmodelledRule"
+                  },
+                  "type": "array",
+                  "title": "Response List Unmodelled Rules Unmodelled Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rules/{slug}": {
+      "get": {
+        "summary": "Read one rule entry",
+        "description": "Read a rule entry in full: its text, its effects, and what it leaves out.\n\nReturns:\n    The rule entry.\n\nRaises:\n    HTTPException: 404, when no entry carries the slug. A rule the corpus\n        prints without an entry has none to read; ``/rules/unmodelled``\n        names those.",
+        "operationId": "read_rule_rules__slug__get",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rule"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ArmourGate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ArmourGate",
+        "description": "A gate on a piece of armour a model wears \u2014 by name, among all it wears.\n\nThe ``worn`` peer of :class:`WeaponGate`, and the armour half of the\nequipment-in-use axis: Parry's \"equipped with ... a shield\" asks\n``{name: Shield}``. Two things separate it from the weapon gate, and both\ncome from the equipment itself. Armour has no family vocabulary \u2014 a piece is\nonly ever its printed name \u2014 so ``name`` is the sole property; and a model\nwears *several* pieces at once where it holds one weapon, so this is a\n:class:`MembershipGate`, satisfied by any piece worn that matches."
+      },
+      "AttackGate": {
+        "properties": {
+          "kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AttackKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "magical": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Magical"
+          },
+          "flaming": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flaming"
+          },
+          "at_long_range": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At Long Range"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "AttackGate",
+        "description": "A gate on the attack a model is the target of.\n\nThe incoming attack, from the defender's side: its ``kind`` (Lion Cloak\nfires only ``against ... shooting attacks``), whether it is ``magical``\n(Lion Cloak wants non-magical, the reason it does not help against a magical\nbow), and whether it is ``flaming`` \u2014 carries the Flaming Attacks rule.\nOrthogonal facts \u2014 a shooting or a close-combat attack may be either.\n``at_long_range`` is a fourth, and a mistake kept for now: see #179 and the\nnote on the field."
+      },
+      "AttackKind": {
+        "type": "string",
+        "enum": [
+          "close_combat",
+          "shooting"
+        ],
+        "title": "AttackKind",
+        "description": "The kind of attack a model is the target of \u2014 a closed, append-only set.\n\nThe rulebook names attacks by kind, and rules gate on the *positive* kind\nthey care about: Lion Cloak on ``shooting``, Parry on being in close combat.\n\"Not shooting\" is not \"close combat\" \u2014 a spell is neither \u2014 so the kind is\ncategorical, never a boolean. A member joins when a rule needs it (a spell\n``magic`` kind when a magic-attack path exists)."
+      },
+      "AttackMarkEffect": {
+        "properties": {
+          "when": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/When"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "attack": {
+            "$ref": "#/components/schemas/AttackMarks"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "attack"
+        ],
+        "title": "AttackMarkEffect",
+        "description": "Classify the attacks the bearer makes: they are Magical, or Flaming.\n\nThe vocabulary for the rules that modify no quantity but change what an\nattack *is* \u2014 \"any attack made by a model with this special rule, or\nmade using a weapon with this special rule, is a 'Magical' attack\". The\nfact producers consume it when they build the incoming-attack facts a\ndefender's gates read (Lion Cloak's non-magical armour bonus, a ward's\nflame gate), from the striker's unit rules and the profile in use\nalike. Self-naming by ``attack`` (the peer of ``add`` / ``reroll`` /\n``grants`` / ``forces``); each model forbids the others' keys."
+      },
+      "AttackMarks": {
+        "properties": {
+          "magical": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Magical"
+          },
+          "flaming": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flaming"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "AttackMarks",
+        "description": "The properties a rule stamps on the attacks its bearer makes.\n\nOne optional flag per property of the incoming-attack facts a defender's\ngates read (:class:`AttackGate`, ``kind`` excepted \u2014 what kind an attack\nis belongs to the phase resolving it, never to a rule). A mark is only\never conferred: an unmarked attack is already not magical, so a False\nhere would say nothing and is a data error."
+      },
+      "BarEffect": {
+        "properties": {
+          "when": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/When"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "bars": {
+            "type": "string",
+            "title": "Bars"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "bars"
+        ],
+        "title": "BarEffect",
+        "description": "The bearer cannot use a piece of armour while this rule is in force.\n\n\"A model cannot use a shield alongside a weapon with this special rule\nduring the Combat phase\": a model has two hands, and wielding decides\nwhat else it can hold. The barred piece is *withdrawn* from what the\nbearer effectively wears \u2014 its armour bonus, whatever its size, and its\npresence to any gate that asks \u2014 never compensated with a counter-\nmodifier, which would couple the rule to the piece's printed value.\nConsumed where the bearer's usable armour is assembled; scoped by the\nweapon in use when the entry rides a weapon profile, as any weapon rule\nis. Self-naming by ``bars``; each model forbids the others' keys."
+      },
+      "BaseSize": {
+        "properties": {
+          "width_mm": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Width Mm"
+          },
+          "depth_mm": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Depth Mm"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "width_mm",
+          "depth_mm"
+        ],
+        "title": "BaseSize",
+        "description": "Base footprint of a single model, in millimetres."
+      },
+      "BlowEffect": {
+        "properties": {
+          "when": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/When"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "denies": {
+            "items": {
+              "$ref": "#/components/schemas/Stage"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Denies"
+          },
+          "slays": {
+            "type": "boolean",
+            "title": "Slays",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "denies"
+        ],
+        "title": "BlowEffect",
+        "description": "The rulebook's \"X Blow\" shape: a triggered strike the foe cannot save.\n\n\"If a model with this special rule rolls a natural 6 when making a roll\nTo Wound for an attack made in combat ... the enemy is not permitted an\narmour save (Ward saves can be attempted as normal)\": ``denies`` names\nthe save stages the foe may not attempt on the trigger branch, and\n``slays`` escalates the unsaved wound to the rulebook's Instant Kill\n(\"loses all of its remaining Wounds\") \u2014 Killing Blow sets both, Cleaving\nBlow denies alone. The ``when`` must carry the natural trigger, on a\nroll before the denied stage; that a die must show a face is also what\nkeeps the printed automatic-wound exception free \u2014 an automatic roll\nshows no die. Self-naming by ``denies``."
+      },
+      "Bounded": {
+        "properties": {
+          "amount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string",
+                "const": "X"
+              }
+            ],
+            "title": "Amount"
+          },
+          "maximum": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum"
+          },
+          "minimum": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "amount"
+        ],
+        "title": "Bounded",
+        "description": "An amount with the printed bound on the value it moves.\n\nThe page prints a bound attached to the quantity it bounds, inside the\nparenthetical that follows it \u2014 \"improves its armour value by 1 (to a\nmaximum of 2+)\", \"a -1 modifier to their Strength characteristic (to a\nminimum of 1)\" \u2014 so the bound is written on the amount, not beside the\noperation. An operation moving two quantities then cannot lend one's\nbound to the other.\n\n``maximum`` is the printed limit on the modified value: a ceiling on a\ncharacteristic, the best attainable save (so numerically a floor) on an\narmour value. ``minimum`` is the floor a malus cannot push a\ncharacteristic below; an armour value needs none, its own floor being\nwhat ``maximum`` already names.\n\nWrite the amount plainly (``S: -1``) where the page prints no bound \u2014\nthe long form exists to carry one."
+      },
+      "Characteristic": {
+        "type": "string",
+        "enum": [
+          "M",
+          "WS",
+          "BS",
+          "S",
+          "T",
+          "W",
+          "I",
+          "A",
+          "Ld"
+        ],
+        "title": "Characteristic",
+        "description": "The profile characteristics; values are the printed abbreviations.\n\nThe single declaration of the vocabulary: profile rows are keyed by\nit, tests match on it, and rule effects will name it."
+      },
+      "ChargeGate": {
+        "properties": {
+          "distance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Comparison"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ChargeGate",
+        "description": "A gate on the charge event \u2014 the model's own charge this turn.\n\nThe typed home for \"a turn in which it charged\", carrying the charge's\nproperties so a rule can constrain them: Furious Charge asks\n``{distance: {at_least: 3}}``. A property name outside this model is a\ndata error at load (``extra=forbid``), the same closed-vocabulary\ndiscipline the flat conditions have \u2014 load-time path validation falls out\nof the typed model. New properties (the arc, the number of enemy models\ncharged) join here as rules need them."
+      },
+      "ChoiceEffect": {
+        "properties": {
+          "when": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/When"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "forces": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Forces"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "forces"
+        ],
+        "title": "ChoiceEffect",
+        "description": "Force the outcome of a decision that is otherwise rolled or chosen.\n\n``forces`` maps a :class:`Decision` to the :class:`~avelorn.tow.schema.psychology.Outcome`\nit takes instead of rolling \u2014 ``{break: fall-back-in-good-order}``. Keyed by\nthe decision exactly as a modifier's ``add`` is keyed by the quantity, so the\nseam that owns a decision reads its own key (\"is ``break`` mine, and forced\nto what?\") with no per-rule handler. The value is typed as the ``Outcome``\nbase; each decision's own results are a subclass (a break's are\n:class:`~avelorn.tow.schema.psychology.BreakOutcome`), resolved by slug, so\nthis generic effect names no decision. Self-naming by ``forces`` (the peer of\n``add`` / ``grants``); each model forbids the others' keys. Forbidding an\noption rather than forcing one is the sibling (a ``forbids`` key) for when\none lands."
+      },
+      "CombatGate": {
+        "properties": {
+          "first_round": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Round"
+          },
+          "outnumbers": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outnumbers"
+          },
+          "was_charged": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Was Charged"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "CombatGate",
+        "description": "A gate on the close combat the model is fighting.\n\nFacts of the combat itself, not the model: ``first_round`` (Elven Reflexes,\nMartial Prowess), ``outnumbers`` \u2014 whether this side's Unit Strength\nbeats the foe's (Massed Infantry) \u2014 and ``was_charged``, whether the foe\ncharged the bearer this turn (Shieldwall's \"a turn in which it was\ncharged\"). Booleans today; the subject is where a round *number* or a\nflank/rear facing would join."
+      },
+      "Comparison": {
+        "properties": {
+          "equals": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equals"
+          },
+          "at_least": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At Least"
+          },
+          "at_most": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At Most"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "Comparison",
+        "description": "A predicate on one numeric property of an event: exactly one comparator.\n\nThe leaf of a gate path \u2014 ``charging.distance`` is constrained by\n``{at_least: 3}``, ``{at_most: 6}`` or ``{equals: 8}``. The comparator\nvocabulary is closed and append-only, the same discipline as\n:class:`Quantity`; a new one joins when a rule needs it. Exactly one\ncomparator is set \u2014 a leaf tests one thing."
+      },
+      "Decision": {
+        "type": "string",
+        "enum": [
+          "break"
+        ],
+        "title": "Decision",
+        "description": "A point where an outcome is rolled or chosen, that a rule may force.\n\nThe routing key of a :class:`ChoiceEffect` \u2014 the peer of :class:`Quantity`\nfor a modifier: the seam that owns a decision reads the effects forcing it.\nClosed and append-only; a member joins when a rule forces a new decision (a\ncharge reaction, ...)."
+      },
+      "DiceQuantity": {
+        "properties": {
+          "sides": {
+            "type": "integer",
+            "enum": [
+              3,
+              6
+            ],
+            "title": "Sides"
+          },
+          "plus": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Plus",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "sides"
+        ],
+        "title": "DiceQuantity",
+        "description": "A printed quantity decided by a dice roll: \"D6\", \"D3\", \"D3+1\".\n\nThe dice form of a rule's bracketed parameter \u2014 \"Often, this is\ndetermined by the roll of a dice\" (Stomp Attacks, Impact Hits). One\ndie plus a flat addend covers every printed instance; a wider form\n(2D6, say) joins when a rule prints one."
+      },
+      "FoeGate": {
+        "properties": {
+          "troop_type": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/TroopType"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Troop Type"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FoeGate",
+        "description": "A gate on the foe of the attack the bearer is making.\n\nThe mirror of :class:`AttackGate` \u2014 that subject describes the attack a\nmodel *suffers*, this one the model its own attack lands on. Killing\nBlow and Cleaving Blow read the foe's troop type (\"enemy models whose\ntroop type is infantry or cavalry ...\"): ``troop_type`` is the printed\nlist, satisfied by any member. A printed category expands to its\nsub-types when the entry is authored \u2014 the rulebook's own reading\n(\"when the rules refer to Infantry units, Monstrous Infantry must also\nfollow\", troop-types-at-a-glance) \u2014 so the engine matches one closed\nvocabulary, never a category tree."
+      },
+      "GrantEffect": {
+        "properties": {
+          "when": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/When"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "grants": {
+            "type": "string",
+            "title": "Grants"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "grants"
+        ],
+        "title": "GrantEffect",
+        "description": "Confer a named special rule, gated like any other effect.\n\n\"gains the Armour Bane (1) special rule\" \u2014 the rule is granted *by name*, not\ncopied: the consuming seam resolves ``grants`` to its entry (the one\nresolution convention, parameter substituted) and applies that rule's own\neffects under this grant's gate. So a change to the granted rule \u2014 or to how\nits quantity resolves \u2014 is tracked automatically, and a rule granted on top of\none a model already carries stacks (two Armour Bane (1) \u2192 +2 on a natural 6),\nbecause each instance is a separate effect. The grant's shared ``when`` is the\n*outer* gate; the granted rule keeps its *own* inner gate\n(Armour Bane's natural-6 To Wound), the two conjoined at evaluation without\nmerging the gate trees. There is no discriminator field: an effect carrying\n``grants`` is one, exactly as one carrying ``add`` is a modifier (each model\nforbids the others' keys)."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HitOrder": {
+        "type": "string",
+        "enum": [
+          "first",
+          "last"
+        ],
+        "title": "HitOrder",
+        "description": "When a rule's extra hits land in a round of close combat.\n\nThe two printed timings: ``first`` \u2014 \"resolved against the charged\nunit when the combat is chosen ... before issuing challenges\"\n(Impact Hits), ahead of every Initiative step \u2014 and ``last`` \u2014 \"must\nbe made last, after all other attacks have been made, including\nattacks made at Initiative 1\" (Stomp Attacks). A member joins when a\nrule prints a third timing."
+      },
+      "HitsEffect": {
+        "properties": {
+          "when": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/When"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hits": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "$ref": "#/components/schemas/DiceQuantity"
+              },
+              {
+                "type": "string",
+                "const": "X"
+              }
+            ],
+            "title": "Hits"
+          },
+          "order": {
+            "$ref": "#/components/schemas/HitOrder"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "hits",
+          "order"
+        ],
+        "title": "HitsEffect",
+        "description": "Extra hits that land automatically, outside the Initiative-ordered blows.\n\nThe \"X automatic hits\" shape Stomp Attacks and Impact Hits share: each\nmodel with the rule causes ``hits`` hits \u2014 a number or a\n:class:`DiceQuantity`, usually the bracketed parameter \u2014 that skip the\nRoll to Hit (\"they hit automatically\") and wound at the unmodified\nStrength of the model making them, at the point of the round ``order``\nnames. Consumed by the combat round, which folds the batch in at that\npoint, a dice quantity as its exact distribution. Self-naming by\n``hits``; each model forbids the others' keys."
+      },
+      "ModifierEffect": {
+        "properties": {
+          "when": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/When"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "add": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "string",
+                      "const": "X"
+                    },
+                    {
+                      "$ref": "#/components/schemas/Bounded"
+                    }
+                  ]
+                },
+                "type": "object",
+                "minProperties": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Add"
+          },
+          "set": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "string",
+                      "const": "X"
+                    }
+                  ]
+                },
+                "type": "object",
+                "minProperties": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Set"
+          },
+          "enemy": {
+            "type": "boolean",
+            "title": "Enemy",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ModifierEffect",
+        "description": "One printed conditional modifier, shaped as the sentence prints it.\n\n\"*If* a model rolls a natural 6 when making a roll To Wound, the\nArmour Piercing of its weapon is improved by X\" \u2014 ``when`` holds\nthe if (a :class:`When` gate), the operation (``add`` / ``set``) holds\nthe consequence. ``When`` is a typed tree, ``subject -> property``: the\ncombat's facts, the model's movement, the volley it fires, and the\n``natural`` die event. Every set fact is conjoined; a state fact the\nengine cannot answer leaves the whole rule unfactored and reported, one\nanswered False is honoured by not applying. Without a ``when`` the\nmodifier applies to every attack. A rule needing branching or ``else``\nbelongs in a code handler, not this data.\n\nThe operation names itself, mirroring how the page prints it. ``add``\nis a signed delta the rulebook writes as a modifier \u2014 To Hit penalties\nnegative (\"-1 To Hit modifier\" is ``add: {to-hit: -1}``), Armour\nPiercing improvements positive (\"improved by 1\" is\n``add: {armour-piercing: 1}``). ``set`` is a replacement the rulebook\nwrites as prose \u2014 \"improves its Initiative characteristic to 10\" is\n``set: {I: 10}`` \u2014 applied before any additive modifier, and honoured\nonly where a base value is read (the characteristic query and its\nsiblings); the dice walk and the armour fold, which move a target\nrather than replace a base, read ``add`` alone. An effect carries at\nleast one operation, and both map each quantity to its printed amount.\nA quantity is a roll of the attack sequence by its kind (consumed by\nthe dice walk), a profile characteristic by its printed abbreviation\n(\"+1 modifier to its Initiative characteristic\" is ``add: {I: 1}``,\nconsumed by the effective-characteristic query), a formation quantity\nlike the number of fighting ranks (``add: {fighting-ranks: 1}``,\nconsumed by the fighting-rank query), a combat-result point\n(``add: {combat-result: 1}``, summed into the round's score), or an\narmour-value improvement (``add: {armour-value: 1}``, folded into the\ndefender's save), or a ward save at its printed Warding value\n(\"has a 6+ Ward save\" is ``set: {ward-save: 6}``, folded into the\ndefender's ward \u2014 the best of the values granted, since wards never\nstack). The literal ``\"X\"`` means the rule's bracketed\nparameter (\"the amount shown in brackets after the name of this\nspecial rule\").\nWhere a change lands follows from its quantity, so no stage is spelled\nout. Equipment in use is gated in the ``when`` like any other fact \u2014 Parry's\n\"a hand weapon and a shield\" is\n``{wielding: {name: Hand Weapon}, worn: {name: Shield}}`` \u2014 evaluated against\nthe loadout the consuming seam has in its context. A printed bound (\"to a\nmaximum of 10\", \"to a minimum of 1\") is written on the amount it bounds, as\na :class:`Bounded` \u2014 ``add: {S: {amount: -1, minimum: 1}}`` \u2014 never beside\nthe operation, where an effect moving two quantities could not say which\none it bounds. Only an ``add`` takes a bound: the page prints bounds on\nmodifiers, and a ``set`` names the value outright.\n\n``enemy`` transcribes the printed sentence's subject when it is the\nother party: \"enemy units ... suffer a -1 To Hit modifier\" moves the\n*enemy's* To Hit, where the default (the page speaks of the bearer)\nmoves the bearer's own. Whose quantity it then is in a given attack\nfollows from the quantity's owner side \u2014 the rulebook's constant,\nnever authored \u2014 flipped by this word: a bearer's ``to-hit`` shapes\nthe attacks it makes, an enemy's the attacks it suffers. Two seams\nresolve the flip today: the dice walk (roll quantities), and the\neffective-characteristic query, which folds the *foe's* enemy-subject\noperations beside the bearer's own wherever both sides are in hand\n(\"enemy models suffer a -1 modifier to their Strength characteristic\",\n\"enemy models become subject to ... Strike Last\"). Every other seam\nfolds a side's own values, so ``enemy`` there is a data error until a\nprinted rule needs it."
+      },
+      "MovementGate": {
+        "properties": {
+          "moved": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Moved"
+          },
+          "charge": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "$ref": "#/components/schemas/ChargeGate"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Charge"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "MovementGate",
+        "description": "A gate on how the model moved this turn.\n\n``moved`` is any move (Moving and Shooting's To Hit penalty); ``charge`` is\nthe charge \u2014 ``false`` to require the model did not charge (Press of Battle,\nFight in Extra Rank), or a :class:`ChargeGate` to constrain the charge's\nproperties (Furious Charge's ``{distance: {at_least: 3}}``)."
+      },
+      "NaturalRoll": {
+        "properties": {
+          "face": {
+            "type": "integer",
+            "maximum": 6.0,
+            "minimum": 1.0,
+            "title": "Face"
+          },
+          "roll": {
+            "$ref": "#/components/schemas/Stage"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "face",
+          "roll"
+        ],
+        "title": "NaturalRoll",
+        "description": "A natural face shown by one of the attack sequence's dice.\n\nThe *event* half of the trigger vocabulary \u2014 \"rolls a natural 6\nwhen making a roll To Wound\". Where ``when`` gates on engagement\nstate, known once before any die is cast (and possibly unknown),\nan event is decided branch by branch during resolution and is never\nunknown. ``roll`` must name a stage that rolls one die per attack \u2014\nthe stage's own :attr:`~avelorn.tow.schema.stage.Stage.dice` row,\nchecked at data load."
+      },
+      "OptionKind": {
+        "type": "string",
+        "enum": [
+          "champion",
+          "standard_bearer",
+          "musician",
+          "equipment",
+          "special_rule",
+          "magic_standard",
+          "other"
+        ],
+        "title": "OptionKind",
+        "description": "Coarse category of a unit option."
+      },
+      "PanicCause": {
+        "type": "string",
+        "enum": [
+          "heavy-casualties",
+          "nearby-friend-destroyed",
+          "nearby-friend-flees-combat",
+          "fled-through"
+        ],
+        "title": "PanicCause",
+        "description": "Why a panic test was forced, named as the sections are printed."
+      },
+      "Profile": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "role": {
+            "$ref": "#/components/schemas/ProfileRole",
+            "default": "rank-and-file"
+          },
+          "characteristics": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "propertyNames": {
+              "$ref": "#/components/schemas/Characteristic"
+            },
+            "type": "object",
+            "title": "Characteristics"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "characteristics"
+        ],
+        "title": "Profile",
+        "description": "One row of a characteristic profile, keyed by the printed abbreviations.\n\nA unit may have several rows, e.g. rank-and-file plus champion. The\nrow is written flat in the printed form ({ name: ..., M: 5, ... });\na validator gathers the abbreviation keys into ``characteristics``,\nso the vocabulary is declared once, on :class:`Characteristic`.\n\n``role`` says which part of the model the row describes\n(:class:`ProfileRole`); it defaults to rank-and-file, which is what a\nsingle-row datasheet prints."
+      },
+      "ProfileRole": {
+        "type": "string",
+        "enum": [
+          "rank-and-file",
+          "champion",
+          "mount"
+        ],
+        "title": "ProfileRole",
+        "description": "What a profile row is a row *of*.\n\nA datasheet's rows are not alternatives; they are the parts a model is made\nof. A Silver Helm prints three: the rider, the champion who replaces one\nrider, and the Barded Elven Steed every rider sits on. Reading any one of\nthem as \"the unit's profile\" drops the others.\n\nThe distinction is not cosmetic. A champion is one model of the unit\nfighting at its own line (#46); a mount is carried by *every* model and\nfights alongside it, contributing its own attacks and lending the ridden\nmodel its Movement. Which row is which cannot be inferred safely at the\npoint of use -- a mount is recognisable only by the shape of its dashes --\nso it is recorded here, once, when the datasheet is written."
+      },
+      "Quantity": {
+        "type": "string",
+        "enum": [
+          "to-hit",
+          "armour-piercing",
+          "fighting-ranks",
+          "supporting-ranks",
+          "combat-result",
+          "armour-value",
+          "ward-save"
+        ],
+        "title": "Quantity",
+        "description": "A quantity a modifier can change, in the rulebook's own modifier vocabulary.\n\nThe whole modifier vocabulary in one closed, append-only enum \u2014 a member\njoins when an imported rule needs it. Each member knows the :class:`Seam`\nthat consumes it, so routing is the member's own knowledge, not a side\ntable: ``to-hit`` and ``armour-piercing`` land on the dice walk,\n``fighting-ranks`` / ``supporting-ranks`` on the fighting-rank query,\n``combat-result`` on the combat-result fold, and ``armour-value`` on the\narmour fold (a defender improving its own save). A profile\n:class:`~avelorn.tow.schema.unit.Characteristic` is the one quantity kept\napart \u2014 a stat vocabulary used far beyond modifiers \u2014 so an operation's\nkey is a Quantity or a Characteristic."
+      },
+      "ReplaceEffect": {
+        "properties": {
+          "when": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/When"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "replaces": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Replaces"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "replaces"
+        ],
+        "title": "ReplaceEffect",
+        "description": "Replace one of a decision's outcomes with another, leaving the rest rolled.\n\nThe sibling of :class:`ChoiceEffect` for a choice narrower than the whole\ndecision: Shieldwall's \"may Give Ground rather than Fall Back in Good\nOrder\" takes effect only where the Break test would have resolved Fall\nBack \u2014 the Breaks and Gives Ground slices roll as ever, where a *forced*\ndecision sends the whole mass one way. ``replaces`` maps the decision to\n``{outcome replaced: outcome taken}``, each resolved by slug against the\ndecision's own outcome set, exactly as ``forces`` values are.\nSelf-naming by ``replaces``; each model forbids the others' keys."
+      },
+      "RerollEffect": {
+        "properties": {
+          "when": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/When"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reroll": {
+            "$ref": "#/components/schemas/Stage"
+          },
+          "causes": {
+            "items": {
+              "$ref": "#/components/schemas/PanicCause"
+            },
+            "type": "array",
+            "title": "Causes"
+          },
+          "on_natural": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 6.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "On Natural"
+          },
+          "of": {
+            "$ref": "#/components/schemas/RollResult",
+            "default": "failed"
+          },
+          "enemy": {
+            "type": "boolean",
+            "title": "Enemy",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "reroll"
+        ],
+        "title": "RerollEffect",
+        "description": "Re-roll a test, under the printed re-roll rules.\n\nThe re-roll operation, named by its own key \u2014 ``reroll: <stage>``, the\nself-naming peer of ``add`` and ``set`` (spelled without a hyphen so it is\na plain field, no alias). The operation *is* the key; its value is the test\nre-rolled, and the seam owning that stage consumes the grant directly (an\nattack roll by the dice walk, a panic test by the fold). A re-roll happens\nat most once whatever its source (\"no single dice can be re-rolled more than\nonce, regardless of the source\"), and a multi-dice roll re-rolls all its\ndice. There is no discriminator field: an effect that carries ``reroll`` is\none, exactly as one carrying ``add`` is a modifier (both models forbid the\nother's keys).\n\nA grant is restricted to the part of the roll it names, and which\nrestriction is legal depends on the stage's seam. ``causes`` restricts\na panic-test re-roll to specific panic causes (Valour of Ages re-rolls\nonly heavy casualties and fled through); empty means any cause.\n``on_natural`` restricts an attack-roll re-roll to the dice showing that\nnatural face (Ithilmar Weapons re-rolls rolls To Hit of a natural 1);\nNone re-rolls every covered die at the stage. The two restrictions are\nmutually exclusive \u2014 a panic test shows no natural face, an attack roll\nhas no panic cause \u2014 so each belongs to its own seam's stages.\n\n``of`` is the printed result restriction: which dice the grant covers,\n``failed`` (the default \u2014 \"may re-roll failed rolls To Hit\", and the\nonly re-roll a rational bearer takes of its own dice) or ``successful``\n(\"must re-roll successful Armour Saves\" \u2014 a re-roll imposed on the\nroller). ``enemy`` transcribes the sentence's subject when the roller\nis the other party: \"*Enemy units* must re-roll ...\" names the enemy's\ndie, where the default names the bearer's own. Whose die a stage rolls\nis the sequence's constant (:attr:`~avelorn.tow.schema.stage.Stage.rolled_by`),\nso the seat a grant applies from follows \u2014 an enemy-subject save\nre-roll fires on the attacks the bearer *makes*, a bearer-subject one\non the attacks it suffers. Both restrictions name a single die's\nresult or face, so they cover only stages rolling one die per attack."
+      },
+      "RollResult": {
+        "type": "string",
+        "enum": [
+          "failed",
+          "successful"
+        ],
+        "title": "RollResult",
+        "description": "One die's result, in the printed re-roll vocabulary.\n\nThe rulebook restricts a re-roll by the result of the dice it names:\n\"may re-roll *failed* rolls To Hit\", \"must re-roll *successful*\nArmour Saves\". Transcribed as printed; the walk re-rolls exactly the\ndice the word covers, with no assumption about whom the re-roll\nserves."
+      },
+      "Rule": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "flavour": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flavour"
+          },
+          "paragraphs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Paragraphs"
+          },
+          "effects": {
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ModifierEffect"
+                },
+                {
+                  "$ref": "#/components/schemas/RerollEffect"
+                },
+                {
+                  "$ref": "#/components/schemas/GrantEffect"
+                },
+                {
+                  "$ref": "#/components/schemas/ChoiceEffect"
+                },
+                {
+                  "$ref": "#/components/schemas/AttackMarkEffect"
+                },
+                {
+                  "$ref": "#/components/schemas/BarEffect"
+                },
+                {
+                  "$ref": "#/components/schemas/BlowEffect"
+                },
+                {
+                  "$ref": "#/components/schemas/WoundMultiplierEffect"
+                },
+                {
+                  "$ref": "#/components/schemas/VolleyEffect"
+                },
+                {
+                  "$ref": "#/components/schemas/ReplaceEffect"
+                },
+                {
+                  "$ref": "#/components/schemas/HitsEffect"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Effects"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "paragraphs"
+        ],
+        "title": "Rule",
+        "description": "A rules-page entry (special rule or core rule), text verbatim."
+      },
+      "RuleSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "factors": {
+            "type": "boolean",
+            "title": "Factors"
+          },
+          "references": {
+            "type": "integer",
+            "title": "References"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "category",
+          "factors",
+          "references"
+        ],
+        "title": "RuleSummary",
+        "description": "A rule entry as a listing shows it: what it is, and whether it reaches the maths.\n\n``factors`` is the honest bit. An entry carries effects or it does not, and\none that does not is text the engine holds and never applies -- Killing Blow\nis the standing example, its \"no armour save allowed\" having no word in the\neffect vocabulary. ``references`` counts the units and weapons printing it,\nso a listing sorts by what would matter most to model next."
+      },
+      "ShootingGate": {
+        "properties": {
+          "at_long_range": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At Long Range"
+          },
+          "stand_and_shoot": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stand And Shoot"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ShootingGate",
+        "description": "A gate on the volley the model is firing.\n\n``at_long_range`` is whether the target sits beyond half the weapon's\nmaximum range (Firing at Long Range); ``stand_and_shoot`` whether the\nvolley is a Stand & Shoot charge reaction (which Volley Fire forbids).\nThe subject is where a range band or a cover fact would join."
+      },
+      "Stage": {
+        "type": "string",
+        "enum": [
+          "roll-to-hit",
+          "roll-to-wound",
+          "make-armour-saves",
+          "ward-saves",
+          "make-panic-tests"
+        ],
+        "title": "Stage",
+        "description": "The attack sequence's stages, one row per printed step.\n\nEach member is a row of the printed sequence: its name (verbatim),\n``rolled_by`` (whose dice the stage rolls \u2014 the attacker's To Hit and\nTo Wound, the target's saves and panic tests), and ``dice`` (what is\nrolled there). Declaration order is the printed order \u2014 the engine's\n\"can this die still shape that roll\" reads it directly."
+      },
+      "TroopType": {
+        "type": "string",
+        "enum": [
+          "Regular Infantry",
+          "Heavy Infantry",
+          "Monstrous Infantry",
+          "Swarm",
+          "Light Cavalry",
+          "Heavy Cavalry",
+          "Monstrous Cavalry",
+          "War Beast",
+          "Light Chariot",
+          "Heavy Chariot",
+          "Monstrous Creature",
+          "Behemoth",
+          "War Machine"
+        ],
+        "title": "TroopType",
+        "description": "Closed set from the rulebook's troop-type table."
+      },
+      "TroopTypeProfile": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "unit_strength": {
+            "$ref": "#/components/schemas/UnitStrength"
+          },
+          "models_per_rank": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Models Per Rank"
+          },
+          "max_rank_bonus": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Max Rank Bonus",
+            "default": 0
+          },
+          "special_rules": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Special Rules",
+            "default": []
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "unit_strength"
+        ],
+        "title": "TroopTypeProfile",
+        "description": "A troop type's rank-and-file data, and how it ranks up.\n\n``models_per_rank`` is how many models a rank must hold to count\ntoward the Rank Bonus, or None for a troop type that does not rank up\n(Swarm, Heavy Chariot, the monsters and war machines that fight as\nsingle models); ``max_rank_bonus`` is the most extra ranks it may\nclaim. ``unit_strength`` is each model's Unit Strength as the\ntroop-type table prints it \u2014 a fixed count, or \"As Starting Wounds\"\nfor the troop types whose strength scales with the model.\n``special_rules`` are the rules the troop type confers on every\nunit of it (Regular Infantry's Press of Battle, say), as printed\ndisplay-name strings \u2014 the type's own rules, held apart from the\ndatasheet's ``special_rules`` because their owner is the troop type,\nnot the unit."
+      },
+      "Unit": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "points": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Points"
+          },
+          "unit_size": {
+            "$ref": "#/components/schemas/UnitSize"
+          },
+          "troop_type": {
+            "$ref": "#/components/schemas/TroopType"
+          },
+          "troop_type_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TroopTypeProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "base_size": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BaseSize"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "profiles": {
+            "items": {
+              "$ref": "#/components/schemas/Profile"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Profiles"
+          },
+          "equipment": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Equipment"
+          },
+          "special_rules": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Special Rules"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/UnitOption"
+            },
+            "type": "array",
+            "title": "Options"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "points",
+          "unit_size",
+          "troop_type",
+          "profiles"
+        ],
+        "title": "Unit",
+        "description": "A unit entry as printed in an army's list."
+      },
+      "UnitOption": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/OptionKind",
+            "default": "other"
+          },
+          "applies_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applies To"
+          },
+          "points": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Points"
+          },
+          "per_model": {
+            "type": "boolean",
+            "title": "Per Model",
+            "default": false
+          },
+          "points_budget": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Points Budget"
+          },
+          "adds_rules": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Adds Rules"
+          },
+          "removes_rules": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Removes Rules"
+          },
+          "adds_equipment": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Adds Equipment"
+          },
+          "removes_equipment": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Removes Equipment"
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "UnitOption",
+        "description": "A purchasable upgrade.\n\nExactly one cost shape applies: a flat `points` cost (per unit, or per\nmodel when `per_model` is set) or a `points_budget` to spend up to\n(e.g. magic standards)."
+      },
+      "UnitSize": {
+        "properties": {
+          "min": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Min"
+          },
+          "max": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "min"
+        ],
+        "title": "UnitSize",
+        "description": "Allowed model count for a unit."
+      },
+      "UnitStrength": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "$ref": "#/components/schemas/UnitStrengthMarker"
+          }
+        ]
+      },
+      "UnitStrengthMarker": {
+        "type": "string",
+        "enum": [
+          "W"
+        ],
+        "title": "UnitStrengthMarker",
+        "description": "The troop-type table's non-numeric Unit Strength markers.\n\nA closed, append-only vocabulary like the rulebook's other tables: a\nmember joins when the Unit Strength column prints a new marker in place\nof a number. ``STARTING_WOUNDS`` is the table's \"W\" \u2014 the model's Unit\nStrength is its starting Wounds, not a fixed count. Each marker names a\ndistinct resolution, so the troop type must match on the member rather\nthan lump every non-numeric value together."
+      },
+      "UnitSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "points": {
+            "type": "integer",
+            "title": "Points"
+          },
+          "unit_size": {
+            "$ref": "#/components/schemas/UnitSize"
+          },
+          "troop_type": {
+            "$ref": "#/components/schemas/TroopType"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "points",
+          "unit_size",
+          "troop_type"
+        ],
+        "title": "UnitSummary",
+        "description": "A datasheet as a listing shows it: what it costs and how it is fielded."
+      },
+      "UnmodelledRule": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "units": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Units"
+          },
+          "weapons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Weapons"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "units",
+          "weapons"
+        ],
+        "title": "UnmodelledRule",
+        "description": "A rule the corpus prints that has no entry, so the engine cannot apply it.\n\nKeyed by printed ``name``: that is how a datasheet references a rule, and\nwith no entry it is the only handle the rule has. ``units`` and ``weapons``\nname who prints it, which is what makes the report actionable -- a rule\nnothing carries is not worth modelling yet.\n\nAn entry that carried no effects would be unapplied too, but no such entry\nis allowed in ``data/`` (``test_every_rule_entry_carries_effects``): a rule\nthat cannot fold is filed by not filing it. So a missing entry is the only\nway a printed rule goes unmodelled, and this needs no reason field."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "VolleyEffect": {
+        "properties": {
+          "when": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/When"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "volley": {
+            "type": "string",
+            "const": "half-of-each-rear-rank",
+            "title": "Volley"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "volley"
+        ],
+        "title": "VolleyEffect",
+        "description": "Volley Fire's printed mechanic: rear ranks join the volley by halves.\n\n\"Half of the models in each rank other than the front rank, rounding\nup, can shoot\" \u2014 a shot-count rule, landing on how many models fire,\nnever on the dice. The one printed fraction is the closed vocabulary;\na variant joins when a rule prints one. Gated as the page gates it\n(no move this turn, never on a Stand & Shoot); the hill variant is\nterrain and stays in the entry's notes. Self-naming by ``volley``."
+      },
+      "WeaponGate": {
+        "properties": {
+          "type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WeaponType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "WeaponGate",
+        "description": "A gate on the weapon a model has in hand \u2014 by family or by name.\n\nThe typed home for \"wielding a bow\" / \"wielding this weapon\": ``type`` names a\nweapon family (:class:`~avelorn.tow.schema.weapon.WeaponType`, the seam #107\nadded), ``name`` a specific printed name. Arrows of Isha asks\n``{type: bow}``; Parry's \"a hand weapon\" asks ``{name: Hand Weapon}``. Both\nmay be set (a specific weapon of a family). At least one must be, or the gate\nconstrains nothing (``extra=forbid`` keeps a stray property a load error)."
+      },
+      "WeaponType": {
+        "type": "string",
+        "enum": [
+          "bow"
+        ],
+        "title": "WeaponType",
+        "description": "A weapon's family in the Weapons of War chapter \u2014 a closed, append-only set.\n\nThe rulebook groups weapons into families a rule can speak to as one (\"any\nbow\" \u2014 a longbow, shortbow, warbow or the Bow of Avelorn). The source does\nnot carry the family as a field, and the individual weapon entries do not\nname it, so it is hand-authored here. A member joins, and a weapon is\nclassified, only when a rule needs to gate on the family \u2014 the same\njust-in-time discipline the rest of the vocabulary follows. Values are slugs,\nmatching the id convention of rules and weapons, so a future rule specific to\na weapon family can key on the family as it keys on a slug."
+      },
+      "When": {
+        "properties": {
+          "combat": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "$ref": "#/components/schemas/CombatGate"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Combat"
+          },
+          "movement": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MovementGate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "shooting": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShootingGate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "wielding": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WeaponGate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "worn": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ArmourGate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "target_of": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "$ref": "#/components/schemas/AttackGate"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Of"
+          },
+          "foe": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FoeGate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "natural": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NaturalRoll"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "When",
+        "description": "An effect's gate: the facts that must hold for it to apply.\n\nA typed tree, one field per subject \u2014 the combat the model is engaged in,\nits movement, the volley it fires, the attack it is the target of \u2014 each\ncarrying that subject's own facts, plus the ``natural`` dice event. A rule\nreads as ``subject -> property (-> comparator)``:\n``{combat: {first_round: true}}``, ``{target_of: {kind: shooting}}``.\n\n``combat`` and ``target_of`` are presence entities: ``combat: true`` gates\non being engaged in a close combat (Parry's \"whilst engaged in close\ncombat\"), a nested gate on being engaged *and* a property (Elven Reflexes's\nfirst round); ``target_of`` names the incoming attack. ``wielding`` and\n``worn`` are the equipment-in-use axis \u2014 the weapon a model is acting with\n(Arrows of Isha's \"any bow\", matched by family or name) and the armour it\nwears (Parry's shield, matched among every piece worn) \u2014 read off the\nengagement context by the dice walk and the folds alike, so a rule gates on\nits gear exactly as it gates on the engagement. A subject or property outside\nthese models is a data error at load (``extra=forbid``) \u2014 the closed\nvocabulary the flat Condition enum gave, now structural. Every set fact is\nconjoined; without a ``when`` the modifier applies to every attack."
+      },
+      "WoundMultiplierEffect": {
+        "properties": {
+          "when": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/When"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "multiplies": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "$ref": "#/components/schemas/DiceQuantity"
+              },
+              {
+                "type": "string",
+                "const": "X"
+              }
+            ],
+            "title": "Multiplies"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "multiplies"
+        ],
+        "title": "WoundMultiplierEffect",
+        "description": "The rulebook's Multiple Wounds shape: each unsaved wound is multiplied.\n\n\"Each unsaved wound inflicted by an attack with this special rule is\nmultiplied by the number shown in brackets\" \u2014 ``multiplies`` is that\nnumber: a printed constant, a :class:`DiceQuantity` (\"D3\", rolled\nseparately for each unsaved wound, so a distribution and never an\nexpectation), or the rule's \"X\" parameter, bound from the bracketed\nvalue exactly as an automatic-hits count is. The printed cap \u2014 \"excess wounds caused to a\nmodel will have no additional effect\", and they \"do not 'spill over'\nonto other models\" \u2014 is not authored here: it is the Remove Casualties\nfold's own knowledge, where a wound lands on a model with so many\nWounds remaining. Self-naming by ``multiplies``; each model forbids\nthe others' keys."
+      }
+    }
+  }
+}
