@@ -662,6 +662,23 @@ def test_fight_massed_infantry_needs_a_strictly_higher_unit_strength() -> None:
     assert not any("Massed Infantry" in note for note in result.notes)  # honoured, still claimed
 
 
+# --- the arc a charge struck: the combat-result points it claims ---
+
+
+def test_fight_scores_the_arc_only_for_the_side_that_charged_it() -> None:
+    """The charger claims its arc's points; the side it struck claims none.
+
+    A flank charge is +1 to the charger. Its target charged nothing, so it
+    scores no arc of its own, whichever arc it was hit in.
+    """
+    spearmen = REPO.units["elven-spearmen"]
+    charger = (
+        _fielded(spearmen, 5).wielding("Thrusting Spear").charging(Charge(6, ChargeArc.FLANK))
+    )
+    result = fight(charger, _fielded(spearmen, 5).wielding("Thrusting Spear"))
+    assert (result.a_combat_result_bonus, result.b_combat_result_bonus) == (1, 0)
+
+
 # --- rule-granted Initiative modifiers, consumed through the loadout ---
 
 

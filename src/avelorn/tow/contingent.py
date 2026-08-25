@@ -96,8 +96,8 @@ class ChargeArc(StrEnum):
 
     The rulebook caps the charge Initiative bonus per arc (front vs flank
     or rear), but flank and rear diverge elsewhere — the combat-result
-    bonuses each grants differ (#28) — so all three are distinguished
-    here, and each arc carries its own printed numbers.
+    bonuses each grants differ — so all three are distinguished here, and
+    each arc carries its own printed numbers.
     """
 
     FRONT = "front"
@@ -114,6 +114,16 @@ class ChargeArc(StrEnum):
         """
         return 3 if self is ChargeArc.FRONT else 4
 
+    @property
+    def combat_result_bonus(self) -> int:
+        """The combat-result points a side claims for striking this arc.
+
+        Returns:
+            +1 for a flank attack, +2 for a rear attack, none for a
+            frontal one (the-combat-phase/combat-result-score).
+        """
+        return {ChargeArc.FRONT: 0, ChargeArc.FLANK: 1, ChargeArc.REAR: 2}[self]
+
 
 @dataclass(frozen=True)
 class Charge:
@@ -121,10 +131,11 @@ class Charge:
 
     Both facts are read by the rules the charge feeds — the Combat-phase
     Initiative bonus computes in
-    :func:`~avelorn.tow.phases.combat.effective_initiative`, and the
-    flank/rear combat-result bonuses are a still-deferred concern (#28).
-    The arc has no default: which arc a charge struck is a fact of the
-    move, not a parameter to assume.
+    :func:`~avelorn.tow.phases.combat.effective_initiative`, and the arc
+    claims its combat-result points in
+    :func:`~avelorn.tow.phases.combat.fight`. The arc has no default:
+    which arc a charge struck is a fact of the move, not a parameter to
+    assume.
     """
 
     full_inches: int

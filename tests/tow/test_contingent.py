@@ -71,6 +71,13 @@ def test_each_arc_carries_its_initiative_cap() -> None:
     assert ChargeArc.REAR.initiative_cap == 4
 
 
+def test_each_arc_carries_its_combat_result_bonus() -> None:
+    """A flank attack scores +1, a rear attack +2, a frontal one nothing."""
+    assert ChargeArc.FRONT.combat_result_bonus == 0
+    assert ChargeArc.FLANK.combat_result_bonus == 1
+    assert ChargeArc.REAR.combat_result_bonus == 2
+
+
 def test_charge_rejects_a_negative_distance() -> None:
     """A negative charge distance is a programming error, not a zero bonus."""
     with pytest.raises(ValueError, match="negative distance"):

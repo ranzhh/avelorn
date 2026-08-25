@@ -902,8 +902,9 @@ class FightResult:
     :func:`combat_result` adds to that side's score. ``a_unit_strength`` and
     ``b_unit_strength`` are the Unit Strengths the round compared (reported,
     and the basis of an outnumbering bonus). ``a_combat_result_bonus`` and
-    ``b_combat_result_bonus`` are the rule-granted combat-result points each
-    side accrued (Massed Infantry's +1, and later others) — a signed total
+    ``b_combat_result_bonus`` are the combat-result points each side accrued
+    beyond its Rank Bonus — the rules it carries (Massed Infantry's +1) plus
+    the arc its charge struck (+1 a flank, +2 a rear) — a signed total
     :func:`combat_result` adds to the score alongside the Rank Bonus.
     """
 
@@ -1254,7 +1255,8 @@ def fight(
 
     Each side's own charge (``a.movement.charge`` / ``b.movement.charge``)
     adds its Initiative bonus before the comparison (the-combat-phase/charging-units),
-    the modified Initiative capped at 10. ``first_round`` — whether this is
+    the modified Initiative capped at 10, and claims the combat-result points
+    of the arc it struck (:func:`_arc_bonus`). ``first_round`` — whether this is
     the combat's first round — is the round's own relational fact, not
     either unit's, so it is a parameter here. The two sides are otherwise
     symmetric; only Initiative orders them. Resolution happens in strike
@@ -1536,10 +1538,27 @@ def fight(
         b_rank_bonus=b.rank_bonus,
         a_unit_strength=a.unit_strength(),
         b_unit_strength=b.unit_strength(),
-        a_combat_result_bonus=a_combat_result.value,
-        b_combat_result_bonus=b_combat_result.value,
+        a_combat_result_bonus=a_combat_result.value + _arc_bonus(a),
+        b_combat_result_bonus=b_combat_result.value + _arc_bonus(b),
         wound_margin=wound_margin,
     )
+
+
+def _arc_bonus(side: Contingent) -> int:
+    """The combat-result points a side claims for the arc its charge struck.
+
+    A charge into the flank or rear scores (:attr:`ChargeArc.combat_result_bonus`).
+    The engine learns an arc only from a :class:`~avelorn.tow.contingent.Charge`,
+    so the points are claimed in the round that charge formed; a unit still
+    fighting in its foe's flank a round later has no charge to read them off
+    and scores none. Holding the arc between rounds needs the engagement to
+    carry a facing of its own (#28).
+
+    Returns:
+        The arc's points, 0 for a side that did not charge.
+    """
+    charge = side.movement.charge
+    return 0 if charge is None else charge.arc.combat_result_bonus
 
 
 def _pooled_damage(

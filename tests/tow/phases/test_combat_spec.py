@@ -609,8 +609,6 @@ KNOWN_GAPS = frozenset(
         "a-stepped-forward-model-cannot-attack",
         "wounds-carry-across-initiative-steps",
         "a-wiped-out-side-loses-the-round",
-        "a-flank-attack-scores",
-        "a-rear-attack-scores",
         # One root cause: `effective_attacks` and `effective_fighting_ranks`
         # read against Contingent._charge_context(), which carries movement and
         # equipment but no `combat` entity, so a rule gated on the engagement
