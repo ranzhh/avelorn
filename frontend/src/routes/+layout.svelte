@@ -1,11 +1,13 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
+
 	import '../app.css';
 
 	let { children } = $props();
 </script>
 
 <header>
-	<a href="/">Avelorn</a>
+	<a href={resolve('/')}>Avelorn</a>
 	<span>unit browser</span>
 </header>
 

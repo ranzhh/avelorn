@@ -7,9 +7,12 @@ close combat, a break test, a question folded across two turns. Each is a
 capability, and a request body per resolver signature is not a way to ask for
 one; the vocabulary for posing them comes first (see the README's roadmap).
 
-A datasheet is already a validated Pydantic model, so serving one is a matter
-of routing to it rather than describing it a second time in a shape that could
-drift from the data.
+A datasheet is already a validated Pydantic model, so serving one is mostly a
+matter of routing to it rather than describing it a second time in a shape that
+could drift from the data. The one projection is
+:class:`~avelorn.tow.views.UnitDetail`, which resolves the rule names a datasheet
+prints to the entries they address, so a caller links to a rule instead of
+deriving a slug from a printed name.
 """
 
 from importlib.metadata import version
@@ -19,9 +22,9 @@ from fastapi import Depends, FastAPI, HTTPException
 
 from avelorn.tow.data import TOWRepository, default_repository
 from avelorn.tow.schema.rule import Rule
-from avelorn.tow.schema.unit import Unit
 from avelorn.tow.views import (
     RuleSummary,
+    UnitDetail,
     UnitSummary,
     UnmodelledRule,
     rule_summaries,
@@ -62,11 +65,12 @@ def list_units(data: Corpus) -> list[UnitSummary]:
 
 
 @app.get("/units/{slug}", summary="Read one datasheet")
-def read_unit(slug: str, data: Corpus) -> Unit:
+def read_unit(slug: str, data: Corpus) -> UnitDetail:
     """Read a datasheet in full: its profiles, equipment, rules, and options.
 
     Returns:
-        The datasheet, its troop-type profile resolved.
+        The datasheet, its troop-type profile resolved and each printed rule
+        name carrying the entry it resolves to.
 
     Raises:
         HTTPException: 404, when no datasheet carries the slug.
@@ -74,7 +78,7 @@ def read_unit(slug: str, data: Corpus) -> Unit:
     unit = data.units.get(slug)
     if unit is None:
         raise HTTPException(status_code=404, detail=f"no unit {slug!r}")
-    return unit
+    return UnitDetail.of(unit, data.rules)
 
 
 @app.get("/rules", summary="List every rule entry in the corpus")

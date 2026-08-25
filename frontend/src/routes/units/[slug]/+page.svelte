@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
+
 	let { data } = $props();
 
 	// Printed order, not the order a profile happens to be written in.
@@ -47,7 +49,14 @@
 	<h2>Special rules</h2>
 	<ul>
 		{#each unit.special_rules as rule}
-			<li>{rule}</li>
+			<li>
+				{#if rule.slug}
+					<a href={resolve('/rules/[slug]', { slug: rule.slug })}>{rule.name}</a>
+				{:else}
+					<span class="unmodelled">{rule.name}</span>
+					<span class="meta">not modelled</span>
+				{/if}
+			</li>
 		{/each}
 	</ul>
 {/if}
@@ -60,7 +69,8 @@
 				{option.name}
 				<span class="meta">
 					{#if option.points_budget}up to {option.points_budget} pts
-					{:else if option.points}{option.points} pts{#if option.per_model} per model{/if}
+					{:else if option.points}{option.points} pts{#if option.per_model}
+							per model{/if}
 					{/if}
 				</span>
 			</li>
@@ -81,5 +91,10 @@
 	.meta {
 		color: var(--muted);
 		font-size: 0.85rem;
+	}
+
+	.unmodelled {
+		color: var(--muted);
+		text-decoration: underline dotted var(--rule);
 	}
 </style>

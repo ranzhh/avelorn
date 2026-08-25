@@ -32,7 +32,7 @@
     "/units/{slug}": {
       "get": {
         "summary": "Read one datasheet",
-        "description": "Read a datasheet in full: its profiles, equipment, rules, and options.\n\nReturns:\n    The datasheet, its troop-type profile resolved.\n\nRaises:\n    HTTPException: 404, when no datasheet carries the slug.",
+        "description": "Read a datasheet in full: its profiles, equipment, rules, and options.\n\nReturns:\n    The datasheet, its troop-type profile resolved and each printed rule\n    name carrying the entry it resolves to.\n\nRaises:\n    HTTPException: 404, when no datasheet carries the slug.",
         "operationId": "read_unit_units__slug__get",
         "parameters": [
           {
@@ -51,7 +51,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Unit"
+                  "$ref": "#/components/schemas/UnitDetail"
                 }
               }
             }
@@ -854,6 +854,33 @@
         "title": "PanicCause",
         "description": "Why a panic test was forced, named as the sections are printed."
       },
+      "PrintedRule": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "slug"
+        ],
+        "title": "PrintedRule",
+        "description": "A rule name as a datasheet prints it, and the entry it resolves to.\n\n``slug`` addresses the entry, so a caller can link to it without knowing\nhow a printed name finds its file -- an exact match, or the \"(X)\" template\na parameterised name comes from (\"Impact Hits (D3)\" is filed under\n``impact-hits``). ``None`` says the corpus prints this name and nothing\nmodels it: the fact :func:`unmodelled_rules` reports over the whole corpus,\nsaid here on the datasheet that prints it."
+      },
       "Profile": {
         "properties": {
           "name": {
@@ -1276,7 +1303,7 @@
         "title": "TroopTypeProfile",
         "description": "A troop type's rank-and-file data, and how it ranks up.\n\n``models_per_rank`` is how many models a rank must hold to count\ntoward the Rank Bonus, or None for a troop type that does not rank up\n(Swarm, Heavy Chariot, the monsters and war machines that fight as\nsingle models); ``max_rank_bonus`` is the most extra ranks it may\nclaim. ``unit_strength`` is each model's Unit Strength as the\ntroop-type table prints it \u2014 a fixed count, or \"As Starting Wounds\"\nfor the troop types whose strength scales with the model.\n``special_rules`` are the rules the troop type confers on every\nunit of it (Regular Infantry's Press of Battle, say), as printed\ndisplay-name strings \u2014 the type's own rules, held apart from the\ndatasheet's ``special_rules`` because their owner is the troop type,\nnot the unit."
       },
-      "Unit": {
+      "UnitDetail": {
         "properties": {
           "id": {
             "type": "string",
@@ -1334,7 +1361,7 @@
           },
           "special_rules": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/PrintedRule"
             },
             "type": "array",
             "title": "Special Rules"
@@ -1355,10 +1382,11 @@
           "points",
           "unit_size",
           "troop_type",
-          "profiles"
+          "profiles",
+          "special_rules"
         ],
-        "title": "Unit",
-        "description": "A unit entry as printed in an army's list."
+        "title": "UnitDetail",
+        "description": "A datasheet as reading one shows it: the entry, its rule names resolved.\n\nEverything :class:`~avelorn.tow.schema.unit.Unit` prints, except that a\nspecial rule arrives as a :class:`PrintedRule` rather than a bare string.\nResolving on the way out is what keeps a caller from re-deriving it: a\nprinted name does not become a slug by slugifying it."
       },
       "UnitOption": {
         "properties": {

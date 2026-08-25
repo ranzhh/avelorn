@@ -10,7 +10,10 @@ body {
 	margin: 0;
 	background: var(--paper);
 	color: var(--ink);
-	font: 16px/1.5 ui-serif, Georgia, serif;
+	font:
+		16px/1.5 ui-serif,
+		Georgia,
+		serif;
 }
 
 header {

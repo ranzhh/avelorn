@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
+
 	let { data } = $props();
 
 	let query = $state('');
@@ -30,7 +32,7 @@
 	<tbody>
 		{#each matches as unit (unit.id)}
 			<tr>
-				<td><a href="/units/{unit.id}">{unit.name}</a></td>
+				<td><a href={resolve('/units/[slug]', { slug: unit.id })}>{unit.name}</a></td>
 				<td>{unit.troop_type}</td>
 				<td>{size(unit)}</td>
 				<td>{unit.points}</td>

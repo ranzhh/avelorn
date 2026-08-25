@@ -42,3 +42,15 @@ repos:
         language: system
         types: [python]
         pass_filenames: false
+
+  # prettier and eslint run from frontend/node_modules, so the versions come
+  # from package-lock.json — the same one source of truth CI installs from.
+  # Needs `npm ci` in frontend/ first, as the hooks above need `uv sync`.
+  - repo: local
+    hooks:
+      - id: frontend-lint
+        name: prettier and eslint
+        entry: make frontend-lint
+        language: system
+        files: ^frontend/
+        pass_filenames: false

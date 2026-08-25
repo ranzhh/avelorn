@@ -23,6 +23,45 @@ jobs:
           path: ~/.cache/pre-commit
           key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
 
+      # The frontend hook needs node_modules, which this job has no reason to
+      # install: the frontend job runs the same prettier and eslint.
       - run: make lint
+        env:
+          SKIP: frontend-lint
 
       - run: make test
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+        working-directory: frontend
+
+      - run: make frontend-lint
+
+      - run: make frontend-check
+
+  types:
+    # The committed OpenAPI document is the API's contract, and the frontend's
+    # types are generated from it. Drift here means the frontend is typed
+    # against a datasheet shape the API stopped serving, which nothing else in
+    # CI would notice.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - run: uv sync --locked --extra api
+
+      - run: make types-check
