@@ -23,7 +23,7 @@
 		</tr>
 	</thead>
 	<tbody>
-		{#each unit.profiles as profile (profile.name)}
+		{#each unit.profiles as profile}
 			<tr>
 				<td>{profile.name}</td>
 				{#each CHARACTERISTICS as key (key)}
@@ -37,7 +37,7 @@
 {#if unit.equipment?.length}
 	<h2>Equipment</h2>
 	<ul>
-		{#each unit.equipment as item (item)}
+		{#each unit.equipment as item}
 			<li>{item}</li>
 		{/each}
 	</ul>
@@ -46,7 +46,7 @@
 {#if unit.special_rules?.length}
 	<h2>Special rules</h2>
 	<ul>
-		{#each unit.special_rules as rule (rule)}
+		{#each unit.special_rules as rule}
 			<li>{rule}</li>
 		{/each}
 	</ul>
@@ -55,7 +55,7 @@
 {#if unit.options?.length}
 	<h2>Options</h2>
 	<ul>
-		{#each unit.options as option (option.name)}
+		{#each unit.options as option}
 			<li>
 				{option.name}
 				<span class="meta">
