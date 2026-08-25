@@ -1,5 +1,4 @@
-# Machine-written, never edited by hand: npm resolves the lockfile, and
-# `make types` regenerates the schema from the API's OpenAPI document.
-# Marking them collapses them in review rather than drowning the diff.
+# npm resolves this; nobody reads it. openapi.json is generated too but is
+# deliberately not marked: it is the API contract, and seeing it change is
+# the reason it is committed.
 frontend/package-lock.json linguist-generated=true
-frontend/src/lib/api/schema.d.ts linguist-generated=true

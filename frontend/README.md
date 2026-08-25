@@ -3,10 +3,12 @@
 A SvelteKit front end over the `avelorn` HTTP API: the datasheet list, and one
 datasheet in full.
 
-Its TypeScript types are generated from the API's OpenAPI document, which
-FastAPI derives from the Pydantic schema the YAML validates against. A field
-added to a datasheet becomes a type error here after `make types`, so no part
-of a unit's shape is written down twice.
+`openapi.json` is committed: it is the API's contract, derived by FastAPI from
+the Pydantic schema the YAML validates against, and a change to a datasheet
+shows up there as a diff you can read. The TypeScript is generated from it by
+`npm run types`, which every other script runs first, so a fresh clone needs
+npm and nothing else. `make types` rewrites the document itself, and is what
+you run after changing a model.
 
 Run the API and the front end in two shells:
 
