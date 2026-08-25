@@ -23,7 +23,11 @@ jobs:
           path: ~/.cache/pre-commit
           key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
 
+      # The frontend hook needs node_modules, which this job has no reason to
+      # install: the frontend job runs the same prettier and eslint.
       - run: make lint
+        env:
+          SKIP: frontend-lint
 
       - run: make test
 
