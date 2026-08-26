@@ -11,6 +11,7 @@ from avelorn.tow.data import TOWRepository
 from avelorn.tow.engine.rules import CombatFacts, GateContext
 from avelorn.tow.phases.combat import (
     CombatPhase,
+    CombatPoints,
     FightResult,
     combat_result,
     effective_initiative,
@@ -559,7 +560,7 @@ def test_combat_result_adds_the_rank_bonus_to_the_score() -> None:
     losses = [[0.25, 0.25], [0.25, 0.25]]  # symmetric: each side loses 0 or 1
     plain = combat_result(FightResult(losses=losses, first_striker=None))
     ranked = combat_result(
-        FightResult(losses=losses, first_striker=None, a_rank_bonus=2, b_rank_bonus=0)
+        FightResult(losses=losses, first_striker=None, a_points=CombatPoints(rank_bonus=2))
     )
     assert plain.p_a_wins == pytest.approx(plain.p_b_wins)
     assert {lead + 2: mass for lead, mass in plain.margin.items()} == ranked.margin
@@ -576,7 +577,7 @@ def test_combat_result_simultaneous_is_symmetric() -> None:
     assert cr.p_draw == pytest.approx(26 / 36)
 
 
-def test_combat_result_adds_the_combat_result_bonus_to_the_score() -> None:
+def test_combat_result_adds_a_rule_granted_point_to_the_score() -> None:
     """A rule-granted combat-result point shifts every lead, like the Rank Bonus.
 
     Giving A +1 combat-result point and B +0 shifts every margin up by one —
@@ -585,11 +586,30 @@ def test_combat_result_adds_the_combat_result_bonus_to_the_score() -> None:
     losses = [[0.25, 0.25], [0.25, 0.25]]  # symmetric: each side loses 0 or 1
     plain = combat_result(FightResult(losses=losses, first_striker=None))
     bonused = combat_result(
-        FightResult(
-            losses=losses, first_striker=None, a_combat_result_bonus=1, b_combat_result_bonus=0
-        )
+        FightResult(losses=losses, first_striker=None, a_points=CombatPoints(rules=1))
     )
     assert {lead + 1: mass for lead, mass in plain.margin.items()} == bonused.margin
+
+
+def test_combat_result_scores_every_row_of_a_side_s_points() -> None:
+    """Each row counts once: the score shifts by the rows summed, not by one of them.
+
+    A side holding a Rank Bonus, a rear attack and a rule's point is +5 up on
+    a side holding none, so every lead shifts by five.
+    """
+    losses = [[0.25, 0.25], [0.25, 0.25]]  # symmetric: each side loses 0 or 1
+    points = CombatPoints(rank_bonus=2, arc=2, rules=1)
+    assert points.total == 5
+    plain = combat_result(FightResult(losses=losses, first_striker=None))
+    scored = combat_result(FightResult(losses=losses, first_striker=None, a_points=points))
+    assert {lead + 5: mass for lead, mass in plain.margin.items()} == scored.margin
+
+
+def test_combat_result_does_not_report_the_arc_unmodelled() -> None:
+    """The arc is scored, so it is absent from the unmodelled rows it used to name."""
+    notes = combat_result(FightResult(losses=[[1.0]], first_striker=None)).notes
+    assert not any("flank" in note or "rear" in note for note in notes)
+    assert any("overkill" in note for note in notes)
 
 
 def test_stand_and_shoot_wounds_score_for_the_shooting_side() -> None:
@@ -648,8 +668,8 @@ def test_fight_massed_infantry_bonuses_the_side_with_higher_unit_strength() -> N
     small = _fielded(spearmen, 5).wielding("Thrusting Spear")
     result = fight(big, small)
     assert (result.a_unit_strength, result.b_unit_strength) == (10, 5)
-    assert result.a_combat_result_bonus == 1
-    assert result.b_combat_result_bonus == 0
+    assert result.a_points.rules == 1
+    assert result.b_points.rules == 0
     assert not any("Massed Infantry" in note for note in result.notes)
 
 
@@ -658,7 +678,7 @@ def test_fight_massed_infantry_needs_a_strictly_higher_unit_strength() -> None:
     spearmen = REPO.units["elven-spearmen"]
     side = _fielded(spearmen, 5).wielding("Thrusting Spear")
     result = fight(side, _fielded(spearmen, 5).wielding("Thrusting Spear"))
-    assert (result.a_combat_result_bonus, result.b_combat_result_bonus) == (0, 0)
+    assert (result.a_points.rules, result.b_points.rules) == (0, 0)
     assert not any("Massed Infantry" in note for note in result.notes)  # honoured, still claimed
 
 
@@ -676,7 +696,7 @@ def test_fight_scores_the_arc_only_for_the_side_that_charged_it() -> None:
         _fielded(spearmen, 5).wielding("Thrusting Spear").charging(Charge(6, ChargeArc.FLANK))
     )
     result = fight(charger, _fielded(spearmen, 5).wielding("Thrusting Spear"))
-    assert (result.a_combat_result_bonus, result.b_combat_result_bonus) == (1, 0)
+    assert (result.a_points.arc, result.b_points.arc) == (1, 0)
 
 
 # --- rule-granted Initiative modifiers, consumed through the loadout ---
