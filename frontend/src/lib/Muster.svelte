@@ -13,6 +13,10 @@
 		refusal?: string;
 		onsubmit: (size: number, options: string[]) => void;
 		oncancel?: () => void;
+		// A second destination for the same draft: the browser both deploys a
+		// block on the table and adds it to the list.
+		alsoLabel?: string;
+		onalso?: (size: number, options: string[]) => void;
 	}
 
 	let {
@@ -22,7 +26,9 @@
 		submitLabel,
 		refusal = '',
 		onsubmit,
-		oncancel
+		oncancel,
+		alsoLabel,
+		onalso
 	}: Props = $props();
 
 	// Seeded from the block once, then owned here: this is a draft, and the
@@ -74,6 +80,9 @@
 
 	<div class="actions">
 		<button onclick={() => onsubmit(size, chosen)}>{submitLabel}</button>
+		{#if alsoLabel && onalso}
+			<button onclick={() => onalso(size, chosen)}>{alsoLabel}</button>
+		{/if}
 		{#if oncancel}
 			<button class="link" onclick={oncancel}>cancel</button>
 		{/if}
