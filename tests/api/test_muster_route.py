@@ -49,6 +49,13 @@ def test_a_block_carries_the_loadout_its_options_fold_in(client: TestClient) -> 
     assert "Cavalry Spear" not in body["equipment"]
 
 
+def test_a_block_says_what_it_can_fight_with(client: TestClient) -> None:
+    """The weapons a block could wield, narrowed out of everything it carries."""
+    body = client.post("/muster", json={"unit": "white-lions-of-chrace", "size": 20}).json()
+    assert body["weapons"] == ["Hand Weapon", "Chracian Great Blade"]
+    assert "Heavy Armour" in body["equipment"] and "Heavy Armour" not in body["weapons"]
+
+
 def test_a_block_resolves_its_rules_the_way_a_datasheet_does(client: TestClient) -> None:
     """A block's rules address their entries, so a caller links them the same way."""
     body = client.post("/muster", json={"unit": "elven-spearmen", "size": 5}).json()

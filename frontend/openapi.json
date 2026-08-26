@@ -108,6 +108,45 @@
         }
       }
     },
+    "/fight": {
+      "post": {
+        "summary": "Resolve one round of close combat between two units",
+        "description": "Deploy two units, fight one round, and score it.\n\nOne round: both sides strike in Initiative order, the Wounds tally into a\ncombat result, and the loser takes its Break test. What a round does not\ncover is the rest of the engagement \u2014 a pursuit, a second round, and the\nStand & Shoot a charge would be met with, which needs the Movement phase's\ncharge sequence rather than a charge recorded on the charger.\n\nReturns:\n    The round resolved: each side's casualty distribution and Break-test\n    outcomes, who won, and every rule the engine held without applying.\n\nRaises:\n    HTTPException: 404, when no datasheet carries a slug; 422, when a\n        datasheet forbids the size or options asked for, or does not carry\n        the weapon named.",
+        "operationId": "fight_fight_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Fight"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FightReport"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/rules": {
       "get": {
         "summary": "List every rule entry in the corpus",
@@ -472,6 +511,16 @@
         "title": "Characteristic",
         "description": "The profile characteristics; values are the printed abbreviations.\n\nThe single declaration of the vocabulary: profile rows are keyed by\nit, tests match on it, and rule effects will name it."
       },
+      "ChargeArc": {
+        "type": "string",
+        "enum": [
+          "front",
+          "flank",
+          "rear"
+        ],
+        "title": "ChargeArc",
+        "description": "Which arc a charge struck.\n\nThe rulebook caps the charge Initiative bonus per arc (front vs flank\nor rear), but flank and rear diverge elsewhere \u2014 the combat-result\nbonuses each grants differ \u2014 so all three are distinguished here, and\neach arc carries its own printed numbers."
+      },
       "ChargeGate": {
         "properties": {
           "distance": {
@@ -489,6 +538,35 @@
         "type": "object",
         "title": "ChargeGate",
         "description": "A gate on the charge event \u2014 the model's own charge this turn.\n\nThe typed home for \"a turn in which it charged\", carrying the charge's\nproperties so a rule can constrain them: Furious Charge asks\n``{distance: {at_least: 3}}``. A property name outside this model is a\ndata error at load (``extra=forbid``), the same closed-vocabulary\ndiscipline the flat conditions have \u2014 load-time path validation falls out\nof the typed model. New properties (the arc, the number of enemy models\ncharged) join here as rules need them."
+      },
+      "ChargedBy": {
+        "properties": {
+          "side": {
+            "type": "string",
+            "enum": [
+              "a",
+              "b"
+            ],
+            "title": "Side"
+          },
+          "full_inches": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Full Inches"
+          },
+          "arc": {
+            "$ref": "#/components/schemas/ChargeArc",
+            "default": "front"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "side",
+          "full_inches"
+        ],
+        "title": "ChargedBy",
+        "description": "A charge into the round: who made it, how far it carried, which arc it struck."
       },
       "ChoiceEffect": {
         "properties": {
@@ -608,6 +686,57 @@
         "title": "Decision",
         "description": "A point where an outcome is rolled or chosen, that a rule may force.\n\nThe routing key of a :class:`ChoiceEffect` \u2014 the peer of :class:`Quantity`\nfor a modifier: the seam that owns a decision reads the effects forcing it.\nClosed and append-only; a member joins when a rule forces a new decision (a\ncharge reaction, ...)."
       },
+      "Deployment": {
+        "properties": {
+          "unit": {
+            "type": "string",
+            "title": "Unit"
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Size"
+          },
+          "options": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Options"
+          },
+          "weapon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weapon"
+          },
+          "frontage": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frontage"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "unit",
+          "size"
+        ],
+        "title": "Deployment",
+        "description": "One side put on the table: a datasheet, sized and equipped, weapon in hand."
+      },
       "DiceQuantity": {
         "properties": {
           "sides": {
@@ -632,6 +761,168 @@
         ],
         "title": "DiceQuantity",
         "description": "A printed quantity decided by a dice roll: \"D6\", \"D3\", \"D3+1\".\n\nThe dice form of a rule's bracketed parameter \u2014 \"Often, this is\ndetermined by the roll of a dice\" (Stomp Attacks, Impact Hits). One\ndie plus a flat addend covers every printed instance; a wider form\n(2D6, say) joins when a rule prints one."
+      },
+      "Fight": {
+        "properties": {
+          "a": {
+            "$ref": "#/components/schemas/Deployment"
+          },
+          "b": {
+            "$ref": "#/components/schemas/Deployment"
+          },
+          "charge": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChargedBy"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "a",
+          "b"
+        ],
+        "title": "Fight",
+        "description": "Two sides meeting in close combat, and the charge that brought them together."
+      },
+      "FightReport": {
+        "properties": {
+          "a": {
+            "$ref": "#/components/schemas/FightSide"
+          },
+          "b": {
+            "$ref": "#/components/schemas/FightSide"
+          },
+          "p_a_wins": {
+            "type": "number",
+            "title": "P A Wins"
+          },
+          "p_draw": {
+            "type": "number",
+            "title": "P Draw"
+          },
+          "p_b_wins": {
+            "type": "number",
+            "title": "P B Wins"
+          },
+          "first_striker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Striker"
+          },
+          "margin": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Margin"
+          },
+          "not_modelled": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Not Modelled"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "a",
+          "b",
+          "p_a_wins",
+          "p_draw",
+          "p_b_wins",
+          "first_striker",
+          "margin",
+          "not_modelled"
+        ],
+        "title": "FightReport",
+        "description": "One round of close combat, resolved exactly.\n\nThe engine works in rationals; these are floats, because JSON has no\nother number and a caller plotting a distribution wants one. The exact\nvalues stay reachable from Python.\n\n``first_striker`` names the side Initiative put first, or is ``None`` when\nequal Initiative made the blows simultaneous -- a Great Weapon's Strike\nLast is why a higher-Initiative unit can still swing second.\n``not_modelled`` is every note the round produced, gathered from the\nmelee, the scoring and the Break test: what the engine held and did not\napply, so a figure is never quietly wrong."
+      },
+      "FightSide": {
+        "properties": {
+          "unit": {
+            "type": "string",
+            "title": "Unit"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size"
+          },
+          "weapon": {
+            "type": "string",
+            "title": "Weapon"
+          },
+          "initiative": {
+            "type": "integer",
+            "title": "Initiative"
+          },
+          "rank_bonus": {
+            "type": "integer",
+            "title": "Rank Bonus"
+          },
+          "unit_strength": {
+            "type": "integer",
+            "title": "Unit Strength"
+          },
+          "casualties": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Casualties"
+          },
+          "expected_casualties": {
+            "type": "number",
+            "title": "Expected Casualties"
+          },
+          "gives_ground": {
+            "type": "number",
+            "title": "Gives Ground"
+          },
+          "falls_back": {
+            "type": "number",
+            "title": "Falls Back"
+          },
+          "breaks": {
+            "type": "number",
+            "title": "Breaks"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "unit",
+          "name",
+          "size",
+          "weapon",
+          "initiative",
+          "rank_bonus",
+          "unit_strength",
+          "casualties",
+          "expected_casualties",
+          "gives_ground",
+          "falls_back",
+          "breaks"
+        ],
+        "title": "FightSide",
+        "description": "One side of a resolved round: what it fielded, what it lost, whether it held.\n\n``casualties`` is the marginal distribution of models this side loses in\nthe melee -- index ``k`` is the probability it loses exactly ``k`` -- and\n``expected_casualties`` its mean, which is the number an averaging\nsimulator would report and the one the distribution exists to replace.\nThe three Break-test figures are conditional on nothing: each is the\nprobability of that outcome *over the whole round*, so they sum to this\nside's chance of losing, and a side that mostly wins shows three small\nnumbers."
       },
       "FoeGate": {
         "properties": {
@@ -907,6 +1198,13 @@
             "type": "array",
             "title": "Equipment"
           },
+          "weapons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Weapons"
+          },
           "special_rules": {
             "items": {
               "$ref": "#/components/schemas/PrintedRule"
@@ -924,10 +1222,11 @@
           "options",
           "points",
           "equipment",
+          "weapons",
           "special_rules"
         ],
         "title": "MusteredUnit",
-        "description": "A block of an army list: a datasheet sized and equipped, and what it costs.\n\nThe view over :class:`~avelorn.tow.muster.Complement`. It carries the\ndatasheet by slug rather than whole, because a list is read as a list --\na caller wanting the profiles follows ``unit`` to the datasheet route.\n``equipment`` and ``special_rules`` are the effective ones, the chosen\noptions' adds and removes already folded in, so a block says what the\nmodels actually carry rather than what the datasheet offered."
+        "description": "A block of an army list: a datasheet sized and equipped, and what it costs.\n\nThe view over :class:`~avelorn.tow.muster.Complement`. It carries the\ndatasheet by slug rather than whole, because a list is read as a list --\na caller wanting the profiles follows ``unit`` to the datasheet route.\n``equipment`` and ``special_rules`` are the effective ones, the chosen\noptions' adds and removes already folded in, so a block says what the\nmodels actually carry rather than what the datasheet offered. ``weapons``\nnarrows the equipment to what the block can actually fight with, which is\nwhat a caller naming a weapon has to choose from."
       },
       "NaturalRoll": {
         "properties": {

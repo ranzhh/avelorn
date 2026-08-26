@@ -26,13 +26,17 @@ than read the rule registry alone -- a rule with no entry is invisible there.
 """
 
 from collections import defaultdict
+from collections.abc import Sequence
 
 from pydantic import BaseModel, ConfigDict
 
+from avelorn.core.distribution import Probability
 from avelorn.core.registry import Registry
+from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.engine.rules import printed_rule
 from avelorn.tow.muster import Complement
+from avelorn.tow.phases.combat import BreakResult, CombatResult, FightResult, SideBreak
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.unit import TroopType, Unit, UnitSize
 
@@ -119,7 +123,9 @@ class MusteredUnit(BaseModel):
     a caller wanting the profiles follows ``unit`` to the datasheet route.
     ``equipment`` and ``special_rules`` are the effective ones, the chosen
     options' adds and removes already folded in, so a block says what the
-    models actually carry rather than what the datasheet offered.
+    models actually carry rather than what the datasheet offered. ``weapons``
+    narrows the equipment to what the block can actually fight with, which is
+    what a caller naming a weapon has to choose from.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -130,6 +136,7 @@ class MusteredUnit(BaseModel):
     options: list[str]
     points: int
     equipment: list[str]
+    weapons: list[str]
     special_rules: list[PrintedRule]
 
     @classmethod
@@ -146,8 +153,138 @@ class MusteredUnit(BaseModel):
             options=list(complement.options),
             points=complement.points,
             equipment=complement.equipment,
+            # What the block could fight with, which is the equipment that
+            # resolves to a weapon rather than to armour.
+            weapons=[weapon.name for weapon in Contingent.field(complement).loadout.weapons],
             special_rules=[PrintedRule.of(name, rules) for name in complement.special_rules],
         )
+
+
+class FightSide(BaseModel):
+    """One side of a resolved round: what it fielded, what it lost, whether it held.
+
+    ``casualties`` is the marginal distribution of models this side loses in
+    the melee -- index ``k`` is the probability it loses exactly ``k`` -- and
+    ``expected_casualties`` its mean, which is the number an averaging
+    simulator would report and the one the distribution exists to replace.
+    The three Break-test figures are conditional on nothing: each is the
+    probability of that outcome *over the whole round*, so they sum to this
+    side's chance of losing, and a side that mostly wins shows three small
+    numbers.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    unit: str
+    name: str
+    size: int
+    weapon: str
+    initiative: int
+    rank_bonus: int
+    unit_strength: int
+    casualties: list[float]
+    expected_casualties: float
+    gives_ground: float
+    falls_back: float
+    breaks: float
+
+
+class FightReport(BaseModel):
+    """One round of close combat, resolved exactly.
+
+    The engine works in rationals; these are floats, because JSON has no
+    other number and a caller plotting a distribution wants one. The exact
+    values stay reachable from Python.
+
+    ``first_striker`` names the side Initiative put first, or is ``None`` when
+    equal Initiative made the blows simultaneous -- a Great Weapon's Strike
+    Last is why a higher-Initiative unit can still swing second.
+    ``not_modelled`` is every note the round produced, gathered from the
+    melee, the scoring and the Break test: what the engine held and did not
+    apply, so a figure is never quietly wrong.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    a: FightSide
+    b: FightSide
+    p_a_wins: float
+    p_draw: float
+    p_b_wins: float
+    first_striker: str | None
+    margin: dict[int, float]
+    not_modelled: list[str]
+
+    @classmethod
+    def of(
+        cls,
+        a: Contingent,
+        b: Contingent,
+        fought: FightResult,
+        scored: CombatResult,
+        broke: BreakResult,
+    ) -> "FightReport":
+        """Gather a resolved round into one answer.
+
+        Returns:
+            The report both surfaces show.
+        """
+        first = None
+        if fought.first_striker is a:
+            first = "a"
+        elif fought.first_striker is b:
+            first = "b"
+        return cls(
+            a=_side(
+                a,
+                fought.a_casualties,
+                fought.a_initiative.value,
+                fought.a_rank_bonus,
+                fought.a_unit_strength,
+                broke.a,
+            ),
+            b=_side(
+                b,
+                fought.b_casualties,
+                fought.b_initiative.value,
+                fought.b_rank_bonus,
+                fought.b_unit_strength,
+                broke.b,
+            ),
+            p_a_wins=float(scored.p_a_wins),
+            p_draw=float(scored.p_draw),
+            p_b_wins=float(scored.p_b_wins),
+            first_striker=first,
+            margin={lead: float(mass) for lead, mass in sorted(scored.margin.items())},
+            not_modelled=sorted({*fought.notes, *scored.notes, *broke.notes}),
+        )
+
+
+def _side(
+    side: Contingent,
+    casualties: Sequence[Probability],
+    initiative: int,
+    rank_bonus: int,
+    unit_strength: int,
+    broke: SideBreak,
+) -> FightSide:
+    # The weapon is set before a contingent fights, so in_hand() is never None
+    # here; a caller that skipped arming it would have failed in the resolver.
+    losses = [float(mass) for mass in casualties]
+    return FightSide(
+        unit=side.unit.id,
+        name=side.unit.name,
+        size=side.models,
+        weapon=side.in_hand().name,
+        initiative=initiative,
+        rank_bonus=rank_bonus,
+        unit_strength=unit_strength,
+        casualties=losses,
+        expected_casualties=sum(k * mass for k, mass in enumerate(losses)),
+        gives_ground=float(broke.p_gives_ground),
+        falls_back=float(broke.p_falls_back),
+        breaks=float(broke.p_breaks),
+    )
 
 
 class RuleSummary(BaseModel):
