@@ -3,6 +3,7 @@
 
 	import { datasheet } from '$lib/datasheets';
 	import { cost, repeated } from '$lib/options';
+	import { sizeRange } from '$lib/listing';
 	import type { UnitOption } from '$lib/api/client';
 
 	interface Props {
@@ -39,9 +40,7 @@
 		datasheet(slug).then((sheet) => {
 			if (!sheet || slug !== unit) return;
 			offered = sheet.options ?? [];
-			allowed = sheet.unit_size.max
-				? `${sheet.unit_size.min}–${sheet.unit_size.max}`
-				: `${sheet.unit_size.min} or more`;
+			allowed = sizeRange(sheet.unit_size);
 		});
 	});
 </script>

@@ -26,9 +26,12 @@
 		onreform: (id: number, frontage: number) => void;
 		/** A datasheet dragged in from the panel and dropped on the table. */
 		ondropunit: (unit: string, size: number, x: number, y: number) => void;
+		/** A block double-clicked: open its size and options. */
+		onedit: (id: number) => void;
 	}
 
-	let { placed, picked, onpick, onmove, onturn, ondrop, onreform, ondropunit }: Props = $props();
+	let { placed, picked, onpick, onmove, onturn, ondrop, onreform, ondropunit, onedit }: Props =
+		$props();
 
 	/** A datasheet being dragged in from the panel, over the table. */
 	let inbound = $state(false);
@@ -280,6 +283,7 @@
 				<g
 					transform="rotate({block.facing} {block.x} {block.y})"
 					onpointerdown={(event) => grab(event, block)}
+					ondblclick={() => onedit(block.id)}
 				>
 					<rect
 						x={block.x - size.width / 2}

@@ -260,6 +260,7 @@
 				ondrop={(mover, target) => (asking = { mover, target })}
 				onreform={reform}
 				ondropunit={(unit, size, x, y) => deploy(unit, size, { x, y })}
+				onedit={(id) => ((picked = id), (editing = id))}
 			/>
 			{#if block && editing === block.id}
 				<div

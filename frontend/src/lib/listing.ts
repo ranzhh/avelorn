@@ -20,9 +20,16 @@ export const minimum = (unit: UnitSummary): number => unit.unit_size.min;
  */
 export const fielded = (unit: UnitSummary): number => unit.points * unit.unit_size.min;
 
-/** The size range, as a datasheet prints it. */
-export const sizeRange = (unit: UnitSummary): string =>
-	unit.unit_size.max ? `${unit.unit_size.min}–${unit.unit_size.max}` : `${unit.unit_size.min}+`;
+/**
+ * The sizes a datasheet may be fielded at: `5+`, `3–5`, or a bare `1`.
+ *
+ * Takes the range rather than the unit so the datasheet route's `Unit` and a
+ * listing's `UnitSummary` print it the same way.
+ */
+export const sizeRange = (size: { min: number; max?: number | null }): string => {
+	if (size.max == null) return `${size.min}+`;
+	return size.max === size.min ? `${size.min}` : `${size.min}–${size.max}`;
+};
 
 /**
  * Whether a datasheet answers to `needle`.

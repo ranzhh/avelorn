@@ -104,11 +104,16 @@ describe('reorder', () => {
 
 describe('sizeRange', () => {
 	it('prints an open range as a minimum', () => {
-		expect(sizeRange(CORPUS[0])).toBe('5+');
+		expect(sizeRange({ min: 5, max: null })).toBe('5+');
+		expect(sizeRange({ min: 3 })).toBe('3+');
 	});
 
-	it('prints a bounded range as both ends', () => {
-		expect(sizeRange(CORPUS[3])).toBe('1–1');
+	it('prints a capped range as both ends', () => {
+		expect(sizeRange({ min: 3, max: 5 })).toBe('3–5');
+	});
+
+	it('prints a fixed size as one number', () => {
+		expect(sizeRange({ min: 1, max: 1 })).toBe('1');
 	});
 });
 
