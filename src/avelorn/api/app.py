@@ -138,9 +138,9 @@ class Deployment(BaseModel):
     size: int = Field(ge=1)
     options: list[str] = Field(default_factory=list)
     # The weapon the side fights with, by printed name. A unit fights with what
-    # it carries, so this must name one of them; omitted, it takes the last it
-    # carries, which is the specialist weapon a datasheet prints after the hand
-    # weapon every model also has.
+    # it carries, and it must be one that can fight -- a bow has no Combat
+    # profile. Omitted, it takes the last carried weapon that has one, which is
+    # the specialist a datasheet prints after the hand weapon every model has.
     weapon: str | None = None
     frontage: int | None = Field(default=None, ge=1)
 
@@ -207,11 +207,34 @@ def _deploy(game: TOWGame, data: TOWRepository, side: Deployment, label: str) ->
         fielded = Contingent.deploy(
             side.unit, side.size, side.options, data=data, frontage=side.frontage
         )
-        return fielded.wielding(side.weapon or fielded.loadout.weapons[-1].name)
+        armed = fielded.wielding(side.weapon or _default_weapon(fielded, label))
     except (ValidationError, ValueError) as refused:
         raise HTTPException(
             status_code=422, detail=f"side {label}: {_reason(refused)}"
         ) from refused
+    # A round of close combat is the only thing routed here, so a weapon that
+    # cannot fight is a refusal at the boundary rather than a resolver blowing
+    # up mid-walk.
+    if armed.in_hand().combat_profile is None:
+        raise HTTPException(
+            status_code=422,
+            detail=f"side {label}: {armed.in_hand().name} has no Combat profile; it cannot fight",
+        )
+    return armed
+
+
+def _default_weapon(fielded: Contingent, label: str) -> str:
+    # The last carried weapon that can fight: a datasheet prints the specialist
+    # after the hand weapon, and a missile weapon after both, so taking the last
+    # outright sends archers into melee with a bow.
+    for weapon in reversed(fielded.loadout.weapons):
+        if weapon.combat_profile is not None:
+            return weapon.name
+    carried = ", ".join(weapon.name for weapon in fielded.loadout.weapons) or "nothing"
+    raise HTTPException(
+        status_code=422,
+        detail=f"side {label}: nothing it carries can fight in close combat; carried: {carried}",
+    )
 
 
 def _reason(refused: ValidationError | ValueError) -> str:

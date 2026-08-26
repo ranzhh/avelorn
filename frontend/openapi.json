@@ -1200,7 +1200,7 @@
           },
           "weapons": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/Wieldable"
             },
             "type": "array",
             "title": "Weapons"
@@ -1226,7 +1226,7 @@
           "special_rules"
         ],
         "title": "MusteredUnit",
-        "description": "A block of an army list: a datasheet sized and equipped, and what it costs.\n\nThe view over :class:`~avelorn.tow.muster.Complement`. It carries the\ndatasheet by slug rather than whole, because a list is read as a list --\na caller wanting the profiles follows ``unit`` to the datasheet route.\n``equipment`` and ``special_rules`` are the effective ones, the chosen\noptions' adds and removes already folded in, so a block says what the\nmodels actually carry rather than what the datasheet offered. ``weapons``\nnarrows the equipment to what the block can actually fight with, which is\nwhat a caller naming a weapon has to choose from."
+        "description": "A block of an army list: a datasheet sized and equipped, and what it costs.\n\nThe view over :class:`~avelorn.tow.muster.Complement`. It carries the\ndatasheet by slug rather than whole, because a list is read as a list --\na caller wanting the profiles follows ``unit`` to the datasheet route.\n``equipment`` and ``special_rules`` are the effective ones, the chosen\noptions' adds and removes already folded in, so a block says what the\nmodels actually carry rather than what the datasheet offered. ``weapons``\nnarrows the equipment to the weapons among it, each saying whether it can\nbe used in close combat -- what a caller naming a weapon chooses from."
       },
       "NaturalRoll": {
         "properties": {
@@ -2214,6 +2214,26 @@
         "type": "object",
         "title": "When",
         "description": "An effect's gate: the facts that must hold for it to apply.\n\nA typed tree, one field per subject \u2014 the combat the model is engaged in,\nits movement, the volley it fires, the attack it is the target of \u2014 each\ncarrying that subject's own facts, plus the ``natural`` dice event. A rule\nreads as ``subject -> property (-> comparator)``:\n``{combat: {first_round: true}}``, ``{target_of: {kind: shooting}}``.\n\n``combat`` and ``target_of`` are presence entities: ``combat: true`` gates\non being engaged in a close combat (Parry's \"whilst engaged in close\ncombat\"), a nested gate on being engaged *and* a property (Elven Reflexes's\nfirst round); ``target_of`` names the incoming attack. ``wielding`` and\n``worn`` are the equipment-in-use axis \u2014 the weapon a model is acting with\n(Arrows of Isha's \"any bow\", matched by family or name) and the armour it\nwears (Parry's shield, matched among every piece worn) \u2014 read off the\nengagement context by the dice walk and the folds alike, so a rule gates on\nits gear exactly as it gates on the engagement. A subject or property outside\nthese models is a data error at load (``extra=forbid``) \u2014 the closed\nvocabulary the flat Condition enum gave, now structural. Every set fact is\nconjoined; without a ``when`` the modifier applies to every attack."
+      },
+      "Wieldable": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "fights": {
+            "type": "boolean",
+            "title": "Fights"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "fights"
+        ],
+        "title": "Wieldable",
+        "description": "A weapon a block carries, and whether it can be used in close combat.\n\nA bow has no Combat profile, so a caller resolving a melee must not offer\nit. The fact belongs here rather than in the caller because it is read off\nthe weapon entry, and a caller guessing from the name would be guessing."
       },
       "WoundMultiplierEffect": {
         "properties": {

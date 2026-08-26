@@ -115,6 +115,20 @@ class UnitDetail(Unit):
         )
 
 
+class Wieldable(BaseModel):
+    """A weapon a block carries, and whether it can be used in close combat.
+
+    A bow has no Combat profile, so a caller resolving a melee must not offer
+    it. The fact belongs here rather than in the caller because it is read off
+    the weapon entry, and a caller guessing from the name would be guessing.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    fights: bool
+
+
 class MusteredUnit(BaseModel):
     """A block of an army list: a datasheet sized and equipped, and what it costs.
 
@@ -124,8 +138,8 @@ class MusteredUnit(BaseModel):
     ``equipment`` and ``special_rules`` are the effective ones, the chosen
     options' adds and removes already folded in, so a block says what the
     models actually carry rather than what the datasheet offered. ``weapons``
-    narrows the equipment to what the block can actually fight with, which is
-    what a caller naming a weapon has to choose from.
+    narrows the equipment to the weapons among it, each saying whether it can
+    be used in close combat -- what a caller naming a weapon chooses from.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -136,7 +150,7 @@ class MusteredUnit(BaseModel):
     options: list[str]
     points: int
     equipment: list[str]
-    weapons: list[str]
+    weapons: list[Wieldable]
     special_rules: list[PrintedRule]
 
     @classmethod
@@ -155,7 +169,10 @@ class MusteredUnit(BaseModel):
             equipment=complement.equipment,
             # What the block could fight with, which is the equipment that
             # resolves to a weapon rather than to armour.
-            weapons=[weapon.name for weapon in Contingent.field(complement).loadout.weapons],
+            weapons=[
+                Wieldable(name=weapon.name, fights=weapon.combat_profile is not None)
+                for weapon in Contingent.field(complement).loadout.weapons
+            ],
             special_rules=[PrintedRule.of(name, rules) for name in complement.special_rules],
         )
 

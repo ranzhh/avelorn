@@ -17,12 +17,31 @@
 
 	let refusal = $state('');
 
+	// The specialist a datasheet prints last, skipping anything with no Combat
+	// profile: archers carry a Longbow after their hand weapon.
+	const fighting = (block: MusteredUnit) =>
+		block.weapons.filter((weapon) => weapon.fights).at(-1)?.name ?? '';
+
 	async function fromRoster(event: Event) {
 		const at = (event.currentTarget as HTMLSelectElement).value;
 		if (at === '') return;
+		// Re-mustered rather than used as saved: a list in localStorage was
+		// written by whatever version of the block shape was current then, and an
+		// entry from before this page existed carries no weapons to fight with.
 		const picked = roster[Number(at)];
-		onblock(picked);
-		onweapon(picked.weapons.at(-1) ?? '');
+		refusal = '';
+		onbusy(true);
+		const { data: fresh, error: refused } = await api(window.location.origin, fetch).POST(
+			'/muster',
+			{ body: { unit: picked.unit, size: picked.size, options: picked.options } }
+		);
+		onbusy(false);
+		if (!fresh) {
+			refusal = typeof refused?.detail === 'string' ? refused.detail : 'could not deploy that';
+			return;
+		}
+		onblock(fresh);
+		onweapon(fighting(fresh));
 	}
 
 	async function fromCorpus(event: Event) {
@@ -45,7 +64,7 @@
 			return;
 		}
 		onblock(mustered);
-		onweapon(mustered.weapons.at(-1) ?? '');
+		onweapon(fighting(mustered));
 	}
 
 	async function resize(event: Event) {
@@ -100,8 +119,8 @@
 		<label>
 			Weapon in hand
 			<select value={weapon} onchange={(e) => onweapon(e.currentTarget.value)}>
-				{#each block.weapons as name}
-					<option value={name}>{name}</option>
+				{#each block.weapons.filter((weapon) => weapon.fights) as weapon}
+					<option value={weapon.name}>{weapon.name}</option>
 				{/each}
 			</select>
 		</label>

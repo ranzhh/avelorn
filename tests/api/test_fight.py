@@ -106,6 +106,29 @@ def test_a_charge_into_the_rear_scores_for_the_charger(client: TestClient) -> No
     assert rear["p_a_wins"] > front["p_a_wins"]
 
 
+def test_a_missile_unit_defaults_to_something_it_can_fight_with(client: TestClient) -> None:
+    """Archers carry a Longbow last, and a bow has no Combat profile."""
+    report = fight(
+        client,
+        a={"unit": "elven-archers", "size": 10},
+        b={"unit": "dwarf-warriors", "size": 10},
+    )
+    assert report["a"]["weapon"] == "Hand Weapon"
+
+
+def test_a_weapon_that_cannot_fight_is_refused_not_resolved(client: TestClient) -> None:
+    """Naming the bow is a refusal at the boundary, not a resolver blowing up."""
+    response = client.post(
+        "/fight",
+        json={
+            "a": {"unit": "elven-archers", "size": 10, "weapon": "Longbow"},
+            "b": {"unit": "dwarf-warriors", "size": 10},
+        },
+    )
+    assert response.status_code == 422
+    assert response.json() == {"detail": "side a: Longbow has no Combat profile; it cannot fight"}
+
+
 def test_the_loser_takes_the_break_test(client: TestClient) -> None:
     """A side's three Break outcomes sum to the chance it lost the round."""
     report = fight(
