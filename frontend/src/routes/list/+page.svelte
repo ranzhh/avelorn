@@ -1,18 +1,22 @@
 <script lang="ts">
-	import { api, type MusteredUnit, type UnitOption } from '$lib/api/client';
+	import { resolve } from '$app/paths';
+
+	import Muster from '$lib/Muster.svelte';
+	import { datasheet } from '$lib/datasheets';
+	import { api, type MusteredUnit } from '$lib/api/client';
 
 	const STORAGE_KEY = 'avelorn:list';
 
 	let { data } = $props();
 
 	let blocks = $state<MusteredUnit[]>([]);
-	let slug = $state('');
-	let size = $state(5);
-	let chosen = $state<string[]>([]);
-	let offered = $state<UnitOption[]>([]);
+	let adding = $state('');
+	let addingSize = $state(1);
+	let editing = $state<number | null>(null);
 	let refusal = $state('');
 
 	const total = $derived(blocks.reduce((sum, block) => sum + block.points, 0));
+	const models = $derived(blocks.reduce((sum, block) => sum + block.size, 0));
 	const client = () => api(window.location.origin, fetch);
 
 	// The list is the browser's, not the server's: there is no store behind the
@@ -26,38 +30,65 @@
 		localStorage.setItem(STORAGE_KEY, JSON.stringify(blocks));
 	});
 
-	async function pick(event: Event) {
-		slug = (event.currentTarget as HTMLSelectElement).value;
-		chosen = [];
-		offered = [];
-		refusal = '';
-		if (!slug) return;
-		const { data: unit } = await client().GET('/units/{slug}', { params: { path: { slug } } });
-		if (!unit) return;
-		offered = unit.options ?? [];
-		size = unit.unit_size.min;
+	async function muster(unit: string, size: number, options: string[]) {
+		const { data: block, error: refused } = await client().POST('/muster', {
+			body: { unit, size, options }
+		});
+		if (block) return block;
+		refusal = typeof refused?.detail === 'string' ? refused.detail : 'could not muster that';
+		return null;
 	}
 
-	async function add() {
+	async function pick(event: Event) {
+		const slug = (event.currentTarget as HTMLSelectElement).value;
 		refusal = '';
-		const { data: block, error: refused } = await client().POST('/muster', {
-			body: { unit: slug, size, options: chosen }
-		});
-		if (!block) {
-			refusal = typeof refused?.detail === 'string' ? refused.detail : 'could not muster that';
+		editing = null;
+		if (!slug) {
+			adding = '';
 			return;
 		}
+		// The size is settled before the editor exists to read it: mounting first
+		// would seed the draft from the previous datasheet's minimum.
+		const sheet = await datasheet(slug);
+		addingSize = sheet?.unit_size.min ?? 1;
+		adding = slug;
+	}
+
+	async function add(size: number, options: string[]) {
+		refusal = '';
+		const block = await muster(adding, size, options);
+		if (!block) return;
 		blocks = [...blocks, block];
+		adding = '';
+	}
+
+	async function save(at: number, size: number, options: string[]) {
+		refusal = '';
+		const block = await muster(blocks[at].unit, size, options);
+		if (!block) return;
+		blocks = blocks.map((old, index) => (index === at ? block : old));
+		editing = null;
+	}
+
+	function duplicate(at: number) {
+		// Already costed and already validated, so it needs no round trip.
+		const copy = structuredClone($state.snapshot(blocks[at]));
+		blocks = [...blocks.slice(0, at + 1), copy, ...blocks.slice(at + 1)];
+		if (editing !== null && editing > at) editing += 1;
+	}
+
+	function edit(at: number) {
+		refusal = '';
+		adding = '';
+		editing = editing === at ? null : at;
 	}
 
 	function remove(at: number) {
+		// An open editor is addressed by index, so dropping a row above it has to
+		// move it down or it would start editing its neighbour.
+		if (editing === at) editing = null;
+		else if (editing !== null && editing > at) editing -= 1;
 		blocks = blocks.filter((_, index) => index !== at);
-	}
-
-	function cost(option: UnitOption) {
-		if (option.points_budget) return `up to ${option.points_budget} pts`;
-		if (!option.points) return '';
-		return `${option.points} pts${option.per_model ? '/model' : ''}`;
 	}
 </script>
 
@@ -69,10 +100,9 @@
 
 <fieldset>
 	<legend>Add a block</legend>
-
 	<label>
 		Unit
-		<select onchange={pick}>
+		<select value={adding} onchange={pick}>
 			<option value="">choose a datasheet</option>
 			{#each data.units as unit}
 				<option value={unit.id}>{unit.name} — {unit.points} pts/model</option>
@@ -80,32 +110,18 @@
 		</select>
 	</label>
 
-	{#if slug}
-		<label>
-			Models
-			<input type="number" min="1" bind:value={size} />
-		</label>
-
-		{#if offered.length}
-			<div class="options">
-				{#each offered as option}
-					<label class="option">
-						<input type="checkbox" value={option.name} bind:group={chosen} />
-						{option.name}
-						<span class="meta">{cost(option)}</span>
-						{#if offered.filter((o) => o.name === option.name).length > 1}
-							<span class="warn">name repeats; both are bought together</span>
-						{/if}
-					</label>
-				{/each}
-			</div>
-		{/if}
-
-		<button onclick={add}>Add to list</button>
-	{/if}
-
-	{#if refusal}
-		<p class="refusal">{refusal}</p>
+	{#if adding}
+		{#key adding}
+			<Muster
+				unit={adding}
+				size={addingSize}
+				options={[]}
+				submitLabel="Add to list"
+				refusal={editing === null ? refusal : ''}
+				onsubmit={add}
+				oncancel={() => (adding = '')}
+			/>
+		{/key}
 	{/if}
 </fieldset>
 
@@ -122,18 +138,59 @@
 		</thead>
 		<tbody>
 			{#each blocks as block, at}
-				<tr>
+				<tr class:editing={editing === at}>
 					<td>{block.name}</td>
 					<td>{block.size}</td>
 					<td class="meta">{block.options.join(', ') || '—'}</td>
 					<td>{block.points}</td>
-					<td><button class="link" onclick={() => remove(at)}>remove</button></td>
+					<td class="row-actions">
+						<button class="link" onclick={() => edit(at)}>
+							{editing === at ? 'close' : 'edit'}
+						</button>
+						<button class="link" onclick={() => duplicate(at)}>duplicate</button>
+						<button class="link" onclick={() => remove(at)}>remove</button>
+					</td>
 				</tr>
+				{#if editing === at}
+					<tr class="editor">
+						<td colspan="5">
+							{#key at}
+								<Muster
+									unit={block.unit}
+									size={block.size}
+									options={block.options}
+									submitLabel="Save"
+									{refusal}
+									onsubmit={(size, options) => save(at, size, options)}
+									oncancel={() => (editing = null)}
+								/>
+							{/key}
+
+							<dl class="loadout">
+								<dt>Carries</dt>
+								<dd>{block.equipment.join(', ') || '—'}</dd>
+								<dt>Rules</dt>
+								<dd>
+									{#each block.special_rules as rule, index}
+										{#if index}<span aria-hidden="true">, </span>{/if}
+										{#if rule.slug}
+											<a href={resolve('/rules/[slug]', { slug: rule.slug })}>{rule.name}</a>
+										{:else}
+											<span class="unmodelled" title="not modelled by the engine">{rule.name}</span>
+										{/if}
+									{/each}
+								</dd>
+							</dl>
+						</td>
+					</tr>
+				{/if}
 			{/each}
 		</tbody>
 		<tfoot>
 			<tr>
-				<th colspan="3">Total</th>
+				<th>Total</th>
+				<th>{models}</th>
+				<th></th>
 				<th>{total}</th>
 				<th></th>
 			</tr>
@@ -156,8 +213,7 @@
 		margin-bottom: 0.6rem;
 	}
 
-	select,
-	input[type='number'] {
+	select {
 		font: inherit;
 		padding: 0.3rem 0.5rem;
 		border: 1px solid var(--rule);
@@ -165,30 +221,28 @@
 		background: white;
 	}
 
-	.options {
-		margin: 0.6rem 0;
+	tr.editing td {
+		border-bottom: none;
 	}
 
-	.option {
-		font-size: 0.9rem;
-		margin-bottom: 0.2rem;
+	tr.editor td {
+		padding: 0.75rem 0.6rem 1rem;
+		background: #f3efe8;
 	}
 
-	button {
-		font: inherit;
-		padding: 0.35rem 0.8rem;
-		border: 1px solid var(--rule);
-		border-radius: 3px;
-		background: white;
-		cursor: pointer;
+	.row-actions {
+		display: flex;
+		gap: 0.75rem;
 	}
 
 	button.link {
+		font: inherit;
 		border: none;
 		background: none;
 		padding: 0;
 		color: var(--muted);
 		text-decoration: underline;
+		cursor: pointer;
 	}
 
 	.meta {
@@ -196,17 +250,29 @@
 		font-size: 0.85rem;
 	}
 
-	.warn {
-		color: #8a5a00;
-		font-size: 0.8rem;
-	}
-
-	.refusal {
-		color: #8a1c1c;
-		font-size: 0.9rem;
-	}
-
 	tfoot th {
 		border-top: 1px solid var(--ink);
+	}
+
+	/* What the block actually ends up with, the chosen options folded in. */
+	.loadout {
+		display: grid;
+		grid-template-columns: auto 1fr;
+		gap: 0.15rem 0.75rem;
+		margin: 0.9rem 0 0;
+		font-size: 0.85rem;
+
+		dt {
+			color: var(--muted);
+		}
+
+		dd {
+			margin: 0;
+		}
+	}
+
+	.unmodelled {
+		color: var(--muted);
+		text-decoration: underline dotted var(--rule);
 	}
 </style>
