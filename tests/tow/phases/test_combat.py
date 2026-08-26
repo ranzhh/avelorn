@@ -1,11 +1,12 @@
 """Close-combat strike tests, golden values hand-computed from the charts."""
 
+from collections.abc import Mapping
 from fractions import Fraction
 
 import pytest
 
 from avelorn.core.dice import binomial_distribution, expected_value
-from avelorn.core.distribution import Distribution
+from avelorn.core.distribution import Distribution, Probability
 from avelorn.tow.contingent import Charge, ChargeArc, Contingent, Loadout
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.engine.rules import CombatFacts, GateContext
@@ -650,6 +651,50 @@ def test_stand_and_shoot_credit_tilts_the_result_toward_the_shooter() -> None:
     )
     assert baseline.p_a_wins == pytest.approx(baseline.p_b_wins)
     assert with_volley.p_b_wins > with_volley.p_a_wins
+
+
+# --- the Wounds row, read one side at a time ---
+
+
+def test_fight_credits_a_stand_and_shoot_wound_to_the_shooter_s_own_total() -> None:
+    """A volley wound shows up in the shooter's Wounds, not the side that took it.
+
+    A enters having certainly lost its only model to B's Stand & Shoot, so no
+    melee blow is struck: B's whole Wounds total is that one volley wound, and
+    A inflicted nothing.
+    """
+    spearmen = REPO.units["elven-spearmen"]
+    a, b = _fielded(spearmen, 1), _fielded(spearmen, 1)
+    result = fight(
+        a.wielding("Thrusting Spear"), b.wielding("Thrusting Spear"), a_prior_losses=[0.0, 1.0]
+    )
+    assert result.b_wounds == {1: pytest.approx(1.0)}
+    assert result.a_wounds == {0: pytest.approx(1.0)}
+
+
+def test_fight_publishes_wound_marginals_that_agree_with_the_margin() -> None:
+    """Each side's Wounds are a marginal of the joint the margin is scored from.
+
+    Both are exact distributions, and the difference of their means is the
+    margin's mean — the check that neither side's credit went astray. The
+    distributions themselves do not convolve to the margin, because the two
+    sides are correlated; that is why scoring reads the joint.
+    """
+    a = _fielded(REPO.units["swordmasters-of-hoeth"], 10).wielding("Sword of Hoeth")
+    b = _fielded(REPO.units["elven-spearmen"], 10).wielding("Thrusting Spear")
+    result = fight(a, b)
+
+    def mean(pmf: Mapping[int, Probability]) -> Probability:
+        return sum(k * v for k, v in pmf.items())
+
+    assert sum(result.a_wounds.values()) == 1
+    assert sum(result.b_wounds.values()) == 1
+    assert mean(result.a_wounds) - mean(result.b_wounds) == mean(result.wound_margin)
+    convolved = {}
+    for ka, pa in result.a_wounds.items():
+        for kb, pb in result.b_wounds.items():
+            convolved[ka - kb] = convolved.get(ka - kb, 0) + pa * pb
+    assert convolved != dict(result.wound_margin)
 
 
 # --- Massed Infantry: the outnumbering side's +1 combat result, from data/ ---
