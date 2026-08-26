@@ -8,7 +8,8 @@
 
 	const NAV = [
 		{ href: resolve('/'), label: 'datasheets', at: '/' },
-		{ href: resolve('/list'), label: 'list', at: '/list' }
+		{ href: resolve('/list'), label: 'list', at: '/list' },
+		{ href: resolve('/table'), label: 'table', at: '/table' }
 	];
 
 	const here = $derived(page.url.pathname.replace(/\/$/, '') || '/');

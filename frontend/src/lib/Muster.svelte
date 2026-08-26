@@ -47,98 +47,57 @@
 </script>
 
 <div class="muster">
-	<label>
-		Models
-		<input type="number" min="1" bind:value={size} />
-		{#if allowed}<span class="meta">{allowed} allowed</span>{/if}
+	<label class="field">
+		<span>models</span>
+		<span class="cluster tight">
+			<input class="input" type="number" min="1" bind:value={size} />
+			{#if allowed}<span class="pill">{allowed}</span>{/if}
+		</span>
 	</label>
 
 	{#if offered.length}
 		<div class="options">
 			{#each offered as option}
-				<label class="option">
+				<label class="check">
 					<input type="checkbox" value={option.name} bind:group={chosen} />
-					{option.name}
-					<span class="meta">{cost(option)}</span>
-					{#if repeated(offered, option.name)}
-						<span class="warn">name repeats; both are bought together</span>
-					{/if}
+					<span>{option.name}</span>
+					{#if cost(option)}<span class="pill">{cost(option)}</span>{/if}
+					{#if repeated(offered, option.name)}<span class="warn">×2</span>{/if}
 				</label>
 			{/each}
 		</div>
 	{/if}
 
 	{#if refusal}
-		<p class="refusal">{refusal}</p>
+		<p class="refuse">{refusal}</p>
 	{/if}
 
-	<div class="actions">
-		<button onclick={() => onsubmit(size, chosen)}>{submitLabel}</button>
+	<div class="cluster actions">
+		<button class="btn btn-primary btn-sm" onclick={() => onsubmit(size, chosen)}>
+			{submitLabel}
+		</button>
 		{#if oncancel}
-			<button class="link" onclick={oncancel}>cancel</button>
+			<button class="btn btn-ghost btn-sm" onclick={oncancel}>cancel</button>
 		{/if}
 	</div>
 </div>
 
 <style>
-	label {
-		display: block;
-		margin-bottom: 0.6rem;
-	}
-
-	input[type='number'] {
-		font: inherit;
-		width: 5rem;
-		padding: 0.3rem 0.5rem;
-		border: 1px solid var(--line);
-		border-radius: 3px;
-		background: var(--sunken);
-	}
-
 	.options {
-		margin: 0.6rem 0;
-	}
-
-	.option {
-		font-size: 0.9rem;
-		margin-bottom: 0.2rem;
+		margin: var(--space-2) 0;
 	}
 
 	.actions {
-		display: flex;
-		gap: 0.75rem;
-		align-items: center;
+		gap: var(--space-2);
+		margin-top: var(--space-2);
 	}
 
-	button {
-		font: inherit;
-		padding: 0.35rem 0.8rem;
-		border: 1px solid var(--line);
-		border-radius: 3px;
-		background: var(--sunken);
-		cursor: pointer;
-	}
-
-	button.link {
-		border: none;
-		background: none;
-		padding: 0;
-		color: var(--dim);
-		text-decoration: underline;
-	}
-
-	.meta {
-		color: var(--dim);
-		font-size: 0.85rem;
+	.tight {
+		gap: var(--space-2);
 	}
 
 	.warn {
+		font: var(--text-xs) / 1.7 var(--font-mono);
 		color: var(--ordinal-1);
-		font-size: 0.8rem;
-	}
-
-	.refusal {
-		color: var(--neg);
-		font-size: 0.9rem;
 	}
 </style>
