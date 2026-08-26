@@ -175,14 +175,13 @@ def fight(request: Fight, data: Corpus) -> FightReport:
     Stand & Shoot a charge would be met with, which needs the Movement phase's
     charge sequence rather than a charge recorded on the charger.
 
+    A side the corpus cannot field is refused before any dice are walked: an
+    unknown slug is a 404, and a size, option or weapon the datasheet does not
+    allow is a 422 naming which side asked for it.
+
     Returns:
         The round resolved: each side's casualty distribution and Break-test
         outcomes, who won, and every rule the engine held without applying.
-
-    Raises:
-        HTTPException: 404, when no datasheet carries a slug; 422, when a
-            datasheet forbids the size or options asked for, or does not carry
-            the weapon named.
     """
     game = TOWGame.assemble(data)
     a = _deploy(game, data, request.a, "a")
