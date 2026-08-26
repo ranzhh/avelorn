@@ -1,288 +1,149 @@
 # The front end
 
-A build spec, written so an agent joining with no conversation history can take
-one slice and produce something that fits beside the others. Decisions here are
-settled unless the Open questions section says otherwise.
-
-## What it is
-
 A tool for asking the engine exact questions about units on a table, modelled on
-Path of Building and poe.ninja. Dense, dark, numbers first. Tables and figures
-are the primary surface; chrome recedes.
+Path of Building and poe.ninja. Dark, dense, numbers first.
 
-## Hard rules
-
-These are the ones that got a previous attempt scrapped whole. They are not
-style preferences.
+## Rules that got a previous attempt scrapped
 
 1. **No prose the model wrote.** Every string on screen is a control label, a
-   value, or something the API returned. No explanatory sentences, no captions
-   narrating what a chart shows, no editorial ("a near-even fight"). A refusal
-   shows the API's own `detail`.
-2. **Function before form.** A change is judged on what it lets you do. Ship
-   behaviour wired to the real API rather than a mock.
-3. **Never invent a derivation.** If the API does not return the operands behind
-   a number, the row does not expand. A plausible-looking breakdown that the
-   engine did not produce is worse than no breakdown.
-4. **Desktop only for now.** Do not trade density for a phone. No responsive
-   stacking; assume a wide viewport.
-5. **Dark only for now.** One theme. The token block is structured so a light
-   theme is a second block, but do not add one yet.
+   value, or something the API returned. No captions narrating a chart, no
+   editorial. A refusal shows the API's own `detail`.
+2. **Never invent a derivation.** If the API does not return the operands behind
+   a number, the row does not expand.
+3. **Desktop only, dark only, for now.** No responsive stacking, no second theme.
 
 ## Tokens
 
-Dark only. Every colour, space and size comes from `frontend/src/app.css`; a
-component that reaches for a raw hex has a bug.
+All in `frontend/src/app.css`. A component reaching for a raw hex is a bug.
 
-### Surfaces and ink
+| Role                        | Value                                     |
+| --------------------------- | ----------------------------------------- |
+| `--plane` / `--panel`       | `#14161a` / `#1b1e23`                     |
+| `--sunken` / `--line`       | `#101216` / `#2a2f37`                     |
+| `--ink` / `--dim`           | `#dfe3e8` / `#8b939e`                     |
+| `--faint`                   | `#5d646d` — 2.79:1, **strokes only**      |
+| `--series-1` / `--series-2` | `#3987e5` / `#cf6a5a` — marks, never text |
+| `--neutral`                 | `#3a4048` — diverging midpoint            |
+| `--ordinal-1`…`-4`          | `#9ec5f4` `#5598e7` `#2a78d6` `#184f95`   |
+| `--pos` / `--neg`           | `#7fb069` / `#e08273` — meaning, on text  |
+| `--accent` / `--accent-ink` | `#3987e5` fills / `#6fa8dc` text          |
 
-| Role       | Value     | Notes                                                                  |
-| ---------- | --------- | ---------------------------------------------------------------------- |
-| `--plane`  | `#14161a` | page                                                                   |
-| `--panel`  | `#1b1e23` | panels, and the chart surface the palette is validated against         |
-| `--sunken` | `#101216` | inputs, derivation rows, table stripes                                 |
-| `--line`   | `#2a2f37` | borders, gridlines, hairlines                                          |
-| `--ink`    | `#dfe3e8` | primary text — 12.96:1 on panel                                        |
-| `--dim`    | `#8b939e` | secondary text, table headers — 5.38:1                                 |
-| `--faint`  | `#5d646d` | **non-text only** — 2.79:1, fails body text. Carets, hairline strokes. |
+Numbers may wear a meaning colour; that is deliberate, and unusual. Marks carry
+identity, text carries meaning.
 
-### Marks — identity and order
-
-Used on bars, segments and table rectangles. Never on text.
-
-| Role                 | Value                                               |
-| -------------------- | --------------------------------------------------- |
-| `--series-1`         | `#3987e5`                                           |
-| `--series-2`         | `#cf6a5a`                                           |
-| `--neutral`          | `#3a4048` (diverging midpoint; a grey, never a hue) |
-| `--ordinal-1` … `-4` | `#9ec5f4` `#5598e7` `#2a78d6` `#184f95`             |
-
-### Meaning — on numbers
-
-A figure may wear a meaning colour. This is a deliberate departure from the
-usual rule that numbers stay neutral; it is how Path of Building reads.
-
-| Role           | Value     | Contrast on panel                       |
-| -------------- | --------- | --------------------------------------- |
-| `--pos`        | `#7fb069` | 6.62:1                                  |
-| `--neg`        | `#e08273` | 6.06:1                                  |
-| `--accent-ink` | `#6fa8dc` | 6.61:1 — accent _text_ and links        |
-| `--accent`     | `#3987e5` | 4.59:1 — accent _fills_ and focus rings |
-
-`--neg` is a lighter step than `--series-2` on purpose: mark-red and text-red are
-the same hue at different steps, so the channel is never ambiguous. Where a
-meaning colour is the only thing separating two figures, pair it with a sign or a
-label so it degrades rather than disappears.
-
-### Validation
-
-Colour is computable, so it is computed. Re-run these on any change, from the
-dataviz skill's `scripts/`:
+Colour is computed, not chosen. Re-run on any change, from the dataviz skill:
 
 ```
 validate_palette.js "#3987e5,#cf6a5a" --mode dark --surface "#1b1e23"
-  → PASS. protan ΔE 20.9, normal-vision ΔE 27.1, both ≥3:1 on surface.
 validate_palette.js "#9ec5f4,#5598e7,#2a78d6,#184f95" --ordinal --mode dark --surface "#1b1e23"
-  → PASS. monotone, ΔL gaps ≥0.06, light end 2.06:1.
 ```
 
-Two results worth not rediscovering: `#5598e7` fails the dark lightness band
-against `#1b1e23` (L 0.671, band tops at 0.67), so it is a ramp step and not a
-pole. And blue↔orange poles cannot coexist with a red "bad" — orange vs red
-measures ΔE 6.8 unsimulated, below the 15 floor. Hence blue↔red poles, with
-meaning red as a separate step.
+Two results not worth rediscovering: `#5598e7` fails the dark lightness band
+against `#1b1e23`, so it is a ramp step and never a pole. Blue-orange poles
+cannot coexist with a red meaning colour — orange against red is ΔE 6.8, under
+the floor of 15.
 
-### Scale
+Scale: 4px spacing steps, 13px base, mono and `tabular-nums` on every figure.
+Primitives are global classes in `app.css`: `.btn`, `.input`, `.select`,
+`.field`, `.check`, `.panel`, `.pill`, `.eyebrow`, `.meta`, `.refuse`,
+`.cluster`, `.num`, `.pos`, `.neg`.
 
-Space on a 4px base: `--space-1` `0.25rem` through `--space-6` `2rem`. Type:
-`--text-xs` `0.6875rem`, `--text-sm` `0.75rem`, `--text-base` `0.8125rem`,
-`--text-lg` `0.9375rem`, `--text-xl` `1.125rem`. Base is 13px — the density is
-the point. `--font-mono` on every figure; `font-variant-numeric: tabular-nums`
-in any column that aligns vertically.
+## The one route
 
-## Primitives
+`/table` owns the app. Deploy dock left, battle table centre, block and resolved
+docks right. Docks collapse, remember it, and keep their value on the header row
+when shut.
 
-Global classes in `app.css`, not components: the same button everywhere is the
-point of a system. `.btn` (`.btn-primary`, `.btn-ghost`, `.btn-sm`), `.input`,
-`.select`, `.field`, `.check`, `.panel`, `.pill`, `.eyebrow`, `.refuse`,
-`.cluster`, `.num`, `.meta`, `.pos`, `.neg`. Layout stays in scoped component
-CSS.
+- Clicking a datasheet deploys it at its smallest legal size, then a popover
+  beside the block takes the size and options. A row can also be dragged onto
+  the table.
+- Blocks carry a mark — A, B, C — with the model count under it.
+- Dragging ghosts the block: it stays put, a dashed ghost follows the pointer,
+  an arrow between them carries the reading. **Do not commit the move during the
+  drag** — the mover ends up on its target and a charge measures zero. The arrow
+  stays after the drop until the next drag.
+- Dropped on open table it is a move. Dropped on another block it is an action,
+  and the menu offers charge, shoot, or fight-already-joined.
+- A side-edge handle re-forms the block. It sends `frontage` to `POST /muster`
+  and the engine answers; the browser never computes a formation.
+- Facing is any angle, turned by a handle on a stalk. Shift snaps to 15°.
+- Nothing is applied back to the table. A result is read, never spent.
 
-## Composition
+## Modules — do not reimplement
 
-One route. The battle table is the primary surface and owns the screen.
+`frontend/src/lib/table.ts`, 33 tests. `separation` is edge-to-edge between the
+rectangles, zero when they touch or overlap. **Never measure a gap from
+`bounds`** — two blocks turned 45° have overlapping boxes while standing apart.
+`arc` bounds arcs by the target's own diagonals. Also `corners`, `within`,
+`angleTo`, `snap`, `reformed`, `room`, `identifier`.
 
-```
-┌───────────────────────────────────────────────────────┐
-│ header: app name · unmodelled count · latency         │
-├────────────┬──────────────────────────────┬───────────┤
-│ config     │                              │ results   │
-│ (docked)   │        battle table          │ (docked)  │
-│            │                              │           │
-│ army list  │                              │           │
-│ (docked)   │                              │           │
-└────────────┴──────────────────────────────┴───────────┘
-```
+`frontend/src/lib/charts/scale.ts`, 11 tests. `band` trims a distribution's
+negligible tail while keeping the middle contiguous. `Spread` draws one
+distribution and takes `compact` for a 74px sparkline. `Outcomes` draws a
+stacked bar, `ordinal` or `poles`.
 
-- Docked panels are collapsible. **A collapsed panel keeps the value it carries
-  on its header row** — `Elven Archers ×20`, `14 shots, 2.33 felled` — so
-  collapsing costs space, not information. Open state persists per panel.
-- `/list` as a route disappears; the army list is a docked panel.
-- Datasheets and rule entries open as **floating panes**, Paradox-style: a pane
-  over the table, movable, dismissible, and a rule name inside one opens another
-  pane on top. Panes stack. `/units/[slug]` and `/rules/[slug]` stay as routes:
-  they are useful on their own and remain linkable. The panes are the primary way
-  in, not the only one.
+`frontend/src/lib/listing.ts`, 13 tests. Filter and sort for the datasheet list.
 
-## Interaction on the table
+## API
 
-- Blocks are drawn at their true footprint from `MusteredUnit.footprint` —
-  `files` × `ranks` on the datasheet's base size.
-- **Clicking a datasheet deploys it** at its smallest legal size, on the near
-  edge facing up, moved clear of anything already standing there (`room`). Size
-  and options are then chosen from a popover next to the block, against
-  something you can see, rather than from a form in the panel. Dragging a row
-  from the panel onto the table deploys it where it is dropped.
-- **A block is named, not counted.** Each carries a progressive mark -- A, B, C
-  -- with its model count under it. Two blocks of twenty are otherwise
-  indistinguishable.
-- **Drag ghosts the block.** It stays where it stands while a dashed ghost
-  follows the pointer, with an arrow between them and the reading live on the
-  arrow. A step that would put a corner off the table is refused, so the ghost
-  stops against the edge rather than the pointer running away from it.
-- **Where the ghost is dropped decides what happened.** On empty table it is a
-  move and the block goes there. On another block it is an action, the mover
-  stays put, and the menu opens: charge, shoot if it carries a missile profile,
-  fight already-joined.
-- Committing the move during the drag is the bug this shape avoids. The mover
-  would end up on top of its target, and the gap a charge must cover would
-  measure zero.
-- **The arrow stays after the drop**, dashed and dimmer than the live one, with
-  its reading. One at a time: it is cleared by the next drag, and by a block
-  arriving or leaving, which would make it a lie about the table.
-- **Resize changes the frontage.** A picked block carries a handle on each side
-  edge. Dragging one reads a file count off how far the pointer is along the
-  block's own width, previews the new rectangle, and on release asks
-  `POST /muster` for the footprint that width actually takes. The browser never
-  decides the formation: `frontage` goes to the API and the engine's `Formation`
-  answers. Model count is not a drag; it is changed from the block's popover.
-  The handles are drawn filled and gripped rather than outlined -- at table
-  scale a hairline handle cannot be found.
-- **Facing is any angle**, turned by a rotation handle on a stalk off the block's
-  front, the way Word and PowerPoint rotate a shape. Free by default; Shift
-  snaps to 15°. Because a block can sit off the axis, nothing may measure it
-  from its bounding box.
-- Selection uses the mark poles: the picked block takes `--series-1`, the one
-  being asked about takes `--series-2`.
-- Nothing is applied back onto the table. A result is read, never spent: the
-  routes return distributions, and carrying one forward means collapsing it to a
-  single number. That collapse is where a battle simulator starts and this is
-  not one.
+Types are generated from the committed OpenAPI document by `make types`. Never
+hand-write a response type. No store behind the API: the table lives in the
+browser.
 
-## Geometry
+- `GET /units` → `UnitSummary` with `armies` (a list).
+- `POST /muster` → `MusteredUnit` with `footprint` and `weapons`. Takes an
+  optional `frontage`; one wider than the block returns the block's own width.
+- `POST /fight`, `POST /volley` → the reports.
 
-`frontend/src/lib/table.ts`, under 26 tests. Blocks turn to any angle, so this
-works in polygons rather than boxes.
+## Where it stands
 
-- `corners` gives the four corners at any facing; `bounds` is their axis-aligned
-  box, for hit areas and edge checks only.
-- `separation` is edge-to-edge in inches between the rectangles themselves, zero
-  when they touch or overlap, including when one sits wholly inside another.
-  Never measure a gap from `bounds` — two blocks turned 45° have overlapping
-  boxes while standing well apart.
-- `arc` bounds the arcs by the target's own diagonals, so a wide block presents a
-  wide front and one stood on end presents a wide flank.
-- `angleTo` and `snap` back the rotation handle. `room` finds a free spot for a
-  newly deployed block.
+Landed, all stacked and unmerged: #197 tokens, #198 shell, #199 drop-to-resolve,
+#200 re-form, #201 deploy-on-click. `/fight`, `/shoot` and `Side.svelte` are
+deleted.
 
-Do not reimplement any of it.
+Left to do:
 
-## Charts
-
-`frontend/src/lib/charts/`. `scale.ts` holds the arithmetic under 11 tests:
-`band` trims a distribution's negligible tail while keeping the middle
-contiguous, `ticks` gives round percentage steps, `percent`/`exact` format,
-`labelEvery` thins colliding axis labels.
-
-- A distribution is drawn: one column per outcome, mean marked, bars capped at
-  24px with a 2px surface gap, square at the baseline and 4px-rounded at the
-  data end. Single series, so no legend.
-- Ordered outcomes (break test, panic test) are one stacked bar on the ordinal
-  ramp, light for the best outcome to dark for the worst, 2px surface gaps
-  between segments and no borders.
-- `A wins / draw / B wins` is a diverging bar: poles on the two series colours,
-  the draw on `--neutral`.
-- `Spread` draws one distribution, and takes `compact` for the 74px sparkline
-  form that fits inside a table row.
-- `Outcomes` draws one stacked bar, `ordinal` for outcomes that worsen and
-  `poles` for two sides about a neutral middle.
-- Every chart has a table twin. A value is never reachable only by hovering.
-
-## Derivation — the direction, not the next task
-
-The goal is that any figure opens to its operands, and those to theirs: a to-hit
-target back to the BS, the range band and each modifier. **Do not build this
-opportunistically.** The resolvers currently report answers, not their working,
-so it is engine work rather than a field added to a view. Until it lands, the
-frontend chain stops where the returned fields stop and rows that cannot be
-broken down are left unexpandable.
-
-What is already derivable from `VolleyReport`: `shots`, `hit_target`, `p_hit`,
-`wound_target`, `p_wound`, `save_target`, `ward_target`, `p_unsaved`,
-`expected_wounds`, `expected_casualties`. Laying those out as the sequence the
-engine walks is honest and needs no backend change.
-
-## API facts a slice will need
-
-- `GET /units` → `UnitSummary`, carrying `armies` (a list — a datasheet may be
-  filed under several).
-- `POST /muster` → `MusteredUnit`, carrying `footprint` (`files`, `ranks`,
-  `width_mm`, `depth_mm`; null where a datasheet prints no base size) and
-  `weapons` as `Wieldable` with `fights` and `shoots`. It takes an optional
-  `frontage`, which re-forms the block that many models wide and changes the
-  footprint without changing the cost. A frontage wider than the block comes
-  back as the block's own width, so a caller may send what it dragged to.
-- `POST /fight`, `POST /volley` → the reports. Both take a `Deployment` per side
-  with an optional `weapon` and `frontage`; omitting `weapon` lets the API pick
-  the last one usable in that phase.
-- Types are generated from the committed OpenAPI document by `make types`. Never
-  hand-write a response type.
-- No store behind the API. The army list and the table live in the browser.
-
-## Work breakdown
-
-Each is independently reviewable and lands on its own. Later ones assume earlier
-ones, so a parallel agent should take a slice with its dependencies already
-merged or accept a rebase.
-
-1. **Tokens and primitives, alone.** `app.css` plus one page proving it. No
-   restructuring. ← _in progress, this branch_
-2. **The one-route shell.** Docked collapsible panels with header values and
-   persisted open state; the battle table as a static surface with blocks placed
-   by click. No drag. ← _landed_
-3. **Drag.** Move a block, drop onto another to open the action menu, drag a side
-   edge to re-form. ← _landed_
-4. **The result panels.** Fight and volley resolved into the docked panel, with
-   the stat chain, distributions and outcome bars. ← _landed_
-5. **Floating panes.** Datasheet and rule panes, stacking, hyperlinked.
-6. **The army list panel.** Absorbs the `/list` route.
+1. **Floating panes** for datasheets and rules, Paradox-style: over the table,
+   movable, and a rule name inside one opens another pane on top. `/units/[slug]`
+   and `/rules/[slug]` stay as routes for linking.
+2. **Army list dock**, absorbing the `/list` route.
+3. **Two lost inputs.** `hit_modifier` is hardcoded to `0` in
+   `routes/table/+page.svelte` — cover, large target, a unit that moved.
+   `battle_strength` is never sent, so a target is always treated as fresh.
+4. **Derivation, later and not opportunistically.** The goal is that any figure
+   opens to its operands, PoB-style. The resolvers report answers, not their
+   working, so it is engine work rather than a view change.
 
 ## Conventions
 
-- Sort/filter/geometry/format logic goes in a `.ts` module with vitest coverage,
-  not inline in a `.svelte` file. `make frontend-test` runs it and CI has a step.
-- Comments: one line, only where the code is genuinely hard. Never restate a
-  name.
-- **Done** means: `make frontend-test`, `make frontend-lint`, `make
-frontend-check` and `make types-check` all clean, `uv run pytest` clean if
-  anything Python moved, and the change exercised against a running API — not
-  tests alone.
+Geometry, format and sort logic goes in a `.ts` module with vitest coverage, not
+inline in a `.svelte` file. Comments only where the code is hard; never restate
+a name.
 
-## What the old routes are waiting for
+**Done** means `make frontend-test`, `make frontend-lint`, `make frontend-check`
+and `make types-check` clean, `uv run pytest` clean if Python moved, and the
+change exercised against a running API.
 
-`/fight`, `/shoot` and `Side.svelte` are gone: the table resolves both now.
-`/list` goes in slice 6, when the army list becomes a dock.
+## Handoff — delete this section when you have read it
 
-## Open questions
+Written 2026-08-26 at the end of a long session. Context you will not get from
+the code:
 
-- **Light theme** — deferred, not refused.
+- **The design was rejected once, hard.** The first frontend was scrapped whole
+  for looking generic. Do not redesign anything without showing it first; build
+  a specimen or a prototype wired to the real API and let him pick, one numbered
+  decision at a time.
+- **Writing style is a live sore point.** A `PreToolUse` hook in his dotfiles
+  now holds every commit and PR body once and reads it back at you. One clause
+  per sentence, no `X, and Y`, no epigrams, prefer "This PR adds a way to…" over
+  describing the object. Re-run the command unchanged to send it.
+- **Pointer interactions are never verified.** Nothing here can drive a drag. Say
+  so plainly rather than implying it was tested; a real bug shipped that way once
+  already.
+- **The stack is eight deep and nothing has merged** because GitHub Actions was
+  down. Check whether it is back. If it is, the bottom of the stack should land
+  before more is piled on. `gh stack` only works from the main worktree — its
+  state is in `.git/gh-stack`, and every linked worktree reports "not part of a
+  stack".
+- Probably next: floating panes, since he was keenest on those and the table
+  cannot show a stat line today.
