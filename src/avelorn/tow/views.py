@@ -146,6 +146,41 @@ class Wieldable(BaseModel):
     shoots: bool
 
 
+class Footprint(BaseModel):
+    """The rectangle a block occupies once it forms up.
+
+    The formation it takes at the datasheet's default frontage, and the table
+    space that costs: ``files`` models across by ``ranks`` deep, each model on
+    a base of the datasheet's size. A rear rank standing short still occupies
+    its whole rank, so the depth is the ranks rather than the models.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    files: int
+    ranks: int
+    width_mm: int
+    depth_mm: int
+
+    @classmethod
+    def of(cls, formed: Contingent) -> "Footprint | None":
+        """Measure what a fielded block stands on.
+
+        Returns:
+            The rectangle, or None where the datasheet prints no base size.
+        """
+        base = formed.unit.base_size
+        if base is None:
+            return None
+        formation = formed.formation
+        return cls(
+            files=formation.files,
+            ranks=formation.ranks,
+            width_mm=formation.files * base.width_mm,
+            depth_mm=formation.ranks * base.depth_mm,
+        )
+
+
 class MusteredUnit(BaseModel):
     """A block of an army list: a datasheet sized and equipped, and what it costs.
 
@@ -157,6 +192,8 @@ class MusteredUnit(BaseModel):
     models actually carry rather than what the datasheet offered. ``weapons``
     narrows the equipment to the weapons among it, each saying whether it can
     be used in close combat -- what a caller naming a weapon chooses from.
+    ``footprint`` is the table space the block takes at the datasheet's default
+    frontage, which a caller drawing it needs and cannot derive from a slug.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -169,6 +206,7 @@ class MusteredUnit(BaseModel):
     equipment: list[str]
     weapons: list[Wieldable]
     special_rules: list[PrintedRule]
+    footprint: Footprint | None
 
     @classmethod
     def of(cls, complement: Complement, rules: Registry[Rule]) -> "MusteredUnit":
@@ -177,6 +215,7 @@ class MusteredUnit(BaseModel):
         Returns:
             The block's view, its rule names resolved as a datasheet's are.
         """
+        formed = Contingent.field(complement)
         return cls(
             unit=complement.unit.id,
             name=complement.unit.name,
@@ -184,6 +223,7 @@ class MusteredUnit(BaseModel):
             options=list(complement.options),
             points=complement.points,
             equipment=complement.equipment,
+            footprint=Footprint.of(formed),
             # What the block could fight with, which is the equipment that
             # resolves to a weapon rather than to armour.
             weapons=[
@@ -192,7 +232,7 @@ class MusteredUnit(BaseModel):
                     fights=weapon.combat_profile is not None,
                     shoots=weapon.missile_profile is not None,
                 )
-                for weapon in Contingent.field(complement).loadout.weapons
+                for weapon in formed.loadout.weapons
             ],
             special_rules=[PrintedRule.of(name, rules) for name in complement.special_rules],
         )

@@ -72,6 +72,25 @@ def test_a_block_resolves_its_rules_the_way_a_datasheet_does(client: TestClient)
     assert resolved["Valour of Ages"] == "valour-of-ages"
 
 
+def test_a_block_says_the_rectangle_it_occupies(client: TestClient) -> None:
+    """Ten spearmen form up five wide on 25mm bases, so they stand on 125mm by 50mm."""
+    body = client.post("/muster", json={"unit": "elven-spearmen", "size": 10}).json()
+    assert body["footprint"] == {"files": 5, "ranks": 2, "width_mm": 125, "depth_mm": 50}
+
+
+def test_a_rear_rank_standing_short_still_occupies_its_rank(client: TestClient) -> None:
+    """Twenty-one Dwarfs four wide leave one model in a sixth rank, and it takes a rank's depth."""
+    body = client.post("/muster", json={"unit": "dwarf-warriors", "size": 21}).json()
+    assert body["footprint"]["ranks"] == 6
+    assert body["footprint"]["depth_mm"] == 150
+
+
+def test_a_cavalry_block_stands_on_its_own_base(client: TestClient) -> None:
+    """A deeper base makes a deeper rectangle at the same model count."""
+    reavers = client.post("/muster", json={"unit": "ellyrian-reavers", "size": 5}).json()
+    assert reavers["footprint"] == {"files": 5, "ranks": 1, "width_mm": 150, "depth_mm": 60}
+
+
 def test_a_size_the_datasheet_forbids_is_refused_with_the_reason(client: TestClient) -> None:
     """Below the printed minimum is not a list to cost, and the message says why."""
     response = client.post("/muster", json={"unit": "elven-spearmen", "size": 2})
