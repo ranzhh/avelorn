@@ -5,7 +5,17 @@
 	import Resolved from '$lib/Resolved.svelte';
 	import { api, type FightReport, type MusteredUnit, type VolleyReport } from '$lib/api/client';
 	import { fielded, listing } from '$lib/listing';
-	import { TABLE, arc, identifier, room, separation, span, usable, type Placed } from '$lib/table';
+	import {
+		TABLE,
+		arc,
+		bounds,
+		identifier,
+		room,
+		separation,
+		span,
+		usable,
+		type Placed
+	} from '$lib/table';
 
 	let { data } = $props();
 
@@ -13,6 +23,7 @@
 	// The block whose size and options are being edited on the table.
 	let editing = $state<number | null>(null);
 	let stamped = $state(0);
+	let popover = $state<HTMLDivElement | null>(null);
 	let placed = $state<Placed[]>([]);
 	let nextId = $state(1);
 	let picked = $state<number | null>(null);
@@ -24,6 +35,24 @@
 	let volley = $state<VolleyReport | null>(null);
 
 	const rows = $derived(listing(data.units, needle, { column: 'name', descending: false }));
+
+	const block = $derived(placed.find((each) => each.id === picked) ?? null);
+	const points = $derived(placed.reduce((sum, each) => sum + each.block.points, 0));
+
+	const pair = $derived.by(() => {
+		const open = asking;
+		if (!open) return null;
+		const mover = placed.find((each) => each.id === open.mover);
+		const target = placed.find((each) => each.id === open.target);
+		if (!mover || !target) return null;
+		return {
+			mover,
+			target,
+			inches: Math.round(separation(mover, target)),
+			into: arc(mover, target),
+			shoots: usable(mover.block, 'missile').length > 0
+		};
+	});
 
 	// Footprints for the panel's drag image, costed once on hover so dragstart
 	// has one to hand: it is synchronous and cannot wait for a round trip.
@@ -57,24 +86,6 @@
 		event.dataTransfer?.setDragImage(ghost, (width * perInch) / 2, (depth * perInch) / 2);
 		setTimeout(() => ghost.remove());
 	}
-	const block = $derived(placed.find((each) => each.id === picked) ?? null);
-	const points = $derived(placed.reduce((sum, each) => sum + each.block.points, 0));
-
-	const pair = $derived.by(() => {
-		const open = asking;
-		if (!open) return null;
-		const mover = placed.find((each) => each.id === open.mover);
-		const target = placed.find((each) => each.id === open.target);
-		if (!mover || !target) return null;
-		return {
-			mover,
-			target,
-			inches: Math.round(separation(mover, target)),
-			into: arc(mover, target),
-			shoots: usable(mover.block, 'missile').length > 0
-		};
-	});
-
 	function deployment(block: Placed, phase: 'melee' | 'missile') {
 		const weapon = phase === 'melee' ? block.melee : block.missile;
 		return {
@@ -190,7 +201,6 @@
 		const costed = await muster(standing.block.unit, size, options);
 		if (!costed) return;
 		amend(id, { block: costed });
-		editing = null;
 	}
 
 	/** Re-form a block to a new width, asking the engine for the footprint it takes. */
@@ -215,6 +225,14 @@
 		amend(id, { block: costed });
 	}
 
+	// Edits apply as they are made, so the popover just goes away on a click
+	// elsewhere. Nothing is left half-applied waiting for a button.
+	function dismiss(event: PointerEvent) {
+		if (editing === null) return;
+		if (popover?.contains(event.target as Node)) return;
+		editing = null;
+	}
+
 	function amend(id: number, change: Partial<Placed>) {
 		placed = placed.map((each) => (each.id === id ? { ...each, ...change } : each));
 	}
@@ -224,6 +242,8 @@
 		if (picked === id) picked = null;
 	}
 </script>
+
+<svelte:window onpointerdown={dismiss} />
 
 <div class="shell">
 	<aside class="left">
@@ -265,16 +285,18 @@
 			{#if block && editing === block.id}
 				<div
 					class="popover"
-					style="left: {(block.x / TABLE.width) * 100}%; top: {(block.y / TABLE.depth) * 100}%"
+					bind:this={popover}
+					style="left: {(block.x / TABLE.width) * 100}%; top: {(bounds(block).bottom /
+						TABLE.depth) *
+						100}%"
 				>
 					<span class="head">{block.mark} · {block.block.name}</span>
 					<Muster
+						live
 						unit={block.block.unit}
 						size={block.block.size}
 						options={block.block.options}
-						submitLabel="apply"
 						onsubmit={(size, options) => recost(block.id, size, options)}
-						oncancel={() => (editing = null)}
 					/>
 				</div>
 			{/if}
@@ -401,7 +423,7 @@
 
 	.menu {
 		position: absolute;
-		transform: translate(-50%, var(--space-2));
+		transform: translate(-50%, var(--space-4));
 		z-index: 2;
 		display: flex;
 		flex-direction: column;
@@ -465,7 +487,7 @@
 
 	.popover {
 		position: absolute;
-		transform: translate(-50%, var(--space-3));
+		transform: translate(-50%, var(--space-4));
 		z-index: 3;
 		width: 15rem;
 		padding: var(--space-2);

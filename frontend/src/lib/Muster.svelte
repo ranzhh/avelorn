@@ -10,20 +10,24 @@
 		unit: string;
 		size: number;
 		options: string[];
-		submitLabel: string;
+		/** Unused when `live`, which has no button to label. */
+		submitLabel?: string;
 		refusal?: string;
 		onsubmit: (size: number, options: string[]) => void;
 		oncancel?: () => void;
+		/** Apply each edit as it is made, with no buttons to press. */
+		live?: boolean;
 	}
 
 	let {
 		unit,
 		size: initialSize,
 		options: initialOptions,
-		submitLabel,
+		submitLabel = '',
 		refusal = '',
 		onsubmit,
-		oncancel
+		oncancel,
+		live = false
 	}: Props = $props();
 
 	// Seeded from the block once, then owned here: this is a draft, and the
@@ -32,6 +36,15 @@
 	let chosen = $state(untrack(() => [...initialOptions]));
 	let offered = $state<UnitOption[]>([]);
 	let allowed = $state('');
+
+	// Typing 20 passes through 2, so a live edit waits for the keystrokes to
+	// stop before costing anything.
+	let pending: ReturnType<typeof setTimeout> | undefined;
+	function edited() {
+		if (!live) return;
+		clearTimeout(pending);
+		pending = setTimeout(() => onsubmit(size, chosen), 300);
+	}
 
 	// A fresh datasheet means a fresh draft: the previous unit's options are not
 	// on offer, and its size is not this one's.
@@ -49,7 +62,7 @@
 	<label class="field">
 		<span>models</span>
 		<span class="cluster tight">
-			<input class="input" type="number" min="1" bind:value={size} />
+			<input class="input" type="number" min="1" bind:value={size} oninput={edited} />
 			{#if allowed}<span class="pill">{allowed}</span>{/if}
 		</span>
 	</label>
@@ -58,7 +71,7 @@
 		<div class="options">
 			{#each offered as option}
 				<label class="check">
-					<input type="checkbox" value={option.name} bind:group={chosen} />
+					<input type="checkbox" value={option.name} bind:group={chosen} onchange={edited} />
 					<span>{option.name}</span>
 					{#if cost(option)}<span class="pill">{cost(option)}</span>{/if}
 					{#if repeated(offered, option.name)}<span class="warn">×2</span>{/if}
@@ -71,14 +84,16 @@
 		<p class="refuse">{refusal}</p>
 	{/if}
 
-	<div class="cluster actions">
-		<button class="btn btn-primary btn-sm" onclick={() => onsubmit(size, chosen)}>
-			{submitLabel}
-		</button>
-		{#if oncancel}
-			<button class="btn btn-ghost btn-sm" onclick={oncancel}>cancel</button>
-		{/if}
-	</div>
+	{#if !live}
+		<div class="cluster actions">
+			<button class="btn btn-primary btn-sm" onclick={() => onsubmit(size, chosen)}>
+				{submitLabel}
+			</button>
+			{#if oncancel}
+				<button class="btn btn-ghost btn-sm" onclick={oncancel}>cancel</button>
+			{/if}
+		</div>
+	{/if}
 </div>
 
 <style>
