@@ -29,6 +29,16 @@ describe('extent', () => {
 		expect(height).toBeCloseTo(100 / 25.4);
 	});
 
+	it('names the block when it has no footprint to draw', () => {
+		// The shape a list entry saved before the API measured footprints takes:
+		// the key is absent rather than null, so the guard cannot test for null.
+		const { footprint, ...saved } = BLOCK;
+		void footprint;
+		expect(() => extent(placed(10, 10, 0, saved as MusteredUnit))).toThrow(
+			'Elven Spearmen has no footprint to draw'
+		);
+	});
+
 	it('swaps its width and depth when the block faces sideways', () => {
 		const { width, height } = extent(placed(10, 10, 90));
 		expect(width).toBeCloseTo(100 / 25.4);

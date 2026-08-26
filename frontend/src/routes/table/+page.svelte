@@ -98,12 +98,19 @@
 	async function deploy(unit: string, size: number, options: string[]) {
 		const block = await cost(unit, size, options);
 		if (!block) return;
-		if (block.footprint === null) {
+		if (!block.footprint) {
 			refusal = `${block.name} prints no base size, so it cannot be put on the table`;
 			return;
 		}
 		pending = block;
 		opened = '';
+	}
+
+	// A list entry is re-costed on its way to the table rather than deployed as
+	// it was saved: the roster is persisted in the browser, so an entry may
+	// predate anything the API has since learned to say about a block.
+	async function deployFromList(entry: MusteredUnit) {
+		await deploy(entry.unit, entry.size, entry.options);
 	}
 
 	async function addToList(unit: string, size: number, options: string[]) {
@@ -244,11 +251,7 @@
 				{#each roster as block}
 					<div class="entry">
 						<span>{block.name} × {block.size} <span class="meta">{block.points} pts</span></span>
-						<button
-							class="link"
-							disabled={block.footprint === null}
-							onclick={() => (pending = block)}>deploy</button
-						>
+						<button class="link" onclick={() => deployFromList(block)}>deploy</button>
 					</div>
 				{/each}
 			</section>
@@ -416,18 +419,45 @@
 </div>
 
 <style>
+	/*
+	 * The table before the browser on a narrow screen. Side by side, a 20rem
+	 * panel leaves a phone nothing to put the table in, and the table is the
+	 * thing being pointed at.
+	 */
 	.screen {
-		display: grid;
-		grid-template-columns: 20rem 1fr;
+		display: flex;
+		flex-direction: column;
 		gap: 1.5rem;
-		align-items: start;
+	}
+
+	.battle {
+		order: -1;
 	}
 
 	aside {
-		border-right: 1px solid var(--rule);
-		padding-right: 1rem;
-		max-height: calc(100vh - 6rem);
-		overflow-y: auto;
+		border-top: 1px solid var(--rule);
+		padding-top: 1rem;
+	}
+
+	@media (min-width: 60rem) {
+		.screen {
+			display: grid;
+			grid-template-columns: 20rem 1fr;
+			align-items: start;
+		}
+
+		.battle {
+			order: initial;
+		}
+
+		aside {
+			border-top: none;
+			padding-top: 0;
+			border-right: 1px solid var(--rule);
+			padding-right: 1rem;
+			max-height: calc(100vh - 6rem);
+			overflow-y: auto;
+		}
 	}
 
 	h1 {
@@ -516,6 +546,7 @@
 	.menu {
 		position: absolute;
 		transform: translate(-50%, 0.5rem);
+		max-width: min(15rem, 70vw);
 		display: flex;
 		flex-direction: column;
 		gap: 0.3rem;

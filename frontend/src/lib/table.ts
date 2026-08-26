@@ -72,7 +72,7 @@ export function extent(placed: Placed): {
 	height: number;
 } {
 	const footprint = placed.block.footprint;
-	if (footprint === null) throw new Error(`${placed.block.name} has no footprint to draw`);
+	if (!footprint) throw new Error(`${placed.block.name} has no footprint to draw`);
 	const { width, depth } = span(footprint);
 	const sideways = placed.facing === 90 || placed.facing === 270;
 	const across = sideways ? depth : width;
@@ -113,7 +113,7 @@ export type Arc = 'front' | 'flank' | 'rear';
  */
 export function arc(mover: Placed, target: Placed): Arc {
 	const footprint = target.block.footprint;
-	if (footprint === null) throw new Error(`${target.block.name} has no footprint to face with`);
+	if (!footprint) throw new Error(`${target.block.name} has no footprint to face with`);
 	const { width, depth } = span(footprint);
 	const { front, right } = bearing(target.facing);
 	const dx = mover.x - target.x;
