@@ -2,6 +2,7 @@
 	import BattleTable from '$lib/BattleTable.svelte';
 	import Dock from '$lib/Dock.svelte';
 	import Muster from '$lib/Muster.svelte';
+	import Panes from '$lib/Panes.svelte';
 	import Resolved from '$lib/Resolved.svelte';
 	import { api, type FightReport, type MusteredUnit, type VolleyReport } from '$lib/api/client';
 	import { fielded, listing } from '$lib/listing';
@@ -19,6 +20,7 @@
 
 	let { data } = $props();
 
+	let panes = $state<Panes | null>(null);
 	let needle = $state('');
 	// The block whose size and options are being edited on the table.
 	let editing = $state<number | null>(null);
@@ -251,19 +253,28 @@
 			<input class="input filter" bind:value={needle} placeholder="filter" />
 			<div class="rows">
 				{#each rows as unit (unit.id)}
-					<button
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<div
 						class="row"
 						draggable="true"
 						onpointerenter={() => shape(unit.id, unit.unit_size.min)}
 						ondragstart={(event) => carry(event, unit.id, unit.unit_size.min)}
-						onclick={() => deploy(unit.id, unit.unit_size.min)}
 					>
-						<span>{unit.name}</span>
-						<span class="cost num">
-							<span class="least">×{unit.unit_size.min}</span>
-							{fielded(unit)} pts
-						</span>
-					</button>
+						<button class="pick" onclick={() => deploy(unit.id, unit.unit_size.min)}>
+							<span>{unit.name}</span>
+							<span class="cost num">
+								<span class="least">×{unit.unit_size.min}</span>
+								{fielded(unit)} pts
+							</span>
+						</button>
+						<button
+							class="sheet"
+							title="datasheet"
+							onclick={() => panes?.show('unit', unit.id, unit.name)}
+						>
+							sheet
+						</button>
+					</div>
 				{/each}
 			</div>
 		</Dock>
@@ -373,6 +384,12 @@
 					</label>
 				{/if}
 				<div class="cluster acts">
+					<button
+						class="btn btn-sm"
+						onclick={() => panes?.show('unit', block.block.unit, block.block.name)}
+					>
+						datasheet
+					</button>
 					<button class="btn btn-sm" onclick={() => (editing = block.id)}>size</button>
 					<button class="btn btn-sm" onclick={() => amend(block.id, { facing: 0 })}>
 						face up
@@ -398,6 +415,8 @@
 		</Dock>
 	</aside>
 </div>
+
+<Panes bind:this={panes} />
 
 <style>
 	.shell {
@@ -458,7 +477,18 @@
 
 	.row {
 		display: flex;
-		width: 100%;
+		align-items: center;
+		border-radius: var(--radius-sm);
+	}
+
+	.row:hover {
+		background: var(--panel);
+	}
+
+	.pick {
+		display: flex;
+		flex: 1;
+		min-width: 0;
 		justify-content: space-between;
 		gap: var(--space-2);
 		padding: 2px var(--space-2);
@@ -467,13 +497,32 @@
 		color: var(--ink);
 		background: none;
 		border: none;
-		border-radius: var(--radius-sm);
 		cursor: pointer;
 		text-align: left;
 	}
 
-	.row:hover {
-		background: var(--panel);
+	.pick span:first-child {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	/* Reading a datasheet is the second thing a row does, so it stays out of
+	   the way until the row is under the pointer. */
+	.sheet {
+		flex: none;
+		visibility: hidden;
+		padding: 0 var(--space-2);
+		font: var(--text-xs) / 1.6 var(--font-mono);
+		color: var(--accent-ink);
+		background: none;
+		border: none;
+		cursor: pointer;
+	}
+
+	.row:hover .sheet,
+	.sheet:focus-visible {
+		visibility: visible;
 	}
 
 	.cost {

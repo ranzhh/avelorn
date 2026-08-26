@@ -12,6 +12,7 @@ export const api = (origin: string, fetch: typeof globalThis.fetch) =>
 	createClient<paths>({ baseUrl: `${origin}/api`, fetch });
 
 export type Unit = paths['/units/{slug}']['get']['responses'][200]['content']['application/json'];
+export type Rule = paths['/rules/{slug}']['get']['responses'][200]['content']['application/json'];
 export type UnitSummary =
 	paths['/units']['get']['responses'][200]['content']['application/json'][number];
 
