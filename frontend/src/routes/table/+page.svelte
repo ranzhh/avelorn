@@ -2,9 +2,10 @@
 	import BattleTable from '$lib/BattleTable.svelte';
 	import Dock from '$lib/Dock.svelte';
 	import Muster from '$lib/Muster.svelte';
-	import { api } from '$lib/api/client';
+	import Resolved from '$lib/Resolved.svelte';
+	import { api, type FightReport, type VolleyReport } from '$lib/api/client';
 	import { listing } from '$lib/listing';
-	import { TABLE, room, usable, type Placed } from '$lib/table';
+	import { TABLE, arc, room, separation, usable, type Placed } from '$lib/table';
 
 	let { data } = $props();
 
@@ -14,10 +15,94 @@
 	let nextId = $state(1);
 	let picked = $state<number | null>(null);
 	let refusal = $state('');
+	// The pair a menu is open on: what the first could do to the second.
+	let asking = $state<{ mover: number; target: number } | null>(null);
+	let resolving = $state('');
+	let fight = $state<FightReport | null>(null);
+	let volley = $state<VolleyReport | null>(null);
 
 	const rows = $derived(listing(data.units, needle, { column: 'name', descending: false }));
 	const block = $derived(placed.find((each) => each.id === picked) ?? null);
 	const points = $derived(placed.reduce((sum, each) => sum + each.block.points, 0));
+
+	const pair = $derived.by(() => {
+		const open = asking;
+		if (!open) return null;
+		const mover = placed.find((each) => each.id === open.mover);
+		const target = placed.find((each) => each.id === open.target);
+		if (!mover || !target) return null;
+		return {
+			mover,
+			target,
+			inches: Math.round(separation(mover, target)),
+			into: arc(mover, target),
+			shoots: usable(mover.block, 'missile').length > 0
+		};
+	});
+
+	function deployment(block: Placed, phase: 'melee' | 'missile') {
+		const weapon = phase === 'melee' ? block.melee : block.missile;
+		return {
+			unit: block.block.unit,
+			size: block.block.size,
+			options: block.block.options,
+			weapon: weapon || null,
+			frontage: block.block.footprint?.files ?? null
+		};
+	}
+
+	function cleared() {
+		fight = null;
+		volley = null;
+		refusal = '';
+	}
+
+	async function meet(charging: boolean) {
+		if (!pair) return;
+		cleared();
+		resolving = 'melee';
+		const { data: report, error: refused } = await api(window.location.origin, fetch).POST(
+			'/fight',
+			{
+				body: {
+					a: deployment(pair.mover, 'melee'),
+					b: deployment(pair.target, 'melee'),
+					charge: charging ? { side: 'a', full_inches: pair.inches, arc: pair.into } : null
+				}
+			}
+		);
+		resolving = '';
+		asking = null;
+		if (!report) {
+			refusal = typeof refused?.detail === 'string' ? refused.detail : 'could not resolve that';
+			return;
+		}
+		fight = report;
+	}
+
+	async function loose() {
+		if (!pair) return;
+		cleared();
+		resolving = 'shooting';
+		const { data: report, error: refused } = await api(window.location.origin, fetch).POST(
+			'/volley',
+			{
+				body: {
+					shooter: deployment(pair.mover, 'missile'),
+					target: deployment(pair.target, 'melee'),
+					distance: pair.inches,
+					hit_modifier: 0
+				}
+			}
+		);
+		resolving = '';
+		asking = null;
+		if (!report) {
+			refusal = typeof refused?.detail === 'string' ? refused.detail : 'could not resolve that';
+			return;
+		}
+		volley = report;
+	}
 
 	async function cost(unit: string, size: number, options: string[]) {
 		refusal = '';
@@ -92,13 +177,33 @@
 	</aside>
 
 	<div class="centre">
-		<BattleTable
-			{placed}
-			{picked}
-			onpick={(id) => (picked = id)}
-			onmove={(id, x, y) => amend(id, { x, y })}
-			onturn={(id, facing) => amend(id, { facing })}
-		/>
+		<div class="surface">
+			<BattleTable
+				{placed}
+				{picked}
+				onpick={(id) => (picked = id)}
+				onmove={(id, x, y) => amend(id, { x, y })}
+				onturn={(id, facing) => amend(id, { facing })}
+				ondrop={(mover, target) => (asking = { mover, target })}
+			/>
+			{#if pair}
+				<div
+					class="menu"
+					style="left: {(pair.target.x / TABLE.width) * 100}%; top: {(pair.target.y / TABLE.depth) *
+						100}%"
+				>
+					<span class="head">{pair.inches}in · {pair.into}</span>
+					<button class="btn btn-sm btn-primary" onclick={() => meet(true)}>
+						charge {pair.inches}in
+					</button>
+					<button class="btn btn-sm" disabled={!pair.shoots} onclick={loose}>
+						{pair.shoots ? `shoot at ${pair.inches}in` : 'no missile weapon'}
+					</button>
+					<button class="btn btn-sm" onclick={() => meet(false)}>fight, engaged</button>
+					<button class="btn btn-ghost btn-sm" onclick={() => (asking = null)}>cancel</button>
+				</div>
+			{/if}
+		</div>
 		{#if refusal}<p class="refuse">{refusal}</p>{/if}
 	</div>
 
@@ -163,13 +268,25 @@
 				<div class="field"><span>points</span><span class="num">{points}</span></div>
 			{/if}
 		</Dock>
+
+		<Dock
+			title="resolved"
+			keep="resolved"
+			value={resolving || (fight ? 'melee' : volley ? 'shooting' : '')}
+		>
+			{#if resolving}
+				<p class="pending">{resolving}…</p>
+			{:else if fight || volley}
+				<Resolved {fight} {volley} />
+			{/if}
+		</Dock>
 	</aside>
 </div>
 
 <style>
 	.shell {
 		display: grid;
-		grid-template-columns: 17rem minmax(0, 1fr) 15rem;
+		grid-template-columns: 16rem minmax(0, 1fr) 19rem;
 		gap: 1px;
 		background: var(--line);
 		min-height: calc(100vh - 2.4rem);
@@ -182,6 +299,35 @@
 	.centre {
 		background: var(--plane);
 		padding: var(--space-3);
+	}
+
+	.surface {
+		position: relative;
+	}
+
+	.menu {
+		position: absolute;
+		transform: translate(-50%, var(--space-2));
+		z-index: 2;
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1);
+		padding: var(--space-2);
+		background: var(--panel);
+		border: 1px solid var(--faint);
+		border-radius: var(--radius-md);
+		box-shadow: var(--shadow);
+	}
+
+	.menu .head {
+		font: var(--text-xs) / 1.5 var(--font-mono);
+		color: var(--dim);
+		padding: 0 var(--space-1);
+	}
+
+	.pending {
+		font: var(--text-xs) / 1.5 var(--font-mono);
+		color: var(--dim);
 	}
 
 	.filter {

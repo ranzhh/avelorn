@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { TABLE, angleTo, bounds, snap, span, within, type Placed } from '$lib/table';
+	import { TABLE, angleTo, bounds, separation, snap, span, within, type Placed } from '$lib/table';
 
 	interface Props {
 		placed: Placed[];
@@ -7,9 +7,11 @@
 		onpick: (id: number | null) => void;
 		onmove: (id: number, x: number, y: number) => void;
 		onturn: (id: number, facing: number) => void;
+		/** One block dropped onto another: what the first could do to the second. */
+		ondrop: (mover: number, target: number) => void;
 	}
 
-	let { placed, picked, onpick, onmove, onturn }: Props = $props();
+	let { placed, picked, onpick, onmove, onturn, ondrop }: Props = $props();
 
 	// A foot apart, interior only: the border already draws the table's edge.
 	const ruled = (edge: number) =>
@@ -22,6 +24,8 @@
 	// What the pointer is doing, and to which block.
 	let dragging = $state<{ id: number; grabX: number; grabY: number } | null>(null);
 	let turning = $state<number | null>(null);
+	// The block the dragged one is currently on top of.
+	let over = $state<number | null>(null);
 
 	/** The pointer's position in table inches. */
 	function at(event: PointerEvent) {
@@ -57,7 +61,13 @@
 			const moved = { ...block, x: point.x - dragging.grabX, y: point.y - dragging.grabY };
 			// The step is refused rather than the drag: a block stops against the
 			// edge instead of the pointer running away from it.
-			if (within(moved)) onmove(block.id, moved.x, moved.y);
+			if (within(moved)) {
+				onmove(block.id, moved.x, moved.y);
+				const landed = { ...moved };
+				over =
+					placed.find((other) => other.id !== block.id && separation(landed, other) === 0)?.id ??
+					null;
+			}
 			return;
 		}
 		if (turning !== null) {
@@ -69,8 +79,10 @@
 	}
 
 	function release() {
+		if (dragging && over !== null) ondrop(dragging.id, over);
 		dragging = null;
 		turning = null;
+		over = null;
 	}
 
 	/** Where the rotation handle sits: on a stalk off the block's front. */
@@ -115,6 +127,7 @@
 				class="block"
 				class:picked={block.id === picked}
 				class:busy={dragging?.id === block.id || turning === block.id}
+				class:under={over === block.id}
 			>
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<g
@@ -206,6 +219,16 @@
 
 	.block.picked .front {
 		stroke: var(--series-1);
+	}
+
+	.block.under rect {
+		fill: color-mix(in oklab, var(--series-2) 30%, var(--sunken));
+		stroke: var(--series-2);
+		stroke-width: 0.2;
+	}
+
+	.block.under .front {
+		stroke: var(--series-2);
 	}
 
 	.block text {
