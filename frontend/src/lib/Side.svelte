@@ -12,9 +12,27 @@
 		weapon: string;
 		onweapon: (weapon: string) => void;
 		onbusy: (busy: boolean) => void;
+		// Which half of a weapon's profiles this phase can use.
+		wields?: 'melee' | 'missile';
+		// A volley's target picks no weapon: it is being shot at, not shooting.
+		arms?: boolean;
 	}
 
-	let { label, units, roster, block, onblock, weapon, onweapon, onbusy }: Props = $props();
+	let {
+		label,
+		units,
+		roster,
+		block,
+		onblock,
+		weapon,
+		onweapon,
+		onbusy,
+		wields = 'melee',
+		arms = true
+	}: Props = $props();
+
+	const usable = (block: MusteredUnit) =>
+		block.weapons.filter((each) => (wields === 'melee' ? each.fights : each.shoots));
 
 	let refusal = $state('');
 	let offered = $state<UnitOption[]>([]);
@@ -23,10 +41,9 @@
 	// reads as broken rather than busy.
 	let deploying = $state(false);
 
-	// The specialist a datasheet prints last, skipping anything with no Combat
-	// profile: archers carry a Longbow after their hand weapon.
-	const fighting = (block: MusteredUnit) =>
-		block.weapons.filter((weapon) => weapon.fights).at(-1)?.name ?? '';
+	// The specialist a datasheet prints last, skipping anything this phase
+	// cannot use: archers carry a Longbow after their hand weapon.
+	const armed = (block: MusteredUnit) => usable(block).at(-1)?.name ?? '';
 
 	async function deploy(slug: string, size: number, options: string[], rearm: boolean) {
 		refusal = '';
@@ -44,7 +61,7 @@
 		}
 		onblock(mustered);
 		chosen = mustered.options;
-		if (rearm) onweapon(fighting(mustered));
+		if (rearm && arms) onweapon(armed(mustered));
 	}
 
 	async function fromRoster(event: Event) {
@@ -141,14 +158,16 @@
 				{/each}
 			</fieldset>
 		{/if}
-		<label>
-			Weapon in hand
-			<select value={weapon} onchange={(e) => onweapon(e.currentTarget.value)}>
-				{#each block.weapons.filter((weapon) => weapon.fights) as weapon}
-					<option value={weapon.name}>{weapon.name}</option>
-				{/each}
-			</select>
-		</label>
+		{#if arms}
+			<label>
+				Weapon in hand
+				<select value={weapon} onchange={(e) => onweapon(e.currentTarget.value)}>
+					{#each usable(block) as each}
+						<option value={each.name}>{each.name}</option>
+					{/each}
+				</select>
+			</label>
+		{/if}
 	{/if}
 
 	{#if refusal}<p class="refusal">{refusal}</p>{/if}

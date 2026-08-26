@@ -9,6 +9,7 @@
 <header>
 	<a href={resolve('/')}>Avelorn</a>
 	<a href={resolve('/list')}>list</a>
+	<a href={resolve('/shoot')}>shoot</a>
 	<a href={resolve('/fight')}>fight</a>
 	<span>unit browser</span>
 </header>
