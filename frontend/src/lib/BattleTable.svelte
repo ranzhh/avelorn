@@ -43,6 +43,23 @@
 	);
 	let turning = $state<number | null>(null);
 
+	/** The last drag, kept on the table after the pointer lets go. */
+	let trace = $state<{
+		fromX: number;
+		fromY: number;
+		toX: number;
+		toY: number;
+		reading: string;
+	} | null>(null);
+
+	// A block arriving or leaving makes the standing trace a lie about the table.
+	let counted: number | null = null;
+	$effect(() => {
+		const now = placed.length;
+		if (counted !== null && now !== counted) trace = null;
+		counted = now;
+	});
+
 	const moving = $derived.by(() => {
 		const out = flight;
 		return out ? (placed.find((each) => each.id === out.id) ?? null) : null;
@@ -77,6 +94,7 @@
 		event.stopPropagation();
 		(event.currentTarget as Element).setPointerCapture(event.pointerId);
 		const point = at(event);
+		trace = null;
 		flight = {
 			id: block.id,
 			grabX: point.x - block.x,
@@ -113,10 +131,18 @@
 
 	function release() {
 		if (flight && moving) {
+			const mark = {
+				fromX: moving.x,
+				fromY: moving.y,
+				toX: over ? over.x : flight.x,
+				toY: over ? over.y : flight.y,
+				reading: reading ?? ''
+			};
 			// On another block the drop is an action, so the mover stays where it
 			// stands and the menu measures from there. Anywhere else it is a move.
 			if (over) ondrop(moving.id, over.id);
 			else onmove(moving.id, flight.x, flight.y);
+			trace = mark;
 		}
 		flight = null;
 		turning = null;
@@ -225,6 +251,28 @@
 			</g>
 		{/if}
 	{/each}
+
+	{#if trace && !flight}
+		<g class="trace">
+			<line
+				class="path"
+				x1={trace.fromX}
+				y1={trace.fromY}
+				x2={trace.toX}
+				y2={trace.toY}
+				marker-end="url(#arrow)"
+			/>
+			{#if trace.reading}
+				<text
+					class="reading"
+					x={(trace.fromX + trace.toX) / 2}
+					y={(trace.fromY + trace.toY) / 2 - 1}
+				>
+					{trace.reading}
+				</text>
+			{/if}
+		</g>
+	{/if}
 
 	{#if ghost && moving}
 		{@const print = ghost.block.footprint}
@@ -347,6 +395,16 @@
 		stroke: var(--series-1);
 		stroke-width: 0.12;
 		pointer-events: none;
+	}
+
+	/* The drag that has finished: quieter than the one in hand. */
+	.trace {
+		opacity: 0.55;
+		pointer-events: none;
+	}
+
+	.trace .path {
+		stroke-dasharray: 0.8 0.5;
 	}
 
 	.reading {

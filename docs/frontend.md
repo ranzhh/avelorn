@@ -151,6 +151,9 @@ One route. The battle table is the primary surface and owns the screen.
 - Committing the move during the drag is the bug this shape avoids. The mover
   would end up on top of its target, and the gap a charge must cover would
   measure zero.
+- **The arrow stays after the drop**, dashed and dimmer than the live one, with
+  its reading. One at a time: it is cleared by the next drag, and by a block
+  arriving or leaving, which would make it a lie about the table.
 - **Resize changes the frontage.** Dragging a block's edge changes `files`, which
   re-forms the ranks and redraws the rectangle. Model count is not a drag: it is
   changed from the block panel.
