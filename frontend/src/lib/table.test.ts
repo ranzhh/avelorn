@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
 import type { MusteredUnit } from './api/client';
-import { angleTo, arc, bounds, corners, room, separation, snap, within } from './table';
+import {
+	angleTo,
+	arc,
+	base,
+	bounds,
+	corners,
+	reformed,
+	room,
+	separation,
+	snap,
+	within
+} from './table';
 import type { Degrees, Placed } from './table';
 
 // Twenty models five wide on 25mm bases: 125mm across, 100mm deep, so a block
@@ -201,5 +212,37 @@ describe('room', () => {
 		const crowd = [placed(36, 40), { ...placed(30, 40), id: 2 }, { ...placed(42, 40), id: 3 }];
 		const settled = room({ ...placed(36, 40), id: 4 }, crowd);
 		expect(within(settled)).toBe(true);
+	});
+});
+
+describe('base', () => {
+	it('divides the footprint back down to one model', () => {
+		const { width, depth } = base(BLOCK.footprint!);
+		expect(width).toBeCloseTo(25 / 25.4);
+		expect(depth).toBeCloseTo(25 / 25.4);
+	});
+});
+
+describe('reformed', () => {
+	const print = BLOCK.footprint!;
+
+	it('reads the frontage off how far the edge was dragged', () => {
+		// Five files of 25mm is 125mm across, so half is 62.5mm.
+		expect(reformed(print, 20, 62.5 / 25.4)).toBe(5);
+		expect(reformed(print, 20, 125 / 25.4)).toBe(10);
+	});
+
+	it('does not care which edge was dragged', () => {
+		expect(reformed(print, 20, -125 / 25.4)).toBe(10);
+	});
+
+	it('will not go narrower than one file', () => {
+		expect(reformed(print, 20, 0)).toBe(1);
+		expect(reformed(print, 20, -0.01)).toBe(1);
+	});
+
+	it('will not go wider than the block has models', () => {
+		expect(reformed(print, 20, 40)).toBe(20);
+		expect(reformed(print, 6, 40)).toBe(6);
 	});
 });

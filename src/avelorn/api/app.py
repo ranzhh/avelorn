@@ -100,6 +100,9 @@ class Muster(BaseModel):
     unit: str
     size: int = Field(ge=1)
     options: list[str] = Field(default_factory=list)
+    # The formation width in files. Omitted, the troop type's default; a caller
+    # re-forming a block on a table asks for the width it dragged it to.
+    frontage: int | None = Field(default=None, ge=1)
 
 
 @app.post("/muster", summary="Cost and equip one block of an army list")
@@ -108,7 +111,8 @@ def muster(request: Muster, data: Corpus) -> MusteredUnit:
 
     Says nothing about whether a list of these is legal -- army composition
     is not modelled yet. This costs one block and refuses one the datasheet
-    does not allow.
+    does not allow. A ``frontage`` re-forms the block that many models wide,
+    which changes the footprint it stands on and nothing about its cost.
 
     Returns:
         The block, its points and effective loadout derived.
@@ -122,9 +126,11 @@ def muster(request: Muster, data: Corpus) -> MusteredUnit:
         raise HTTPException(status_code=404, detail=f"no unit {request.unit!r}")
     try:
         complement = Complement(unit=unit, size=request.size, options=request.options)
+        return MusteredUnit.of(complement, data.rules, frontage=request.frontage)
     except ValidationError as invalid:
         raise HTTPException(status_code=422, detail=_first_message(invalid)) from invalid
-    return MusteredUnit.of(complement, data.rules)
+    except ValueError as refused:
+        raise HTTPException(status_code=422, detail=str(refused)) from refused
 
 
 def _first_message(invalid: ValidationError) -> str:

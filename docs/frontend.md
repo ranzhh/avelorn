@@ -154,9 +154,12 @@ One route. The battle table is the primary surface and owns the screen.
 - **The arrow stays after the drop**, dashed and dimmer than the live one, with
   its reading. One at a time: it is cleared by the next drag, and by a block
   arriving or leaving, which would make it a lie about the table.
-- **Resize changes the frontage.** Dragging a block's edge changes `files`, which
-  re-forms the ranks and redraws the rectangle. Model count is not a drag: it is
-  changed from the block panel.
+- **Resize changes the frontage.** A picked block carries a handle on each side
+  edge. Dragging one reads a file count off how far the pointer is along the
+  block's own width, previews the new rectangle, and on release asks
+  `POST /muster` for the footprint that width actually takes. The browser never
+  decides the formation: `frontage` goes to the API and the engine's `Formation`
+  answers. Model count is not a drag; it is changed from the block panel.
 - **Facing is any angle**, turned by a rotation handle on a stalk off the block's
   front, the way Word and PowerPoint rotate a shape. Free by default; Shift
   snaps to 15°. Because a block can sit off the axis, nothing may measure it
@@ -227,7 +230,10 @@ engine walks is honest and needs no backend change.
   filed under several).
 - `POST /muster` → `MusteredUnit`, carrying `footprint` (`files`, `ranks`,
   `width_mm`, `depth_mm`; null where a datasheet prints no base size) and
-  `weapons` as `Wieldable` with `fights` and `shoots`.
+  `weapons` as `Wieldable` with `fights` and `shoots`. It takes an optional
+  `frontage`, which re-forms the block that many models wide and changes the
+  footprint without changing the cost. A frontage wider than the block comes
+  back as the block's own width, so a caller may send what it dragged to.
 - `POST /fight`, `POST /volley` → the reports. Both take a `Deployment` per side
   with an optional `weapon` and `frontage`; omitting `weapon` lets the API pick
   the last one usable in that phase.
@@ -246,8 +252,8 @@ merged or accept a rebase.
 2. **The one-route shell.** Docked collapsible panels with header values and
    persisted open state; the battle table as a static surface with blocks placed
    by click. No drag. ← _landed_
-3. **Drag.** Move a block and drop onto another to open the action menu, both
-   landed. Resizing an edge to change frontage is still to do.
+3. **Drag.** Move a block, drop onto another to open the action menu, drag a side
+   edge to re-form. ← _landed_
 4. **The result panels.** Fight and volley resolved into the docked panel, with
    the stat chain, distributions and outcome bars. ← _landed_
 5. **Floating panes.** Datasheet and rule panes, stacking, hyperlinked.

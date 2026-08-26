@@ -196,6 +196,32 @@ export function angleTo(centre: Point, at: Point): Degrees {
 	return (degrees + 360) % 360;
 }
 
+/** The base a single model stands on, in inches, read back out of the footprint. */
+export function base(footprint: NonNullable<MusteredUnit['footprint']>): {
+	width: number;
+	depth: number;
+} {
+	const { width, depth } = span(footprint);
+	return { width: width / footprint.files, depth: depth / footprint.ranks };
+}
+
+/**
+ * The frontage a block would take if its side edge were dragged to `across`.
+ *
+ * `across` is the distance from the block's centre to the pointer along its own
+ * width, so half the formation. Bounded at one file and at the model count: a
+ * block cannot stand narrower than a single file, and standing wider than it
+ * has models is the same as one rank.
+ */
+export function reformed(
+	footprint: NonNullable<MusteredUnit['footprint']>,
+	models: number,
+	across: number
+): number {
+	const files = Math.round((Math.abs(across) * 2) / base(footprint).width);
+	return Math.min(Math.max(files, 1), models);
+}
+
 /** An angle snapped to the nearest `step` degrees. */
 export function snap(facing: Degrees, step = 15): Degrees {
 	return (((Math.round(facing / step) * step) % 360) + 360) % 360;

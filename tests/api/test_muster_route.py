@@ -91,6 +91,39 @@ def test_a_cavalry_block_stands_on_its_own_base(client: TestClient) -> None:
     assert reavers["footprint"] == {"files": 5, "ranks": 1, "width_mm": 150, "depth_mm": 60}
 
 
+def test_a_block_re_forms_to_the_width_asked_for(client: TestClient) -> None:
+    """Twenty spearmen ten wide are two ranks deep instead of four."""
+    body = client.post(
+        "/muster", json={"unit": "elven-spearmen", "size": 20, "frontage": 10}
+    ).json()
+    assert body["footprint"] == {"files": 10, "ranks": 2, "width_mm": 250, "depth_mm": 50}
+
+
+def test_re_forming_costs_nothing(client: TestClient) -> None:
+    """Standing wider is a formation, not a purchase."""
+    wide = client.post("/muster", json={"unit": "elven-spearmen", "size": 20, "frontage": 10})
+    deep = client.post("/muster", json={"unit": "elven-spearmen", "size": 20, "frontage": 4})
+    assert wide.json()["points"] == deep.json()["points"]
+
+
+def test_a_frontage_wider_than_the_block_is_the_block(client: TestClient) -> None:
+    """A caller dragging an edge past the unit's width gets the truth back."""
+    body = client.post(
+        "/muster", json={"unit": "elven-spearmen", "size": 20, "frontage": 40}
+    ).json()
+    assert body["footprint"]["files"] == 20
+    assert body["footprint"]["ranks"] == 1
+
+
+def test_a_short_rear_rank_still_takes_a_rank_at_a_chosen_frontage(client: TestClient) -> None:
+    """Twenty spearmen seven wide leave six in a third rank, which takes its depth."""
+    body = client.post(
+        "/muster", json={"unit": "elven-spearmen", "size": 20, "frontage": 7}
+    ).json()
+    assert body["footprint"]["ranks"] == 3
+    assert body["footprint"]["depth_mm"] == 75
+
+
 def test_a_size_the_datasheet_forbids_is_refused_with_the_reason(client: TestClient) -> None:
     """Below the printed minimum is not a list to cost, and the message says why."""
     response = client.post("/muster", json={"unit": "elven-spearmen", "size": 2})

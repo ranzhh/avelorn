@@ -3,7 +3,10 @@
 		TABLE,
 		angleTo,
 		arc,
+		base,
+		bearing,
 		bounds,
+		reformed,
 		separation,
 		snap,
 		span,
@@ -19,9 +22,11 @@
 		onturn: (id: number, facing: number) => void;
 		/** One block dropped onto another: what the first could do to the second. */
 		ondrop: (mover: number, target: number) => void;
+		/** The block re-formed to a new width in files. */
+		onreform: (id: number, frontage: number) => void;
 	}
 
-	let { placed, picked, onpick, onmove, onturn, ondrop }: Props = $props();
+	let { placed, picked, onpick, onmove, onturn, ondrop, onreform }: Props = $props();
 
 	// A foot apart, interior only: the border already draws the table's edge.
 	const ruled = (edge: number) =>
@@ -42,6 +47,8 @@
 		null
 	);
 	let turning = $state<number | null>(null);
+	/** A side edge being dragged, and the width it currently reads. */
+	let widening = $state<{ id: number; files: number } | null>(null);
 
 	/** The last drag, kept on the table after the pointer lets go. */
 	let trace = $state<{
@@ -105,6 +112,13 @@
 		onpick(block.id);
 	}
 
+	function grabEdge(event: PointerEvent, block: Placed) {
+		event.stopPropagation();
+		(event.currentTarget as Element).setPointerCapture(event.pointerId);
+		widening = { id: block.id, files: block.block.footprint?.files ?? 1 };
+		onpick(block.id);
+	}
+
 	function grabHandle(event: PointerEvent, block: Placed) {
 		event.stopPropagation();
 		(event.currentTarget as Element).setPointerCapture(event.pointerId);
@@ -126,6 +140,18 @@
 			if (!block) return;
 			const facing = angleTo({ x: block.x, y: block.y }, at(event));
 			onturn(block.id, event.shiftKey ? snap(facing) : Math.round(facing));
+			return;
+		}
+		const wide = widening;
+		if (wide) {
+			const block = placed.find((each) => each.id === wide.id);
+			const print = block?.block.footprint;
+			if (!block || !print) return;
+			const point = at(event);
+			const { right } = bearing(block.facing);
+			// How far along the block's own width the pointer is from its centre.
+			const across = (point.x - block.x) * right.x + (point.y - block.y) * right.y;
+			widening = { id: wide.id, files: reformed(print, block.block.size, across) };
 		}
 	}
 
@@ -144,8 +170,16 @@
 			else onmove(moving.id, flight.x, flight.y);
 			trace = mark;
 		}
+		const wide = widening;
+		if (wide) {
+			const block = placed.find((each) => each.id === wide.id);
+			if (block && block.block.footprint?.files !== wide.files) {
+				onreform(block.id, wide.files);
+			}
+		}
 		flight = null;
 		turning = null;
+		widening = null;
 	}
 
 	/** Where the rotation handle sits: on a stalk off the block's front. */
@@ -228,6 +262,19 @@
 				</g>
 
 				{#if block.id === picked && !flight}
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<g transform="rotate({block.facing} {block.x} {block.y})">
+						{#each [-1, 1] as side}
+							<rect
+								class="edge"
+								x={block.x + (side * size.width) / 2 - 0.5}
+								y={block.y - 1}
+								width="1"
+								height="2"
+								onpointerdown={(event) => grabEdge(event, block)}
+							/>
+						{/each}
+					</g>
 					{@const handle = stalk(block)}
 					{#if handle}
 						<line class="tether" x1={handle.fromX} y1={handle.fromY} x2={handle.x} y2={handle.y} />
@@ -251,6 +298,26 @@
 			</g>
 		{/if}
 	{/each}
+
+	{#if widening !== null}
+		{@const reform = widening}
+		{@const block = placed.find((each) => each.id === reform.id)}
+		{#if block}
+			{@const print = block.block.footprint}
+			{#if print}
+				{@const ranks = Math.ceil(block.block.size / reform.files)}
+				{@const cell = base(print)}
+				{@const wide = reform.files * cell.width}
+				{@const deep = ranks * cell.depth}
+				<g class="ghost" transform="rotate({block.facing} {block.x} {block.y})">
+					<rect x={block.x - wide / 2} y={block.y - deep / 2} width={wide} height={deep} />
+				</g>
+				<text class="reading" x={block.x} y={block.y - deep / 2 - 1}>
+					{reform.files}×{ranks}
+				</text>
+			{/if}
+		{/if}
+	{/if}
 
 	{#if trace && !flight}
 		<g class="trace">
@@ -440,6 +507,17 @@
 	}
 
 	.handle:hover {
+		fill: var(--series-1);
+	}
+
+	.edge {
+		fill: var(--sunken);
+		stroke: var(--series-1);
+		stroke-width: 0.15;
+		cursor: ew-resize;
+	}
+
+	.edge:hover {
 		fill: var(--series-1);
 	}
 </style>
