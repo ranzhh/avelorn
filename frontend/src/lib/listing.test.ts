@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { UnitSummary } from './api/client';
-import { listing, matches, reorder, sizeRange } from './listing';
+import { fielded, listing, matches, reorder, sizeRange } from './listing';
 import type { Order } from './listing';
 
 const unit = (
@@ -52,12 +52,12 @@ describe('matches', () => {
 describe('listing', () => {
 	it('orders by a numeric column numerically, not as text', () => {
 		const ordered = listing(CORPUS, '', { column: 'points', descending: false });
-		expect(ordered.map((each) => each.points)).toEqual([8, 9, 18, 50]);
+		expect(ordered.map(fielded)).toEqual([45, 50, 80, 90]);
 	});
 
 	it('reverses when descending', () => {
 		const ordered = listing(CORPUS, '', { column: 'points', descending: true });
-		expect(ordered.map((each) => each.points)).toEqual([50, 18, 9, 8]);
+		expect(ordered.map(fielded)).toEqual([90, 80, 50, 45]);
 	});
 
 	it('breaks ties on name so the order is total', () => {
@@ -109,5 +109,30 @@ describe('sizeRange', () => {
 
 	it('prints a bounded range as both ends', () => {
 		expect(sizeRange(CORPUS[3])).toBe('1–1');
+	});
+});
+
+describe('fielded', () => {
+	it('costs the smallest legal unit, not one model', () => {
+		// Elven Archers are 9 a model with a printed minimum of 5.
+		expect(fielded(CORPUS[0])).toBe(45);
+	});
+
+	it('follows the datasheet’s own minimum', () => {
+		expect(fielded(CORPUS[1])).toBe(80);
+		expect(fielded(CORPUS[3])).toBe(50);
+	});
+});
+
+describe('listing by points', () => {
+	it('orders by what a unit costs to field, not by its per-model price', () => {
+		// Dwarf Warriors are cheaper a model than Elven Archers, dearer to field.
+		const ordered = listing(CORPUS, '', { column: 'points', descending: false });
+		expect(ordered.map((each) => each.name)).toEqual([
+			'Elven Archers',
+			'Great Eagle',
+			'Dwarf Warriors',
+			'Ellyrian Reavers'
+		]);
 	});
 });

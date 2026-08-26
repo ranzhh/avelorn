@@ -3,9 +3,9 @@
 	import Dock from '$lib/Dock.svelte';
 	import Muster from '$lib/Muster.svelte';
 	import Resolved from '$lib/Resolved.svelte';
-	import { api, type FightReport, type VolleyReport } from '$lib/api/client';
-	import { listing } from '$lib/listing';
-	import { TABLE, arc, identifier, room, separation, usable, type Placed } from '$lib/table';
+	import { api, type FightReport, type MusteredUnit, type VolleyReport } from '$lib/api/client';
+	import { fielded, listing } from '$lib/listing';
+	import { TABLE, arc, identifier, room, separation, span, usable, type Placed } from '$lib/table';
 
 	let { data } = $props();
 
@@ -24,6 +24,39 @@
 	let volley = $state<VolleyReport | null>(null);
 
 	const rows = $derived(listing(data.units, needle, { column: 'name', descending: false }));
+
+	// Footprints for the panel's drag image, costed once on hover so dragstart
+	// has one to hand: it is synchronous and cannot wait for a round trip.
+	const shapes: Record<string, MusteredUnit> = {};
+	async function shape(unit: string, size: number) {
+		if (shapes[unit]) return;
+		const costed = await muster(unit, size, []);
+		if (costed) shapes[unit] = costed;
+	}
+
+	/**
+	 * Drag the block, not its name.
+	 *
+	 * The ghost under the pointer is the rectangle the unit will occupy, at the
+	 * scale the table is drawn, so what lands is what was carried.
+	 */
+	function carry(event: DragEvent, unit: string, size: number) {
+		event.dataTransfer?.setData('application/avelorn-unit', `${unit}:${size}`);
+		const costed = shapes[unit];
+		const print = costed?.footprint;
+		const surface = document.querySelector('.surface svg');
+		if (!print || !surface) return;
+		const perInch = surface.getBoundingClientRect().width / TABLE.width;
+		const { width, depth } = span(print);
+		const ghost = document.createElement('div');
+		ghost.className = 'carried';
+		ghost.style.width = `${width * perInch}px`;
+		ghost.style.height = `${depth * perInch}px`;
+		ghost.textContent = `${print.files}×${print.ranks}`;
+		document.body.append(ghost);
+		event.dataTransfer?.setDragImage(ghost, (width * perInch) / 2, (depth * perInch) / 2);
+		setTimeout(() => ghost.remove());
+	}
 	const block = $derived(placed.find((each) => each.id === picked) ?? null);
 	const points = $derived(placed.reduce((sum, each) => sum + each.block.points, 0));
 
@@ -201,15 +234,15 @@
 					<button
 						class="row"
 						draggable="true"
-						ondragstart={(event) =>
-							event.dataTransfer?.setData(
-								'application/avelorn-unit',
-								`${unit.id}:${unit.unit_size.min}`
-							)}
+						onpointerenter={() => shape(unit.id, unit.unit_size.min)}
+						ondragstart={(event) => carry(event, unit.id, unit.unit_size.min)}
 						onclick={() => deploy(unit.id, unit.unit_size.min)}
 					>
 						<span>{unit.name}</span>
-						<span class="num">{unit.points}</span>
+						<span class="cost num">
+							<span class="least">×{unit.unit_size.min}</span>
+							{fielded(unit)} pts
+						</span>
 					</button>
 				{/each}
 			</div>
@@ -420,8 +453,13 @@
 		background: var(--panel);
 	}
 
-	.row .num {
+	.cost {
 		color: var(--dim);
+		white-space: nowrap;
+	}
+
+	.least {
+		color: var(--faint);
 	}
 
 	.popover {

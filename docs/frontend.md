@@ -56,8 +56,14 @@ when shut.
 
 - Clicking a datasheet deploys it at its smallest legal size, then a popover
   beside the block takes the size and options. A row can also be dragged onto
-  the table.
-- Blocks carry a mark — A, B, C — with the model count under it.
+  the table, and what is dragged is a rectangle at the block's real size rather
+  than the row.
+- Blocks carry a mark — A, B, C — with the model count under it. Icons are
+  coming: expect the mark to be replaced by a per-unit icon, so keep whatever
+  draws the block label in one place.
+- Prices are always what the smallest legal unit costs, suffixed `pts`.
+  `UnitSummary.points` is per model, and a bare per-model figure tells you
+  nothing about taking the unit. `fielded()` in `listing.ts` does the sum.
 - Dragging ghosts the block: it stays put, a dashed ghost follows the pointer,
   an arrow between them carries the reading. **Do not commit the move during the
   drag** — the mover ends up on its target and a charge measures zero. The arrow
