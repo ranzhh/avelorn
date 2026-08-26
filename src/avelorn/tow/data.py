@@ -5,7 +5,7 @@ weapons, armour, and rules. :class:`TOWRepository` is the one place that
 knows the tree's layout, so tests, demos, and the app read through it.
 """
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from functools import cached_property
 from pathlib import Path
 
@@ -113,6 +113,22 @@ class TOWRepository:
         troop_types = self.troop_types
         loaded = [(path, load_yaml(path, Unit).with_troop_type(troop_types)) for path in paths]
         return Registry(_reconciled(loaded), kind="unit")
+
+    @cached_property
+    def fielded_by(self) -> Mapping[str, tuple[str, ...]]:
+        """Which armies file each datasheet, by unit slug.
+
+        The army is the directory a datasheet sits in rather than anything
+        the YAML declares, so it is read off the path here and nowhere else.
+        A slug maps to every army that fields it, sorted.
+
+        Returns:
+            One entry per unit slug, each the army slugs filing it.
+        """
+        filed: dict[str, set[str]] = {}
+        for path in self._data_dir.glob("tow/armies/*/units/*.yaml"):
+            filed.setdefault(path.stem, set()).add(path.parents[1].name)
+        return {slug: tuple(sorted(armies)) for slug, armies in sorted(filed.items())}
 
     @cached_property
     def weapons(self) -> Registry[Weapon]:

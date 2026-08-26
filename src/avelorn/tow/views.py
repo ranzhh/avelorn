@@ -43,7 +43,13 @@ from avelorn.tow.schema.unit import TroopType, Unit, UnitSize
 
 
 class UnitSummary(BaseModel):
-    """A datasheet as a listing shows it: what it costs and how it is fielded."""
+    """A datasheet as a listing shows it: what it costs, how it is fielded, who fields it.
+
+    ``armies`` is every army filing the datasheet, by slug, which a listing
+    groups by. It is plural because a slug may be filed under several -- a
+    mount or a beast that more than one army takes -- so a unit belongs to as
+    many branches of a browser as field it.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -52,15 +58,23 @@ class UnitSummary(BaseModel):
     points: int
     unit_size: UnitSize
     troop_type: TroopType
+    armies: list[str]
 
     @classmethod
-    def of(cls, unit: Unit) -> "UnitSummary":
+    def of(cls, unit: Unit, armies: Sequence[str]) -> "UnitSummary":
         """Summarise one datasheet.
 
         Returns:
-            The listing view of ``unit``.
+            The listing view of ``unit``, told which armies field it.
         """
-        return cls.model_validate(unit, from_attributes=True)
+        return cls(
+            id=unit.id,
+            name=unit.name,
+            points=unit.points,
+            unit_size=unit.unit_size,
+            troop_type=unit.troop_type,
+            armies=list(armies),
+        )
 
 
 class PrintedRule(BaseModel):

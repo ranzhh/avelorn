@@ -70,7 +70,9 @@ def list_units(data: Corpus) -> list[UnitSummary]:
     Returns:
         One summary per unit.
     """
-    return [UnitSummary.of(unit) for _, unit in sorted(data.units.items())]
+    return [
+        UnitSummary.of(unit, data.fielded_by[slug]) for slug, unit in sorted(data.units.items())
+    ]
 
 
 @app.get("/units/{slug}", summary="Read one datasheet")

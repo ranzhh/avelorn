@@ -83,6 +83,24 @@ def test_copies_that_disagree_fail_the_load_naming_both(tmp_path: Path) -> None:
         _ = stale.units
 
 
+def test_a_datasheet_names_the_army_filing_it() -> None:
+    """The army is the directory, which the repository reads off the path."""
+    assert REPO.fielded_by["elven-archers"] == ("high-elf-realms",)
+    assert REPO.fielded_by["dwarf-warriors"] == ("dwarfen-mountain-holds",)
+
+
+def test_every_datasheet_is_fielded_by_someone() -> None:
+    """A unit reaches the registry by being filed under an army, so none is orphaned."""
+    assert set(REPO.fielded_by) == set(REPO.units)
+
+
+def test_a_datasheet_filed_under_two_armies_names_both(tmp_path: Path) -> None:
+    """A mount several armies take belongs to every branch of a browser that fields it."""
+    _corpus_filing(tmp_path, "elven-archers", under="wood-elf-realms")
+    shared = TOWRepository(data_dir=tmp_path / "data")
+    assert shared.fielded_by["elven-archers"] == ("high-elf-realms", "wood-elf-realms")
+
+
 def test_printed_references_are_spelled_as_their_entries() -> None:
     """A reference that is a loose variant of an existing entry is a data error.
 

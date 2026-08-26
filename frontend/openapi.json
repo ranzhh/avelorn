@@ -2057,6 +2057,13 @@
           },
           "troop_type": {
             "$ref": "#/components/schemas/TroopType"
+          },
+          "armies": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Armies"
           }
         },
         "additionalProperties": false,
@@ -2066,10 +2073,11 @@
           "name",
           "points",
           "unit_size",
-          "troop_type"
+          "troop_type",
+          "armies"
         ],
         "title": "UnitSummary",
-        "description": "A datasheet as a listing shows it: what it costs and how it is fielded."
+        "description": "A datasheet as a listing shows it: what it costs, how it is fielded, who fields it.\n\n``armies`` is every army filing the datasheet, by slug, which a listing\ngroups by. It is plural because a slug may be filed under several -- a\nmount or a beast that more than one army takes -- so a unit belongs to as\nmany branches of a browser as field it."
       },
       "UnmodelledRule": {
         "properties": {
