@@ -196,7 +196,7 @@
 	}
 
 	fieldset.range {
-		border: 1px solid var(--rule);
+		border: 1px solid var(--line);
 		border-radius: 3px;
 		padding: 1rem;
 		margin-bottom: 1rem;
@@ -211,22 +211,22 @@
 		font: inherit;
 		width: 5rem;
 		padding: 0.3rem 0.5rem;
-		border: 1px solid var(--rule);
+		border: 1px solid var(--line);
 		border-radius: 3px;
-		background: white;
+		background: var(--sunken);
 	}
 
 	button {
 		font: inherit;
 		padding: 0.4rem 1rem;
-		border: 1px solid var(--rule);
+		border: 1px solid var(--line);
 		border-radius: 3px;
-		background: white;
+		background: var(--sunken);
 		cursor: pointer;
 	}
 
 	button:disabled {
-		color: var(--muted);
+		color: var(--dim);
 		cursor: not-allowed;
 	}
 
@@ -241,17 +241,17 @@
 
 		summary {
 			cursor: pointer;
-			color: var(--muted);
+			color: var(--dim);
 		}
 	}
 
 	.meta {
-		color: var(--muted);
+		color: var(--dim);
 		font-size: 0.85rem;
 	}
 
 	.refusal {
-		color: #8a1c1c;
+		color: var(--neg);
 		font-size: 0.9rem;
 	}
 </style>

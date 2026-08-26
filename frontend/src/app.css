@@ -1,62 +1,312 @@
+/*
+ * The design tokens, and the base element styles written against them.
+ *
+ * Roles, values, and the reasoning behind the colours are specified in
+ * docs/frontend.md. Two things that document settles and this file only
+ * implements: the mark colours are validated for colourblind separation and
+ * contrast against --panel, so changing one means re-running that validation;
+ * and --faint fails body-text contrast, so it is for strokes and carets only.
+ *
+ * Dark only for now. A light theme is a second block of the same role names.
+ */
+
 :root {
-	--ink: #1c1a17;
-	--muted: #6b645c;
-	--rule: #ddd6cc;
-	--paper: #faf7f2;
-	color-scheme: light;
+	--space-1: 0.25rem;
+	--space-2: 0.5rem;
+	--space-3: 0.75rem;
+	--space-4: 1rem;
+	--space-5: 1.5rem;
+	--space-6: 2rem;
+
+	--font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+	--font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, monospace;
+
+	--text-xs: 0.6875rem;
+	--text-sm: 0.75rem;
+	--text-base: 0.8125rem;
+	--text-lg: 0.9375rem;
+	--text-xl: 1.125rem;
+
+	--radius-sm: 2px;
+	--radius-md: 4px;
+	--radius-pill: 999px;
+
+	--transition: 100ms ease;
+
+	color-scheme: dark;
+
+	--plane: #14161a;
+	--panel: #1b1e23;
+	--sunken: #101216;
+	--line: #2a2f37;
+
+	--ink: #dfe3e8;
+	--dim: #8b939e;
+	--faint: #5d646d;
+
+	/* Marks: identity and order. Never on text. */
+	--series-1: #3987e5;
+	--series-2: #cf6a5a;
+	--neutral: #3a4048;
+	--ordinal-1: #9ec5f4;
+	--ordinal-2: #5598e7;
+	--ordinal-3: #2a78d6;
+	--ordinal-4: #184f95;
+
+	/* Meaning: allowed on numbers. */
+	--pos: #7fb069;
+	--neg: #e08273;
+
+	--accent: #3987e5;
+	--accent-ink: #6fa8dc;
+	--on-accent: #0b0e12;
+
+	/* Floating things: menus now, panes later. */
+	--shadow: 0 4px 12px rgb(0 0 0 / 0.55);
+}
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
 }
 
 body {
 	margin: 0;
-	background: var(--paper);
+	background: var(--plane);
 	color: var(--ink);
-	font:
-		16px/1.5 ui-serif,
-		Georgia,
-		serif;
+	font: var(--text-base) / 1.45 var(--font-sans);
+	-webkit-font-smoothing: antialiased;
 }
 
-header {
-	display: flex;
-	gap: 0.75rem;
-	align-items: baseline;
-	padding: 1rem 1.5rem;
-	border-bottom: 1px solid var(--rule);
-
-	a {
-		font-weight: 700;
-		font-size: 1.1rem;
-		color: inherit;
-		text-decoration: none;
-	}
-
-	span {
-		color: var(--muted);
-		font-size: 0.9rem;
-	}
+h1,
+h2,
+h3 {
+	margin: 0;
+	font-weight: 600;
+	line-height: 1.25;
 }
 
-main {
-	max-width: 54rem;
-	margin: 0 auto;
-	padding: 1.5rem;
+h1 {
+	font-size: var(--text-lg);
 }
+
+h2 {
+	font-size: var(--text-xs);
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--dim);
+}
+
+h3 {
+	font-size: var(--text-base);
+}
+
+p {
+	margin: 0;
+}
+
+a {
+	color: var(--accent-ink);
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
+
+:focus-visible {
+	outline: 1px solid var(--accent);
+	outline-offset: 1px;
+}
+
+/* ── tables: the primary surface ──────────────────────────────────────── */
 
 table {
-	border-collapse: collapse;
 	width: 100%;
+	border-collapse: collapse;
+	font-size: var(--text-base);
+}
 
-	th,
-	td {
-		text-align: left;
-		padding: 0.4rem 0.6rem;
-		border-bottom: 1px solid var(--rule);
-	}
+th {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	text-align: left;
+	padding: var(--space-2) var(--space-3);
+	font: 600 var(--text-xs) / 1 var(--font-sans);
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: var(--dim);
+	background: var(--panel);
+	border-bottom: 1px solid var(--line);
+	white-space: nowrap;
+}
 
-	th {
-		font-size: 0.8rem;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-		color: var(--muted);
-	}
+td {
+	padding: var(--space-1) var(--space-3);
+	border-bottom: 1px solid var(--sunken);
+	white-space: nowrap;
+}
+
+tbody tr:hover td {
+	background: var(--panel);
+}
+
+.num,
+th.num {
+	text-align: right;
+	font-family: var(--font-mono);
+	font-variant-numeric: tabular-nums;
+}
+
+/* ── primitives ───────────────────────────────────────────────────────── */
+
+.btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--space-2);
+	padding: var(--space-1) var(--space-3);
+	font: 500 var(--text-sm) / 1.6 var(--font-sans);
+	color: var(--ink);
+	background: var(--sunken);
+	border: 1px solid var(--line);
+	border-radius: var(--radius-sm);
+	cursor: pointer;
+	white-space: nowrap;
+	transition:
+		border-color var(--transition),
+		background var(--transition);
+}
+
+.btn:hover:not(:disabled) {
+	border-color: var(--faint);
+}
+
+.btn:disabled {
+	color: var(--faint);
+	cursor: not-allowed;
+}
+
+.btn-primary {
+	background: var(--accent);
+	border-color: var(--accent);
+	color: var(--on-accent);
+}
+
+.btn-ghost {
+	background: none;
+	border-color: transparent;
+	color: var(--dim);
+}
+
+.btn-ghost:hover:not(:disabled) {
+	background: var(--panel);
+	color: var(--ink);
+	border-color: transparent;
+}
+
+.btn-sm {
+	font-size: var(--text-xs);
+	padding: 0 var(--space-2);
+}
+
+.input,
+.select {
+	font: var(--text-sm) / 1.6 var(--font-sans);
+	padding: var(--space-1) var(--space-2);
+	color: var(--ink);
+	background: var(--sunken);
+	border: 1px solid var(--line);
+	border-radius: var(--radius-sm);
+	transition: border-color var(--transition);
+}
+
+.input:hover,
+.select:hover {
+	border-color: var(--faint);
+}
+
+.input::placeholder {
+	color: var(--faint);
+}
+
+.input[type='number'] {
+	width: 4.5rem;
+	text-align: right;
+	font-family: var(--font-mono);
+	font-variant-numeric: tabular-nums;
+}
+
+.field {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-2);
+	padding: 1px 0;
+	font-size: var(--text-sm);
+	color: var(--dim);
+}
+
+.check {
+	display: flex;
+	align-items: center;
+	gap: var(--space-1);
+	font-size: var(--text-xs);
+	color: var(--dim);
+	cursor: pointer;
+}
+
+.panel {
+	background: var(--panel);
+	border: 1px solid var(--line);
+	border-radius: var(--radius-md);
+	padding: var(--space-3);
+}
+
+.pill {
+	display: inline-flex;
+	align-items: center;
+	padding: 0 var(--space-2);
+	font: var(--text-xs) / 1.7 var(--font-mono);
+	color: var(--dim);
+	background: var(--sunken);
+	border: 1px solid var(--line);
+	border-radius: var(--radius-sm);
+	white-space: nowrap;
+}
+
+.eyebrow {
+	font: 600 var(--text-xs) / 1 var(--font-sans);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--dim);
+}
+
+.meta {
+	color: var(--dim);
+	font-size: var(--text-sm);
+}
+
+.refuse {
+	font-family: var(--font-mono);
+	font-size: var(--text-sm);
+	color: var(--neg);
+}
+
+.cluster {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-3);
+	align-items: center;
+}
+
+.pos {
+	color: var(--pos);
+}
+
+.neg {
+	color: var(--neg);
 }

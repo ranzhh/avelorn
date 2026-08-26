@@ -175,7 +175,7 @@
 
 <style>
 	fieldset {
-		border: 1px solid var(--rule);
+		border: 1px solid var(--line);
 		border-radius: 3px;
 		padding: 1rem;
 	}
@@ -189,9 +189,9 @@
 	input[type='number'] {
 		font: inherit;
 		padding: 0.3rem 0.5rem;
-		border: 1px solid var(--rule);
+		border: 1px solid var(--line);
 		border-radius: 3px;
-		background: white;
+		background: var(--sunken);
 	}
 
 	input[type='number'] {
@@ -204,7 +204,7 @@
 	}
 
 	.refusal {
-		color: #8a1c1c;
+		color: var(--neg);
 		font-size: 0.9rem;
 	}
 
@@ -214,7 +214,7 @@
 
 		legend {
 			font-size: 0.8rem;
-			color: var(--muted);
+			color: var(--dim);
 		}
 	}
 
@@ -224,12 +224,12 @@
 	}
 
 	.meta {
-		color: var(--muted);
+		color: var(--dim);
 		font-size: 0.85rem;
 	}
 
 	.warn {
-		color: #8a5a00;
+		color: var(--ordinal-1);
 		font-size: 0.8rem;
 	}
 </style>

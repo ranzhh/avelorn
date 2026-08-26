@@ -90,9 +90,9 @@
 		font: inherit;
 		width: 5rem;
 		padding: 0.3rem 0.5rem;
-		border: 1px solid var(--rule);
+		border: 1px solid var(--line);
 		border-radius: 3px;
-		background: white;
+		background: var(--sunken);
 	}
 
 	.options {
@@ -113,9 +113,9 @@
 	button {
 		font: inherit;
 		padding: 0.35rem 0.8rem;
-		border: 1px solid var(--rule);
+		border: 1px solid var(--line);
 		border-radius: 3px;
-		background: white;
+		background: var(--sunken);
 		cursor: pointer;
 	}
 
@@ -123,22 +123,22 @@
 		border: none;
 		background: none;
 		padding: 0;
-		color: var(--muted);
+		color: var(--dim);
 		text-decoration: underline;
 	}
 
 	.meta {
-		color: var(--muted);
+		color: var(--dim);
 		font-size: 0.85rem;
 	}
 
 	.warn {
-		color: #8a5a00;
+		color: var(--ordinal-1);
 		font-size: 0.8rem;
 	}
 
 	.refusal {
-		color: #8a1c1c;
+		color: var(--neg);
 		font-size: 0.9rem;
 	}
 </style>

@@ -35,12 +35,12 @@
 	}
 
 	.meta {
-		color: var(--muted);
+		color: var(--dim);
 		font-size: 0.85rem;
 	}
 
 	.flavour {
 		font-style: italic;
-		color: var(--muted);
+		color: var(--dim);
 	}
 </style>
