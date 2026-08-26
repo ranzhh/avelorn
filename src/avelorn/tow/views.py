@@ -37,6 +37,7 @@ from avelorn.tow.data import TOWRepository
 from avelorn.tow.engine.rules import printed_rule
 from avelorn.tow.muster import Complement
 from avelorn.tow.phases.combat import BreakResult, CombatResult, FightResult, SideBreak
+from avelorn.tow.phases.shooting import PanicResult, ShootingResult
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.unit import TroopType, Unit, UnitSize
 
@@ -116,17 +117,19 @@ class UnitDetail(Unit):
 
 
 class Wieldable(BaseModel):
-    """A weapon a block carries, and whether it can be used in close combat.
+    """A weapon a block carries, and which phases can put it in hand.
 
-    A bow has no Combat profile, so a caller resolving a melee must not offer
-    it. The fact belongs here rather than in the caller because it is read off
-    the weapon entry, and a caller guessing from the name would be guessing.
+    A bow has no Combat profile and a hand weapon no missile one, so a caller
+    resolving a melee or a volley must not offer the wrong half. The facts
+    belong here rather than in the caller because they are read off the weapon
+    entry, and a caller guessing from the name would be guessing.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     name: str
     fights: bool
+    shoots: bool
 
 
 class MusteredUnit(BaseModel):
@@ -170,7 +173,11 @@ class MusteredUnit(BaseModel):
             # What the block could fight with, which is the equipment that
             # resolves to a weapon rather than to armour.
             weapons=[
-                Wieldable(name=weapon.name, fights=weapon.combat_profile is not None)
+                Wieldable(
+                    name=weapon.name,
+                    fights=weapon.combat_profile is not None,
+                    shoots=weapon.missile_profile is not None,
+                )
                 for weapon in Contingent.field(complement).loadout.weapons
             ],
             special_rules=[PrintedRule.of(name, rules) for name in complement.special_rules],
@@ -302,6 +309,116 @@ def _side(
         falls_back=float(broke.p_falls_back),
         breaks=float(broke.p_breaks),
     )
+
+
+class Panic(BaseModel):
+    """What a volley's casualties do to the target's nerve.
+
+    ``tests`` is the chance the unit is forced to test at all -- it lost more
+    than a quarter of the models it started the phase with, and something is
+    left to test. The four outcomes below it are unconditional and exhaust the
+    space: a unit that is never forced to test simply ``holds``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    tests: float
+    holds: float
+    falls_back: float
+    flees: float
+    destroyed: float
+    # The rule that re-rolled a failed test, if the target carries one.
+    reroll_from: str | None
+
+
+class Volleyed(BaseModel):
+    """A unit in a volley: the one shooting, or the one shot at."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    unit: str
+    name: str
+    size: int
+    # The weapon loosed, on the shooter; the target is not armed for this.
+    weapon: str | None = None
+
+
+class VolleyReport(BaseModel):
+    """One volley of shooting, resolved exactly, and what it did to the target's nerve.
+
+    The targets are the ones the volley actually used, not the ones printed:
+    ``hit_target`` already carries the range and movement modifiers, which is
+    why the same bow needs a 3+ up close and a 4+ beyond half range. A target
+    is ``None`` where the stage does not apply -- no armour save to take, no
+    ward to attempt.
+
+    ``wounds`` is the distribution of unsaved wounds and ``casualties`` the
+    models removed; they differ only when the volley would overkill the unit
+    or its models have more than one Wound.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    shooter: Volleyed
+    target: Volleyed
+    shots: int
+    hit_target: int
+    wound_target: int | None
+    save_target: int | None
+    ward_target: int | None
+    p_hit: float
+    p_wound: float
+    p_unsaved: float
+    wounds: list[float]
+    casualties: list[float]
+    expected_wounds: float
+    expected_casualties: float
+    panic: Panic
+    not_modelled: list[str]
+
+    @classmethod
+    def of(
+        cls,
+        shooter: Contingent,
+        target: Contingent,
+        volley: ShootingResult,
+        panicked: PanicResult,
+    ) -> "VolleyReport":
+        """Gather a resolved volley and its panic step into one answer.
+
+        Returns:
+            The report both surfaces show.
+        """
+        return cls(
+            shooter=Volleyed(
+                unit=shooter.unit.id,
+                name=shooter.unit.name,
+                size=shooter.models,
+                weapon=shooter.in_hand().name,
+            ),
+            target=Volleyed(unit=target.unit.id, name=target.unit.name, size=target.models),
+            shots=volley.shots,
+            hit_target=volley.hit_target,
+            wound_target=volley.wound_target,
+            save_target=volley.save_target,
+            ward_target=volley.ward_target,
+            p_hit=float(volley.p_hit),
+            p_wound=float(volley.p_wound),
+            p_unsaved=float(volley.p_unsaved),
+            wounds=[float(mass) for mass in volley.distribution],
+            casualties=[float(mass) for mass in volley.casualties],
+            expected_wounds=float(volley.expected_wounds),
+            expected_casualties=float(volley.expected_casualties),
+            panic=Panic(
+                tests=float(panicked.p_test),
+                holds=float(panicked.p_holds),
+                falls_back=float(panicked.p_falls_back),
+                flees=float(panicked.p_flees),
+                destroyed=float(panicked.p_destroyed),
+                reroll_from=panicked.reroll_from,
+            ),
+            not_modelled=sorted(set(volley.notes)),
+        )
 
 
 class RuleSummary(BaseModel):

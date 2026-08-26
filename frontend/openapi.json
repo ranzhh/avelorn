@@ -147,6 +147,45 @@
         }
       }
     },
+    "/volley": {
+      "post": {
+        "summary": "Resolve one volley of shooting, and the panic it causes",
+        "description": "Shoot one unit at another and resolve the panic its casualties cause.\n\nOne volley: shots are counted, rolled to hit and to wound, saved against,\nand the survivors tally into a casualty distribution the target then tests\nits nerve against. The to-hit target reported is the one the volley used,\nwith the range and movement modifiers already folded in.\n\nA side the corpus cannot field is refused before any dice are walked: an\nunknown slug is a 404, and a size, option or weapon the datasheet does not\nallow is a 422 naming which side asked for it. The shooter must carry\nsomething with a missile profile.\n\nReturns:\n    The volley resolved: the effective targets, the wound and casualty\n    distributions, what the target's nerve does, and every rule the engine\n    held without applying.",
+        "operationId": "volley_volley_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Volley"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VolleyReport"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/rules": {
       "get": {
         "summary": "List every rule entry in the corpus",
@@ -1263,6 +1302,53 @@
         "title": "OptionKind",
         "description": "Coarse category of a unit option."
       },
+      "Panic": {
+        "properties": {
+          "tests": {
+            "type": "number",
+            "title": "Tests"
+          },
+          "holds": {
+            "type": "number",
+            "title": "Holds"
+          },
+          "falls_back": {
+            "type": "number",
+            "title": "Falls Back"
+          },
+          "flees": {
+            "type": "number",
+            "title": "Flees"
+          },
+          "destroyed": {
+            "type": "number",
+            "title": "Destroyed"
+          },
+          "reroll_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reroll From"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tests",
+          "holds",
+          "falls_back",
+          "flees",
+          "destroyed",
+          "reroll_from"
+        ],
+        "title": "Panic",
+        "description": "What a volley's casualties do to the target's nerve.\n\n``tests`` is the chance the unit is forced to test at all -- it lost more\nthan a quarter of the models it started the phase with, and something is\nleft to test. The four outcomes below it are unconditional and exhaust the\nspace: a unit that is never forced to test simply ``holds``."
+      },
       "PanicCause": {
         "type": "string",
         "enum": [
@@ -2056,6 +2142,53 @@
         ],
         "title": "ValidationError"
       },
+      "Volley": {
+        "properties": {
+          "shooter": {
+            "$ref": "#/components/schemas/Deployment"
+          },
+          "target": {
+            "$ref": "#/components/schemas/Deployment"
+          },
+          "distance": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distance"
+          },
+          "hit_modifier": {
+            "type": "integer",
+            "title": "Hit Modifier",
+            "default": 0
+          },
+          "battle_strength": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Battle Strength"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "shooter",
+          "target"
+        ],
+        "title": "Volley",
+        "description": "One unit shooting another, and what the shot has to travel through."
+      },
       "VolleyEffect": {
         "properties": {
           "when": {
@@ -2081,6 +2214,159 @@
         ],
         "title": "VolleyEffect",
         "description": "Volley Fire's printed mechanic: rear ranks join the volley by halves.\n\n\"Half of the models in each rank other than the front rank, rounding\nup, can shoot\" \u2014 a shot-count rule, landing on how many models fire,\nnever on the dice. The one printed fraction is the closed vocabulary;\na variant joins when a rule prints one. Gated as the page gates it\n(no move this turn, never on a Stand & Shoot); the hill variant is\nterrain and stays in the entry's notes. Self-naming by ``volley``."
+      },
+      "VolleyReport": {
+        "properties": {
+          "shooter": {
+            "$ref": "#/components/schemas/Volleyed"
+          },
+          "target": {
+            "$ref": "#/components/schemas/Volleyed"
+          },
+          "shots": {
+            "type": "integer",
+            "title": "Shots"
+          },
+          "hit_target": {
+            "type": "integer",
+            "title": "Hit Target"
+          },
+          "wound_target": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wound Target"
+          },
+          "save_target": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Save Target"
+          },
+          "ward_target": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ward Target"
+          },
+          "p_hit": {
+            "type": "number",
+            "title": "P Hit"
+          },
+          "p_wound": {
+            "type": "number",
+            "title": "P Wound"
+          },
+          "p_unsaved": {
+            "type": "number",
+            "title": "P Unsaved"
+          },
+          "wounds": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Wounds"
+          },
+          "casualties": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Casualties"
+          },
+          "expected_wounds": {
+            "type": "number",
+            "title": "Expected Wounds"
+          },
+          "expected_casualties": {
+            "type": "number",
+            "title": "Expected Casualties"
+          },
+          "panic": {
+            "$ref": "#/components/schemas/Panic"
+          },
+          "not_modelled": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Not Modelled"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "shooter",
+          "target",
+          "shots",
+          "hit_target",
+          "wound_target",
+          "save_target",
+          "ward_target",
+          "p_hit",
+          "p_wound",
+          "p_unsaved",
+          "wounds",
+          "casualties",
+          "expected_wounds",
+          "expected_casualties",
+          "panic",
+          "not_modelled"
+        ],
+        "title": "VolleyReport",
+        "description": "One volley of shooting, resolved exactly, and what it did to the target's nerve.\n\nThe targets are the ones the volley actually used, not the ones printed:\n``hit_target`` already carries the range and movement modifiers, which is\nwhy the same bow needs a 3+ up close and a 4+ beyond half range. A target\nis ``None`` where the stage does not apply -- no armour save to take, no\nward to attempt.\n\n``wounds`` is the distribution of unsaved wounds and ``casualties`` the\nmodels removed; they differ only when the volley would overkill the unit\nor its models have more than one Wound."
+      },
+      "Volleyed": {
+        "properties": {
+          "unit": {
+            "type": "string",
+            "title": "Unit"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size"
+          },
+          "weapon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weapon"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "unit",
+          "name",
+          "size"
+        ],
+        "title": "Volleyed",
+        "description": "A unit in a volley: the one shooting, or the one shot at."
       },
       "WeaponGate": {
         "properties": {
@@ -2224,16 +2510,21 @@
           "fights": {
             "type": "boolean",
             "title": "Fights"
+          },
+          "shoots": {
+            "type": "boolean",
+            "title": "Shoots"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
           "name",
-          "fights"
+          "fights",
+          "shoots"
         ],
         "title": "Wieldable",
-        "description": "A weapon a block carries, and whether it can be used in close combat.\n\nA bow has no Combat profile, so a caller resolving a melee must not offer\nit. The fact belongs here rather than in the caller because it is read off\nthe weapon entry, and a caller guessing from the name would be guessing."
+        "description": "A weapon a block carries, and which phases can put it in hand.\n\nA bow has no Combat profile and a hand weapon no missile one, so a caller\nresolving a melee or a volley must not offer the wrong half. The facts\nbelong here rather than in the caller because they are read off the weapon\nentry, and a caller guessing from the name would be guessing."
       },
       "WoundMultiplierEffect": {
         "properties": {

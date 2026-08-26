@@ -15,8 +15,9 @@ prints to the entries they address, so a caller links to a rule instead of
 deriving a slug from a printed name.
 """
 
+from collections.abc import Callable
 from importlib.metadata import version
-from typing import Annotated, Literal
+from typing import Annotated, Literal, NamedTuple
 
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -26,6 +27,7 @@ from avelorn.tow.data import TOWRepository, default_repository
 from avelorn.tow.game import TOWGame
 from avelorn.tow.muster import Complement
 from avelorn.tow.schema.rule import Rule
+from avelorn.tow.schema.weapon import Weapon
 from avelorn.tow.views import (
     FightReport,
     MusteredUnit,
@@ -33,6 +35,7 @@ from avelorn.tow.views import (
     UnitDetail,
     UnitSummary,
     UnmodelledRule,
+    VolleyReport,
     rule_summaries,
     unmodelled_rules,
 )
@@ -184,8 +187,8 @@ def fight(request: Fight, data: Corpus) -> FightReport:
         outcomes, who won, and every rule the engine held without applying.
     """
     game = TOWGame.assemble(data)
-    a = _deploy(game, data, request.a, "a")
-    b = _deploy(game, data, request.b, "b")
+    a = _deploy(game, data, request.a, "side a")
+    b = _deploy(game, data, request.b, "side b")
     if request.charge is not None:
         charged = Charge(request.charge.full_inches, request.charge.arc)
         if request.charge.side == "a":
@@ -197,7 +200,25 @@ def fight(request: Fight, data: Corpus) -> FightReport:
     return FightReport.of(a, b, fought, scored, game.combat.break_test(scored, a, b))
 
 
-def _deploy(game: TOWGame, data: TOWRepository, side: Deployment, label: str) -> Contingent:
+class _Wields(NamedTuple):
+    """What a phase needs of the weapon it puts in a unit's hand."""
+
+    # Reads the profile off a weapon entry; None means it cannot serve here.
+    profile: Callable[[Weapon], object | None]
+    missing: str
+
+
+MELEE = _Wields(lambda weapon: weapon.combat_profile, "Combat")
+MISSILE = _Wields(lambda weapon: weapon.missile_profile, "missile")
+
+
+def _deploy(
+    game: TOWGame,
+    data: TOWRepository,
+    side: Deployment,
+    label: str,
+    wields: _Wields = MELEE,
+) -> Contingent:
     # The muster boundary for one side of a fight: every refusal a datasheet
     # makes -- the size, the options, the weapon it does not carry -- becomes a
     # 422 naming which side asked for it.
@@ -207,33 +228,33 @@ def _deploy(game: TOWGame, data: TOWRepository, side: Deployment, label: str) ->
         fielded = Contingent.deploy(
             side.unit, side.size, side.options, data=data, frontage=side.frontage
         )
-        armed = fielded.wielding(side.weapon or _default_weapon(fielded, label))
+        armed = fielded.wielding(side.weapon or _default_weapon(fielded, label, wields))
     except (ValidationError, ValueError) as refused:
-        raise HTTPException(
-            status_code=422, detail=f"side {label}: {_reason(refused)}"
-        ) from refused
-    # A round of close combat is the only thing routed here, so a weapon that
-    # cannot fight is a refusal at the boundary rather than a resolver blowing
-    # up mid-walk.
-    if armed.in_hand().combat_profile is None:
+        raise HTTPException(status_code=422, detail=f"{label}: {_reason(refused)}") from refused
+    # The phase decides what a usable weapon is, so a weapon that cannot serve
+    # is a refusal at the boundary rather than a resolver blowing up mid-walk.
+    if wields.profile(armed.in_hand()) is None:
         raise HTTPException(
             status_code=422,
-            detail=f"side {label}: {armed.in_hand().name} has no Combat profile; it cannot fight",
+            detail=(
+                f"{label}: {armed.in_hand().name} has no {wields.missing} profile; "
+                f"it cannot be used here"
+            ),
         )
     return armed
 
 
-def _default_weapon(fielded: Contingent, label: str) -> str:
-    # The last carried weapon that can fight: a datasheet prints the specialist
-    # after the hand weapon, and a missile weapon after both, so taking the last
-    # outright sends archers into melee with a bow.
+def _default_weapon(fielded: Contingent, label: str, wields: _Wields) -> str:
+    # The last carried weapon the phase can use: a datasheet prints the
+    # specialist after the hand weapon and the missile weapon after both, so
+    # taking the last outright sends archers into melee with a bow.
     for weapon in reversed(fielded.loadout.weapons):
-        if weapon.combat_profile is not None:
+        if wields.profile(weapon) is not None:
             return weapon.name
     carried = ", ".join(weapon.name for weapon in fielded.loadout.weapons) or "nothing"
     raise HTTPException(
         status_code=422,
-        detail=f"side {label}: nothing it carries can fight in close combat; carried: {carried}",
+        detail=(f"{label}: nothing it carries has a {wields.missing} profile; carried: {carried}"),
     )
 
 
@@ -242,6 +263,57 @@ def _reason(refused: ValidationError | ValueError) -> str:
     if isinstance(refused, ValidationError):
         return refused.errors()[0]["msg"].removeprefix("Value error, ")
     return str(refused)
+
+
+class Volley(BaseModel):
+    """One unit shooting another, and what the shot has to travel through."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    shooter: Deployment
+    target: Deployment
+    # How far the shot carries, in inches. Omitted, the long-range modifier
+    # cannot be settled either way, so it is left unapplied and said so in
+    # not_modelled rather than assumed to be short range.
+    distance: int | None = Field(default=None, ge=0)
+    # Situational to-hit modifiers the caller knows and the corpus cannot:
+    # cover, a large target, a unit that moved.
+    hit_modifier: int = 0
+    # The target's model count at the start of the battle, which governs the
+    # printed Fall Back or Flee split. Defaults to the size it is shot at --
+    # a unit that has taken no casualties yet.
+    battle_strength: int | None = Field(default=None, ge=1)
+
+
+@app.post("/volley", summary="Resolve one volley of shooting, and the panic it causes")
+def volley(request: Volley, data: Corpus) -> VolleyReport:
+    """Shoot one unit at another and resolve the panic its casualties cause.
+
+    One volley: shots are counted, rolled to hit and to wound, saved against,
+    and the survivors tally into a casualty distribution the target then tests
+    its nerve against. The to-hit target reported is the one the volley used,
+    with the range and movement modifiers already folded in.
+
+    A side the corpus cannot field is refused before any dice are walked: an
+    unknown slug is a 404, and a size, option or weapon the datasheet does not
+    allow is a 422 naming which side asked for it. The shooter must carry
+    something with a missile profile.
+
+    Returns:
+        The volley resolved: the effective targets, the wound and casualty
+        distributions, what the target's nerve does, and every rule the engine
+        held without applying.
+    """
+    game = TOWGame.assemble(data)
+    shooter = _deploy(game, data, request.shooter, "shooter", MISSILE)
+    target = _deploy(game, data, request.target, "target", MELEE)
+    fired = game.shooting.volley(
+        shooter, target, distance=request.distance, hit_modifier=request.hit_modifier
+    )
+    panicked = game.shooting.make_panic_tests(
+        fired, target, battle_strength=request.battle_strength
+    )
+    return VolleyReport.of(shooter, target, fired, panicked)
 
 
 @app.get("/rules", summary="List every rule entry in the corpus")
