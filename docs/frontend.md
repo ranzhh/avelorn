@@ -138,16 +138,21 @@ One route. The battle table is the primary surface and owns the screen.
 
 - Blocks are drawn at their true footprint from `MusteredUnit.footprint` —
   `files` × `ranks` on the datasheet's base size.
-- **Drag to move.** A block is dragged around the table.
+- **Deploying puts the block on the table**, on the near edge facing up, moved
+  clear of anything already standing there (`room`). There is no placing click.
+- **Drag to move.** A block is dragged around the table. A step that would put a
+  corner off the table is refused, so the block stops against the edge rather
+  than the pointer running away from it.
 - **Drag onto another block → the action menu** opens: charge, shoot if it
   carries a missile profile, fight already-joined. The separation and the arc
   come off the geometry, never from a form.
 - **Resize changes the frontage.** Dragging a block's edge changes `files`, which
   re-forms the ranks and redraws the rectangle. Model count is not a drag: it is
   changed from the block panel.
-- Facing is one of four quarters; wheeling is a quarter at a time. This keeps
-  rectangles axis-aligned, which is what makes the separation an exact
-  edge-to-edge measure rather than an approximation between rotated shapes.
+- **Facing is any angle**, turned by a rotation handle on a stalk off the block's
+  front, the way Word and PowerPoint rotate a shape. Free by default; Shift
+  snaps to 15°. Because a block can sit off the axis, nothing may measure it
+  from its bounding box.
 - Selection uses the mark poles: the picked block takes `--series-1`, the one
   being asked about takes `--series-2`.
 - Nothing is applied back onto the table. A result is read, never spent: the
@@ -157,11 +162,21 @@ One route. The battle table is the primary surface and owns the screen.
 
 ## Geometry
 
-`frontend/src/lib/table.ts`, in the tree since the shell slice, under 13 tests.
-`separation` is
-edge-to-edge in inches, zero when blocks touch. `arc` bounds the arcs by the
-target's own diagonals, so a wide block presents a wide front and one stood on
-end presents a wide flank. Do not reimplement either.
+`frontend/src/lib/table.ts`, under 26 tests. Blocks turn to any angle, so this
+works in polygons rather than boxes.
+
+- `corners` gives the four corners at any facing; `bounds` is their axis-aligned
+  box, for hit areas and edge checks only.
+- `separation` is edge-to-edge in inches between the rectangles themselves, zero
+  when they touch or overlap, including when one sits wholly inside another.
+  Never measure a gap from `bounds` — two blocks turned 45° have overlapping
+  boxes while standing well apart.
+- `arc` bounds the arcs by the target's own diagonals, so a wide block presents a
+  wide front and one stood on end presents a wide flank.
+- `angleTo` and `snap` back the rotation handle. `room` finds a free spot for a
+  newly deployed block.
+
+Do not reimplement any of it.
 
 ## Charts
 

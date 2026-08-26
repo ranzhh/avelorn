@@ -2,9 +2,9 @@
 	import BattleTable from '$lib/BattleTable.svelte';
 	import Dock from '$lib/Dock.svelte';
 	import Muster from '$lib/Muster.svelte';
-	import { api, type MusteredUnit } from '$lib/api/client';
+	import { api } from '$lib/api/client';
 	import { listing } from '$lib/listing';
-	import { TABLE, usable, within, type Facing, type Placed } from '$lib/table';
+	import { TABLE, room, usable, type Placed } from '$lib/table';
 
 	let { data } = $props();
 
@@ -12,7 +12,6 @@
 	let opened = $state('');
 	let placed = $state<Placed[]>([]);
 	let nextId = $state(1);
-	let pending = $state<MusteredUnit | null>(null);
 	let picked = $state<number | null>(null);
 	let refusal = $state('');
 
@@ -34,39 +33,25 @@
 			refusal = `${costed.name}: no base size, cannot be drawn`;
 			return;
 		}
-		pending = costed;
-		opened = '';
-	}
-
-	function put(x: number, y: number) {
-		if (!pending) return;
-		// Facing the middle of the table, which is where the other side stands.
-		const candidate: Placed = {
+		// Deployed on the near edge, facing up the table, then dragged from there.
+		const wanted: Placed = {
 			id: nextId,
-			block: pending,
-			x,
-			y,
-			facing: y > TABLE.depth / 2 ? 0 : 180,
+			block: costed,
+			x: TABLE.width / 2,
+			y: TABLE.depth - 6,
+			facing: 0,
 			melee: '',
 			missile: ''
 		};
-		if (!within(candidate)) {
-			refusal = `${pending.name}: off the table there`;
-			return;
-		}
-		placed = [...placed, candidate];
+		const settled = room(wanted, placed);
+		placed = [...placed, settled];
 		nextId += 1;
-		picked = candidate.id;
-		pending = null;
-		refusal = '';
+		picked = settled.id;
+		opened = '';
 	}
 
 	function amend(id: number, change: Partial<Placed>) {
 		placed = placed.map((each) => (each.id === id ? { ...each, ...change } : each));
-	}
-
-	function wheel(id: number, facing: Facing) {
-		amend(id, { facing: ((facing + 90) % 360) as Facing });
 	}
 
 	function remove(id: number) {
@@ -77,7 +62,7 @@
 
 <div class="shell">
 	<aside class="left">
-		<Dock title="deploy" keep="deploy" value={pending ? `placing ${pending.name}` : ''}>
+		<Dock title="deploy" keep="deploy" value={`${placed.length} on the table`}>
 			<input class="input filter" bind:value={needle} placeholder="filter" />
 			<div class="rows">
 				{#each rows as unit (unit.id)}
@@ -110,9 +95,9 @@
 		<BattleTable
 			{placed}
 			{picked}
-			placing={pending !== null}
-			onplace={put}
 			onpick={(id) => (picked = id)}
+			onmove={(id, x, y) => amend(id, { x, y })}
+			onturn={(id, facing) => amend(id, { facing })}
 		/>
 		{#if refusal}<p class="refuse">{refusal}</p>{/if}
 	</div>
@@ -168,7 +153,9 @@
 					</label>
 				{/if}
 				<div class="cluster acts">
-					<button class="btn btn-sm" onclick={() => wheel(block.id, block.facing)}>wheel</button>
+					<button class="btn btn-sm" onclick={() => amend(block.id, { facing: 0 })}>
+						face up
+					</button>
 					<button class="btn btn-sm" onclick={() => remove(block.id)}>remove</button>
 				</div>
 			{:else}

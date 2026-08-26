@@ -1,52 +1,100 @@
 <script lang="ts">
-	import { TABLE, extent, type Placed } from '$lib/table';
+	import { TABLE, angleTo, bounds, snap, span, within, type Placed } from '$lib/table';
 
 	interface Props {
 		placed: Placed[];
 		picked: number | null;
-		/** A costed block waiting for somewhere to stand; the surface takes a placing click. */
-		placing: boolean;
-		onplace: (x: number, y: number) => void;
 		onpick: (id: number | null) => void;
+		onmove: (id: number, x: number, y: number) => void;
+		onturn: (id: number, facing: number) => void;
 	}
 
-	let { placed, picked, placing, onplace, onpick }: Props = $props();
+	let { placed, picked, onpick, onmove, onturn }: Props = $props();
 
 	// A foot apart, interior only: the border already draws the table's edge.
-	const ruled = (span: number) =>
-		[...Array(Math.floor(span / 12) - 1).keys()].map((n) => (n + 1) * 12);
+	const ruled = (edge: number) =>
+		[...Array(Math.floor(edge / 12) - 1).keys()].map((n) => (n + 1) * 12);
 	const columns = ruled(TABLE.width);
 	const rows = ruled(TABLE.depth);
 
-	function onSurface(event: MouseEvent) {
-		const box = (event.currentTarget as SVGSVGElement).getBoundingClientRect();
-		const x = ((event.clientX - box.left) / box.width) * TABLE.width;
-		const y = ((event.clientY - box.top) / box.height) * TABLE.depth;
-		if (placing) onplace(x, y);
-		else onpick(null);
+	let surface = $state<SVGSVGElement | null>(null);
+
+	// What the pointer is doing, and to which block.
+	let dragging = $state<{ id: number; grabX: number; grabY: number } | null>(null);
+	let turning = $state<number | null>(null);
+
+	/** The pointer's position in table inches. */
+	function at(event: PointerEvent) {
+		const box = surface!.getBoundingClientRect();
+		return {
+			x: ((event.clientX - box.left) / box.width) * TABLE.width,
+			y: ((event.clientY - box.top) / box.height) * TABLE.depth
+		};
 	}
 
-	/** The front edge, as two points, given the facing. */
-	function front(block: Placed) {
-		const box = extent(block);
-		switch (block.facing) {
-			case 0:
-				return { x1: box.left, y1: box.top, x2: box.right, y2: box.top };
-			case 180:
-				return { x1: box.left, y1: box.bottom, x2: box.right, y2: box.bottom };
-			case 90:
-				return { x1: box.right, y1: box.top, x2: box.right, y2: box.bottom };
-			case 270:
-				return { x1: box.left, y1: box.top, x2: box.left, y2: box.bottom };
+	const held = (id: number) => placed.find((each) => each.id === id);
+
+	function grab(event: PointerEvent, block: Placed) {
+		event.stopPropagation();
+		(event.currentTarget as Element).setPointerCapture(event.pointerId);
+		const point = at(event);
+		dragging = { id: block.id, grabX: point.x - block.x, grabY: point.y - block.y };
+		onpick(block.id);
+	}
+
+	function grabHandle(event: PointerEvent, block: Placed) {
+		event.stopPropagation();
+		(event.currentTarget as Element).setPointerCapture(event.pointerId);
+		turning = block.id;
+		onpick(block.id);
+	}
+
+	function drag(event: PointerEvent) {
+		if (dragging) {
+			const block = held(dragging.id);
+			if (!block) return;
+			const point = at(event);
+			const moved = { ...block, x: point.x - dragging.grabX, y: point.y - dragging.grabY };
+			// The step is refused rather than the drag: a block stops against the
+			// edge instead of the pointer running away from it.
+			if (within(moved)) onmove(block.id, moved.x, moved.y);
+			return;
 		}
+		if (turning !== null) {
+			const block = held(turning);
+			if (!block) return;
+			const facing = angleTo({ x: block.x, y: block.y }, at(event));
+			onturn(block.id, event.shiftKey ? snap(facing) : Math.round(facing));
+		}
+	}
+
+	function release() {
+		dragging = null;
+		turning = null;
+	}
+
+	/** Where the rotation handle sits: on a stalk off the block's front. */
+	function stalk(block: Placed) {
+		const footprint = block.block.footprint;
+		if (!footprint) return null;
+		const reach = span(footprint).depth / 2 + 2.5;
+		const radians = (block.facing * Math.PI) / 180;
+		return {
+			x: block.x + Math.sin(radians) * reach,
+			y: block.y - Math.cos(radians) * reach,
+			fromX: block.x + Math.sin(radians) * (reach - 2.5),
+			fromY: block.y - Math.cos(radians) * (reach - 2.5)
+		};
 	}
 </script>
 
-<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions, a11y_no_noninteractive_element_interactions -->
 <svg
+	bind:this={surface}
 	viewBox="0 0 {TABLE.width} {TABLE.depth}"
-	class:placing
-	onclick={onSurface}
+	onpointerdown={() => onpick(null)}
+	onpointermove={drag}
+	onpointerup={release}
+	onpointercancel={release}
 	role="application"
 	aria-label="battle table, {TABLE.width} by {TABLE.depth} inches, {placed.length} blocks"
 >
@@ -59,21 +107,59 @@
 	{/each}
 
 	{#each placed as block (block.id)}
-		{@const box = extent(block)}
-		{@const edge = front(block)}
-		<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-		<g
-			class="block"
-			class:picked={block.id === picked}
-			onclick={(event) => {
-				event.stopPropagation();
-				onpick(block.id === picked ? null : block.id);
-			}}
-		>
-			<rect x={box.left} y={box.top} width={box.width} height={box.height} />
-			<line class="front" x1={edge.x1} y1={edge.y1} x2={edge.x2} y2={edge.y2} />
-			<text x={block.x} y={block.y + 0.6}>{block.block.size}</text>
-		</g>
+		{@const print = block.block.footprint}
+		{#if print}
+			{@const size = span(print)}
+			{@const box = bounds(block)}
+			<g
+				class="block"
+				class:picked={block.id === picked}
+				class:busy={dragging?.id === block.id || turning === block.id}
+			>
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<g
+					transform="rotate({block.facing} {block.x} {block.y})"
+					onpointerdown={(event) => grab(event, block)}
+				>
+					<rect
+						x={block.x - size.width / 2}
+						y={block.y - size.depth / 2}
+						width={size.width}
+						height={size.depth}
+					/>
+					<line
+						class="front"
+						x1={block.x - size.width / 2}
+						y1={block.y - size.depth / 2}
+						x2={block.x + size.width / 2}
+						y2={block.y - size.depth / 2}
+					/>
+					<text x={block.x} y={block.y + 0.6}>{block.block.size}</text>
+				</g>
+
+				{#if block.id === picked}
+					{@const handle = stalk(block)}
+					{#if handle}
+						<line class="tether" x1={handle.fromX} y1={handle.fromY} x2={handle.x} y2={handle.y} />
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<circle
+							class="handle"
+							cx={handle.x}
+							cy={handle.y}
+							r="1.1"
+							onpointerdown={(event) => grabHandle(event, block)}
+						/>
+					{/if}
+					<rect
+						class="halo"
+						x={box.left - 0.4}
+						y={box.top - 0.4}
+						width={box.width + 0.8}
+						height={box.height + 0.8}
+					/>
+				{/if}
+			</g>
+		{/if}
 	{/each}
 </svg>
 
@@ -84,10 +170,7 @@
 		background: var(--sunken);
 		border: 1px solid var(--line);
 		border-radius: var(--radius-md);
-	}
-
-	svg.placing {
-		cursor: crosshair;
+		touch-action: none;
 	}
 
 	.cloth {
@@ -103,7 +186,11 @@
 		fill: color-mix(in oklab, var(--series-1) 20%, var(--sunken));
 		stroke: color-mix(in oklab, var(--series-1) 45%, var(--sunken));
 		stroke-width: 0.08;
-		cursor: pointer;
+		cursor: grab;
+	}
+
+	.block.busy rect {
+		cursor: grabbing;
 	}
 
 	.block .front {
@@ -114,7 +201,7 @@
 	.block.picked rect {
 		fill: color-mix(in oklab, var(--series-1) 32%, var(--sunken));
 		stroke: var(--series-1);
-		stroke-width: 0.22;
+		stroke-width: 0.18;
 	}
 
 	.block.picked .front {
@@ -126,5 +213,31 @@
 		text-anchor: middle;
 		fill: var(--ink);
 		pointer-events: none;
+	}
+
+	.halo {
+		fill: none;
+		stroke: var(--series-1);
+		stroke-width: 0.06;
+		stroke-dasharray: 0.5 0.4;
+		pointer-events: none;
+		opacity: 0.7;
+	}
+
+	.tether {
+		stroke: var(--series-1);
+		stroke-width: 0.09;
+		pointer-events: none;
+	}
+
+	.handle {
+		fill: var(--sunken);
+		stroke: var(--series-1);
+		stroke-width: 0.18;
+		cursor: grab;
+	}
+
+	.handle:hover {
+		fill: var(--series-1);
 	}
 </style>
