@@ -140,12 +140,17 @@ One route. The battle table is the primary surface and owns the screen.
   `files` × `ranks` on the datasheet's base size.
 - **Deploying puts the block on the table**, on the near edge facing up, moved
   clear of anything already standing there (`room`). There is no placing click.
-- **Drag to move.** A block is dragged around the table. A step that would put a
-  corner off the table is refused, so the block stops against the edge rather
-  than the pointer running away from it.
-- **Drag onto another block → the action menu** opens: charge, shoot if it
-  carries a missile profile, fight already-joined. The separation and the arc
-  come off the geometry, never from a form.
+- **Drag ghosts the block.** It stays where it stands while a dashed ghost
+  follows the pointer, with an arrow between them and the reading live on the
+  arrow. A step that would put a corner off the table is refused, so the ghost
+  stops against the edge rather than the pointer running away from it.
+- **Where the ghost is dropped decides what happened.** On empty table it is a
+  move and the block goes there. On another block it is an action, the mover
+  stays put, and the menu opens: charge, shoot if it carries a missile profile,
+  fight already-joined.
+- Committing the move during the drag is the bug this shape avoids. The mover
+  would end up on top of its target, and the gap a charge must cover would
+  measure zero.
 - **Resize changes the frontage.** Dragging a block's edge changes `files`, which
   re-forms the ranks and redraws the rectangle. Model count is not a drag: it is
   changed from the block panel.
