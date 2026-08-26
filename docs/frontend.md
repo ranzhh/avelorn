@@ -138,8 +138,14 @@ One route. The battle table is the primary surface and owns the screen.
 
 - Blocks are drawn at their true footprint from `MusteredUnit.footprint` —
   `files` × `ranks` on the datasheet's base size.
-- **Deploying puts the block on the table**, on the near edge facing up, moved
-  clear of anything already standing there (`room`). There is no placing click.
+- **Clicking a datasheet deploys it** at its smallest legal size, on the near
+  edge facing up, moved clear of anything already standing there (`room`). Size
+  and options are then chosen from a popover next to the block, against
+  something you can see, rather than from a form in the panel. Dragging a row
+  from the panel onto the table deploys it where it is dropped.
+- **A block is named, not counted.** Each carries a progressive mark -- A, B, C
+  -- with its model count under it. Two blocks of twenty are otherwise
+  indistinguishable.
 - **Drag ghosts the block.** It stays where it stands while a dashed ghost
   follows the pointer, with an arrow between them and the reading live on the
   arrow. A step that would put a corner off the table is refused, so the ghost
@@ -159,7 +165,9 @@ One route. The battle table is the primary surface and owns the screen.
   block's own width, previews the new rectangle, and on release asks
   `POST /muster` for the footprint that width actually takes. The browser never
   decides the formation: `frontage` goes to the API and the engine's `Formation`
-  answers. Model count is not a drag; it is changed from the block panel.
+  answers. Model count is not a drag; it is changed from the block's popover.
+  The handles are drawn filled and gripped rather than outlined -- at table
+  scale a hairline handle cannot be found.
 - **Facing is any angle**, turned by a rotation handle on a stalk off the block's
   front, the way Word and PowerPoint rotate a shape. Free by default; Shift
   snaps to 15°. Because a block can sit off the axis, nothing may measure it

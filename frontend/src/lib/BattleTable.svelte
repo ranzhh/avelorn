@@ -24,9 +24,41 @@
 		ondrop: (mover: number, target: number) => void;
 		/** The block re-formed to a new width in files. */
 		onreform: (id: number, frontage: number) => void;
+		/** A datasheet dragged in from the panel and dropped on the table. */
+		ondropunit: (unit: string, size: number, x: number, y: number) => void;
 	}
 
-	let { placed, picked, onpick, onmove, onturn, ondrop, onreform }: Props = $props();
+	let { placed, picked, onpick, onmove, onturn, ondrop, onreform, ondropunit }: Props = $props();
+
+	/** A datasheet being dragged in from the panel, over the table. */
+	let inbound = $state(false);
+
+	function carried(event: DragEvent): [string, number] | null {
+		const payload = event.dataTransfer?.getData('application/avelorn-unit');
+		if (!payload) return null;
+		const [unit, size] = payload.split(':');
+		return unit ? [unit, Number(size) || 1] : null;
+	}
+
+	function admit(event: DragEvent) {
+		if (!event.dataTransfer?.types.includes('application/avelorn-unit')) return;
+		event.preventDefault();
+		inbound = true;
+	}
+
+	function land(event: DragEvent) {
+		event.preventDefault();
+		inbound = false;
+		const held = carried(event);
+		if (!held) return;
+		const box = surface!.getBoundingClientRect();
+		ondropunit(
+			held[0],
+			held[1],
+			((event.clientX - box.left) / box.width) * TABLE.width,
+			((event.clientY - box.top) / box.height) * TABLE.depth
+		);
+	}
 
 	// A foot apart, interior only: the border already draws the table's edge.
 	const ruled = (edge: number) =>
@@ -204,6 +236,10 @@
 	onpointermove={drag}
 	onpointerup={release}
 	onpointercancel={release}
+	ondragover={admit}
+	ondragleave={() => (inbound = false)}
+	ondrop={land}
+	class:inbound
 	role="application"
 	aria-label="battle table, {TABLE.width} by {TABLE.depth} inches, {placed.length} blocks"
 >
@@ -258,21 +294,38 @@
 						x2={block.x + size.width / 2}
 						y2={block.y - size.depth / 2}
 					/>
-					<text x={block.x} y={block.y + 0.6}>{block.block.size}</text>
+					{#if size.depth > 3}
+						<text class="mark" x={block.x} y={block.y - 0.1}>{block.mark}</text>
+						<text class="count" x={block.x} y={block.y + 1.7}>{block.block.size}</text>
+					{:else}
+						<text class="mark" x={block.x} y={block.y + 0.7}>
+							{block.mark}<tspan class="count"> {block.block.size}</tspan>
+						</text>
+					{/if}
 				</g>
 
 				{#if block.id === picked && !flight}
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<g transform="rotate({block.facing} {block.x} {block.y})">
 						{#each [-1, 1] as side}
-							<rect
-								class="edge"
-								x={block.x + (side * size.width) / 2 - 0.5}
-								y={block.y - 1}
-								width="1"
-								height="2"
-								onpointerdown={(event) => grabEdge(event, block)}
-							/>
+							{@const at = block.x + (side * size.width) / 2}
+							<g class="edge" onpointerdown={(event) => grabEdge(event, block)}>
+								<rect x={at - 0.75} y={block.y - 1.6} width="1.5" height="3.2" rx="0.4" />
+								<line
+									class="grip"
+									x1={at - 0.25}
+									y1={block.y - 0.8}
+									x2={at - 0.25}
+									y2={block.y + 0.8}
+								/>
+								<line
+									class="grip"
+									x1={at + 0.25}
+									y1={block.y - 0.8}
+									x2={at + 0.25}
+									y2={block.y + 0.8}
+								/>
+							</g>
 						{/each}
 					</g>
 					{@const handle = stalk(block)}
@@ -387,6 +440,10 @@
 		touch-action: none;
 	}
 
+	svg.inbound {
+		border-color: var(--series-1);
+	}
+
 	.cloth {
 		fill: var(--sunken);
 	}
@@ -436,10 +493,19 @@
 	}
 
 	.block text {
-		font: 1.6px var(--font-mono);
 		text-anchor: middle;
-		fill: var(--ink);
 		pointer-events: none;
+	}
+
+	.block .mark {
+		font: 600 2.4px var(--font-sans);
+		fill: var(--ink);
+		letter-spacing: 0.04em;
+	}
+
+	.block .count {
+		font: 1.5px var(--font-mono);
+		fill: var(--dim);
 	}
 
 	.ghost {
@@ -510,14 +576,24 @@
 		fill: var(--series-1);
 	}
 
+	/* Loud on purpose: at table scale a hairline handle is invisible. */
 	.edge {
-		fill: var(--sunken);
-		stroke: var(--series-1);
-		stroke-width: 0.15;
 		cursor: ew-resize;
 	}
 
-	.edge:hover {
+	.edge rect {
 		fill: var(--series-1);
+		stroke: var(--sunken);
+		stroke-width: 0.2;
+	}
+
+	.edge .grip {
+		stroke: var(--sunken);
+		stroke-width: 0.16;
+		pointer-events: none;
+	}
+
+	.edge:hover rect {
+		fill: var(--accent-ink);
 	}
 </style>

@@ -7,6 +7,7 @@ import {
 	base,
 	bounds,
 	corners,
+	identifier,
 	reformed,
 	room,
 	separation,
@@ -33,8 +34,18 @@ const WIDE = 125 / 25.4;
 const DEEP = 100 / 25.4;
 
 function placed(x: number, y: number, facing: Degrees = 0, block = BLOCK): Placed {
-	return { id: 1, block, x, y, facing, melee: '', missile: '' };
+	return { id: 1, mark: 'A', block, x, y, facing, melee: '', missile: '' };
 }
+
+describe('identifier', () => {
+	it('names the first blocks by letter', () => {
+		expect([0, 1, 25].map(identifier)).toEqual(['A', 'B', 'Z']);
+	});
+
+	it('carries past the alphabet without repeating itself', () => {
+		expect([26, 27, 51, 52].map(identifier)).toEqual(['AA', 'AB', 'AZ', 'BA']);
+	});
+});
 
 describe('bounds', () => {
 	it('is the block wide and deep when it faces up the table', () => {

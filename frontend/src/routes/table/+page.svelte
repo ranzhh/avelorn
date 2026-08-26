@@ -5,12 +5,14 @@
 	import Resolved from '$lib/Resolved.svelte';
 	import { api, type FightReport, type VolleyReport } from '$lib/api/client';
 	import { listing } from '$lib/listing';
-	import { TABLE, arc, room, separation, usable, type Placed } from '$lib/table';
+	import { TABLE, arc, identifier, room, separation, usable, type Placed } from '$lib/table';
 
 	let { data } = $props();
 
 	let needle = $state('');
-	let opened = $state('');
+	// The block whose size and options are being edited on the table.
+	let editing = $state<number | null>(null);
+	let stamped = $state(0);
 	let placed = $state<Placed[]>([]);
 	let nextId = $state(1);
 	let picked = $state<number | null>(null);
@@ -104,26 +106,38 @@
 		volley = report;
 	}
 
-	async function cost(unit: string, size: number, options: string[]) {
+	async function muster(unit: string, size: number, options: string[], frontage?: number) {
 		refusal = '';
 		const { data: costed, error: refused } = await api(window.location.origin, fetch).POST(
 			'/muster',
-			{ body: { unit, size, options } }
+			{ body: { unit, size, options, frontage: frontage ?? null } }
 		);
 		if (!costed) {
 			refusal = typeof refused?.detail === 'string' ? refused.detail : 'could not cost that';
-			return;
+			return null;
 		}
 		if (!costed.footprint) {
 			refusal = `${costed.name}: no base size, cannot be drawn`;
-			return;
+			return null;
 		}
-		// Deployed on the near edge, facing up the table, then dragged from there.
+		return costed;
+	}
+
+	/**
+	 * Put a datasheet on the table at its smallest legal size.
+	 *
+	 * Clicking a row deploys rather than opening a form: the block lands, and the
+	 * size and options are then chosen against something you can see.
+	 */
+	async function deploy(unit: string, size: number, where?: { x: number; y: number }) {
+		const costed = await muster(unit, size, []);
+		if (!costed) return;
 		const wanted: Placed = {
 			id: nextId,
+			mark: identifier(stamped),
 			block: costed,
-			x: TABLE.width / 2,
-			y: TABLE.depth - 6,
+			x: where?.x ?? TABLE.width / 2,
+			y: where?.y ?? TABLE.depth - 6,
 			facing: 0,
 			melee: '',
 			missile: ''
@@ -131,8 +145,19 @@
 		const settled = room(wanted, placed);
 		placed = [...placed, settled];
 		nextId += 1;
+		stamped += 1;
 		picked = settled.id;
-		opened = '';
+		editing = settled.id;
+	}
+
+	/** Re-cost a standing block at a new size or set of options. */
+	async function recost(id: number, size: number, options: string[]) {
+		const standing = placed.find((each) => each.id === id);
+		if (!standing) return;
+		const costed = await muster(standing.block.unit, size, options);
+		if (!costed) return;
+		amend(id, { block: costed });
+		editing = null;
 	}
 
 	/** Re-form a block to a new width, asking the engine for the footprint it takes. */
@@ -175,24 +200,17 @@
 				{#each rows as unit (unit.id)}
 					<button
 						class="row"
-						class:on={opened === unit.id}
-						onclick={() => (opened = opened === unit.id ? '' : unit.id)}
+						draggable="true"
+						ondragstart={(event) =>
+							event.dataTransfer?.setData(
+								'application/avelorn-unit',
+								`${unit.id}:${unit.unit_size.min}`
+							)}
+						onclick={() => deploy(unit.id, unit.unit_size.min)}
 					>
 						<span>{unit.name}</span>
 						<span class="num">{unit.points}</span>
 					</button>
-					{#if opened === unit.id}
-						<div class="editor">
-							<Muster
-								unit={unit.id}
-								size={unit.unit_size.min}
-								options={[]}
-								submitLabel="deploy"
-								onsubmit={(size, options) => cost(unit.id, size, options)}
-								oncancel={() => (opened = '')}
-							/>
-						</div>
-					{/if}
 				{/each}
 			</div>
 		</Dock>
@@ -208,7 +226,25 @@
 				onturn={(id, facing) => amend(id, { facing })}
 				ondrop={(mover, target) => (asking = { mover, target })}
 				onreform={reform}
+				ondropunit={(unit, size, x, y) => deploy(unit, size, { x, y })}
 			/>
+			{#if block && editing === block.id}
+				<div
+					class="popover"
+					style="left: {(block.x / TABLE.width) * 100}%; top: {(block.y / TABLE.depth) * 100}%"
+				>
+					<span class="head">{block.mark} · {block.block.name}</span>
+					<Muster
+						unit={block.block.unit}
+						size={block.block.size}
+						options={block.block.options}
+						submitLabel="apply"
+						onsubmit={(size, options) => recost(block.id, size, options)}
+						oncancel={() => (editing = null)}
+					/>
+				</div>
+			{/if}
+
 			{#if pair}
 				<div
 					class="menu"
@@ -281,6 +317,7 @@
 					</label>
 				{/if}
 				<div class="cluster acts">
+					<button class="btn btn-sm" onclick={() => (editing = block.id)}>size</button>
 					<button class="btn btn-sm" onclick={() => amend(block.id, { facing: 0 })}>
 						face up
 					</button>
@@ -383,20 +420,27 @@
 		background: var(--panel);
 	}
 
-	.row.on {
-		background: var(--panel);
-		color: var(--accent-ink);
-	}
-
 	.row .num {
 		color: var(--dim);
 	}
 
-	.editor {
+	.popover {
+		position: absolute;
+		transform: translate(-50%, var(--space-3));
+		z-index: 3;
+		width: 15rem;
 		padding: var(--space-2);
-		margin: var(--space-1) 0 var(--space-2);
 		background: var(--panel);
-		border-radius: var(--radius-sm);
+		border: 1px solid var(--faint);
+		border-radius: var(--radius-md);
+		box-shadow: var(--shadow);
+	}
+
+	.popover .head {
+		display: block;
+		margin-bottom: var(--space-2);
+		font: var(--text-xs) / 1.5 var(--font-mono);
+		color: var(--dim);
 	}
 
 	.field span:first-child {

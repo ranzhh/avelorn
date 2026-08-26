@@ -14,9 +14,27 @@ const MM_PER_INCH = 25.4;
  */
 export type Degrees = number;
 
+/**
+ * A short name for the nth block put on the table: A, B, ... Z, AA, AB.
+ *
+ * A rectangle is too small for "Elven Spearmen", and a model count does not
+ * identify anything once two blocks of twenty are standing on the table.
+ */
+export function identifier(nth: number): string {
+	let mark = '';
+	let left = nth;
+	while (left >= 0) {
+		mark = String.fromCharCode(65 + (left % 26)) + mark;
+		left = Math.floor(left / 26) - 1;
+	}
+	return mark;
+}
+
 /** A block standing somewhere on the table, in some formation, facing some way. */
 export interface Placed {
 	id: number;
+	/** What the block is called on the table: A, B, C. */
+	mark: string;
 	block: MusteredUnit;
 	/** The centre of the rectangle, in inches from the table's top-left. */
 	x: number;
