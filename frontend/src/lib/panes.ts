@@ -6,8 +6,8 @@
  * pane that never opened.
  */
 
-/** What a pane reads. A datasheet, or one of the rules it prints. */
-export type Subject = 'unit' | 'rule';
+/** What a pane reads: anything the corpus files under a printed name. */
+export type Subject = 'unit' | 'rule' | 'weapon' | 'armour';
 
 export interface Pane {
 	id: number;
@@ -37,9 +37,19 @@ export interface Viewport {
  * below, so the rectangle that is clamped is the rectangle that is drawn. A
  * pane taller than its measure scrolls inside; it does not grow.
  */
+/** What a pane calls itself on its own title bar. */
+export const LABEL: Record<Subject, string> = {
+	unit: 'datasheet',
+	rule: 'rule',
+	weapon: 'weapon',
+	armour: 'armour'
+};
+
 export const MEASURE: Record<Subject, Size> = {
 	unit: { width: 384, height: 520 },
-	rule: { width: 320, height: 300 }
+	rule: { width: 320, height: 300 },
+	weapon: { width: 340, height: 340 },
+	armour: { width: 300, height: 220 }
 };
 
 /** How far a pane opened from another sits down and right of it. */
@@ -91,7 +101,19 @@ export function spot(
 	const corner = from
 		? { x: from.x + CASCADE, y: from.y + CASCADE }
 		: { x: FIRST.x + open.length * STEP, y: FIRST.y + open.length * STEP };
-	return clamped(corner.x, corner.y, size, viewport);
+	let landing = clamped(corner.x, corner.y, size, viewport);
+	// Step past a corner already taken. Two names followed out of one datasheet
+	// cascade off the same parent, so without this the second lands exactly on
+	// the first and looks like nothing opened. Bounded by the panes open,
+	// because clamping against an edge can stop the stepping from moving.
+	for (let tries = 0; tries < open.length && taken(open, landing); tries += 1) {
+		landing = clamped(landing.x + CASCADE, landing.y + CASCADE, size, viewport);
+	}
+	return landing;
+}
+
+function taken(open: Pane[], at: { x: number; y: number }): boolean {
+	return open.some((pane) => Math.abs(pane.x - at.x) < 2 && Math.abs(pane.y - at.y) < 2);
 }
 
 /**

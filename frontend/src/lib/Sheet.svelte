@@ -1,14 +1,15 @@
 <script lang="ts">
+	import Chips from '$lib/Chips.svelte';
 	import { cost } from '$lib/options';
-	import type { Unit } from '$lib/api/client';
+	import type { Reference, Unit } from '$lib/api/client';
 
 	interface Props {
 		unit: Unit;
-		/** Follow a printed rule to its entry, opening a pane on top of this one. */
-		onrule: (slug: string, name: string) => void;
+		/** Follow a printed name to its entry, opening a pane on top of this one. */
+		onopen: (reference: Reference) => void;
 	}
 
-	let { unit, onrule }: Props = $props();
+	let { unit, onopen }: Props = $props();
 
 	// Printed order, not the order a profile happens to be written in.
 	const CHARACTERISTICS = ['M', 'WS', 'BS', 'S', 'T', 'W', 'I', 'A', 'Ld'] as const;
@@ -46,24 +47,12 @@
 
 {#if unit.equipment?.length}
 	<h4>equipment</h4>
-	<div class="cluster tight">
-		{#each unit.equipment as item}
-			<span class="pill">{item.name}</span>
-		{/each}
-	</div>
+	<Chips of={unit.equipment} {onopen} />
 {/if}
 
 {#if unit.special_rules?.length}
 	<h4>special rules</h4>
-	<div class="cluster tight">
-		{#each unit.special_rules as rule}
-			{#if rule.slug}
-				<button class="pill link" onclick={() => onrule(rule.slug!, rule.name)}>{rule.name}</button>
-			{:else}
-				<span class="pill unmodelled" title="no entry in the corpus">{rule.name}</span>
-			{/if}
-		{/each}
-	</div>
+	<Chips of={unit.special_rules} {onopen} />
 {/if}
 
 {#if unit.options?.length}
@@ -112,24 +101,5 @@
 		margin-left: var(--space-1);
 		font-size: var(--text-xs);
 		color: var(--faint);
-	}
-
-	.tight {
-		gap: var(--space-1);
-	}
-
-	.link {
-		color: var(--accent-ink);
-		cursor: pointer;
-		font-family: var(--font-mono);
-	}
-
-	.link:hover {
-		border-color: var(--accent);
-	}
-
-	.unmodelled {
-		color: var(--faint);
-		border-style: dashed;
 	}
 </style>

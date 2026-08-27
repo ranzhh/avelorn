@@ -1,5 +1,5 @@
 import createClient from 'openapi-fetch';
-import type { paths } from './schema';
+import type { components, paths } from './schema';
 
 /**
  * A client for the Avelorn API, addressed through the app's own origin.
@@ -13,6 +13,13 @@ export const api = (origin: string, fetch: typeof globalThis.fetch) =>
 
 export type Unit = paths['/units/{slug}']['get']['responses'][200]['content']['application/json'];
 export type Rule = paths['/rules/{slug}']['get']['responses'][200]['content']['application/json'];
+export type Weapon =
+	paths['/weapons/{slug}']['get']['responses'][200]['content']['application/json'];
+export type Armour =
+	paths['/armour/{slug}']['get']['responses'][200]['content']['application/json'];
+
+/** A printed name, carrying the entry it addresses. Both fields, or neither. */
+export type Reference = components['schemas']['Reference'];
 export type UnitSummary =
 	paths['/units']['get']['responses'][200]['content']['application/json'][number];
 

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 
-	import { datasheet } from '$lib/datasheets';
+	import { entry } from '$lib/corpus';
 	import { cost, repeated } from '$lib/options';
 	import { sizeRange } from '$lib/listing';
 	import type { UnitOption } from '$lib/api/client';
@@ -50,7 +50,7 @@
 	// on offer, and its size is not this one's.
 	$effect(() => {
 		const slug = unit;
-		datasheet(slug).then((sheet) => {
+		entry('unit', slug).then((sheet) => {
 			if (!sheet || slug !== unit) return;
 			offered = sheet.options ?? [];
 			allowed = sizeRange(sheet.unit_size);

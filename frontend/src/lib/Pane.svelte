@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { MEASURE, type Pane } from '$lib/panes';
+	import { LABEL, MEASURE, type Pane } from '$lib/panes';
 
 	interface Props {
 		pane: Pane;
@@ -50,7 +50,7 @@
 		onpointerup={release}
 		onpointercancel={release}
 	>
-		<span class="eyebrow">{pane.subject === 'unit' ? 'datasheet' : 'rule'}</span>
+		<span class="eyebrow">{LABEL[pane.subject]}</span>
 		<h3>{pane.title}</h3>
 		<button class="btn btn-ghost btn-sm shut" onclick={onclose} aria-label="close">×</button>
 	</header>

@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
-import { clamped, closed, moved, opened, raised, spot, type Pane } from './panes';
+import {
+	MEASURE,
+	clamped,
+	closed,
+	moved,
+	opened,
+	raised,
+	spot,
+	type Pane,
+	type Subject
+} from './panes';
 
 const SIZE = { width: 320, height: 400 };
 const SCREEN = { width: 1600, height: 900 };
@@ -43,6 +53,15 @@ describe('spot', () => {
 		const second = spot([pane(1, 'a')], SIZE, SCREEN);
 		expect(second.x).toBeGreaterThan(first.x);
 		expect(second.y).toBeGreaterThan(first.y);
+	});
+
+	it('steps past a corner a sibling already took', () => {
+		const parent = pane(1, 'white-lions', 300, 72);
+		const first = spot([parent], SIZE, SCREEN, parent);
+		const child = { ...parent, id: 2, ...first };
+		const second = spot([parent, child], SIZE, SCREEN, parent);
+		expect(second).not.toEqual(first);
+		expect(second.x).toBeGreaterThan(first.x);
 	});
 
 	it('lands a cascade inside the window when its parent is against the edge', () => {
@@ -103,5 +122,52 @@ describe('closed', () => {
 	it('drops one pane and keeps the order of the rest', () => {
 		const open = [pane(1, 'a'), pane(2, 'b'), pane(3, 'c')];
 		expect(closed(open, 2).map((each) => each.id)).toEqual([1, 3]);
+	});
+});
+
+describe('subjects', () => {
+	it('measures every kind a pane can read', () => {
+		const kinds: Subject[] = ['unit', 'rule', 'weapon', 'armour'];
+		for (const kind of kinds) {
+			expect(MEASURE[kind].width).toBeGreaterThan(0);
+			expect(MEASURE[kind].height).toBeGreaterThan(0);
+		}
+	});
+
+	it('tells a weapon from the rule filed under the same slug', () => {
+		const open = opened(
+			[],
+			{ id: 1, subject: 'weapon', slug: 'daiths-reaper', title: "Daith's Reaper" },
+			MEASURE.weapon,
+			SCREEN
+		);
+		const both = opened(
+			open,
+			{ id: 2, subject: 'rule', slug: 'daiths-reaper', title: "Daith's Reaper" },
+			MEASURE.rule,
+			SCREEN
+		);
+		expect(both).toHaveLength(2);
+		expect(both.map((each) => each.subject)).toEqual(['weapon', 'rule']);
+	});
+
+	it('cascades a three-deep chain down and right of each parent', () => {
+		const sheet = {
+			id: 1,
+			subject: 'unit' as const,
+			slug: 'white-lions',
+			title: 'x',
+			x: 300,
+			y: 72
+		};
+		const weapon = spot([sheet], MEASURE.weapon, SCREEN, sheet);
+		const rule = spot([sheet, { ...sheet, id: 2, ...weapon }], MEASURE.rule, SCREEN, {
+			...sheet,
+			id: 2,
+			...weapon
+		});
+		expect(weapon.x).toBeGreaterThan(sheet.x);
+		expect(rule.x).toBeGreaterThan(weapon.x);
+		expect(rule.y).toBeGreaterThan(weapon.y);
 	});
 });

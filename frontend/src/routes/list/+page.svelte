@@ -2,7 +2,7 @@
 	import { resolve } from '$app/paths';
 
 	import Muster from '$lib/Muster.svelte';
-	import { datasheet } from '$lib/datasheets';
+	import { entry } from '$lib/corpus';
 	import { api, type MusteredUnit } from '$lib/api/client';
 
 	const STORAGE_KEY = 'avelorn:list';
@@ -49,7 +49,7 @@
 		}
 		// The size is settled before the editor exists to read it: mounting first
 		// would seed the draft from the previous datasheet's minimum.
-		const sheet = await datasheet(slug);
+		const sheet = await entry('unit', slug);
 		addingSize = sheet?.unit_size.min ?? 1;
 		adding = slug;
 	}
