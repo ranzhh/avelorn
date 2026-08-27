@@ -310,3 +310,18 @@ th.num {
 .neg {
 	color: var(--neg);
 }
+
+/* The drag image for a datasheet leaving the panel. Global because it is
+   appended to the body, out of any component's scope. */
+.carried {
+	position: fixed;
+	top: -1000px;
+	left: -1000px;
+	display: grid;
+	place-items: center;
+	font: var(--text-xs) / 1 var(--font-mono);
+	color: var(--ink);
+	background: color-mix(in oklab, var(--series-1) 32%, var(--sunken));
+	border: 1px solid var(--series-1);
+	border-radius: 2px;
+}

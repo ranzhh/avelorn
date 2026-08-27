@@ -11,9 +11,25 @@ export interface Order {
 /** The minimum models a datasheet may be fielded at. */
 export const minimum = (unit: UnitSummary): number => unit.unit_size.min;
 
-/** The size range, as a datasheet prints it. */
-export const sizeRange = (unit: UnitSummary): string =>
-	unit.unit_size.max ? `${unit.unit_size.min}–${unit.unit_size.max}` : `${unit.unit_size.min}+`;
+/**
+ * What the smallest legal unit of this datasheet costs.
+ *
+ * `points` is per model, and a bare per-model figure says nothing about what
+ * taking the unit costs: 8 points is 40 for the five Elven Spearmen you must
+ * take to field any at all.
+ */
+export const fielded = (unit: UnitSummary): number => unit.points * unit.unit_size.min;
+
+/**
+ * The sizes a datasheet may be fielded at: `5+`, `3–5`, or a bare `1`.
+ *
+ * Takes the range rather than the unit so the datasheet route's `Unit` and a
+ * listing's `UnitSummary` print it the same way.
+ */
+export const sizeRange = (size: { min: number; max?: number | null }): string => {
+	if (size.max == null) return `${size.min}+`;
+	return size.max === size.min ? `${size.min}` : `${size.min}–${size.max}`;
+};
 
 /**
  * Whether a datasheet answers to `needle`.
@@ -32,7 +48,7 @@ export function matches(unit: UnitSummary, needle: string): boolean {
 function key(unit: UnitSummary, column: Column): string | number {
 	switch (column) {
 		case 'points':
-			return unit.points;
+			return fielded(unit);
 		case 'size':
 			return minimum(unit);
 		case 'armies':

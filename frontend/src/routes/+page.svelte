@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 
-	import { listing, reorder, sizeRange, type Column, type Order } from '$lib/listing';
+	import { fielded, listing, reorder, sizeRange, type Column, type Order } from '$lib/listing';
 
 	let { data } = $props();
 
@@ -42,8 +42,8 @@
 		{#each rows as unit (unit.id)}
 			<tr>
 				<td><a href={resolve('/units/[slug]', { slug: unit.id })}>{unit.name}</a></td>
-				<td class="num">{unit.points}</td>
-				<td class="num">{sizeRange(unit)}</td>
+				<td class="num">{fielded(unit)}</td>
+				<td class="num">{sizeRange(unit.unit_size)}</td>
 				<td class="dim">{unit.troop_type}</td>
 				<td class="armies">
 					{#each unit.armies as army, index}{index ? ', ' : ''}{army}{/each}

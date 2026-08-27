@@ -3,14 +3,27 @@
 	import Dock from '$lib/Dock.svelte';
 	import Muster from '$lib/Muster.svelte';
 	import Resolved from '$lib/Resolved.svelte';
-	import { api, type FightReport, type VolleyReport } from '$lib/api/client';
-	import { listing } from '$lib/listing';
-	import { TABLE, arc, room, separation, usable, type Placed } from '$lib/table';
+	import { api, type FightReport, type MusteredUnit, type VolleyReport } from '$lib/api/client';
+	import { fielded, listing } from '$lib/listing';
+	import {
+		TABLE,
+		arc,
+		bounds,
+		identifier,
+		room,
+		separation,
+		span,
+		usable,
+		type Placed
+	} from '$lib/table';
 
 	let { data } = $props();
 
 	let needle = $state('');
-	let opened = $state('');
+	// The block whose size and options are being edited on the table.
+	let editing = $state<number | null>(null);
+	let stamped = $state(0);
+	let popover = $state<HTMLDivElement | null>(null);
 	let placed = $state<Placed[]>([]);
 	let nextId = $state(1);
 	let picked = $state<number | null>(null);
@@ -22,6 +35,7 @@
 	let volley = $state<VolleyReport | null>(null);
 
 	const rows = $derived(listing(data.units, needle, { column: 'name', descending: false }));
+
 	const block = $derived(placed.find((each) => each.id === picked) ?? null);
 	const points = $derived(placed.reduce((sum, each) => sum + each.block.points, 0));
 
@@ -40,6 +54,38 @@
 		};
 	});
 
+	// Footprints for the panel's drag image, costed once on hover so dragstart
+	// has one to hand: it is synchronous and cannot wait for a round trip.
+	const shapes: Record<string, MusteredUnit> = {};
+	async function shape(unit: string, size: number) {
+		if (shapes[unit]) return;
+		const costed = await muster(unit, size, []);
+		if (costed) shapes[unit] = costed;
+	}
+
+	/**
+	 * Drag the block, not its name.
+	 *
+	 * The ghost under the pointer is the rectangle the unit will occupy, at the
+	 * scale the table is drawn, so what lands is what was carried.
+	 */
+	function carry(event: DragEvent, unit: string, size: number) {
+		event.dataTransfer?.setData('application/avelorn-unit', `${unit}:${size}`);
+		const costed = shapes[unit];
+		const print = costed?.footprint;
+		const surface = document.querySelector('.surface svg');
+		if (!print || !surface) return;
+		const perInch = surface.getBoundingClientRect().width / TABLE.width;
+		const { width, depth } = span(print);
+		const ghost = document.createElement('div');
+		ghost.className = 'carried';
+		ghost.style.width = `${width * perInch}px`;
+		ghost.style.height = `${depth * perInch}px`;
+		ghost.textContent = `${print.files}×${print.ranks}`;
+		document.body.append(ghost);
+		event.dataTransfer?.setDragImage(ghost, (width * perInch) / 2, (depth * perInch) / 2);
+		setTimeout(() => ghost.remove());
+	}
 	function deployment(block: Placed, phase: 'melee' | 'missile') {
 		const weapon = phase === 'melee' ? block.melee : block.missile;
 		return {
@@ -104,26 +150,38 @@
 		volley = report;
 	}
 
-	async function cost(unit: string, size: number, options: string[]) {
+	async function muster(unit: string, size: number, options: string[], frontage?: number) {
 		refusal = '';
 		const { data: costed, error: refused } = await api(window.location.origin, fetch).POST(
 			'/muster',
-			{ body: { unit, size, options } }
+			{ body: { unit, size, options, frontage: frontage ?? null } }
 		);
 		if (!costed) {
 			refusal = typeof refused?.detail === 'string' ? refused.detail : 'could not cost that';
-			return;
+			return null;
 		}
 		if (!costed.footprint) {
 			refusal = `${costed.name}: no base size, cannot be drawn`;
-			return;
+			return null;
 		}
-		// Deployed on the near edge, facing up the table, then dragged from there.
+		return costed;
+	}
+
+	/**
+	 * Put a datasheet on the table at its smallest legal size.
+	 *
+	 * Clicking a row deploys rather than opening a form: the block lands, and the
+	 * size and options are then chosen against something you can see.
+	 */
+	async function deploy(unit: string, size: number, where?: { x: number; y: number }) {
+		const costed = await muster(unit, size, []);
+		if (!costed) return;
 		const wanted: Placed = {
 			id: nextId,
+			mark: identifier(stamped),
 			block: costed,
-			x: TABLE.width / 2,
-			y: TABLE.depth - 6,
+			x: where?.x ?? TABLE.width / 2,
+			y: where?.y ?? TABLE.depth - 6,
 			facing: 0,
 			melee: '',
 			missile: ''
@@ -131,8 +189,18 @@
 		const settled = room(wanted, placed);
 		placed = [...placed, settled];
 		nextId += 1;
+		stamped += 1;
 		picked = settled.id;
-		opened = '';
+		editing = settled.id;
+	}
+
+	/** Re-cost a standing block at a new size or set of options. */
+	async function recost(id: number, size: number, options: string[]) {
+		const standing = placed.find((each) => each.id === id);
+		if (!standing) return;
+		const costed = await muster(standing.block.unit, size, options);
+		if (!costed) return;
+		amend(id, { block: costed });
 	}
 
 	/** Re-form a block to a new width, asking the engine for the footprint it takes. */
@@ -157,6 +225,14 @@
 		amend(id, { block: costed });
 	}
 
+	// Edits apply as they are made, so the popover just goes away on a click
+	// elsewhere. Nothing is left half-applied waiting for a button.
+	function dismiss(event: PointerEvent) {
+		if (editing === null) return;
+		if (popover?.contains(event.target as Node)) return;
+		editing = null;
+	}
+
 	function amend(id: number, change: Partial<Placed>) {
 		placed = placed.map((each) => (each.id === id ? { ...each, ...change } : each));
 	}
@@ -167,6 +243,8 @@
 	}
 </script>
 
+<svelte:window onpointerdown={dismiss} />
+
 <div class="shell">
 	<aside class="left">
 		<Dock title="deploy" keep="deploy" value={`${placed.length} on the table`}>
@@ -175,24 +253,17 @@
 				{#each rows as unit (unit.id)}
 					<button
 						class="row"
-						class:on={opened === unit.id}
-						onclick={() => (opened = opened === unit.id ? '' : unit.id)}
+						draggable="true"
+						onpointerenter={() => shape(unit.id, unit.unit_size.min)}
+						ondragstart={(event) => carry(event, unit.id, unit.unit_size.min)}
+						onclick={() => deploy(unit.id, unit.unit_size.min)}
 					>
 						<span>{unit.name}</span>
-						<span class="num">{unit.points}</span>
+						<span class="cost num">
+							<span class="least">×{unit.unit_size.min}</span>
+							{fielded(unit)} pts
+						</span>
 					</button>
-					{#if opened === unit.id}
-						<div class="editor">
-							<Muster
-								unit={unit.id}
-								size={unit.unit_size.min}
-								options={[]}
-								submitLabel="deploy"
-								onsubmit={(size, options) => cost(unit.id, size, options)}
-								oncancel={() => (opened = '')}
-							/>
-						</div>
-					{/if}
 				{/each}
 			</div>
 		</Dock>
@@ -208,7 +279,28 @@
 				onturn={(id, facing) => amend(id, { facing })}
 				ondrop={(mover, target) => (asking = { mover, target })}
 				onreform={reform}
+				ondropunit={(unit, size, x, y) => deploy(unit, size, { x, y })}
+				onedit={(id) => ((picked = id), (editing = id))}
 			/>
+			{#if block && editing === block.id}
+				<div
+					class="popover"
+					bind:this={popover}
+					style="left: {(block.x / TABLE.width) * 100}%; top: {(bounds(block).bottom /
+						TABLE.depth) *
+						100}%"
+				>
+					<span class="head">{block.mark} · {block.block.name}</span>
+					<Muster
+						live
+						unit={block.block.unit}
+						size={block.block.size}
+						options={block.block.options}
+						onsubmit={(size, options) => recost(block.id, size, options)}
+					/>
+				</div>
+			{/if}
+
 			{#if pair}
 				<div
 					class="menu"
@@ -281,6 +373,7 @@
 					</label>
 				{/if}
 				<div class="cluster acts">
+					<button class="btn btn-sm" onclick={() => (editing = block.id)}>size</button>
 					<button class="btn btn-sm" onclick={() => amend(block.id, { facing: 0 })}>
 						face up
 					</button>
@@ -330,7 +423,7 @@
 
 	.menu {
 		position: absolute;
-		transform: translate(-50%, var(--space-2));
+		transform: translate(-50%, var(--space-4));
 		z-index: 2;
 		display: flex;
 		flex-direction: column;
@@ -383,20 +476,32 @@
 		background: var(--panel);
 	}
 
-	.row.on {
-		background: var(--panel);
-		color: var(--accent-ink);
-	}
-
-	.row .num {
+	.cost {
 		color: var(--dim);
+		white-space: nowrap;
 	}
 
-	.editor {
+	.least {
+		color: var(--faint);
+	}
+
+	.popover {
+		position: absolute;
+		transform: translate(-50%, var(--space-4));
+		z-index: 3;
+		width: 15rem;
 		padding: var(--space-2);
-		margin: var(--space-1) 0 var(--space-2);
 		background: var(--panel);
-		border-radius: var(--radius-sm);
+		border: 1px solid var(--faint);
+		border-radius: var(--radius-md);
+		box-shadow: var(--shadow);
+	}
+
+	.popover .head {
+		display: block;
+		margin-bottom: var(--space-2);
+		font: var(--text-xs) / 1.5 var(--font-mono);
+		color: var(--dim);
 	}
 
 	.field span:first-child {
