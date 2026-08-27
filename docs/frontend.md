@@ -130,23 +130,29 @@ One route. The battle table is the primary surface and owns the screen.
 - `/list` as a route disappears; the army list is a docked panel.
 - Datasheets and rule entries open as **floating panes**, Paradox-style: a pane
   over the table, movable, dismissible, and a rule name inside one opens another
-  pane on top. Panes stack. `/units/[slug]` and `/rules/[slug]` stay as routes so
-  a datasheet is still linkable, but the panes are the primary way in.
+  pane on top. Panes stack. `/units/[slug]` and `/rules/[slug]` stay as routes:
+  they are useful on their own and remain linkable. The panes are the primary way
+  in, not the only one.
 
 ## Interaction on the table
 
 - Blocks are drawn at their true footprint from `MusteredUnit.footprint` —
   `files` × `ranks` on the datasheet's base size.
-- **Drag to move.** A block is dragged around the table.
+- **Deploying puts the block on the table**, on the near edge facing up, moved
+  clear of anything already standing there (`room`). There is no placing click.
+- **Drag to move.** A block is dragged around the table. A step that would put a
+  corner off the table is refused, so the block stops against the edge rather
+  than the pointer running away from it.
 - **Drag onto another block → the action menu** opens: charge, shoot if it
   carries a missile profile, fight already-joined. The separation and the arc
   come off the geometry, never from a form.
-- **Resize changes the formation.** Dragging a block's edge changes its frontage,
-  which re-forms the ranks and redraws the rectangle. Model count is a config
-  input, not a drag. (See Open questions.)
-- Facing is one of four quarters; wheeling is a quarter at a time. This keeps
-  rectangles axis-aligned, which is what makes the separation an exact
-  edge-to-edge measure rather than an approximation between rotated shapes.
+- **Resize changes the frontage.** Dragging a block's edge changes `files`, which
+  re-forms the ranks and redraws the rectangle. Model count is not a drag: it is
+  changed from the block panel.
+- **Facing is any angle**, turned by a rotation handle on a stalk off the block's
+  front, the way Word and PowerPoint rotate a shape. Free by default; Shift
+  snaps to 15°. Because a block can sit off the axis, nothing may measure it
+  from its bounding box.
 - Selection uses the mark poles: the picked block takes `--series-1`, the one
   being asked about takes `--series-2`.
 - Nothing is applied back onto the table. A result is read, never spent: the
@@ -156,11 +162,21 @@ One route. The battle table is the primary surface and owns the screen.
 
 ## Geometry
 
-Carried on the `feature/battle-table` branch as `frontend/src/lib/table.ts`
-with 12 tests, and returns to the tree in the drag slice. `separation` is
-edge-to-edge in inches, zero when blocks touch. `arc` bounds the arcs by the
-target's own diagonals, so a wide block presents a wide front and one stood on
-end presents a wide flank. Do not reimplement either.
+`frontend/src/lib/table.ts`, under 26 tests. Blocks turn to any angle, so this
+works in polygons rather than boxes.
+
+- `corners` gives the four corners at any facing; `bounds` is their axis-aligned
+  box, for hit areas and edge checks only.
+- `separation` is edge-to-edge in inches between the rectangles themselves, zero
+  when they touch or overlap, including when one sits wholly inside another.
+  Never measure a gap from `bounds` — two blocks turned 45° have overlapping
+  boxes while standing well apart.
+- `arc` bounds the arcs by the target's own diagonals, so a wide block presents a
+  wide front and one stood on end presents a wide flank.
+- `angleTo` and `snap` back the rotation handle. `room` finds a free spot for a
+  newly deployed block.
+
+Do not reimplement any of it.
 
 ## Charts
 
@@ -220,7 +236,7 @@ merged or accept a rebase.
    restructuring. ← _in progress, this branch_
 2. **The one-route shell.** Docked collapsible panels with header values and
    persisted open state; the battle table as a static surface with blocks placed
-   by click. No drag.
+   by click. No drag. ← _landed_
 3. **Drag.** Move a block; drop onto another to open the action menu; resize an
    edge to change frontage.
 4. **The result panels.** Fight and volley resolved into the docked panel, with
@@ -239,11 +255,13 @@ frontend-check` and `make types-check` all clean, `uv run pytest` clean if
   anything Python moved, and the change exercised against a running API — not
   tests alone.
 
+## What the old routes are waiting for
+
+`/fight` and `/shoot` still exist and are still the only way to resolve
+anything. They go when the result panels land in slice 4, not before: deleting
+them earlier would leave the tool unable to answer a question. `/list` goes in
+slice 6, when the army list becomes a dock.
+
 ## Open questions
 
-- **Resize semantics.** Taken as frontage: dragging an edge changes `files` and
-  re-forms the ranks, model count unchanged. It could instead mean model count.
-  Flagged, assumption stated, cheap to switch.
-- **Do `/units/[slug]` and `/rules/[slug]` survive** as routes once floating
-  panes exist? Kept above for linkability; drop them if that is not wanted.
 - **Light theme** — deferred, not refused.
