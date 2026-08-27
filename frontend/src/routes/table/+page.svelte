@@ -1,6 +1,7 @@
 <script lang="ts">
 	import BattleTable from '$lib/BattleTable.svelte';
 	import Dock from '$lib/Dock.svelte';
+	import Matchups from '$lib/Matchups.svelte';
 	import Muster from '$lib/Muster.svelte';
 	import Panes from '$lib/Panes.svelte';
 	import Resolved from '$lib/Resolved.svelte';
@@ -304,6 +305,18 @@
 			{/if}
 		</div>
 		{#if refusal}<p class="refuse">{refusal}</p>{/if}
+
+		<div class="under">
+			<Dock title="matchups" keep="matchups" value={`${placed.length} blocks`}>
+				<Matchups
+					{placed}
+					onread={(report) => {
+						cleared();
+						fight = report;
+					}}
+				/>
+			</Dock>
+		</div>
 	</div>
 
 	<aside class="right">
@@ -529,5 +542,10 @@
 
 	.refuse {
 		margin-top: var(--space-2);
+	}
+
+	.under {
+		margin-top: var(--space-3);
+		border-top: 1px solid var(--line);
 	}
 </style>
