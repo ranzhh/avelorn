@@ -21,3 +21,6 @@ export type UnitOption = NonNullable<Unit['options']>[number];
 
 export type FightReport = paths['/fight']['post']['responses'][200]['content']['application/json'];
 export type FightSide = FightReport['a'];
+
+export type VolleyReport =
+	paths['/volley']['post']['responses'][200]['content']['application/json'];

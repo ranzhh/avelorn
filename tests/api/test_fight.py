@@ -126,7 +126,9 @@ def test_a_weapon_that_cannot_fight_is_refused_not_resolved(client: TestClient) 
         },
     )
     assert response.status_code == 422
-    assert response.json() == {"detail": "side a: Longbow has no Combat profile; it cannot fight"}
+    assert response.json() == {
+        "detail": "side a: Longbow has no Combat profile; it cannot be used here"
+    }
 
 
 def test_the_loser_takes_the_break_test(client: TestClient) -> None:
