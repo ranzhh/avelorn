@@ -32,7 +32,7 @@ def list_units(data: TOWRepository) -> list[str]:
     Returns:
         The lines to print.
     """
-    rows = [["SLUG", "NAME", "PTS/MODEL", "SIZE", "TROOP TYPE"]]
+    rows = [["SLUG", "NAME", "PTS/MODEL", "SIZE", "TROOP TYPE", "ARMIES"]]
     rows.extend(
         [
             summary.id,
@@ -40,8 +40,12 @@ def list_units(data: TOWRepository) -> list[str]:
             str(summary.points),
             _size(summary.unit_size),
             summary.troop_type.value,
+            ", ".join(summary.armies),
         ]
-        for summary in (UnitSummary.of(unit) for _, unit in sorted(data.units.items()))
+        for summary in (
+            UnitSummary.of(unit, data.fielded_by[slug])
+            for slug, unit in sorted(data.units.items())
+        )
     )
     return _columns(rows)
 

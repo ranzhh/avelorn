@@ -985,6 +985,36 @@
         "title": "FoeGate",
         "description": "A gate on the foe of the attack the bearer is making.\n\nThe mirror of :class:`AttackGate` \u2014 that subject describes the attack a\nmodel *suffers*, this one the model its own attack lands on. Killing\nBlow and Cleaving Blow read the foe's troop type (\"enemy models whose\ntroop type is infantry or cavalry ...\"): ``troop_type`` is the printed\nlist, satisfied by any member. A printed category expands to its\nsub-types when the entry is authored \u2014 the rulebook's own reading\n(\"when the rules refer to Infantry units, Monstrous Infantry must also\nfollow\", troop-types-at-a-glance) \u2014 so the engine matches one closed\nvocabulary, never a category tree."
       },
+      "Footprint": {
+        "properties": {
+          "files": {
+            "type": "integer",
+            "title": "Files"
+          },
+          "ranks": {
+            "type": "integer",
+            "title": "Ranks"
+          },
+          "width_mm": {
+            "type": "integer",
+            "title": "Width Mm"
+          },
+          "depth_mm": {
+            "type": "integer",
+            "title": "Depth Mm"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "files",
+          "ranks",
+          "width_mm",
+          "depth_mm"
+        ],
+        "title": "Footprint",
+        "description": "The rectangle a block occupies once it forms up.\n\nThe formation it takes at the datasheet's default frontage, and the table\nspace that costs: ``files`` models across by ``ranks`` deep, each model on\na base of the datasheet's size. A rear rank standing short still occupies\nits whole rank, so the depth is the ranks rather than the models."
+      },
       "GrantEffect": {
         "properties": {
           "when": {
@@ -1250,6 +1280,16 @@
             },
             "type": "array",
             "title": "Special Rules"
+          },
+          "footprint": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Footprint"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -1262,10 +1302,11 @@
           "points",
           "equipment",
           "weapons",
-          "special_rules"
+          "special_rules",
+          "footprint"
         ],
         "title": "MusteredUnit",
-        "description": "A block of an army list: a datasheet sized and equipped, and what it costs.\n\nThe view over :class:`~avelorn.tow.muster.Complement`. It carries the\ndatasheet by slug rather than whole, because a list is read as a list --\na caller wanting the profiles follows ``unit`` to the datasheet route.\n``equipment`` and ``special_rules`` are the effective ones, the chosen\noptions' adds and removes already folded in, so a block says what the\nmodels actually carry rather than what the datasheet offered. ``weapons``\nnarrows the equipment to the weapons among it, each saying whether it can\nbe used in close combat -- what a caller naming a weapon chooses from."
+        "description": "A block of an army list: a datasheet sized and equipped, and what it costs.\n\nThe view over :class:`~avelorn.tow.muster.Complement`. It carries the\ndatasheet by slug rather than whole, because a list is read as a list --\na caller wanting the profiles follows ``unit`` to the datasheet route.\n``equipment`` and ``special_rules`` are the effective ones, the chosen\noptions' adds and removes already folded in, so a block says what the\nmodels actually carry rather than what the datasheet offered. ``weapons``\nnarrows the equipment to the weapons among it, each saying whether it can\nbe used in close combat -- what a caller naming a weapon chooses from.\n``footprint`` is the table space the block takes at the datasheet's default\nfrontage, which a caller drawing it needs and cannot derive from a slug."
       },
       "NaturalRoll": {
         "properties": {
@@ -2057,6 +2098,13 @@
           },
           "troop_type": {
             "$ref": "#/components/schemas/TroopType"
+          },
+          "armies": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Armies"
           }
         },
         "additionalProperties": false,
@@ -2066,10 +2114,11 @@
           "name",
           "points",
           "unit_size",
-          "troop_type"
+          "troop_type",
+          "armies"
         ],
         "title": "UnitSummary",
-        "description": "A datasheet as a listing shows it: what it costs and how it is fielded."
+        "description": "A datasheet as a listing shows it: what it costs, how it is fielded, who fields it.\n\n``armies`` is every army filing the datasheet, by slug, which a listing\ngroups by. It is plural because a slug may be filed under several -- a\nmount or a beast that more than one army takes -- so a unit belongs to as\nmany branches of a browser as field it."
       },
       "UnmodelledRule": {
         "properties": {

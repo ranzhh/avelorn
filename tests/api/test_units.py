@@ -40,7 +40,16 @@ def test_the_listing_carries_what_a_list_needs_and_no_more(client: TestClient) -
         "points": 9,
         "unit_size": {"min": 5, "max": None},
         "troop_type": "Regular Infantry",
+        "armies": ["high-elf-realms"],
     }
+
+
+def test_a_listing_says_which_armies_field_a_unit(client: TestClient) -> None:
+    """A browser groups by army, so the summary carries the armies filing it."""
+    listed = {unit["id"]: unit["armies"] for unit in client.get("/units").json()}
+    assert listed["elven-archers"] == ["high-elf-realms"]
+    assert listed["dwarf-warriors"] == ["dwarfen-mountain-holds"]
+    assert all(armies for armies in listed.values())
 
 
 def test_a_datasheet_is_served_whole(client: TestClient) -> None:
