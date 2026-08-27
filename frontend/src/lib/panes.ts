@@ -15,9 +15,24 @@ export interface Pane {
 	/** The slug addressing the entry, unique per subject among open panes. */
 	slug: string;
 	title: string;
+	/**
+	 * The block on the table this was opened for, if any.
+	 *
+	 * Two blocks of one datasheet read the same entry and hold different
+	 * options, so a block's pane is its own pane rather than the datasheet's.
+	 */
+	block?: number;
 	/** Top-left corner in viewport pixels. */
 	x: number;
 	y: number;
+	/**
+	 * Where in the stack this sits, highest on top.
+	 *
+	 * Carried on the pane rather than read off the list's order, because a keyed
+	 * list reordered under a pointer moves the node. The browser then has a
+	 * pointerdown and a pointerup on different elements, and issues no click.
+	 */
+	z: number;
 }
 
 export interface Size {
@@ -30,13 +45,6 @@ export interface Viewport {
 	height: number;
 }
 
-/**
- * What a pane of each subject measures, in pixels.
- *
- * Read by the component into custom properties as well as by the placement
- * below, so the rectangle that is clamped is the rectangle that is drawn. A
- * pane taller than its measure scrolls inside; it does not grow.
- */
 /** What a pane calls itself on its own title bar. */
 export const LABEL: Record<Subject, string> = {
 	unit: 'datasheet',
@@ -45,12 +53,35 @@ export const LABEL: Record<Subject, string> = {
 	armour: 'armour'
 };
 
+/**
+ * What a pane of each subject measures, in pixels.
+ *
+ * Read by the component into custom properties as well as by the placement
+ * below, so the rectangle that is clamped is the rectangle that is drawn. A
+ * pane taller than its measure scrolls inside; it does not grow.
+ */
 export const MEASURE: Record<Subject, Size> = {
 	unit: { width: 384, height: 520 },
 	rule: { width: 320, height: 300 },
 	weapon: { width: 340, height: 340 },
 	armour: { width: 300, height: 220 }
 };
+
+/** How wide the options a block's pane carries beside its datasheet. */
+export const ASIDE = 248;
+
+/**
+ * What one pane measures, aside included.
+ *
+ * A collapsed aside draws narrower than this. Clamping the wider rectangle
+ * keeps a pane on screen when it is opened again, and a pane narrower than its
+ * clamp cannot overhang.
+ */
+export function measure(pane: Pick<Pane, 'subject' | 'block'>): Size {
+	const base = MEASURE[pane.subject];
+	if (pane.block === undefined) return base;
+	return { width: base.width + ASIDE, height: base.height };
+}
 
 /** How far a pane opened from another sits down and right of it. */
 const CASCADE = 24;
@@ -117,28 +148,42 @@ function taken(open: Pane[], at: { x: number; y: number }): boolean {
 }
 
 /**
- * Open a pane, or raise the one already reading that entry.
+ * Open a pane, or raise the one already reading that entry for that block.
  *
  * A rule opened twice from two datasheets is one pane, because two copies of
- * the same text is not two pieces of information.
+ * the same text is not two pieces of information. Two blocks of one datasheet
+ * are two panes, because their options differ.
  */
 export function opened(
 	open: Pane[],
-	wanted: { id: number; subject: Subject; slug: string; title: string },
+	wanted: { id: number; subject: Subject; slug: string; title: string; block?: number },
 	size: Size,
 	viewport: Viewport,
 	from?: Pane
 ): Pane[] {
-	const already = open.find((pane) => pane.subject === wanted.subject && pane.slug === wanted.slug);
+	const already = open.find(
+		(pane) =>
+			pane.subject === wanted.subject && pane.slug === wanted.slug && pane.block === wanted.block
+	);
 	if (already) return raised(open, already.id);
-	return [...open, { ...wanted, ...spot(open, size, viewport, from) }];
+	return [...open, { ...wanted, ...spot(open, size, viewport, from), z: ceiling(open) + 1 }];
 }
 
-/** Bring a pane to the front; the last of the list is the topmost. */
+function ceiling(open: Pane[]): number {
+	return open.reduce((high, pane) => Math.max(high, pane.z), 0);
+}
+
+/** The pane on top, or null with none open. */
+export function topmost(open: Pane[]): Pane | null {
+	return open.reduce<Pane | null>((top, pane) => (!top || pane.z > top.z ? pane : top), null);
+}
+
+/** Bring a pane to the front, leaving the list in the order it opened in. */
 export function raised(open: Pane[], id: number): Pane[] {
 	const pane = open.find((each) => each.id === id);
-	if (!pane || open[open.length - 1]?.id === id) return open;
-	return [...open.filter((each) => each.id !== id), pane];
+	if (!pane || pane.z === ceiling(open)) return open;
+	const z = ceiling(open) + 1;
+	return open.map((each) => (each.id === id ? { ...each, z } : each));
 }
 
 export function closed(open: Pane[], id: number): Pane[] {

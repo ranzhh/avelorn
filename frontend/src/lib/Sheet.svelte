@@ -5,11 +5,13 @@
 
 	interface Props {
 		unit: Unit;
+		/** Print what the options cost. Off where the pane carries them editable. */
+		pricing?: boolean;
 		/** Follow a printed name to its entry, opening a pane on top of this one. */
 		onopen: (reference: Reference) => void;
 	}
 
-	let { unit, onopen }: Props = $props();
+	let { unit, pricing = true, onopen }: Props = $props();
 
 	// Printed order, not the order a profile happens to be written in.
 	const CHARACTERISTICS = ['M', 'WS', 'BS', 'S', 'T', 'W', 'I', 'A', 'Ld'] as const;
@@ -55,7 +57,7 @@
 	<Chips of={unit.special_rules} {onopen} />
 {/if}
 
-{#if unit.options?.length}
+{#if pricing && unit.options?.length}
 	<h4>options</h4>
 	<table>
 		<tbody>

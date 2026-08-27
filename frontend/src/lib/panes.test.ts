@@ -4,10 +4,12 @@ import {
 	MEASURE,
 	clamped,
 	closed,
+	measure,
 	moved,
 	opened,
 	raised,
 	spot,
+	topmost,
 	type Pane,
 	type Subject
 } from './panes';
@@ -21,7 +23,8 @@ const pane = (id: number, slug: string, x = 0, y = 0): Pane => ({
 	slug,
 	title: slug,
 	x,
-	y
+	y,
+	z: id
 });
 
 describe('clamped', () => {
@@ -79,7 +82,8 @@ describe('opened', () => {
 			SIZE,
 			SCREEN
 		);
-		expect(again.map((each) => each.id)).toEqual([2, 1]);
+		expect(again).toHaveLength(2);
+		expect(topmost(again)?.id).toBe(1);
 	});
 
 	it('tells a rule from a datasheet filed under the same slug', () => {
@@ -92,17 +96,94 @@ describe('opened', () => {
 		);
 		expect(both).toHaveLength(2);
 	});
+
+	it('gives two blocks of one datasheet a pane each', () => {
+		const first = opened(
+			[],
+			{ id: 1, subject: 'unit', slug: 'white-lions', title: 'A · White Lions', block: 1 },
+			SIZE,
+			SCREEN
+		);
+		const both = opened(
+			first,
+			{ id: 2, subject: 'unit', slug: 'white-lions', title: 'B · White Lions', block: 2 },
+			SIZE,
+			SCREEN
+		);
+		expect(both).toHaveLength(2);
+		expect(both.map((each) => each.block)).toEqual([1, 2]);
+	});
+
+	it("raises a block's own pane rather than opening it twice", () => {
+		const open = opened(
+			[],
+			{ id: 1, subject: 'unit', slug: 'white-lions', title: 'A · White Lions', block: 1 },
+			SIZE,
+			SCREEN
+		);
+		const again = opened(
+			open,
+			{ id: 2, subject: 'unit', slug: 'white-lions', title: 'A · White Lions', block: 1 },
+			SIZE,
+			SCREEN
+		);
+		expect(again).toHaveLength(1);
+		expect(again[0].id).toBe(1);
+	});
+
+	it("keeps a block's pane apart from the same datasheet read off the roster", () => {
+		const open = opened(
+			[],
+			{ id: 1, subject: 'unit', slug: 'white-lions', title: 'White Lions' },
+			SIZE,
+			SCREEN
+		);
+		const both = opened(
+			open,
+			{ id: 2, subject: 'unit', slug: 'white-lions', title: 'A · White Lions', block: 1 },
+			SIZE,
+			SCREEN
+		);
+		expect(both).toHaveLength(2);
+	});
+});
+
+describe('measure', () => {
+	it("widens a block's pane by the aside it carries", () => {
+		const bare = measure({ subject: 'unit' });
+		const withOptions = measure({ subject: 'unit', block: 1 });
+		expect(bare.width).toBe(MEASURE.unit.width);
+		expect(withOptions.width).toBeGreaterThan(bare.width);
+		expect(withOptions.height).toBe(bare.height);
+	});
 });
 
 describe('raised', () => {
-	it('puts the raised pane last, which is the top of the stack', () => {
+	it('puts the raised pane on top of the stack', () => {
 		const open = [pane(1, 'a'), pane(2, 'b'), pane(3, 'c')];
-		expect(raised(open, 1).map((each) => each.id)).toEqual([2, 3, 1]);
+		expect(topmost(raised(open, 1))?.id).toBe(1);
+	});
+
+	it('keeps the list in the order it opened in', () => {
+		const open = [pane(1, 'a'), pane(2, 'b'), pane(3, 'c')];
+		expect(raised(open, 1).map((each) => each.id)).toEqual([1, 2, 3]);
 	});
 
 	it('leaves the list alone when the pane is already on top', () => {
 		const open = [pane(1, 'a'), pane(2, 'b')];
 		expect(raised(open, 2)).toBe(open);
+	});
+});
+
+describe('topmost', () => {
+	it('reads the stack off the order, not off the list', () => {
+		const open = [pane(1, 'a'), pane(2, 'b')];
+		expect(topmost(open)?.id).toBe(2);
+		expect(topmost(raised(open, 1))?.id).toBe(1);
+	});
+
+	it('has nothing to report with no pane open', () => {
+		expect(topmost([])).toBeNull();
 	});
 });
 
@@ -152,14 +233,7 @@ describe('subjects', () => {
 	});
 
 	it('cascades a three-deep chain down and right of each parent', () => {
-		const sheet = {
-			id: 1,
-			subject: 'unit' as const,
-			slug: 'white-lions',
-			title: 'x',
-			x: 300,
-			y: 72
-		};
+		const sheet = pane(1, 'white-lions', 300, 72);
 		const weapon = spot([sheet], MEASURE.weapon, SCREEN, sheet);
 		const rule = spot([sheet, { ...sheet, id: 2, ...weapon }], MEASURE.rule, SCREEN, {
 			...sheet,

@@ -1,20 +1,25 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { LABEL, MEASURE, type Pane } from '$lib/panes';
+	import { ASIDE, LABEL, MEASURE, measure, type Pane } from '$lib/panes';
 
 	interface Props {
 		pane: Pane;
-		/** Where in the stack this sits; the last pane drawn is the top one. */
-		depth: number;
 		onraise: () => void;
 		onmove: (x: number, y: number) => void;
 		onclose: () => void;
 		children: Snippet;
+		/** Shown beside the body, taking the block the pane was opened for. */
+		options?: Snippet<[number]>;
 	}
 
-	let { pane, depth, onraise, onmove, onclose, children }: Props = $props();
+	let { pane, onraise, onmove, onclose, children, options }: Props = $props();
 
-	const measure = $derived(MEASURE[pane.subject]);
+	const beside = $derived(pane.block !== undefined && options !== undefined);
+	let showing = $state(true);
+
+	// Placed at its full measure, drawn without the aside while that is folded.
+	const placed = $derived(measure(pane));
+	const drawn = $derived(beside && showing ? placed.width : MEASURE[pane.subject].width);
 
 	// Where in the bar the pointer went down, so the pane moves with the grip
 	// rather than jumping its corner under the cursor.
@@ -42,7 +47,7 @@
 <section
 	class="pane"
 	style="left: {pane.x}px; top: {pane.y}px; z-index: {100 +
-		depth}; --pane-w: {measure.width}px; --pane-h: {measure.height}px"
+		pane.z}; --pane-w: {drawn}px; --pane-h: {placed.height}px; --aside-w: {ASIDE}px"
 	onpointerdowncapture={onraise}
 >
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -55,10 +60,27 @@
 	>
 		<span class="eyebrow">{LABEL[pane.subject]}</span>
 		<h3>{pane.title}</h3>
+		{#if beside}
+			<button
+				class="btn btn-ghost btn-sm fold"
+				class:on={showing}
+				onclick={() => (showing = !showing)}
+				aria-expanded={showing}
+			>
+				options
+			</button>
+		{/if}
 		<button class="btn btn-ghost btn-sm shut" onclick={onclose} aria-label="close">×</button>
 	</header>
-	<div class="body">
-		{@render children()}
+	<div class="split">
+		<div class="body">
+			{@render children()}
+		</div>
+		{#if beside && showing}
+			<aside>
+				{@render options?.(pane.block!)}
+			</aside>
+		{/if}
 	</div>
 </section>
 
@@ -102,6 +124,32 @@
 		flex: none;
 	}
 
+	.split {
+		display: flex;
+		min-height: 0;
+		overflow: hidden;
+	}
+
+	aside {
+		flex: none;
+		width: var(--aside-w);
+		overflow-y: auto;
+		padding: var(--space-3);
+		border-left: 1px solid var(--line);
+	}
+
+	.fold {
+		flex: none;
+		align-self: center;
+		font-family: var(--font-mono);
+		font-size: var(--text-xs);
+		color: var(--dim);
+	}
+
+	.fold.on {
+		color: var(--accent-ink);
+	}
+
 	.shut {
 		flex: none;
 		align-self: center;
@@ -111,6 +159,8 @@
 	}
 
 	.body {
+		flex: 1;
+		min-width: 0;
 		overflow-y: auto;
 		padding: var(--space-3);
 	}

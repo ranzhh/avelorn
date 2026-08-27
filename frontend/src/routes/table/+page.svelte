@@ -6,26 +6,13 @@
 	import Resolved from '$lib/Resolved.svelte';
 	import { api, type FightReport, type MusteredUnit, type VolleyReport } from '$lib/api/client';
 	import { fielded, listing } from '$lib/listing';
-	import {
-		TABLE,
-		arc,
-		bounds,
-		identifier,
-		room,
-		separation,
-		span,
-		usable,
-		type Placed
-	} from '$lib/table';
+	import { TABLE, arc, identifier, room, separation, span, usable, type Placed } from '$lib/table';
 
 	let { data } = $props();
 
 	let panes = $state<Panes | null>(null);
 	let needle = $state('');
-	// The block whose size and options are being edited on the table.
-	let editing = $state<number | null>(null);
 	let stamped = $state(0);
-	let popover = $state<HTMLDivElement | null>(null);
 	let placed = $state<Placed[]>([]);
 	let nextId = $state(1);
 	let picked = $state<number | null>(null);
@@ -193,7 +180,6 @@
 		nextId += 1;
 		stamped += 1;
 		picked = settled.id;
-		editing = settled.id;
 	}
 
 	/** Re-cost a standing block at a new size or set of options. */
@@ -227,12 +213,16 @@
 		amend(id, { block: costed });
 	}
 
-	// Edits apply as they are made, so the popover just goes away on a click
-	// elsewhere. Nothing is left half-applied waiting for a button.
-	function dismiss(event: PointerEvent) {
-		if (editing === null) return;
-		if (popover?.contains(event.target as Node)) return;
-		editing = null;
+	/** Open a block's own pane: the datasheet it fields, with its options beside it. */
+	function sheet(id: number) {
+		const standing = placed.find((each) => each.id === id);
+		if (!standing) return;
+		panes?.show({
+			subject: 'unit',
+			slug: standing.block.unit,
+			title: `${standing.mark} · ${standing.block.name}`,
+			block: id
+		});
 	}
 
 	function amend(id: number, change: Partial<Placed>) {
@@ -244,8 +234,6 @@
 		if (picked === id) picked = null;
 	}
 </script>
-
-<svelte:window onpointerdown={dismiss} />
 
 <div class="shell">
 	<aside class="left">
@@ -270,7 +258,7 @@
 						<button
 							class="sheet"
 							title="datasheet"
-							onclick={() => panes?.show('unit', unit.id, unit.name)}
+							onclick={() => panes?.show({ subject: 'unit', slug: unit.id, title: unit.name })}
 						>
 							sheet
 						</button>
@@ -291,27 +279,8 @@
 				ondrop={(mover, target) => (asking = { mover, target })}
 				onreform={reform}
 				ondropunit={(unit, size, x, y) => deploy(unit, size, { x, y })}
-				onedit={(id) => ((picked = id), (editing = id))}
+				onedit={(id) => ((picked = id), sheet(id))}
 			/>
-			{#if block && editing === block.id}
-				<div
-					class="popover"
-					bind:this={popover}
-					style="left: {(block.x / TABLE.width) * 100}%; top: {(bounds(block).bottom /
-						TABLE.depth) *
-						100}%"
-				>
-					<span class="head">{block.mark} · {block.block.name}</span>
-					<Muster
-						live
-						unit={block.block.unit}
-						size={block.block.size}
-						options={block.block.options}
-						onsubmit={(size, options) => recost(block.id, size, options)}
-					/>
-				</div>
-			{/if}
-
 			{#if pair}
 				<div
 					class="menu"
@@ -384,13 +353,7 @@
 					</label>
 				{/if}
 				<div class="cluster acts">
-					<button
-						class="btn btn-sm"
-						onclick={() => panes?.show('unit', block.block.unit, block.block.name)}
-					>
-						datasheet
-					</button>
-					<button class="btn btn-sm" onclick={() => (editing = block.id)}>size</button>
+					<button class="btn btn-sm" onclick={() => sheet(block.id)}>datasheet</button>
 					<button class="btn btn-sm" onclick={() => amend(block.id, { facing: 0 })}>
 						face up
 					</button>
@@ -416,7 +379,20 @@
 	</aside>
 </div>
 
-<Panes bind:this={panes} />
+<Panes bind:this={panes}>
+	{#snippet options(id)}
+		{@const standing = placed.find((each) => each.id === id)}
+		{#if standing}
+			<Muster
+				live
+				unit={standing.block.unit}
+				size={standing.block.size}
+				options={standing.block.options}
+				onsubmit={(size, chosen) => recost(id, size, chosen)}
+			/>
+		{/if}
+	{/snippet}
+</Panes>
 
 <style>
 	.shell {
@@ -532,25 +508,6 @@
 
 	.least {
 		color: var(--faint);
-	}
-
-	.popover {
-		position: absolute;
-		transform: translate(-50%, var(--space-4));
-		z-index: 3;
-		width: 15rem;
-		padding: var(--space-2);
-		background: var(--panel);
-		border: 1px solid var(--faint);
-		border-radius: var(--radius-md);
-		box-shadow: var(--shadow);
-	}
-
-	.popover .head {
-		display: block;
-		margin-bottom: var(--space-2);
-		font: var(--text-xs) / 1.5 var(--font-mono);
-		color: var(--dim);
 	}
 
 	.field span:first-child {
