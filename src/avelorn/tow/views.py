@@ -27,6 +27,7 @@ than read the rule registry alone -- a rule with no entry is invisible there.
 
 from collections import defaultdict
 from collections.abc import Sequence
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict
 
@@ -38,8 +39,10 @@ from avelorn.tow.engine.rules import printed_rule
 from avelorn.tow.muster import Complement
 from avelorn.tow.phases.combat import BreakResult, CombatResult, FightResult, SideBreak
 from avelorn.tow.phases.shooting import PanicResult, ShootingResult
+from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.unit import TroopType, Unit, UnitSize
+from avelorn.tow.schema.weapon import Weapon, WeaponProfile, WeaponType
 
 
 class UnitSummary(BaseModel):
@@ -77,47 +80,85 @@ class UnitSummary(BaseModel):
         )
 
 
-class PrintedRule(BaseModel):
-    """A rule name as a datasheet prints it, and the entry it resolves to.
+class Kind(StrEnum):
+    """What a printed name turns out to name.
 
-    ``slug`` addresses the entry, so a caller can link to it without knowing
-    how a printed name finds its file -- an exact match, or the "(X)" template
-    a parameterised name comes from ("Impact Hits (D3)" is filed under
-    ``impact-hits``). ``None`` says the corpus prints this name and nothing
-    models it: the fact :func:`unmodelled_rules` reports over the whole corpus,
-    said here on the datasheet that prints it.
+    A caller following a reference needs the route as well as the slug, and the
+    two cannot be inferred from the name: "Daith's Reaper" is filed both as a
+    weapon and as the rule that weapon carries.
+    """
+
+    RULE = "rule"
+    WEAPON = "weapon"
+    ARMOUR = "armour"
+
+
+class Reference(BaseModel):
+    """A name as an entry prints it, and the entry it resolves to.
+
+    ``slug`` addresses the entry and ``kind`` says which registry holds it, so a
+    caller can follow the name without knowing how one finds its file -- for a
+    rule, an exact match or the "(X)" template a parameterised name comes from
+    ("Impact Hits (D3)" is filed under ``impact-hits``).
+
+    Both are ``None`` together, and that says the corpus prints this name while
+    nothing models it: the fact :func:`unmodelled_rules` reports over the whole
+    corpus, said here on the entry that prints it.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     name: str
+    kind: Kind | None
     slug: str | None
 
     @classmethod
-    def of(cls, printed: str, rules: Registry[Rule]) -> "PrintedRule":
-        """Resolve one printed name.
+    def rule(cls, printed: str, rules: Registry[Rule]) -> "Reference":
+        """Resolve one printed rule name.
 
         Returns:
-            The name, with the slug of the entry it resolves to or ``None``.
+            The name, carrying the entry it addresses or nothing.
         """
         entry = printed_rule(printed, rules)
-        return cls(name=printed, slug=None if entry is None else entry.id)
+        if entry is None:
+            return cls(name=printed, kind=None, slug=None)
+        return cls(name=printed, kind=Kind.RULE, slug=entry.id)
+
+    @classmethod
+    def equipment(
+        cls, printed: str, weapons: Registry[Weapon], armoury: Registry[Armour]
+    ) -> "Reference":
+        """Resolve one printed equipment name against both registries it may sit in.
+
+        A datasheet prints its weapons and its armour in one list, so which of
+        the two a name addresses is the server's to say. Weapons are tried
+        first; no name is filed as both.
+
+        Returns:
+            The name, carrying the entry it addresses or nothing.
+        """
+        for kind, registry in ((Kind.WEAPON, weapons), (Kind.ARMOUR, armoury)):
+            found, _ = registry.resolve([printed])
+            if found:
+                return cls(name=printed, kind=kind, slug=found[0].id)
+        return cls(name=printed, kind=None, slug=None)
 
 
 class UnitDetail(Unit):
-    """A datasheet as reading one shows it: the entry, its rule names resolved.
+    """A datasheet as reading one shows it: the entry, every printed name resolved.
 
-    Everything :class:`~avelorn.tow.schema.unit.Unit` prints, except that a
-    special rule arrives as a :class:`PrintedRule` rather than a bare string.
-    Resolving on the way out is what keeps a caller from re-deriving it: a
-    printed name does not become a slug by slugifying it.
+    Everything :class:`~avelorn.tow.schema.unit.Unit` prints, except that its
+    equipment and its special rules arrive as :class:`Reference` rather than as
+    bare strings. Resolving on the way out is what keeps a caller from
+    re-deriving it: a printed name does not become a slug by slugifying it.
     """
 
-    special_rules: list[PrintedRule]
+    equipment: list[Reference]
+    special_rules: list[Reference]
 
     @classmethod
-    def of(cls, unit: Unit, rules: Registry[Rule]) -> "UnitDetail":
-        """Resolve a datasheet's printed rule names.
+    def of(cls, unit: Unit, data: TOWRepository) -> "UnitDetail":
+        """Resolve a datasheet's printed names against the registries holding them.
 
         Returns:
             The detail view of ``unit``.
@@ -125,8 +166,75 @@ class UnitDetail(Unit):
         return cls.model_validate(
             {
                 **unit.model_dump(),
-                "special_rules": [PrintedRule.of(name, rules) for name in unit.special_rules],
+                "equipment": [
+                    Reference.equipment(name, data.weapons, data.armoury)
+                    for name in unit.equipment
+                ],
+                "special_rules": [Reference.rule(name, data.rules) for name in unit.special_rules],
             }
+        )
+
+
+class ProfileDetail(WeaponProfile):
+    """One weapon profile, its printed rule names resolved."""
+
+    special_rules: list[Reference]
+
+
+class WeaponDetail(Weapon):
+    """A weapon entry as reading one shows it, its rule names resolved per profile.
+
+    Per profile rather than pooled, because a weapon with two of them need not
+    print the same rules on both -- a Brace of Drakefire Pistols carries Quick
+    Shot when fired and Extra Attacks in close combat.
+    """
+
+    profiles: list[ProfileDetail]
+
+    @classmethod
+    def of(cls, weapon: Weapon, rules: Registry[Rule]) -> "WeaponDetail":
+        """Resolve a weapon's printed rule names, profile by profile.
+
+        Returns:
+            The detail view of ``weapon``.
+        """
+        printed = weapon.model_dump(by_alias=True)
+        for profile, resolved in zip(printed["profiles"], weapon.profiles, strict=True):
+            profile["special_rules"] = [
+                Reference.rule(name, rules).model_dump() for name in resolved.special_rules
+            ]
+        return cls.model_validate(printed)
+
+
+class WeaponSummary(BaseModel):
+    """A weapon as a listing shows it: what it is, and which phase can use it.
+
+    ``fights`` and ``shoots`` are read off the profiles, because a caller
+    choosing a weapon for a melee or a volley must not be offered the wrong
+    half, and guessing from the name would be guessing.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    name: str
+    weapon_type: WeaponType | None
+    fights: bool
+    shoots: bool
+
+    @classmethod
+    def of(cls, weapon: Weapon) -> "WeaponSummary":
+        """Summarise one weapon entry.
+
+        Returns:
+            The listing view of ``weapon``.
+        """
+        return cls(
+            id=weapon.id,
+            name=weapon.name,
+            weapon_type=weapon.weapon_type,
+            fights=weapon.combat_profile is not None,
+            shoots=weapon.missile_profile is not None,
         )
 
 
@@ -142,6 +250,9 @@ class Wieldable(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str
+    # The weapon entry this names. A loadout resolves at the muster boundary or
+    # refuses, so a carried weapon always has one.
+    slug: str
     fights: bool
     shoots: bool
 
@@ -206,7 +317,7 @@ class MusteredUnit(BaseModel):
     points: int
     equipment: list[str]
     weapons: list[Wieldable]
-    special_rules: list[PrintedRule]
+    special_rules: list[Reference]
     footprint: Footprint | None
 
     @classmethod
@@ -238,12 +349,13 @@ class MusteredUnit(BaseModel):
             weapons=[
                 Wieldable(
                     name=weapon.name,
+                    slug=weapon.id,
                     fights=weapon.combat_profile is not None,
                     shoots=weapon.missile_profile is not None,
                 )
                 for weapon in formed.loadout.weapons
             ],
-            special_rules=[PrintedRule.of(name, rules) for name in complement.special_rules],
+            special_rules=[Reference.rule(name, rules) for name in complement.special_rules],
         )
 
 

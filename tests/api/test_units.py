@@ -56,8 +56,13 @@ def test_a_datasheet_is_served_whole(client: TestClient) -> None:
     """The detail route carries the parts the listing leaves out."""
     body = client.get("/units/white-lions-of-chrace").json()
     assert [profile["name"] for profile in body["profiles"]] == ["White Lion", "Guardian"]
-    assert "Chracian Great Blade" in body["equipment"]
-    assert {"name": "Lion Cloak", "slug": "lion-cloak"} in body["special_rules"]
+    assert {
+        "name": "Chracian Great Blade",
+        "kind": "weapon",
+        "slug": "chracian-great-blade",
+    } in body["equipment"]
+    assert {"name": "Heavy Armour", "kind": "armour", "slug": "heavy-armour"} in body["equipment"]
+    assert {"name": "Lion Cloak", "kind": "rule", "slug": "lion-cloak"} in body["special_rules"]
 
 
 def test_a_printed_rule_carries_the_entry_it_resolves_to(client: TestClient) -> None:

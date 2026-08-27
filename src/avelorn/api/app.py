@@ -26,6 +26,7 @@ from avelorn.tow.contingent import Charge, ChargeArc, Contingent
 from avelorn.tow.data import TOWRepository, default_repository
 from avelorn.tow.game import TOWGame
 from avelorn.tow.muster import Complement
+from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.weapon import Weapon
 from avelorn.tow.views import (
@@ -36,6 +37,8 @@ from avelorn.tow.views import (
     UnitSummary,
     UnmodelledRule,
     VolleyReport,
+    WeaponDetail,
+    WeaponSummary,
     rule_summaries,
     unmodelled_rules,
 )
@@ -89,7 +92,7 @@ def read_unit(slug: str, data: Corpus) -> UnitDetail:
     unit = data.units.get(slug)
     if unit is None:
         raise HTTPException(status_code=404, detail=f"no unit {slug!r}")
-    return UnitDetail.of(unit, data.rules)
+    return UnitDetail.of(unit, data)
 
 
 class Muster(BaseModel):
@@ -322,6 +325,62 @@ def volley(request: Volley, data: Corpus) -> VolleyReport:
         fired, target, battle_strength=request.battle_strength
     )
     return VolleyReport.of(shooter, target, fired, panicked)
+
+
+@app.get("/weapons", summary="List every weapon entry in the corpus")
+def list_weapons(data: Corpus) -> list[WeaponSummary]:
+    """List the weapon entries, ordered by slug.
+
+    Returns:
+        One summary per weapon.
+    """
+    return [WeaponSummary.of(weapon) for _, weapon in sorted(data.weapons.items())]
+
+
+@app.get("/weapons/{slug}", summary="Read one weapon entry")
+def read_weapon(slug: str, data: Corpus) -> WeaponDetail:
+    """Read a weapon entry in full: its profiles, its rules, its restrictions.
+
+    Returns:
+        The entry, each profile's printed rule names carrying what they resolve
+        to.
+
+    Raises:
+        HTTPException: 404, when no entry carries the slug.
+    """
+    weapon = data.weapons.get(slug)
+    if weapon is None:
+        raise HTTPException(status_code=404, detail=f"no weapon {slug!r}")
+    return WeaponDetail.of(weapon, data.rules)
+
+
+@app.get("/armour", summary="List every armour entry in the corpus")
+def list_armour(data: Corpus) -> list[Armour]:
+    """List the armour entries, ordered by slug.
+
+    An armour entry prints no rules and no long text, so a listing serves each
+    one whole rather than projecting a summary that could drift from it.
+
+    Returns:
+        Every entry.
+    """
+    return [armour for _, armour in sorted(data.armoury.items())]
+
+
+@app.get("/armour/{slug}", summary="Read one armour entry")
+def read_armour(slug: str, data: Corpus) -> Armour:
+    """Read one armour entry: its armour value, and what it leaves out.
+
+    Returns:
+        The entry.
+
+    Raises:
+        HTTPException: 404, when no entry carries the slug.
+    """
+    armour = data.armoury.get(slug)
+    if armour is None:
+        raise HTTPException(status_code=404, detail=f"no armour {slug!r}")
+    return armour
 
 
 @app.get("/rules", summary="List every rule entry in the corpus")
