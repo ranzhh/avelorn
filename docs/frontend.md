@@ -103,22 +103,34 @@ browser.
 
 ## Where it stands
 
-Landed, all stacked and unmerged: #197 tokens, #198 shell, #199 drop-to-resolve,
-#200 re-form, #201 deploy-on-click. `/fight`, `/shoot` and `Side.svelte` are
-deleted.
+One stack, unmerged: #197 tokens, #198 shell, #199 drop-to-resolve, #200
+re-form, #201 deploy-on-click. `/fight`, `/shoot` and `Side.svelte` are deleted.
+
+Four siblings off #201, unmerged and independent of each other. Each conflicts
+with the others in `routes/table/+page.svelte` only.
+
+- **#202 floating panes.** `panes.ts` places them, `Pane.svelte` is the chrome,
+  `Sheet.svelte` and `RuleText.svelte` are the bodies. `/units/[slug]` and
+  `/rules/[slug]` stay as routes for linking.
+- **#203 the To Hit ledger.** A compiled `Modifier` carries the rule that
+  emitted it. `engine/derivation.py` gathers the target's operands. Shooting
+  only.
+- **#204 matchup matrix.** Every standing block against every other, under the
+  table. Depends on the roster, not on where a block stands.
+- **#205 conditions dock.** The `moved` flag reaches `POST /volley` at last, so
+  Moving and Shooting can fire. The situational stepper and battle strength go
+  with it.
 
 Left to do:
 
-1. **Floating panes** for datasheets and rules, Paradox-style: over the table,
-   movable, and a rule name inside one opens another pane on top. `/units/[slug]`
-   and `/rules/[slug]` stay as routes for linking.
-2. **Army list dock**, absorbing the `/list` route.
-3. **Two lost inputs.** `hit_modifier` is hardcoded to `0` in
-   `routes/table/+page.svelte` — cover, large target, a unit that moved.
-   `battle_strength` is never sent, so a target is always treated as fresh.
-4. **Derivation, later and not opportunistically.** The goal is that any figure
-   opens to its operands, PoB-style. The resolvers report answers, not their
-   working, so it is engine work rather than a view change.
+1. **Army list dock**, absorbing the `/list` route.
+2. **Derivation past the To Hit roll.** #203 does one target of four in one
+   phase of two. A melee round reports no ledger; giving it one means threading
+   the same shape through `phases/combat.py`.
+3. **Named situational modifiers.** #205's stepper is deliberately unnamed:
+   cover and large target have no entry in the corpus, so a label would assert
+   a rulebook value nothing here can check. Import those rules and the dock can
+   offer real toggles.
 
 ## Conventions
 
@@ -128,28 +140,9 @@ a name.
 
 **Done** means `make frontend-test`, `make frontend-lint`, `make frontend-check`
 and `make types-check` clean, `uv run pytest` clean if Python moved, and the
-change exercised against a running API.
+change exercised against a running API. `pre-commit run -a` skips untracked
+files, so stage before you trust it.
 
-## Handoff — delete this section when you have read it
-
-Written 2026-08-26 at the end of a long session. Context you will not get from
-the code:
-
-- **The design was rejected once, hard.** The first frontend was scrapped whole
-  for looking generic. Do not redesign anything without showing it first; build
-  a specimen or a prototype wired to the real API and let him pick, one numbered
-  decision at a time.
-- **Writing style is a live sore point.** A `PreToolUse` hook in his dotfiles
-  now holds every commit and PR body once and reads it back at you. One clause
-  per sentence, no `X, and Y`, no epigrams, prefer "This PR adds a way to…" over
-  describing the object. Re-run the command unchanged to send it.
-- **Pointer interactions are never verified.** Nothing here can drive a drag. Say
-  so plainly rather than implying it was tested; a real bug shipped that way once
-  already.
-- **The stack is eight deep and nothing has merged** because GitHub Actions was
-  down. Check whether it is back. If it is, the bottom of the stack should land
-  before more is piled on. `gh stack` only works from the main worktree — its
-  state is in `.git/gh-stack`, and every linked worktree reports "not part of a
-  stack".
-- Probably next: floating panes, since he was keenest on those and the table
-  cannot show a stat line today.
+Pointer interactions are drivable: Playwright's browsers are cached under
+`~/.cache/ms-playwright`. Grab a block by its `rect`, never by the `g`, whose
+box grows by the rotation stalk once the block is picked.
