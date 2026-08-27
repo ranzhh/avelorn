@@ -1,75 +1,103 @@
 <script lang="ts">
+	import ArmourText from '$lib/ArmourText.svelte';
 	import Pane from '$lib/Pane.svelte';
 	import RuleText from '$lib/RuleText.svelte';
 	import Sheet from '$lib/Sheet.svelte';
-	import { datasheet } from '$lib/datasheets';
+	import WeaponText from '$lib/WeaponText.svelte';
+	import { entry } from '$lib/corpus';
 	import {
-		MEASURE,
 		closed,
+		measure,
 		moved,
 		opened,
 		raised,
+		topmost,
 		type Pane as Open,
 		type Subject
 	} from '$lib/panes';
-	import { rule } from '$lib/rules';
-	import type { Rule, Unit } from '$lib/api/client';
+	import type { Armour, Reference, Rule, Unit, Weapon } from '$lib/api/client';
+	import type { Snippet } from 'svelte';
+
+	interface Props {
+		/** What a block's pane shows beside its datasheet, given the block. */
+		options?: Snippet<[number]>;
+	}
+
+	let { options }: Props = $props();
 
 	let open = $state<Open[]>([]);
 	let nextId = 1;
 	// Entries arrive after the pane does, so a pane draws its chrome first and
 	// fills in. Keyed by "subject:slug", which is what a pane is one of.
-	let read = $state<Record<string, Unit | Rule>>({});
+	let read = $state<Record<string, Unit | Rule | Weapon | Armour>>({});
 
 	function viewport() {
 		return { width: window.innerWidth, height: window.innerHeight };
 	}
 
 	/**
-	 * Put a datasheet or a rule on screen, or raise the pane already reading it.
+	 * Put one entry of the corpus on screen, or raise the pane already reading it.
 	 *
-	 * `from` is the pane it was followed from, so a rule opened out of a
-	 * datasheet cascades off that datasheet rather than landing anywhere.
+	 * `from` is the pane it was followed from, so a rule opened out of a weapon
+	 * opened out of a datasheet cascades down the chain rather than landing
+	 * anywhere. `block` names the block on the table the pane belongs to, which
+	 * is what gives it its own options.
 	 */
-	export async function show(subject: Subject, slug: string, title: string, from?: Open) {
-		open = opened(open, { id: nextId, subject, slug, title }, MEASURE[subject], viewport(), from);
+	export async function show(
+		wanted: { subject: Subject; slug: string; title: string; block?: number },
+		from?: Open
+	) {
+		open = opened(open, { id: nextId, ...wanted }, measure(wanted), viewport(), from);
 		nextId += 1;
-		const key = `${subject}:${slug}`;
+		const key = `${wanted.subject}:${wanted.slug}`;
 		if (read[key]) return;
-		const entry = subject === 'unit' ? await datasheet(slug) : await rule(slug);
-		if (entry) read[key] = entry;
+		const found = await entry(wanted.subject, wanted.slug);
+		if (found) read[key] = found;
 	}
 
-	function follow(parent: Open, slug: string, name: string) {
-		show('rule', slug, name, parent);
+	// A reference carries the kind as well as the slug, because a printed name
+	// does not say which registry holds it: "Daith's Reaper" is filed as both a
+	// weapon and a rule.
+	function follow(parent: Open, reference: Reference) {
+		if (!reference.kind || !reference.slug) return;
+		show({ subject: reference.kind, slug: reference.slug, title: reference.name }, parent);
 	}
 
 	// Escape shuts the top pane, the way it shuts any floating thing. Following
-	// rules down opens a stack, and closing it should not mean hunting for four
+	// names down opens a stack, and closing it should not mean hunting for four
 	// close buttons.
 	function dismiss(event: KeyboardEvent) {
-		if (event.key !== 'Escape' || open.length === 0) return;
-		open = open.slice(0, -1);
+		if (event.key !== 'Escape') return;
+		const top = topmost(open);
+		if (top) open = closed(open, top.id);
 	}
 </script>
 
 <svelte:window onkeydown={dismiss} />
 
-{#each open as pane, depth (pane.id)}
-	{@const entry = read[`${pane.subject}:${pane.slug}`]}
+{#each open as pane (pane.id)}
+	{@const found = read[`${pane.subject}:${pane.slug}`]}
 	<Pane
 		{pane}
-		{depth}
 		onraise={() => (open = raised(open, pane.id))}
-		onmove={(x, y) => (open = moved(open, pane.id, x, y, MEASURE[pane.subject], viewport()))}
+		onmove={(x, y) => (open = moved(open, pane.id, x, y, measure(pane), viewport()))}
 		onclose={() => (open = closed(open, pane.id))}
+		{options}
 	>
-		{#if !entry}
+		{#if !found}
 			<p class="pending">reading…</p>
 		{:else if pane.subject === 'unit'}
-			<Sheet unit={entry as Unit} onrule={(slug, name) => follow(pane, slug, name)} />
+			<Sheet
+				unit={found as Unit}
+				pricing={pane.block === undefined}
+				onopen={(reference) => follow(pane, reference)}
+			/>
+		{:else if pane.subject === 'weapon'}
+			<WeaponText weapon={found as Weapon} onopen={(reference) => follow(pane, reference)} />
+		{:else if pane.subject === 'armour'}
+			<ArmourText armour={found as Armour} />
 		{:else}
-			<RuleText rule={entry as Rule} />
+			<RuleText rule={found as Rule} />
 		{/if}
 	</Pane>
 {/each}
