@@ -19,7 +19,7 @@ export interface Entry {
 	armour: Armour;
 }
 
-const seen = new Map<string, Entry[Kind]>();
+const seen = new Map<string, Promise<Entry[Kind] | undefined>>();
 
 // One call per kind rather than an indexed route: openapi-fetch types the
 // request against the literal path, and a path read out of a lookup widens the
@@ -42,15 +42,22 @@ async function fetched(kind: Kind, slug: string): Promise<Entry[Kind] | undefine
 /**
  * Read one entry of the corpus.
  *
- * Returns the entry, or null where the route refused it. The cast is the seam
- * where the kind stops being a value and becomes a type: `fetched` returns the
- * union, and which member it is follows from the kind it was handed.
+ * Returns the entry, or null where the route refused it. What is kept is the
+ * read rather than the result, so a hover that warms an entry and the click
+ * that follows it wait on one request between them.
+ *
+ * The cast is the seam where the kind stops being a value and becomes a type:
+ * `fetched` returns the union, and which member it is follows from the kind it
+ * was handed.
  */
-export async function entry<K extends Kind>(kind: K, slug: string): Promise<Entry[K] | null> {
+export function entry<K extends Kind>(kind: K, slug: string): Promise<Entry[K] | null> {
 	const key = `${kind}:${slug}`;
-	const cached = seen.get(key);
-	if (cached) return cached as Entry[K];
-	const found = await fetched(kind, slug);
-	if (found) seen.set(key, found);
-	return (found as Entry[K]) ?? null;
+	let reading = seen.get(key);
+	if (!reading) {
+		reading = fetched(kind, slug);
+		// A read that threw is not an answer. Drop it so the next caller asks again.
+		reading.catch(() => seen.delete(key));
+		seen.set(key, reading);
+	}
+	return reading.then((found) => (found as Entry[K]) ?? null);
 }

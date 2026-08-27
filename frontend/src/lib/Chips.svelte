@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { entry } from '$lib/corpus';
 	import type { Reference } from '$lib/api/client';
 
 	interface Props {
@@ -13,7 +14,16 @@
 <div class="cluster tight">
 	{#each of as reference (reference.name)}
 		{#if reference.slug && reference.kind}
-			<button class="pill link" onclick={() => onopen(reference)}>{reference.name}</button>
+			{@const kind = reference.kind}
+			{@const slug = reference.slug}
+			<!-- Warmed on hover, so the pane a click opens has its body to hand. -->
+			<button
+				class="pill link"
+				onpointerenter={() => entry(kind, slug)}
+				onclick={() => onopen(reference)}
+			>
+				{reference.name}
+			</button>
 		{:else}
 			<span class="pill dead" title="the corpus prints this name and holds no entry">
 				{reference.name}

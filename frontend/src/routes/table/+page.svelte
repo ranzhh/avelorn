@@ -5,6 +5,7 @@
 	import Panes from '$lib/Panes.svelte';
 	import Resolved from '$lib/Resolved.svelte';
 	import { api, type FightReport, type MusteredUnit, type VolleyReport } from '$lib/api/client';
+	import { entry } from '$lib/corpus';
 	import { fielded, listing } from '$lib/listing';
 	import { TABLE, arc, identifier, room, separation, span, usable, type Placed } from '$lib/table';
 
@@ -245,7 +246,10 @@
 					<div
 						class="row"
 						draggable="true"
-						onpointerenter={() => shape(unit.id, unit.unit_size.min)}
+						onpointerenter={() => {
+							shape(unit.id, unit.unit_size.min);
+							entry('unit', unit.id);
+						}}
 						ondragstart={(event) => carry(event, unit.id, unit.unit_size.min)}
 					>
 						<button class="pick" onclick={() => deploy(unit.id, unit.unit_size.min)}>
