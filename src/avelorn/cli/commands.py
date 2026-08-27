@@ -11,6 +11,7 @@ from collections.abc import Sequence
 import yaml
 
 from avelorn.tow.data import TOWRepository
+from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.unit import (
     BaseSize,
@@ -20,7 +21,15 @@ from avelorn.tow.schema.unit import (
     UnitOption,
     UnitSize,
 )
-from avelorn.tow.views import UnitDetail, UnitSummary, rule_summaries, unmodelled_rules
+from avelorn.tow.schema.weapon import Weapon, WeaponStrength
+from avelorn.tow.views import (
+    Reference,
+    UnitDetail,
+    UnitSummary,
+    WeaponSummary,
+    rule_summaries,
+    unmodelled_rules,
+)
 
 
 def list_units(data: TOWRepository) -> list[str]:
@@ -81,13 +90,148 @@ def show_unit(data: TOWRepository, slug: str) -> list[str]:
         "",
         *_columns(rows),
     ]
-    lines.extend(_listing("Equipment", unit.equipment))
-    rules = UnitDetail.of(unit, data.rules).special_rules
-    lines.extend(_listing("Special rules", [r.name if r.slug else f"{r.name} *" for r in rules]))
-    if any(r.slug is None for r in rules):
-        lines.append("  * not modelled: the engine holds the text and never applies it")
+    detail = UnitDetail.of(unit, data)
+    lines.extend(_listing("Equipment", [_named(item) for item in detail.equipment]))
+    lines.extend(_listing("Special rules", [_named(rule) for rule in detail.special_rules]))
+    if any(ref.slug is None for ref in (*detail.equipment, *detail.special_rules)):
+        lines.append("  * no entry: the engine holds the name and never applies it")
     lines.extend(_listing("Options", [_option(option) for option in unit.options]))
     return lines
+
+
+def list_weapons(data: TOWRepository) -> list[str]:
+    """List every weapon entry, and which phase can use it.
+
+    One column per field of the shared listing view, so the terminal shows
+    exactly what ``GET /weapons`` serves.
+
+    Returns:
+        The lines to print.
+    """
+    rows = [["SLUG", "NAME", "TYPE", "FIGHTS", "SHOOTS"]]
+    rows.extend(
+        [
+            summary.id,
+            summary.name,
+            summary.weapon_type.value if summary.weapon_type else "-",
+            "yes" if summary.fights else "no",
+            "yes" if summary.shoots else "no",
+        ]
+        for summary in (WeaponSummary.of(weapon) for _, weapon in sorted(data.weapons.items()))
+    )
+    return _columns(rows)
+
+
+def show_weapon(data: TOWRepository, slug: str) -> list[str]:
+    """Print one weapon entry: its profiles, its rules, its restrictions.
+
+    Returns:
+        The lines to print.
+    """
+    weapon = _weapon(data, slug)
+    family = weapon.weapon_type.value if weapon.weapon_type else "no family recorded"
+    lines = [f"{weapon.name}  ({weapon.id})", family, ""]
+    rows = [["PROFILE", "RANGE", "S", "AP"]]
+    rows.extend(
+        [
+            profile.name or "-",
+            str(profile.range),
+            _strength(profile.strength),
+            str(profile.armour_piercing) if profile.armour_piercing else "-",
+        ]
+        for profile in weapon.profiles
+    )
+    lines.extend(_columns(rows))
+    # Kept in printed order, deduplicated: a weapon with two profiles may print
+    # the same rule on both.
+    printed: dict[str, Reference] = {}
+    for profile in weapon.profiles:
+        for name in profile.special_rules:
+            printed.setdefault(name, Reference.rule(name, data.rules))
+    lines.extend(_listing("Special rules", [_named(ref) for ref in printed.values()]))
+    if any(ref.slug is None for ref in printed.values()):
+        lines.append("  * no entry: the engine holds the name and never applies it")
+    if weapon.notes:
+        lines.extend(["", "Not covered:", *(f"  {line}" for line in _wrapped(weapon.notes))])
+    return lines
+
+
+def list_armour(data: TOWRepository) -> list[str]:
+    """List every armour entry: what it is worth, or what it improves.
+
+    Returns:
+        The lines to print.
+    """
+    rows = [["SLUG", "NAME", "VALUE", "IMPROVES BY"]]
+    rows.extend(
+        [
+            armour.id,
+            armour.name,
+            f"{armour.armour_value}+" if armour.armour_value else "-",
+            str(armour.armour_value_improvement) if armour.armour_value_improvement else "-",
+        ]
+        for _, armour in sorted(data.armoury.items())
+    )
+    return _columns(rows)
+
+
+def show_armour(data: TOWRepository, slug: str) -> list[str]:
+    """Print one armour entry: its armour value, and what it leaves out.
+
+    Returns:
+        The lines to print.
+    """
+    armour = _armour(data, slug)
+    value = f"{armour.armour_value}+" if armour.armour_value else "no value of its own"
+    lines = [f"{armour.name}  ({armour.id})", value]
+    if armour.armour_value_improvement:
+        lines.append(f"improves the value it is worn with by {armour.armour_value_improvement}")
+    if armour.notes:
+        lines.extend(["", "Not covered:", *(f"  {line}" for line in _wrapped(armour.notes))])
+    return lines
+
+
+def _weapon(data: TOWRepository, slug: str) -> Weapon:
+    """Address a weapon entry by slug.
+
+    Returns:
+        The weapon entry.
+
+    Raises:
+        LookupError: no entry carries the slug.
+    """
+    weapon = data.weapons.get(slug)
+    if weapon is None:
+        raise LookupError(f"no weapon {slug!r}")
+    return weapon
+
+
+def _armour(data: TOWRepository, slug: str) -> Armour:
+    """Address an armour entry by slug.
+
+    Returns:
+        The armour entry.
+
+    Raises:
+        LookupError: no entry carries the slug.
+    """
+    armour = data.armoury.get(slug)
+    if armour is None:
+        raise LookupError(f"no armour {slug!r}")
+    return armour
+
+
+def _strength(strength: WeaponStrength) -> str:
+    # Printed as the datasheet prints it: an absolute value, or an offset on the
+    # wielder's own Strength.
+    if strength.base is not None:
+        return str(strength.base)
+    return f"S{strength.modifier:+d}" if strength.modifier else "S"
+
+
+def _named(reference: Reference) -> str:
+    # A printed name, starred where the corpus holds no entry behind it.
+    return reference.name if reference.slug else f"{reference.name} *"
 
 
 def list_rules(data: TOWRepository) -> list[str]:

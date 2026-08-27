@@ -48,7 +48,7 @@
 	<h4>equipment</h4>
 	<div class="cluster tight">
 		{#each unit.equipment as item}
-			<span class="pill">{item}</span>
+			<span class="pill">{item.name}</span>
 		{/each}
 	</div>
 {/if}

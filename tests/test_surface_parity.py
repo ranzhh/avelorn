@@ -10,9 +10,11 @@ from fastapi.testclient import TestClient
 from avelorn.api.app import app, corpus
 from avelorn.cli import commands
 from avelorn.tow.data import TOWRepository
+from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.unit import Unit
-from avelorn.tow.views import RuleSummary, UnitSummary
+from avelorn.tow.schema.weapon import Weapon
+from avelorn.tow.views import RuleSummary, UnitSummary, WeaponSummary
 
 REPO = TOWRepository()
 app.dependency_overrides[corpus] = lambda: REPO
@@ -110,3 +112,69 @@ def test_show_rule_covers_every_field_the_detail_endpoint_serves() -> None:
     }
     assert set(shown) == set(Rule.model_fields)
     assert [field for field, found in shown.items() if not found] == []
+
+
+def test_the_weapon_listing_carries_the_same_fields_on_both() -> None:
+    """One shared view backs `avelorn weapons list` and `GET /weapons`."""
+    served = CLIENT.get("/weapons").json()
+    assert set(served[0]) == set(WeaponSummary.model_fields)
+
+    listed = commands.list_weapons(REPO)
+    assert len(listed[0].split()) == len(WeaponSummary.model_fields)
+    assert len(listed) - 1 == len(served)
+
+
+def test_show_weapon_covers_every_field_the_detail_endpoint_serves() -> None:
+    """`avelorn weapons show` prints all of `Weapon`, which is what the route returns.
+
+    Two entries, because no weapon populates every field: the Longbow records a
+    family and prints no restriction, the Lance the other way round.
+    """
+    assert set(CLIENT.get("/weapons/longbow").json()) == set(Weapon.model_fields)
+
+    longbow, lance = REPO.weapons["longbow"], REPO.weapons["lance"]
+    assert lance.notes is not None
+    lines = commands.show_weapon(REPO, "longbow")
+    typed = "\n".join(lines)
+    restricted = "\n".join(commands.show_weapon(REPO, "lance")).replace("\n  ", " ")
+    covered = {
+        "id": longbow.id in typed,
+        "name": longbow.name in typed,
+        # The family is checked on its own line: every weapon carrying a type is
+        # a bow, so a substring match would pass off the name alone.
+        "weapon_type": longbow.weapon_type is not None and lines[1] == longbow.weapon_type.value,
+        "profiles": str(longbow.profiles[0].range) in typed,
+        "notes": lance.notes[:40] in restricted,
+    }
+    assert set(covered) == set(Weapon.model_fields)
+    assert all(covered.values()), [field for field, ok in covered.items() if not ok]
+
+
+def test_the_armour_listing_shows_every_entry_on_both() -> None:
+    """`avelorn armour list` and `GET /armour` cover the same entries."""
+    served = CLIENT.get("/armour").json()
+    assert set(served[0]) == set(Armour.model_fields)
+    assert len(commands.list_armour(REPO)) - 1 == len(served)
+
+
+def test_show_armour_covers_every_field_the_detail_endpoint_serves() -> None:
+    """`avelorn armour show` prints all of `Armour`, which is what the route returns.
+
+    Two entries again: Heavy Armour carries a value of its own, a Shield carries
+    an improvement and a restriction instead.
+    """
+    assert set(CLIENT.get("/armour/heavy-armour").json()) == set(Armour.model_fields)
+
+    heavy, shield = REPO.armoury["heavy-armour"], REPO.armoury["shield"]
+    assert shield.notes is not None
+    valued = "\n".join(commands.show_armour(REPO, "heavy-armour"))
+    worn = "\n".join(commands.show_armour(REPO, "shield")).replace("\n  ", " ")
+    covered = {
+        "id": heavy.id in valued,
+        "name": heavy.name in valued,
+        "armour_value": f"{heavy.armour_value}+" in valued,
+        "armour_value_improvement": str(shield.armour_value_improvement) in worn,
+        "notes": shield.notes[:30] in worn,
+    }
+    assert set(covered) == set(Armour.model_fields)
+    assert all(covered.values()), [field for field, ok in covered.items() if not ok]

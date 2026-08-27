@@ -66,6 +66,18 @@ def _parser() -> argparse.ArgumentParser:
     units.add_parser("list", help="list every datasheet in the corpus")
     units.add_parser("show", help="print one datasheet").add_argument("slug")
 
+    weapons = groups.add_parser("weapons", help="the weapons of war").add_subparsers(
+        dest="command", required=True
+    )
+    weapons.add_parser("list", help="list every weapon entry")
+    weapons.add_parser("show", help="print one weapon entry").add_argument("slug")
+
+    armour = groups.add_parser("armour", help="the armour").add_subparsers(
+        dest="command", required=True
+    )
+    armour.add_parser("list", help="list every armour entry")
+    armour.add_parser("show", help="print one armour entry").add_argument("slug")
+
     rules = groups.add_parser("rules", help="the special rules").add_subparsers(
         dest="command", required=True
     )
@@ -89,6 +101,14 @@ def _dispatch(args: argparse.Namespace, data: TOWRepository) -> list[str]:
         if args.command == "list":
             return commands.list_units(data)
         return commands.show_unit(data, args.slug)
+    if args.group == "weapons":
+        if args.command == "list":
+            return commands.list_weapons(data)
+        return commands.show_weapon(data, args.slug)
+    if args.group == "armour":
+        if args.command == "list":
+            return commands.list_armour(data)
+        return commands.show_armour(data, args.slug)
     if args.command == "list":
         return commands.list_unmodelled(data) if args.unmodelled else commands.list_rules(data)
     return commands.show_rule(data, args.slug)

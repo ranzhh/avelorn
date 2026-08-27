@@ -186,6 +186,132 @@
         }
       }
     },
+    "/weapons": {
+      "get": {
+        "summary": "List every weapon entry in the corpus",
+        "description": "List the weapon entries, ordered by slug.\n\nReturns:\n    One summary per weapon.",
+        "operationId": "list_weapons_weapons_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WeaponSummary"
+                  },
+                  "type": "array",
+                  "title": "Response List Weapons Weapons Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/weapons/{slug}": {
+      "get": {
+        "summary": "Read one weapon entry",
+        "description": "Read a weapon entry in full: its profiles, its rules, its restrictions.\n\nReturns:\n    The entry, each profile's printed rule names carrying what they resolve\n    to.\n\nRaises:\n    HTTPException: 404, when no entry carries the slug.",
+        "operationId": "read_weapon_weapons__slug__get",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeaponDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/armour": {
+      "get": {
+        "summary": "List every armour entry in the corpus",
+        "description": "List the armour entries, ordered by slug.\n\nAn armour entry prints no rules and no long text, so a listing serves each\none whole rather than projecting a summary that could drift from it.\n\nReturns:\n    Every entry.",
+        "operationId": "list_armour_armour_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Armour"
+                  },
+                  "type": "array",
+                  "title": "Response List Armour Armour Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/armour/{slug}": {
+      "get": {
+        "summary": "Read one armour entry",
+        "description": "Read one armour entry: its armour value, and what it leaves out.\n\nReturns:\n    The entry.\n\nRaises:\n    HTTPException: 404, when no entry carries the slug.",
+        "operationId": "read_armour_armour__slug__get",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Armour"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/rules": {
       "get": {
         "summary": "List every rule entry in the corpus",
@@ -275,6 +401,62 @@
   },
   "components": {
     "schemas": {
+      "Armour": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "armour_value": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 6.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Armour Value"
+          },
+          "armour_value_improvement": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Armour Value Improvement"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "Armour",
+        "description": "An armour entry: a suit with its own value, or an addition."
+      },
       "ArmourGate": {
         "properties": {
           "name": {
@@ -1102,6 +1284,16 @@
         "title": "HitsEffect",
         "description": "Extra hits that land automatically, outside the Initiative-ordered blows.\n\nThe \"X automatic hits\" shape Stomp Attacks and Impact Hits share: each\nmodel with the rule causes ``hits`` hits \u2014 a number or a\n:class:`DiceQuantity`, usually the bracketed parameter \u2014 that skip the\nRoll to Hit (\"they hit automatically\") and wound at the unmodified\nStrength of the model making them, at the point of the round ``order``\nnames. Consumed by the combat round, which folds the batch in at that\npoint, a dice quantity as its exact distribution. Self-naming by\n``hits``; each model forbids the others' keys."
       },
+      "Kind": {
+        "type": "string",
+        "enum": [
+          "rule",
+          "weapon",
+          "armour"
+        ],
+        "title": "Kind",
+        "description": "What a printed name turns out to name.\n\nA caller following a reference needs the route as well as the slug, and the\ntwo cannot be inferred from the name: \"Daith's Reaper\" is filed both as a\nweapon and as the rule that weapon carries."
+      },
       "ModifierEffect": {
         "properties": {
           "when": {
@@ -1288,7 +1480,7 @@
           },
           "special_rules": {
             "items": {
-              "$ref": "#/components/schemas/PrintedRule"
+              "$ref": "#/components/schemas/Reference"
             },
             "type": "array",
             "title": "Special Rules"
@@ -1413,33 +1605,6 @@
         "title": "PanicCause",
         "description": "Why a panic test was forced, named as the sections are printed."
       },
-      "PrintedRule": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "slug": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Slug"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "name",
-          "slug"
-        ],
-        "title": "PrintedRule",
-        "description": "A rule name as a datasheet prints it, and the entry it resolves to.\n\n``slug`` addresses the entry, so a caller can link to it without knowing\nhow a printed name finds its file -- an exact match, or the \"(X)\" template\na parameterised name comes from (\"Impact Hits (D3)\" is filed under\n``impact-hits``). ``None`` says the corpus prints this name and nothing\nmodels it: the fact :func:`unmodelled_rules` reports over the whole corpus,\nsaid here on the datasheet that prints it."
-      },
       "Profile": {
         "properties": {
           "name": {
@@ -1477,6 +1642,62 @@
         "title": "Profile",
         "description": "One row of a characteristic profile, keyed by the printed abbreviations.\n\nA unit may have several rows, e.g. rank-and-file plus champion. The\nrow is written flat in the printed form ({ name: ..., M: 5, ... });\na validator gathers the abbreviation keys into ``characteristics``,\nso the vocabulary is declared once, on :class:`Characteristic`.\n\n``role`` says which part of the model the row describes\n(:class:`ProfileRole`); it defaults to rank-and-file, which is what a\nsingle-row datasheet prints."
       },
+      "ProfileDetail": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "R": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "Combat",
+                  "N/A"
+                ]
+              },
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              }
+            ],
+            "title": "R"
+          },
+          "S": {
+            "$ref": "#/components/schemas/WeaponStrength"
+          },
+          "AP": {
+            "type": "integer",
+            "title": "Ap",
+            "default": 0,
+            "le": 0
+          },
+          "special_rules": {
+            "items": {
+              "$ref": "#/components/schemas/Reference"
+            },
+            "type": "array",
+            "title": "Special Rules"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "R",
+          "S",
+          "special_rules"
+        ],
+        "title": "ProfileDetail",
+        "description": "One weapon profile, its printed rule names resolved."
+      },
       "ProfileRole": {
         "type": "string",
         "enum": [
@@ -1500,6 +1721,44 @@
         ],
         "title": "Quantity",
         "description": "A quantity a modifier can change, in the rulebook's own modifier vocabulary.\n\nThe whole modifier vocabulary in one closed, append-only enum \u2014 a member\njoins when an imported rule needs it. Each member knows the :class:`Seam`\nthat consumes it, so routing is the member's own knowledge, not a side\ntable: ``to-hit`` and ``armour-piercing`` land on the dice walk,\n``fighting-ranks`` / ``supporting-ranks`` on the fighting-rank query,\n``combat-result`` on the combat-result fold, and ``armour-value`` on the\narmour fold (a defender improving its own save). A profile\n:class:`~avelorn.tow.schema.unit.Characteristic` is the one quantity kept\napart \u2014 a stat vocabulary used far beyond modifiers \u2014 so an operation's\nkey is a Quantity or a Characteristic."
+      },
+      "Reference": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Kind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "kind",
+          "slug"
+        ],
+        "title": "Reference",
+        "description": "A name as an entry prints it, and the entry it resolves to.\n\n``slug`` addresses the entry and ``kind`` says which registry holds it, so a\ncaller can follow the name without knowing how one finds its file -- for a\nrule, an exact match or the \"(X)\" template a parameterised name comes from\n(\"Impact Hits (D3)\" is filed under ``impact-hits``).\n\nBoth are ``None`` together, and that says the corpus prints this name while\nnothing models it: the fact :func:`unmodelled_rules` reports over the whole\ncorpus, said here on the entry that prints it."
       },
       "ReplaceEffect": {
         "properties": {
@@ -1913,14 +2172,14 @@
           },
           "equipment": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/Reference"
             },
             "type": "array",
             "title": "Equipment"
           },
           "special_rules": {
             "items": {
-              "$ref": "#/components/schemas/PrintedRule"
+              "$ref": "#/components/schemas/Reference"
             },
             "type": "array",
             "title": "Special Rules"
@@ -1942,10 +2201,11 @@
           "unit_size",
           "troop_type",
           "profiles",
+          "equipment",
           "special_rules"
         ],
         "title": "UnitDetail",
-        "description": "A datasheet as reading one shows it: the entry, its rule names resolved.\n\nEverything :class:`~avelorn.tow.schema.unit.Unit` prints, except that a\nspecial rule arrives as a :class:`PrintedRule` rather than a bare string.\nResolving on the way out is what keeps a caller from re-deriving it: a\nprinted name does not become a slug by slugifying it."
+        "description": "A datasheet as reading one shows it: the entry, every printed name resolved.\n\nEverything :class:`~avelorn.tow.schema.unit.Unit` prints, except that its\nequipment and its special rules arrive as :class:`Reference` rather than as\nbare strings. Resolving on the way out is what keeps a caller from\nre-deriving it: a printed name does not become a slug by slugifying it."
       },
       "UnitOption": {
         "properties": {
@@ -2429,6 +2689,55 @@
         "title": "Volleyed",
         "description": "A unit in a volley: the one shooting, or the one shot at."
       },
+      "WeaponDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "weapon_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WeaponType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "profiles": {
+            "items": {
+              "$ref": "#/components/schemas/ProfileDetail"
+            },
+            "type": "array",
+            "title": "Profiles"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "profiles"
+        ],
+        "title": "WeaponDetail",
+        "description": "A weapon entry as reading one shows it, its rule names resolved per profile.\n\nPer profile rather than pooled, because a weapon with two of them need not\nprint the same rules on both -- a Brace of Drakefire Pistols carries Quick\nShot when fired and Extra Attacks in close combat."
+      },
       "WeaponGate": {
         "properties": {
           "type": {
@@ -2457,6 +2766,72 @@
         "type": "object",
         "title": "WeaponGate",
         "description": "A gate on the weapon a model has in hand \u2014 by family or by name.\n\nThe typed home for \"wielding a bow\" / \"wielding this weapon\": ``type`` names a\nweapon family (:class:`~avelorn.tow.schema.weapon.WeaponType`, the seam #107\nadded), ``name`` a specific printed name. Arrows of Isha asks\n``{type: bow}``; Parry's \"a hand weapon\" asks ``{name: Hand Weapon}``. Both\nmay be set (a specific weapon of a family). At least one must be, or the gate\nconstrains nothing (``extra=forbid`` keeps a stray property a load error)."
+      },
+      "WeaponStrength": {
+        "properties": {
+          "base": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base"
+          },
+          "modifier": {
+            "type": "integer",
+            "title": "Modifier",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "WeaponStrength",
+        "description": "A weapon profile's Strength, as printed.\n\nAbsolute (\"4\"), or relative to the wielder's own Strength (\"S\",\n\"S+2\")."
+      },
+      "WeaponSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "weapon_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WeaponType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fights": {
+            "type": "boolean",
+            "title": "Fights"
+          },
+          "shoots": {
+            "type": "boolean",
+            "title": "Shoots"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "weapon_type",
+          "fights",
+          "shoots"
+        ],
+        "title": "WeaponSummary",
+        "description": "A weapon as a listing shows it: what it is, and which phase can use it.\n\n``fights`` and ``shoots`` are read off the profiles, because a caller\nchoosing a weapon for a melee or a volley must not be offered the wrong\nhalf, and guessing from the name would be guessing."
       },
       "WeaponType": {
         "type": "string",
@@ -2568,6 +2943,10 @@
             "type": "string",
             "title": "Name"
           },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
           "fights": {
             "type": "boolean",
             "title": "Fights"
@@ -2581,6 +2960,7 @@
         "type": "object",
         "required": [
           "name",
+          "slug",
           "fights",
           "shoots"
         ],
