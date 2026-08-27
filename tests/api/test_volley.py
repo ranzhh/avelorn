@@ -123,6 +123,25 @@ def test_a_depleted_unit_flees_where_a_fresh_one_falls_back(client: TestClient) 
     assert depleted["panic"]["flees"] > fresh["panic"]["flees"]
 
 
+def test_a_shooter_that_moved_hits_one_point_harder(client: TestClient) -> None:
+    """Moving and Shooting is a corpus rule the caller could not reach before.
+
+    A deployment is stationary, so the rule was honoured by never applying. The
+    same volley from a unit that marched hits on a 4+ rather than a 3+.
+    """
+    shot = {
+        "shooter": {"unit": "elven-archers", "size": 10},
+        "target": {"unit": "dwarf-warriors", "size": 20},
+        "distance": 6,
+    }
+    still = volley(client, **shot)
+    marched = volley(client, **shot, moved=True)
+
+    assert still["hit_target"] == 3
+    assert marched["hit_target"] == 4
+    assert marched["expected_casualties"] < still["expected_casualties"]
+
+
 def test_a_weapon_that_cannot_shoot_is_refused(client: TestClient) -> None:
     """A hand weapon has no missile profile, and the refusal says which side asked."""
     response = client.post(

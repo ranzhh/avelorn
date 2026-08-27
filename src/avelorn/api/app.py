@@ -22,7 +22,7 @@ from typing import Annotated, Literal, NamedTuple
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from avelorn.tow.contingent import Charge, ChargeArc, Contingent
+from avelorn.tow.contingent import Charge, ChargeArc, Contingent, Movement
 from avelorn.tow.data import TOWRepository, default_repository
 from avelorn.tow.game import TOWGame
 from avelorn.tow.muster import Complement
@@ -287,8 +287,12 @@ class Volley(BaseModel):
     # cannot be settled either way, so it is left unapplied and said so in
     # not_modelled rather than assumed to be short range.
     distance: int | None = Field(default=None, ge=0)
+    # Whether the shooter moved in its Movement phase, which is the fact
+    # Moving and Shooting gates on. A deployment is stationary by default, so
+    # without this the rule is honoured by never applying.
+    moved: bool = False
     # Situational to-hit modifiers the caller knows and the corpus cannot:
-    # cover, a large target, a unit that moved.
+    # cover, a large target.
     hit_modifier: int = 0
     # The target's model count at the start of the battle, which governs the
     # printed Fall Back or Flee split. Defaults to the size it is shot at --
@@ -303,7 +307,8 @@ def volley(request: Volley, data: Corpus) -> VolleyReport:
     One volley: shots are counted, rolled to hit and to wound, saved against,
     and the survivors tally into a casualty distribution the target then tests
     its nerve against. The to-hit target reported is the one the volley used,
-    with the range and movement modifiers already folded in.
+    with the range and movement modifiers already folded in -- the range from
+    ``distance``, the movement from ``moved``.
 
     A side the corpus cannot field is refused before any dice are walked: an
     unknown slug is a 404, and a size, option or weapon the datasheet does not
@@ -318,6 +323,8 @@ def volley(request: Volley, data: Corpus) -> VolleyReport:
     game = TOWGame.assemble(data)
     shooter = _deploy(game, data, request.shooter, "shooter", MISSILE)
     target = _deploy(game, data, request.target, "target", MELEE)
+    if request.moved:
+        shooter = shooter.after(Movement.march())
     fired = game.shooting.volley(
         shooter, target, distance=request.distance, hit_modifier=request.hit_modifier
     )

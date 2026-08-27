@@ -150,7 +150,7 @@
     "/volley": {
       "post": {
         "summary": "Resolve one volley of shooting, and the panic it causes",
-        "description": "Shoot one unit at another and resolve the panic its casualties cause.\n\nOne volley: shots are counted, rolled to hit and to wound, saved against,\nand the survivors tally into a casualty distribution the target then tests\nits nerve against. The to-hit target reported is the one the volley used,\nwith the range and movement modifiers already folded in.\n\nA side the corpus cannot field is refused before any dice are walked: an\nunknown slug is a 404, and a size, option or weapon the datasheet does not\nallow is a 422 naming which side asked for it. The shooter must carry\nsomething with a missile profile.\n\nReturns:\n    The volley resolved: the effective targets, the wound and casualty\n    distributions, what the target's nerve does, and every rule the engine\n    held without applying.",
+        "description": "Shoot one unit at another and resolve the panic its casualties cause.\n\nOne volley: shots are counted, rolled to hit and to wound, saved against,\nand the survivors tally into a casualty distribution the target then tests\nits nerve against. The to-hit target reported is the one the volley used,\nwith the range and movement modifiers already folded in -- the range from\n``distance``, the movement from ``moved``.\n\nA side the corpus cannot field is refused before any dice are walked: an\nunknown slug is a 404, and a size, option or weapon the datasheet does not\nallow is a 422 naming which side asked for it. The shooter must carry\nsomething with a missile profile.\n\nReturns:\n    The volley resolved: the effective targets, the wound and casualty\n    distributions, what the target's nerve does, and every rule the engine\n    held without applying.",
         "operationId": "volley_volley_post",
         "requestBody": {
           "content": {
@@ -2482,6 +2482,11 @@
               }
             ],
             "title": "Distance"
+          },
+          "moved": {
+            "type": "boolean",
+            "title": "Moved",
+            "default": false
           },
           "hit_modifier": {
             "type": "integer",
