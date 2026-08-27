@@ -202,7 +202,7 @@
 
 <style>
 	fieldset {
-		border: 1px solid var(--rule);
+		border: 1px solid var(--line);
 		border-radius: 3px;
 		padding: 1rem;
 		margin-bottom: 1.5rem;
@@ -216,9 +216,9 @@
 	select {
 		font: inherit;
 		padding: 0.3rem 0.5rem;
-		border: 1px solid var(--rule);
+		border: 1px solid var(--line);
 		border-radius: 3px;
-		background: white;
+		background: var(--sunken);
 	}
 
 	tr.editing td {
@@ -227,7 +227,7 @@
 
 	tr.editor td {
 		padding: 0.75rem 0.6rem 1rem;
-		background: #f3efe8;
+		background: var(--sunken);
 	}
 
 	.row-actions {
@@ -240,13 +240,13 @@
 		border: none;
 		background: none;
 		padding: 0;
-		color: var(--muted);
+		color: var(--dim);
 		text-decoration: underline;
 		cursor: pointer;
 	}
 
 	.meta {
-		color: var(--muted);
+		color: var(--dim);
 		font-size: 0.85rem;
 	}
 
@@ -263,7 +263,7 @@
 		font-size: 0.85rem;
 
 		dt {
-			color: var(--muted);
+			color: var(--dim);
 		}
 
 		dd {
@@ -272,7 +272,7 @@
 	}
 
 	.unmodelled {
-		color: var(--muted);
-		text-decoration: underline dotted var(--rule);
+		color: var(--dim);
+		text-decoration: underline dotted var(--line);
 	}
 </style>

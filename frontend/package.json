@@ -10,10 +10,12 @@
 		"dev": "vite dev",
 		"format": "prettier --write .",
 		"lint": "prettier --check . && eslint .",
+		"test": "vitest run",
 		"prebuild": "npm run types",
 		"precheck": "npm run types",
 		"predev": "npm run types",
 		"prelint": "npm run types",
+		"pretest": "npm run types",
 		"prepare": "npm run types && svelte-kit sync || echo ''",
 		"preview": "vite preview",
 		"types": "openapi-typescript openapi.json -o src/lib/api/schema.d.ts"
@@ -35,7 +37,8 @@
 		"svelte-check": "^4.6.0",
 		"typescript": "^5.9.3",
 		"typescript-eslint": "^8.60.1",
-		"vite": "^8.0.16"
+		"vite": "^8.0.16",
+		"vitest": "^4.1.11"
 	},
 	"dependencies": {
 		"openapi-fetch": "^0.17.0"

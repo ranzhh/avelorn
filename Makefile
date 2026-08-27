@@ -1,4 +1,4 @@
-.PHONY: install test lint demo serve types types-check frontend frontend-lint frontend-check up down logs
+.PHONY: install test lint demo serve types types-check frontend frontend-lint frontend-test frontend-check up down logs
 
 # Which end-to-end demo `make demo` runs — any scripts/<DEMO>_demo.py:
 # shooting, melee, turn, or soften_the_charge.
@@ -33,6 +33,9 @@ frontend: ## serve the unit browser, with reload (needs `make serve` in another 
 
 frontend-lint: ## prettier and eslint over the frontend
 	cd frontend && npm run lint
+
+frontend-test: ## run the frontend unit tests
+	cd frontend && npm test
 
 frontend-check: ## type-check the frontend and build it
 	cd frontend && npm run check && npm run build

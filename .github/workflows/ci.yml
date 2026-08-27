@@ -47,6 +47,8 @@ jobs:
 
       - run: make frontend-lint
 
+      - run: make frontend-test
+
       - run: make frontend-check
 
   types:

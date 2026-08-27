@@ -89,12 +89,12 @@
 	}
 
 	.meta {
-		color: var(--muted);
+		color: var(--dim);
 		font-size: 0.85rem;
 	}
 
 	.unmodelled {
-		color: var(--muted);
-		text-decoration: underline dotted var(--rule);
+		color: var(--dim);
+		text-decoration: underline dotted var(--line);
 	}
 </style>
