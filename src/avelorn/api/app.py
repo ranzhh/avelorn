@@ -16,15 +16,18 @@ deriving a slug from a printed name.
 """
 
 from importlib.metadata import version
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from avelorn.tow.contingent import Charge, ChargeArc, Contingent
 from avelorn.tow.data import TOWRepository, default_repository
+from avelorn.tow.game import TOWGame
 from avelorn.tow.muster import Complement
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.views import (
+    FightReport,
     MusteredUnit,
     RuleSummary,
     UnitDetail,
@@ -124,6 +127,121 @@ def _first_message(invalid: ValidationError) -> str:
     # is the whole reason. Pydantic prefixes it with "Value error, ".
     message = invalid.errors()[0]["msg"]
     return message.removeprefix("Value error, ")
+
+
+class Deployment(BaseModel):
+    """One side put on the table: a datasheet, sized and equipped, weapon in hand."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    unit: str
+    size: int = Field(ge=1)
+    options: list[str] = Field(default_factory=list)
+    # The weapon the side fights with, by printed name. A unit fights with what
+    # it carries, and it must be one that can fight -- a bow has no Combat
+    # profile. Omitted, it takes the last carried weapon that has one, which is
+    # the specialist a datasheet prints after the hand weapon every model has.
+    weapon: str | None = None
+    frontage: int | None = Field(default=None, ge=1)
+
+
+class ChargedBy(BaseModel):
+    """A charge into the round: who made it, how far it carried, which arc it struck."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    side: Literal["a", "b"]
+    full_inches: int = Field(ge=0)
+    arc: ChargeArc = ChargeArc.FRONT
+
+
+class Fight(BaseModel):
+    """Two sides meeting in close combat, and the charge that brought them together."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    a: Deployment
+    b: Deployment
+    charge: ChargedBy | None = None
+
+
+@app.post("/fight", summary="Resolve one round of close combat between two units")
+def fight(request: Fight, data: Corpus) -> FightReport:
+    """Deploy two units, fight one round, and score it.
+
+    One round: both sides strike in Initiative order, the Wounds tally into a
+    combat result, and the loser takes its Break test. What a round does not
+    cover is the rest of the engagement — a pursuit, a second round, and the
+    Stand & Shoot a charge would be met with, which needs the Movement phase's
+    charge sequence rather than a charge recorded on the charger.
+
+    A side the corpus cannot field is refused before any dice are walked: an
+    unknown slug is a 404, and a size, option or weapon the datasheet does not
+    allow is a 422 naming which side asked for it.
+
+    Returns:
+        The round resolved: each side's casualty distribution and Break-test
+        outcomes, who won, and every rule the engine held without applying.
+    """
+    game = TOWGame.assemble(data)
+    a = _deploy(game, data, request.a, "a")
+    b = _deploy(game, data, request.b, "b")
+    if request.charge is not None:
+        charged = Charge(request.charge.full_inches, request.charge.arc)
+        if request.charge.side == "a":
+            a = a.charging(charged)
+        else:
+            b = b.charging(charged)
+    fought = game.combat.fight(a, b)
+    scored = game.combat.result(fought)
+    return FightReport.of(a, b, fought, scored, game.combat.break_test(scored, a, b))
+
+
+def _deploy(game: TOWGame, data: TOWRepository, side: Deployment, label: str) -> Contingent:
+    # The muster boundary for one side of a fight: every refusal a datasheet
+    # makes -- the size, the options, the weapon it does not carry -- becomes a
+    # 422 naming which side asked for it.
+    if side.unit not in game.units:
+        raise HTTPException(status_code=404, detail=f"no unit {side.unit!r}")
+    try:
+        fielded = Contingent.deploy(
+            side.unit, side.size, side.options, data=data, frontage=side.frontage
+        )
+        armed = fielded.wielding(side.weapon or _default_weapon(fielded, label))
+    except (ValidationError, ValueError) as refused:
+        raise HTTPException(
+            status_code=422, detail=f"side {label}: {_reason(refused)}"
+        ) from refused
+    # A round of close combat is the only thing routed here, so a weapon that
+    # cannot fight is a refusal at the boundary rather than a resolver blowing
+    # up mid-walk.
+    if armed.in_hand().combat_profile is None:
+        raise HTTPException(
+            status_code=422,
+            detail=f"side {label}: {armed.in_hand().name} has no Combat profile; it cannot fight",
+        )
+    return armed
+
+
+def _default_weapon(fielded: Contingent, label: str) -> str:
+    # The last carried weapon that can fight: a datasheet prints the specialist
+    # after the hand weapon, and a missile weapon after both, so taking the last
+    # outright sends archers into melee with a bow.
+    for weapon in reversed(fielded.loadout.weapons):
+        if weapon.combat_profile is not None:
+            return weapon.name
+    carried = ", ".join(weapon.name for weapon in fielded.loadout.weapons) or "nothing"
+    raise HTTPException(
+        status_code=422,
+        detail=f"side {label}: nothing it carries can fight in close combat; carried: {carried}",
+    )
+
+
+def _reason(refused: ValidationError | ValueError) -> str:
+    # Complement raises through Pydantic, a loadout raises a bare ValueError.
+    if isinstance(refused, ValidationError):
+        return refused.errors()[0]["msg"].removeprefix("Value error, ")
+    return str(refused)
 
 
 @app.get("/rules", summary="List every rule entry in the corpus")

@@ -2,6 +2,7 @@
 	import { untrack } from 'svelte';
 
 	import { datasheet } from '$lib/datasheets';
+	import { cost, repeated } from '$lib/options';
 	import type { UnitOption } from '$lib/api/client';
 
 	interface Props {
@@ -43,17 +44,6 @@
 				: `${sheet.unit_size.min} or more`;
 		});
 	});
-
-	function cost(option: UnitOption) {
-		if (option.points_budget) return `up to ${option.points_budget} pts`;
-		if (!option.points) return '';
-		return `${option.points} pts${option.per_model ? '/model' : ''}`;
-	}
-
-	// A datasheet may print the same option name twice — Dwarf Warriors offer a
-	// Veteran champion and a Veteran special rule — and a complement picks
-	// options by name, so ticking either buys both.
-	const repeated = (name: string) => offered.filter((o) => o.name === name).length > 1;
 </script>
 
 <div class="muster">
@@ -70,7 +60,7 @@
 					<input type="checkbox" value={option.name} bind:group={chosen} />
 					{option.name}
 					<span class="meta">{cost(option)}</span>
-					{#if repeated(option.name)}
+					{#if repeated(offered, option.name)}
 						<span class="warn">name repeats; both are bought together</span>
 					{/if}
 				</label>
