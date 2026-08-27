@@ -22,6 +22,9 @@
 
 	function grab(event: PointerEvent) {
 		onraise();
+		// The close button sits in this bar. Capturing the pointer retargets its
+		// click to the bar, which swallows it.
+		if ((event.target as Element).closest('button')) return;
 		grip = { x: event.clientX - pane.x, y: event.clientY - pane.y };
 		(event.currentTarget as Element).setPointerCapture(event.pointerId);
 	}
