@@ -135,6 +135,28 @@
 		opened = '';
 	}
 
+	/** Re-form a block to a new width, asking the engine for the footprint it takes. */
+	async function reform(id: number, frontage: number) {
+		const block = placed.find((each) => each.id === id);
+		if (!block) return;
+		const { data: costed, error: refused } = await api(window.location.origin, fetch).POST(
+			'/muster',
+			{
+				body: {
+					unit: block.block.unit,
+					size: block.block.size,
+					options: block.block.options,
+					frontage
+				}
+			}
+		);
+		if (!costed) {
+			refusal = typeof refused?.detail === 'string' ? refused.detail : 'could not re-form that';
+			return;
+		}
+		amend(id, { block: costed });
+	}
+
 	function amend(id: number, change: Partial<Placed>) {
 		placed = placed.map((each) => (each.id === id ? { ...each, ...change } : each));
 	}
@@ -185,6 +207,7 @@
 				onmove={(id, x, y) => amend(id, { x, y })}
 				onturn={(id, facing) => amend(id, { facing })}
 				ondrop={(mover, target) => (asking = { mover, target })}
+				onreform={reform}
 			/>
 			{#if pair}
 				<div

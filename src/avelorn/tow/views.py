@@ -149,10 +149,10 @@ class Wieldable(BaseModel):
 class Footprint(BaseModel):
     """The rectangle a block occupies once it forms up.
 
-    The formation it takes at the datasheet's default frontage, and the table
-    space that costs: ``files`` models across by ``ranks`` deep, each model on
-    a base of the datasheet's size. A rear rank standing short still occupies
-    its whole rank, so the depth is the ranks rather than the models.
+    The formation it takes, and the table space that costs: ``files`` models
+    across by ``ranks`` deep, each model on a base of the datasheet's size. A
+    rear rank standing short still occupies its whole rank, so the depth is the
+    ranks rather than the models.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -192,8 +192,9 @@ class MusteredUnit(BaseModel):
     models actually carry rather than what the datasheet offered. ``weapons``
     narrows the equipment to the weapons among it, each saying whether it can
     be used in close combat -- what a caller naming a weapon chooses from.
-    ``footprint`` is the table space the block takes at the datasheet's default
-    frontage, which a caller drawing it needs and cannot derive from a slug.
+    ``footprint`` is the table space the block takes, at the frontage asked for
+    or the datasheet's default, which a caller drawing it needs and cannot
+    derive from a slug.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -209,13 +210,21 @@ class MusteredUnit(BaseModel):
     footprint: Footprint | None
 
     @classmethod
-    def of(cls, complement: Complement, rules: Registry[Rule]) -> "MusteredUnit":
-        """Cost and equip one block.
+    def of(
+        cls, complement: Complement, rules: Registry[Rule], frontage: int | None = None
+    ) -> "MusteredUnit":
+        """Cost and equip one block, formed up as wide as asked.
+
+        Args:
+            complement: The sized and equipped datasheet.
+            rules: The registry its printed rule names resolve against.
+            frontage: The formation width in files; the troop type's default
+                when omitted.
 
         Returns:
             The block's view, its rule names resolved as a datasheet's are.
         """
-        formed = Contingent.field(complement)
+        formed = Contingent.field(complement, frontage=frontage)
         return cls(
             unit=complement.unit.id,
             name=complement.unit.name,

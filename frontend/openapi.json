@@ -72,7 +72,7 @@
     "/muster": {
       "post": {
         "summary": "Cost and equip one block of an army list",
-        "description": "Size and equip a datasheet, and derive what the block costs.\n\nSays nothing about whether a list of these is legal -- army composition\nis not modelled yet. This costs one block and refuses one the datasheet\ndoes not allow.\n\nReturns:\n    The block, its points and effective loadout derived.\n\nRaises:\n    HTTPException: 404, when no datasheet carries the slug; 422, when the\n        datasheet does not allow the size or the options asked for.",
+        "description": "Size and equip a datasheet, and derive what the block costs.\n\nSays nothing about whether a list of these is legal -- army composition\nis not modelled yet. This costs one block and refuses one the datasheet\ndoes not allow. A ``frontage`` re-forms the block that many models wide,\nwhich changes the footprint it stands on and nothing about its cost.\n\nReturns:\n    The block, its points and effective loadout derived.\n\nRaises:\n    HTTPException: 404, when no datasheet carries the slug; 422, when the\n        datasheet does not allow the size or the options asked for.",
         "operationId": "muster_muster_post",
         "requestBody": {
           "content": {
@@ -1013,7 +1013,7 @@
           "depth_mm"
         ],
         "title": "Footprint",
-        "description": "The rectangle a block occupies once it forms up.\n\nThe formation it takes at the datasheet's default frontage, and the table\nspace that costs: ``files`` models across by ``ranks`` deep, each model on\na base of the datasheet's size. A rear rank standing short still occupies\nits whole rank, so the depth is the ranks rather than the models."
+        "description": "The rectangle a block occupies once it forms up.\n\nThe formation it takes, and the table space that costs: ``files`` models\nacross by ``ranks`` deep, each model on a base of the datasheet's size. A\nrear rank standing short still occupies its whole rank, so the depth is the\nranks rather than the models."
       },
       "GrantEffect": {
         "properties": {
@@ -1224,6 +1224,18 @@
             },
             "type": "array",
             "title": "Options"
+          },
+          "frontage": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frontage"
           }
         },
         "additionalProperties": false,
@@ -1306,7 +1318,7 @@
           "footprint"
         ],
         "title": "MusteredUnit",
-        "description": "A block of an army list: a datasheet sized and equipped, and what it costs.\n\nThe view over :class:`~avelorn.tow.muster.Complement`. It carries the\ndatasheet by slug rather than whole, because a list is read as a list --\na caller wanting the profiles follows ``unit`` to the datasheet route.\n``equipment`` and ``special_rules`` are the effective ones, the chosen\noptions' adds and removes already folded in, so a block says what the\nmodels actually carry rather than what the datasheet offered. ``weapons``\nnarrows the equipment to the weapons among it, each saying whether it can\nbe used in close combat -- what a caller naming a weapon chooses from.\n``footprint`` is the table space the block takes at the datasheet's default\nfrontage, which a caller drawing it needs and cannot derive from a slug."
+        "description": "A block of an army list: a datasheet sized and equipped, and what it costs.\n\nThe view over :class:`~avelorn.tow.muster.Complement`. It carries the\ndatasheet by slug rather than whole, because a list is read as a list --\na caller wanting the profiles follows ``unit`` to the datasheet route.\n``equipment`` and ``special_rules`` are the effective ones, the chosen\noptions' adds and removes already folded in, so a block says what the\nmodels actually carry rather than what the datasheet offered. ``weapons``\nnarrows the equipment to the weapons among it, each saying whether it can\nbe used in close combat -- what a caller naming a weapon chooses from.\n``footprint`` is the table space the block takes, at the frontage asked for\nor the datasheet's default, which a caller drawing it needs and cannot\nderive from a slug."
       },
       "NaturalRoll": {
         "properties": {
