@@ -140,12 +140,20 @@ One route. The battle table is the primary surface and owns the screen.
   `files` × `ranks` on the datasheet's base size.
 - **Deploying puts the block on the table**, on the near edge facing up, moved
   clear of anything already standing there (`room`). There is no placing click.
-- **Drag to move.** A block is dragged around the table. A step that would put a
-  corner off the table is refused, so the block stops against the edge rather
-  than the pointer running away from it.
-- **Drag onto another block → the action menu** opens: charge, shoot if it
-  carries a missile profile, fight already-joined. The separation and the arc
-  come off the geometry, never from a form.
+- **Drag ghosts the block.** It stays where it stands while a dashed ghost
+  follows the pointer, with an arrow between them and the reading live on the
+  arrow. A step that would put a corner off the table is refused, so the ghost
+  stops against the edge rather than the pointer running away from it.
+- **Where the ghost is dropped decides what happened.** On empty table it is a
+  move and the block goes there. On another block it is an action, the mover
+  stays put, and the menu opens: charge, shoot if it carries a missile profile,
+  fight already-joined.
+- Committing the move during the drag is the bug this shape avoids. The mover
+  would end up on top of its target, and the gap a charge must cover would
+  measure zero.
+- **The arrow stays after the drop**, dashed and dimmer than the live one, with
+  its reading. One at a time: it is cleared by the next drag, and by a block
+  arriving or leaving, which would make it a lie about the table.
 - **Resize changes the frontage.** Dragging a block's edge changes `files`, which
   re-forms the ranks and redraws the rectangle. Model count is not a drag: it is
   changed from the block panel.
@@ -180,8 +188,7 @@ Do not reimplement any of it.
 
 ## Charts
 
-Carried on `feature/battle-table` as `frontend/src/lib/charts/`, returning in
-the result-panel slice. `scale.ts` holds the arithmetic and is tested:
+`frontend/src/lib/charts/`. `scale.ts` holds the arithmetic under 11 tests:
 `band` trims a distribution's negligible tail while keeping the middle
 contiguous, `ticks` gives round percentage steps, `percent`/`exact` format,
 `labelEvery` thins colliding axis labels.
@@ -194,8 +201,10 @@ contiguous, `ticks` gives round percentage steps, `percent`/`exact` format,
   between segments and no borders.
 - `A wins / draw / B wins` is a diverging bar: poles on the two series colours,
   the draw on `--neutral`.
-- A distribution also has a 74px sparkline form for use inside a table row,
-  expanding to the full columns on click.
+- `Spread` draws one distribution, and takes `compact` for the 74px sparkline
+  form that fits inside a table row.
+- `Outcomes` draws one stacked bar, `ordinal` for outcomes that worsen and
+  `poles` for two sides about a neutral middle.
 - Every chart has a table twin. A value is never reachable only by hovering.
 
 ## Derivation — the direction, not the next task
@@ -237,10 +246,10 @@ merged or accept a rebase.
 2. **The one-route shell.** Docked collapsible panels with header values and
    persisted open state; the battle table as a static surface with blocks placed
    by click. No drag. ← _landed_
-3. **Drag.** Move a block; drop onto another to open the action menu; resize an
-   edge to change frontage.
+3. **Drag.** Move a block and drop onto another to open the action menu, both
+   landed. Resizing an edge to change frontage is still to do.
 4. **The result panels.** Fight and volley resolved into the docked panel, with
-   the stat chain, distributions and outcome bars.
+   the stat chain, distributions and outcome bars. ← _landed_
 5. **Floating panes.** Datasheet and rule panes, stacking, hyperlinked.
 6. **The army list panel.** Absorbs the `/list` route.
 
@@ -257,10 +266,8 @@ frontend-check` and `make types-check` all clean, `uv run pytest` clean if
 
 ## What the old routes are waiting for
 
-`/fight` and `/shoot` still exist and are still the only way to resolve
-anything. They go when the result panels land in slice 4, not before: deleting
-them earlier would leave the tool unable to answer a question. `/list` goes in
-slice 6, when the army list becomes a dock.
+`/fight`, `/shoot` and `Side.svelte` are gone: the table resolves both now.
+`/list` goes in slice 6, when the army list becomes a dock.
 
 ## Open questions
 
