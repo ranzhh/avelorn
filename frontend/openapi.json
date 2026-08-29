@@ -958,6 +958,39 @@
         "title": "Deployment",
         "description": "One side put on the table: a datasheet, sized and equipped, weapon in hand."
       },
+      "Derivation": {
+        "properties": {
+          "base": {
+            "type": "integer",
+            "title": "Base"
+          },
+          "basis": {
+            "type": "string",
+            "title": "Basis"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/Step"
+            },
+            "type": "array",
+            "title": "Steps"
+          },
+          "target": {
+            "type": "integer",
+            "title": "Target"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "base",
+          "basis",
+          "steps",
+          "target"
+        ],
+        "title": "Derivation",
+        "description": "A reported roll target with its operands still attached.\n\n``base`` is what the chart gave before anything moved it and ``basis``\nnames the characteristic behind it, so a 5+ is legible as a poor Ballistic\nSkill or as a good one shooting through modifiers. The steps sum: the last\none's ``target`` is ``target``."
+      },
       "DiceQuantity": {
         "properties": {
           "sides": {
@@ -2051,6 +2084,38 @@
         "title": "Stage",
         "description": "The attack sequence's stages, one row per printed step.\n\nEach member is a row of the printed sequence: its name (verbatim),\n``rolled_by`` (whose dice the stage rolls \u2014 the attacker's To Hit and\nTo Wound, the target's saves and panic tests), and ``dice`` (what is\nrolled there). Declaration order is the printed order \u2014 the engine's\n\"can this die still shape that roll\" reads it directly."
       },
+      "Step": {
+        "properties": {
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "modifier": {
+            "type": "integer",
+            "title": "Modifier"
+          },
+          "target": {
+            "type": "integer",
+            "title": "Target"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source",
+          "modifier",
+          "target"
+        ],
+        "title": "Step",
+        "description": "One line of a reported target's derivation.\n\n``modifier`` is in the rulebook's sign convention, where a penalty is\nnegative: a printed \"-1 To Hit\" reads -1 here and *raises* ``target`` by\none. ``source`` is the printed rule that emitted it, or ``None`` where the\nengine moved the roll without a named record to credit."
+      },
       "TroopType": {
         "type": "string",
         "enum": [
@@ -2597,6 +2662,32 @@
             "type": "number",
             "title": "P Unsaved"
           },
+          "hit_from": {
+            "$ref": "#/components/schemas/Derivation"
+          },
+          "strength": {
+            "type": "integer",
+            "title": "Strength"
+          },
+          "toughness": {
+            "type": "integer",
+            "title": "Toughness"
+          },
+          "armour_value": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Armour Value"
+          },
+          "armour_piercing": {
+            "type": "integer",
+            "title": "Armour Piercing"
+          },
           "wounds": {
             "items": {
               "type": "number"
@@ -2643,6 +2734,11 @@
           "p_hit",
           "p_wound",
           "p_unsaved",
+          "hit_from",
+          "strength",
+          "toughness",
+          "armour_value",
+          "armour_piercing",
           "wounds",
           "casualties",
           "expected_wounds",
