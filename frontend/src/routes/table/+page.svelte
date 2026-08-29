@@ -1,10 +1,12 @@
 <script lang="ts">
 	import BattleTable from '$lib/BattleTable.svelte';
+	import Conditions from '$lib/Conditions.svelte';
 	import Dock from '$lib/Dock.svelte';
 	import Muster from '$lib/Muster.svelte';
 	import Panes from '$lib/Panes.svelte';
 	import Resolved from '$lib/Resolved.svelte';
 	import { api, type FightReport, type MusteredUnit, type VolleyReport } from '$lib/api/client';
+	import { FRESH, strengthFor, summary, type Conditions as Held } from '$lib/conditions';
 	import { entry } from '$lib/corpus';
 	import { fielded, listing } from '$lib/listing';
 	import { TABLE, arc, identifier, room, separation, span, usable, type Placed } from '$lib/table';
@@ -23,10 +25,15 @@
 	let resolving = $state('');
 	let fight = $state<FightReport | null>(null);
 	let volley = $state<VolleyReport | null>(null);
+	let held = $state<Held>({ ...FRESH });
+	// The volley on screen, kept so a change of conditions re-asks it rather
+	// than leaving a stale answer under new premises.
+	let asked = $state<{ shooter: number; target: number; inches: number } | null>(null);
 
 	const rows = $derived(listing(data.units, needle, { column: 'name', descending: false }));
 
 	const block = $derived(placed.find((each) => each.id === picked) ?? null);
+	const shotAt = $derived(placed.find((each) => each.id === asked?.target) ?? null);
 	const points = $derived(placed.reduce((sum, each) => sum + each.block.points, 0));
 
 	const pair = $derived.by(() => {
@@ -118,21 +125,34 @@
 
 	async function loose() {
 		if (!pair) return;
+		asked = { shooter: pair.mover.id, target: pair.target.id, inches: pair.inches };
+		asking = null;
+		await fire();
+	}
+
+	/** Resolve the volley on screen under the conditions currently held. */
+	async function fire() {
+		const shot = asked;
+		if (!shot) return;
+		const shooter = placed.find((each) => each.id === shot.shooter);
+		const target = placed.find((each) => each.id === shot.target);
+		if (!shooter || !target) return;
 		cleared();
 		resolving = 'shooting';
 		const { data: report, error: refused } = await api(window.location.origin, fetch).POST(
 			'/volley',
 			{
 				body: {
-					shooter: deployment(pair.mover, 'missile'),
-					target: deployment(pair.target, 'melee'),
-					distance: pair.inches,
-					hit_modifier: 0
+					shooter: deployment(shooter, 'missile'),
+					target: deployment(target, 'melee'),
+					distance: shot.inches,
+					moved: held.moved,
+					hit_modifier: held.hit,
+					battle_strength: strengthFor(held.battleStrength, target.block.size)
 				}
 			}
 		);
 		resolving = '';
-		asking = null;
 		if (!report) {
 			refusal = typeof refused?.detail === 'string' ? refused.detail : 'could not resolve that';
 			return;
@@ -367,6 +387,17 @@
 				<div class="field"><span>blocks</span><span class="num">{placed.length}</span></div>
 				<div class="field"><span>points</span><span class="num">{points}</span></div>
 			{/if}
+		</Dock>
+
+		<Dock title="conditions" keep="conditions" value={summary(held)}>
+			<Conditions
+				conditions={held}
+				size={shotAt?.block.size ?? null}
+				onchange={(next) => {
+					held = next;
+					fire();
+				}}
+			/>
 		</Dock>
 
 		<Dock
