@@ -20,7 +20,5 @@ effects:
       shooting:
         stand_and_shoot: false
     volley: half-of-each-rear-rank
-notes: >-
-  The hill variant (the front two ranks shoot, the volley counted behind them) is
-  terrain, which is not modelled; rear ranks' line of sight is assumed, as the
-  front rank's already is.
+caveats: The hill variant (the front two ranks shoot, the volley counted behind them) is terrain, which is not modelled; rear
+  ranks' line of sight is assumed, as the front rank's already is.

@@ -31,4 +31,4 @@ effects:
           - War Beast
     denies: [make-armour-saves]
     slays: true
-notes: Regeneration saves do not exist to deny.
+caveats: Regeneration saves do not exist to deny.

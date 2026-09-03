@@ -10,10 +10,8 @@ paragraphs:
 # Every printed panic cause qualifies, so no `causes` filter, where Valour of
 # Ages names two. The printed Break-test exclusion needs no expressing: a Break
 # test is a decision, not this stage.
-notes: >-
-  The "majority of the models" condition is not expressed: the engine fields a
-  homogeneous unit, so a rule printed on its profile is carried by every model
-  and the majority always holds. It will need a gate once a unit can be mustered
-  from parts that do not all share it.
 effects:
   - reroll: make-panic-tests
+caveats: 'The "majority of the models" condition is not expressed: the engine fields a homogeneous unit, so a rule printed on
+  its profile is carried by every model and the majority always holds. It will need a gate once a unit can be mustered from
+  parts that do not all share it.'

@@ -31,8 +31,8 @@ from avelorn.tow.data import TOWRepository
 from avelorn.tow.importers.whfb_app.canon import canonical_unit, canonical_weapon
 from avelorn.tow.importers.whfb_app.client import BASE_URL, WhfbAppClient, WhfbAppError
 from avelorn.tow.importers.whfb_app.equipment import parse_armour, parse_weapon
+from avelorn.tow.importers.whfb_app.merge import with_hand_authored
 from avelorn.tow.importers.whfb_app.parse import UnsupportedUnit, WhfbParseError, parse_unit
-from avelorn.tow.importers.whfb_app.preserve import with_hand_authored
 from avelorn.tow.importers.whfb_app.rules import parse_special_rule
 from avelorn.tow.importers.whfb_app.yamlout import (
     armour_to_yaml,
@@ -165,9 +165,14 @@ def _rerender(
     if kind == "units":
         result = parse_unit(client.unit_entry(slug))
         equipment, rules = _corpus_names(data_dir)
-        unit, fixes = canonical_unit(result.unit, equipment=equipment, rules=rules)
+        fresh, fixes = canonical_unit(result.unit, equipment=equipment, rules=rules)
+        unit, merge_warnings = with_hand_authored(fresh, path)
         held = unit_to_yaml(load_yaml(path, Unit), source_url=url)
-        return held, unit_to_yaml(unit, source_url=url), [*result.warnings, *fixes]
+        return (
+            held,
+            unit_to_yaml(unit, source_url=url),
+            [*result.warnings, *fixes, *merge_warnings],
+        )
     if kind == "weapons":
         result = parse_weapon(client.weapons_of_war_entry(slug))
         _, rules = _corpus_names(data_dir)
@@ -180,9 +185,14 @@ def _rerender(
             [*result.warnings, *fixes, *merge_warnings],
         )
     if kind == "armour":
-        armour = parse_armour(client.weapons_of_war_entry(slug))
+        result = parse_armour(client.weapons_of_war_entry(slug))
+        armour, merge_warnings = with_hand_authored(result.armour, path)
         held = armour_to_yaml(load_yaml(path, Armour), source_url=url)
-        return held, armour_to_yaml(armour.armour, source_url=url), armour.warnings
+        return (
+            held,
+            armour_to_yaml(armour, source_url=url),
+            [*result.warnings, *merge_warnings],
+        )
     if kind in ("rules", "magic-items"):
         # An army's magic items (tow/armies/<army>/magic-items/) re-render
         # through the rule path: their pages parse as rule entries, and the
@@ -356,17 +366,22 @@ def _write_unit(entry: dict, army: str, data_dir: Path, dry_run: bool) -> bool:
     except WhfbParseError:
         logger.exception("%s: parse failed", slug)
         return False
-    for warning in result.warnings:
-        logger.warning("%s: %s", slug, warning)
     equipment, rules = _corpus_names(data_dir)
-    unit, fixes = canonical_unit(result.unit, equipment=equipment, rules=rules)
+    fresh, fixes = canonical_unit(result.unit, equipment=equipment, rules=rules)
+    path = data_dir / "tow" / "armies" / army / "units" / f"{slug}.yaml"
+    try:
+        unit, merge_warnings = with_hand_authored(fresh, path)
+    except WhfbParseError:
+        logger.exception("%s: merge failed", slug)
+        return False
+    for warning in (*result.warnings, *merge_warnings):
+        logger.warning("%s: %s", slug, warning)
     for fix in fixes:
         logger.info("%s: %s", slug, fix)
     text = unit_to_yaml(unit, source_url=f"{BASE_URL}/unit/{slug}")
     if dry_run:
         print(text)  # generated YAML is the program's payload -> stdout
         return True
-    path = data_dir / "tow" / "armies" / army / "units" / f"{slug}.yaml"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text)
     logger.info("wrote %s", path)

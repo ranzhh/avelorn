@@ -9,6 +9,8 @@ from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from avelorn.tow.schema.correction import Correction
+
 
 class Armour(BaseModel):
     """An armour entry: a suit with its own value, or an addition."""
@@ -20,6 +22,8 @@ class Armour(BaseModel):
     armour_value: int | None = Field(default=None, ge=1, le=6)  # printed "6+" -> 6
     armour_value_improvement: int | None = Field(default=None, ge=1)
     notes: str | None = None  # printed usage restrictions, verbatim
+    caveats: str | None = None  # what this build does not model about the entry
+    corrections: list[Correction] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _exactly_one_shape(self) -> Self:

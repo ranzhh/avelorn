@@ -40,6 +40,7 @@ from pydantic import (
     model_validator,
 )
 
+from avelorn.tow.schema.correction import Correction
 from avelorn.tow.schema.psychology import Outcome, PanicCause
 from avelorn.tow.schema.stage import Dice, Stage
 from avelorn.tow.schema.unit import Characteristic, TroopType
@@ -1165,12 +1166,13 @@ class Rule(BaseModel):
     flavour: str | None = None  # italic flavour line, if any
     paragraphs: list[str] = Field(min_length=1)  # rule text, as displayed
     effects: list[RuleEffect] = Field(default_factory=list)
-    # Hand-authored modelling notes: the scope this build covers and the parts
-    # of the printed rule it does not, in the author's words. A seam that
-    # factors the rule surfaces them (break_test does, for Stubborn), so a
-    # simplification is stated in data — maintainable, diffable against the
-    # paragraphs — never composed as prose in the engine.
-    notes: str | None = None
+    # The parts of the printed rule this build does not cover, in the
+    # author's words. A seam that factors the rule surfaces them (break_test
+    # does, for Stubborn), so a simplification is stated in data —
+    # maintainable, diffable against the paragraphs — never composed as prose
+    # in the engine.
+    caveats: str | None = None
+    corrections: list[Correction] = Field(default_factory=list)
 
     @model_validator(mode="before")
     @classmethod

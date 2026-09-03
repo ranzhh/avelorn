@@ -10,11 +10,14 @@ from avelorn.tow.importers.whfb_app.yamlout import (
     weapon_to_yaml,
 )
 from avelorn.tow.schema.armour import Armour
+from avelorn.tow.schema.correction import Correction
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.unit import OptionKind, UnitOption
 from avelorn.tow.schema.weapon import Weapon
 
 REPO = TOWRepository()
+
+_CORRECTION = Correction(op="replace", path="/name", expect="Wrong", value="Right", why="...")
 
 
 def test_option_row_writes_every_field_of_the_schema() -> None:
@@ -53,23 +56,40 @@ def _written(text: str) -> set[str]:
 
 def test_weapon_writer_emits_every_schema_field() -> None:
     """A weapon field the writer forgets is dropped on the next re-import."""
-    weapon = REPO.weapons["longbow"].model_copy(update={"notes": "Printed usage restriction."})
-    assert weapon.weapon_type and weapon.notes  # the premise: every field is set
+    weapon = REPO.weapons["longbow"].model_copy(
+        update={
+            "notes": "Printed usage restriction.",
+            "caveats": "What the engine does with it.",
+            "corrections": [_CORRECTION],
+        }
+    )
+    assert weapon.weapon_type and weapon.notes and weapon.caveats  # the premise
     assert _written(weapon_to_yaml(weapon)) == set(Weapon.model_fields)
 
 
 def test_rule_writer_emits_every_schema_field() -> None:
-    """Likewise for a rule: effects and notes are hand-authored and easy to lose."""
+    """Likewise for a rule: effects, notes and corrections are hand-authored."""
     rule = REPO.rules["strike-first"].model_copy(
-        update={"notes": "What the engine does with it.", "flavour": "Quicksilver.", "page": 177}
+        update={
+            "caveats": "What the engine does with it.",
+            "corrections": [_CORRECTION],
+            "flavour": "Quicksilver.",
+            "page": 177,
+        }
     )
-    assert rule.effects and rule.notes and rule.category  # the premise
+    assert rule.effects and rule.caveats and rule.category  # the premise
     assert _written(rule_to_yaml(rule)) == set(Rule.model_fields)
 
 
 def test_armour_writer_emits_every_schema_field() -> None:
     """Armour's two value shapes are exclusive, so it takes two documents."""
-    suit = REPO.armoury["heavy-armour"].model_copy(update={"notes": "Restriction."})
+    suit = REPO.armoury["heavy-armour"].model_copy(
+        update={
+            "notes": "Restriction.",
+            "caveats": "What the engine does with it.",
+            "corrections": [_CORRECTION],
+        }
+    )
     addition = REPO.armoury["shield"]
     assert suit.armour_value and addition.armour_value_improvement  # the premise
     written = _written(armour_to_yaml(suit)) | _written(armour_to_yaml(addition))

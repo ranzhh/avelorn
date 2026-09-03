@@ -13,6 +13,6 @@ paragraphs:
 effects:
   - attack:
       flaming: true
-notes: The Fear it causes in war beasts and swarms is psychology, not modelled. A model-level
-  carrier wielding a magic weapon should not make Flaming attacks with that weapon, which
-  nothing expresses yet; the corpus prints the rule on weapons alone, where no caveat applies.
+caveats: The Fear it causes in war beasts and swarms is psychology, not modelled. A model-level carrier wielding a magic weapon
+  should not make Flaming attacks with that weapon, which nothing expresses yet; the corpus prints the rule on weapons alone,
+  where no caveat applies.

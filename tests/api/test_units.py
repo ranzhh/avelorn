@@ -131,7 +131,7 @@ def test_a_rule_is_served_whole(client: TestClient) -> None:
     # Served with its nulls, as every response model is; the CLI drops them for
     # readability, which is rendering rather than a difference in what is carried.
     assert body["effects"] == [{"when": None, "forces": {"break": "fall-back-in-good-order"}}]
-    assert body["notes"]
+    assert body["caveats"]
 
 
 def test_an_unknown_rule_slug_is_a_404(client: TestClient) -> None:

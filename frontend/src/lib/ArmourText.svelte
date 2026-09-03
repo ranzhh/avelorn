@@ -2,6 +2,8 @@
 	import type { Armour } from '$lib/api/client';
 
 	let { armour }: { armour: Armour } = $props();
+
+	const corrections = $derived(armour.corrections ?? []);
 </script>
 
 <table>
@@ -18,8 +20,20 @@
 </table>
 
 {#if armour.notes}
-	<h4>not covered</h4>
+	<h4>restrictions</h4>
 	<p class="meta">{armour.notes}</p>
+{/if}
+
+{#if armour.caveats}
+	<h4>not covered</h4>
+	<p class="meta">{armour.caveats}</p>
+{/if}
+
+{#if corrections.length}
+	<h4>corrected from the source</h4>
+	{#each corrections as correction}
+		<p class="meta"><code>{correction.op} {correction.path}</code> {correction.why}</p>
+	{/each}
 {/if}
 
 <style>

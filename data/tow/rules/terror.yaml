@@ -22,6 +22,5 @@ effects:
       combat: true
     add:
       Ld: -1
-notes: only the Break-test Leadership malus is modelled — the Leadership test
-  on declaring a charge against a Terror-causer (and the Flee it forces), the
-  Fear interplay, and immunity to Terror are not.
+caveats: only the Break-test Leadership malus is modelled — the Leadership test on declaring a charge against a Terror-causer
+  (and the Flee it forces), the Fear interplay, and immunity to Terror are not.

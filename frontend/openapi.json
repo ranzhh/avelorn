@@ -446,6 +446,24 @@
               }
             ],
             "title": "Notes"
+          },
+          "caveats": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caveats"
+          },
+          "corrections": {
+            "items": {
+              "$ref": "#/components/schemas/Correction"
+            },
+            "type": "array",
+            "title": "Corrections"
           }
         },
         "additionalProperties": false,
@@ -898,6 +916,43 @@
         "type": "object",
         "title": "Comparison",
         "description": "A predicate on one numeric property of an event: exactly one comparator.\n\nThe leaf of a gate path \u2014 ``charging.distance`` is constrained by\n``{at_least: 3}``, ``{at_most: 6}`` or ``{equals: 8}``. The comparator\nvocabulary is closed and append-only, the same discipline as\n:class:`Quantity`; a new one joins when a rule needs it. Exactly one\ncomparator is set \u2014 a leaf tests one thing."
+      },
+      "Correction": {
+        "properties": {
+          "op": {
+            "type": "string",
+            "enum": [
+              "add",
+              "remove",
+              "replace"
+            ],
+            "title": "Op"
+          },
+          "path": {
+            "type": "string",
+            "pattern": "^(/[^/]*)+$",
+            "title": "Path"
+          },
+          "expect": {
+            "title": "Expect"
+          },
+          "value": {
+            "title": "Value"
+          },
+          "why": {
+            "type": "string",
+            "title": "Why"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "op",
+          "path",
+          "why"
+        ],
+        "title": "Correction",
+        "description": "One deliberate departure from what the source states."
       },
       "Decision": {
         "type": "string",
@@ -1945,7 +2000,7 @@
             "type": "array",
             "title": "Effects"
           },
-          "notes": {
+          "caveats": {
             "anyOf": [
               {
                 "type": "string"
@@ -1954,7 +2009,14 @@
                 "type": "null"
               }
             ],
-            "title": "Notes"
+            "title": "Caveats"
+          },
+          "corrections": {
+            "items": {
+              "$ref": "#/components/schemas/Correction"
+            },
+            "type": "array",
+            "title": "Corrections"
           }
         },
         "additionalProperties": false,
@@ -2190,6 +2252,24 @@
             },
             "type": "array",
             "title": "Options"
+          },
+          "caveats": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caveats"
+          },
+          "corrections": {
+            "items": {
+              "$ref": "#/components/schemas/Correction"
+            },
+            "type": "array",
+            "title": "Corrections"
           }
         },
         "additionalProperties": false,
@@ -2726,6 +2806,24 @@
               }
             ],
             "title": "Notes"
+          },
+          "caveats": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caveats"
+          },
+          "corrections": {
+            "items": {
+              "$ref": "#/components/schemas/Correction"
+            },
+            "type": "array",
+            "title": "Corrections"
           }
         },
         "additionalProperties": false,

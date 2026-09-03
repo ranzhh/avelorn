@@ -12,6 +12,7 @@ import re
 import yaml
 
 from avelorn.tow.schema.armour import Armour
+from avelorn.tow.schema.correction import Correction
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.unit import Characteristic, Profile, ProfileRole, Unit, UnitOption
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile
@@ -67,6 +68,8 @@ def unit_to_yaml(unit: Unit, source_url: str | None = None) -> str:
         doc["special_rules"] = list(unit.special_rules)
     if unit.options:
         doc["options"] = [_option_row(o) for o in unit.options]
+    _add_caveats(doc, unit.caveats)
+    _add_corrections(doc, unit.corrections)
     return _dump(doc, source_url)
 
 
@@ -83,6 +86,8 @@ def weapon_to_yaml(weapon: Weapon, source_url: str | None = None) -> str:
     doc["profiles"] = [_weapon_profile_row(p) for p in weapon.profiles]
     if weapon.notes is not None:
         doc["notes"] = weapon.notes
+    _add_caveats(doc, weapon.caveats)
+    _add_corrections(doc, weapon.corrections)
     return _dump(doc, source_url)
 
 
@@ -99,6 +104,8 @@ def armour_to_yaml(armour: Armour, source_url: str | None = None) -> str:
         doc["armour_value_improvement"] = armour.armour_value_improvement
     if armour.notes is not None:
         doc["notes"] = armour.notes
+    _add_caveats(doc, armour.caveats)
+    _add_corrections(doc, armour.corrections)
     return _dump(doc, source_url)
 
 
@@ -116,8 +123,6 @@ def rule_to_yaml(rule: Rule, source_url: str | None = None) -> str:
     if rule.flavour is not None:
         doc["flavour"] = rule.flavour
     doc["paragraphs"] = list(rule.paragraphs)
-    if rule.notes is not None:
-        doc["notes"] = rule.notes
     if rule.effects:
         # by_alias so an operation prints as the rulebook names it: a
         # ModifierEffect's `set` is `set_` on the model only to clear the
@@ -125,7 +130,21 @@ def rule_to_yaml(rule: Rule, source_url: str | None = None) -> str:
         doc["effects"] = [
             e.model_dump(mode="json", exclude_none=True, by_alias=True) for e in rule.effects
         ]
+    _add_caveats(doc, rule.caveats)
+    _add_corrections(doc, rule.corrections)
     return _dump(doc, source_url)
+
+
+def _add_caveats(doc: dict, caveats: str | None) -> None:
+    """Write what this build does not model, where anything was written."""
+    if caveats is not None:
+        doc["caveats"] = caveats
+
+
+def _add_corrections(doc: dict, corrections: list[Correction]) -> None:
+    """Close the document with where this corpus departs from the source."""
+    if corrections:
+        doc["corrections"] = [c.model_dump(mode="json", exclude_none=True) for c in corrections]
 
 
 def _dump(doc: dict, source_url: str | None) -> str:

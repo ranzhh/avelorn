@@ -17,6 +17,5 @@ effects:
       combat: true
     set:
       I: 1
-notes: base contact is read as being engaged in the combat — the whole engaged
-  enemy unit strikes last, not only the models touching this one; mount rows
-  are read printed, so an engaged foe's mounts keep their own Initiative.
+caveats: base contact is read as being engaged in the combat — the whole engaged enemy unit strikes last, not only the models
+  touching this one; mount rows are read printed, so an engaged foe's mounts keep their own Initiative.

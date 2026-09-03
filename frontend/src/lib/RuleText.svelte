@@ -3,6 +3,8 @@
 
 	let { rule }: { rule: Rule } = $props();
 
+	const corrections = $derived(rule.corrections ?? []);
+
 	const where = $derived(
 		[rule.category, rule.page && `page ${rule.page}`].filter(Boolean).join(' · ')
 	);
@@ -24,9 +26,16 @@
 	{/if}
 </p>
 
-{#if rule.notes}
+{#if rule.caveats}
 	<h4>left out</h4>
-	<p class="meta">{rule.notes}</p>
+	<p class="meta">{rule.caveats}</p>
+{/if}
+
+{#if corrections.length}
+	<h4>corrected from the source</h4>
+	{#each corrections as correction}
+		<p class="meta"><code>{correction.op} {correction.path}</code> {correction.why}</p>
+	{/each}
 {/if}
 
 <style>

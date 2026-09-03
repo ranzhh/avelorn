@@ -13,5 +13,4 @@ effects:
         kind: shooting
     add:
       to-hit: -1
-notes: the Unit Strength 1 restriction is not expressed — the engine fields
-  US-1 infantry only, so it cannot yet fail.
+caveats: the Unit Strength 1 restriction is not expressed — the engine fields US-1 infantry only, so it cannot yet fail.

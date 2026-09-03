@@ -17,7 +17,5 @@ effects:
     replaces:
       break:
         fall-back-in-good-order: gives-ground
-notes: >-
-  Modelled with no player choice ("may ... rather than" is always taken) and no
-  once-per-game tracking. The Close Order requirement is a formation, which the
-  engine does not model (#28), so it is not gated.
+caveats: Modelled with no player choice ("may ... rather than" is always taken) and no once-per-game tracking. The Close Order
+  requirement is a formation, which the engine does not model (#28), so it is not gated.

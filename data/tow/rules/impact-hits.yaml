@@ -19,11 +19,8 @@ effects:
             at_least: 3
     hits: X
     order: first
-notes: >-
-  "In base contact" is read as the engine reads contact everywhere: every
-  front-rank model causes its hits, an equally wide foe assumed. The hits are
-  resolved ahead of every Initiative step of the round; challenges are not
-  modelled, so "before issuing challenges" has no bearing. "The model making
-  them" cannot be named on a split profile — datasheet rules are unit-wide —
-  so a bearer whose mount row prints a different Strength is refused loudly
-  rather than resolved at the rank and file's row.
+caveats: '"In base contact" is read as the engine reads contact everywhere: every front-rank model causes its hits, an equally
+  wide foe assumed. The hits are resolved ahead of every Initiative step of the round; challenges are not modelled, so "before
+  issuing challenges" has no bearing. "The model making them" cannot be named on a split profile — datasheet rules are unit-wide
+  — so a bearer whose mount row prints a different Strength is refused loudly rather than resolved at the rank and file''s
+  row.'

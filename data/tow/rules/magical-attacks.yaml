@@ -11,4 +11,4 @@ paragraphs:
 effects:
   - attack:
       magical: true
-notes: Spells and magic-item hits carry this rule too; neither exists to mark.
+caveats: Spells and magic-item hits carry this rule too; neither exists to mark.

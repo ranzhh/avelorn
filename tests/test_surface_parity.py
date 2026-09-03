@@ -9,8 +9,10 @@ from fastapi.testclient import TestClient
 
 from avelorn.api.app import app, corpus
 from avelorn.cli import commands
+from avelorn.core.registry import Registry
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.schema.armour import Armour
+from avelorn.tow.schema.correction import Correction
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.unit import Unit
 from avelorn.tow.schema.weapon import Weapon
@@ -23,6 +25,49 @@ CLIENT = TestClient(app)
 # A datasheet that populates every field: two profiles, equipment, rules,
 # options, a base size, and a resolved troop-type profile.
 SLUG = "elven-archers"
+
+
+_CORRECTION = Correction(op="replace", path="/name", expect="Wrong", value="Right", why="a test's")
+_CAVEATS = "What this build does not model about it."
+
+
+def _annotated(attribute: str, kind: str, slug: str) -> list[str]:
+    """What the terminal prints for an entry carrying both hand-authored fields.
+
+    No weapon, armour entry or datasheet under data/ carries either today,
+    so the guard is held against an entry made here. It stays honest
+    whether or not the corpus happens to carry one that day.
+
+    Returns:
+        The lines `avelorn <kind> show` prints for it.
+    """
+    registry = getattr(REPO, attribute)
+    annotated = registry[slug].model_copy(
+        update={"caveats": _CAVEATS, "corrections": [_CORRECTION]}
+    )
+    repo = TOWRepository()
+    repo.__dict__[attribute] = Registry(
+        (annotated if entry.id == slug else entry for entry in registry.values()), kind=kind
+    )
+    return getattr(commands, f"show_{kind}")(repo, slug)
+
+
+def _caveats_are_shown(printed: list[str]) -> bool:
+    """Whether the terminal prints what the build leaves out.
+
+    Returns:
+        Whether the heading reached the output.
+    """
+    return "Not covered:" in "\n".join(printed)
+
+
+def _corrections_are_shown(printed: list[str]) -> bool:
+    """Whether the terminal prints an entry's departures from the source.
+
+    Returns:
+        Whether the heading reached the output.
+    """
+    return "Corrected from the source:" in "\n".join(printed)
 
 
 def test_the_listing_carries_the_same_fields_on_both() -> None:
@@ -67,6 +112,8 @@ def test_show_covers_every_field_the_detail_endpoint_serves() -> None:
         "equipment": all(item in printed for item in unit.equipment),
         "special_rules": all(rule in printed for rule in unit.special_rules),
         "options": all(option.name in printed for option in unit.options),
+        "caveats": _caveats_are_shown(_annotated("units", "unit", SLUG)),
+        "corrections": _corrections_are_shown(_annotated("units", "unit", SLUG)),
     }
     assert set(shown) == set(Unit.model_fields)
     assert [field for field, found in shown.items() if not found] == []
@@ -108,7 +155,8 @@ def test_show_rule_covers_every_field_the_detail_endpoint_serves() -> None:
         "flavour": rule.flavour is None or rule.flavour.split()[0] in printed,
         "paragraphs": all(p.split()[0] in printed for p in rule.paragraphs),
         "effects": "fall-back-in-good-order" in printed,
-        "notes": "Not covered:" in printed,
+        "caveats": "Not covered:" in printed,
+        "corrections": _corrections_are_shown(_annotated("rules", "rule", "stubborn")),
     }
     assert set(shown) == set(Rule.model_fields)
     assert [field for field, found in shown.items() if not found] == []
@@ -145,6 +193,8 @@ def test_show_weapon_covers_every_field_the_detail_endpoint_serves() -> None:
         "weapon_type": longbow.weapon_type is not None and lines[1] == longbow.weapon_type.value,
         "profiles": str(longbow.profiles[0].range) in typed,
         "notes": lance.notes[:40] in restricted,
+        "caveats": _caveats_are_shown(_annotated("weapons", "weapon", "longbow")),
+        "corrections": _corrections_are_shown(_annotated("weapons", "weapon", "longbow")),
     }
     assert set(covered) == set(Weapon.model_fields)
     assert all(covered.values()), [field for field, ok in covered.items() if not ok]
@@ -175,6 +225,8 @@ def test_show_armour_covers_every_field_the_detail_endpoint_serves() -> None:
         "armour_value": f"{heavy.armour_value}+" in valued,
         "armour_value_improvement": str(shield.armour_value_improvement) in worn,
         "notes": shield.notes[:30] in worn,
+        "caveats": _caveats_are_shown(_annotated("armoury", "armour", "shield")),
+        "corrections": _corrections_are_shown(_annotated("armoury", "armour", "shield")),
     }
     assert set(covered) == set(Armour.model_fields)
     assert all(covered.values()), [field for field, ok in covered.items() if not ok]
