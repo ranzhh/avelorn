@@ -23,4 +23,4 @@ effects:
           - Heavy Cavalry
           - War Beast
     denies: [make-armour-saves]
-notes: Regeneration saves do not exist to deny.
+caveats: Regeneration saves do not exist to deny.

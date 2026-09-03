@@ -16,11 +16,7 @@ effects:
       combat: true
     hits: X
     order: last
-notes: >-
-  "In base contact" is read as the engine reads contact everywhere: every
-  front-rank model stomps, an equally wide foe assumed. The hits land after
-  every Initiative step of the round, so a bearer slain earlier in the round
-  never stomps. "The model making them" cannot be named on a split profile —
-  datasheet rules are unit-wide — so a bearer whose mount row prints a
-  different Strength is refused loudly rather than resolved at the rank and
-  file's row.
+caveats: '"In base contact" is read as the engine reads contact everywhere: every front-rank model stomps, an equally wide foe
+  assumed. The hits land after every Initiative step of the round, so a bearer slain earlier in the round never stomps. "The
+  model making them" cannot be named on a split profile — datasheet rules are unit-wide — so a bearer whose mount row prints
+  a different Strength is refused loudly rather than resolved at the rank and file''s row.'

@@ -11,5 +11,5 @@ paragraphs:
 # its effects on its own entry. Same shape as skirmishers.yaml.
 effects:
   - grants: Enemy Fire (Skirmishers)
-notes: only the formation's Enemy Fire rule is modelled; the loose group's
-  movement, its lack of ranks and files, and its use of terrain are not.
+caveats: only the formation's Enemy Fire rule is modelled; the loose group's movement, its lack of ranks and files, and its
+  use of terrain are not.

@@ -14,6 +14,8 @@ from typing import Annotated, Literal, Self
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.functional_validators import BeforeValidator
 
+from avelorn.tow.schema.correction import Correction
+
 _RELATIVE_STRENGTH_RE = re.compile(r"S([+-]\d+)?")
 
 
@@ -135,6 +137,8 @@ class Weapon(BaseModel):
     weapon_type: WeaponType | None = None  # the rulebook family; None until a rule needs it
     profiles: list[WeaponProfile] = Field(min_length=1)
     notes: str | None = None  # printed usage restrictions, verbatim
+    caveats: str | None = None  # what this build does not model about the entry
+    corrections: list[Correction] = Field(default_factory=list)
 
     @property
     def missile_profile(self) -> WeaponProfile | None:

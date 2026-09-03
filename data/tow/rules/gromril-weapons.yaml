@@ -15,5 +15,4 @@ effects:
         name: Hand Weapon
     add:
       armour-piercing: 1
-notes: 'Not modelled: the exclusions for two hand weapons, or a hand weapon
-  bearing Weapon runes.'
+caveats: 'Not modelled: the exclusions for two hand weapons, or a hand weapon bearing Weapon runes.'

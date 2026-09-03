@@ -11,5 +11,4 @@ paragraphs:
 # so its effects stay authored on that entry.
 effects:
   - grants: Enemy Fire (Skirmishers)
-notes: the Skirmish formation is not modelled; a unit with this rule is taken
-  to be skirmishing at all times.
+caveats: the Skirmish formation is not modelled; a unit with this rule is taken to be skirmishing at all times.

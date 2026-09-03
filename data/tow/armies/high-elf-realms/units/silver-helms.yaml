@@ -41,3 +41,6 @@ options:
   - name: High Helm magic items
     kind: other
     points_budget: 25
+caveats: Two printed allowances are absent. The Standard Bearer's magic banner (up to 25 points) has no option kind to carry
+  it, so the importer drops it; and the steeds' hooves, printed in the equipment line as counting as a hand weapon, resolve
+  to no weapon entry, so the mount row fights at its printed Attacks with nothing in hand.

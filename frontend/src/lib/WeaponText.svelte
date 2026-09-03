@@ -9,6 +9,8 @@
 
 	let { weapon, onopen }: Props = $props();
 
+	const corrections = $derived(weapon.corrections ?? []);
+
 	/** Printed as the entry prints it: an absolute value, or an offset on the wielder's. */
 	function strength(profile: Weapon['profiles'][number]): string {
 		const { base, modifier } = profile.S;
@@ -49,8 +51,20 @@
 {/each}
 
 {#if weapon.notes}
-	<h4>not covered</h4>
+	<h4>restrictions</h4>
 	<p class="meta">{weapon.notes}</p>
+{/if}
+
+{#if weapon.caveats}
+	<h4>not covered</h4>
+	<p class="meta">{weapon.caveats}</p>
+{/if}
+
+{#if corrections.length}
+	<h4>corrected from the source</h4>
+	{#each corrections as correction}
+		<p class="meta"><code>{correction.op} {correction.path}</code> {correction.why}</p>
+	{/each}
 {/if}
 
 <style>

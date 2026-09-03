@@ -9,11 +9,9 @@ paragraphs:
     is more than twice that of the losing side. A unit that is not Stubborn does not become Stubborn
     when joined by a character that is. A Stubborn character cannot use this special rule whilst part
     of a unit that is not Stubborn.
-notes: >-
-  Modelled for a single round with no player choice: the "first Break test of the battle" limit is
-  not tracked (no multi-turn state) and the rule is always applied, never declined. A would-be Give
-  Ground is folded into the automatic Fall Back in Good Order; and the "more than twice the Unit
-  Strength" clause is moot, since the auto-rout it overrides is not modelled.
 effects:
   - forces:
       break: fall-back-in-good-order
+caveats: 'Modelled for a single round with no player choice: the "first Break test of the battle" limit is not tracked (no multi-turn
+  state) and the rule is always applied, never declined. A would-be Give Ground is folded into the automatic Fall Back in
+  Good Order; and the "more than twice the Unit Strength" clause is moot, since the auto-rout it overrides is not modelled.'

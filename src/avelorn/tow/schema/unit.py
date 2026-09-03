@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.functional_validators import BeforeValidator
 
 from avelorn.core.registry import Registry
+from avelorn.tow.schema.correction import Correction
 from avelorn.tow.schema.troop_type import TroopTypeProfile
 
 
@@ -222,6 +223,8 @@ class Unit(BaseModel):
     equipment: list[str] = Field(default_factory=list)
     special_rules: list[str] = Field(default_factory=list)  # rule names, as printed
     options: list[UnitOption] = Field(default_factory=list)
+    caveats: str | None = None  # what this build does not model about the datasheet
+    corrections: list[Correction] = Field(default_factory=list)
 
     # An option attached to a named model needs that model's profile row:
     # "An Ironbeard may ..." is only meaningful on a datasheet printing an

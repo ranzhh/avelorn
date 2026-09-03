@@ -12,6 +12,7 @@ import yaml
 
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.schema.armour import Armour
+from avelorn.tow.schema.correction import Correction
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.unit import (
     BaseSize,
@@ -96,6 +97,7 @@ def show_unit(data: TOWRepository, slug: str) -> list[str]:
     if any(ref.slug is None for ref in (*detail.equipment, *detail.special_rules)):
         lines.append("  * no entry: the engine holds the name and never applies it")
     lines.extend(_listing("Options", [_option(option) for option in unit.options]))
+    lines.extend(_hand_authored(unit.caveats, unit.corrections))
     return lines
 
 
@@ -123,7 +125,7 @@ def list_weapons(data: TOWRepository) -> list[str]:
 
 
 def show_weapon(data: TOWRepository, slug: str) -> list[str]:
-    """Print one weapon entry: its profiles, its rules, its restrictions.
+    """Print one weapon entry: its profiles, its rules, its printed restrictions.
 
     Returns:
         The lines to print.
@@ -152,7 +154,8 @@ def show_weapon(data: TOWRepository, slug: str) -> list[str]:
     if any(ref.slug is None for ref in printed.values()):
         lines.append("  * no entry: the engine holds the name and never applies it")
     if weapon.notes:
-        lines.extend(["", "Not covered:", *(f"  {line}" for line in _wrapped(weapon.notes))])
+        lines.extend(["", "Restrictions:", *(f"  {line}" for line in _wrapped(weapon.notes))])
+    lines.extend(_hand_authored(weapon.caveats, weapon.corrections))
     return lines
 
 
@@ -187,7 +190,8 @@ def show_armour(data: TOWRepository, slug: str) -> list[str]:
     if armour.armour_value_improvement:
         lines.append(f"improves the value it is worn with by {armour.armour_value_improvement}")
     if armour.notes:
-        lines.extend(["", "Not covered:", *(f"  {line}" for line in _wrapped(armour.notes))])
+        lines.extend(["", "Restrictions:", *(f"  {line}" for line in _wrapped(armour.notes))])
+    lines.extend(_hand_authored(armour.caveats, armour.corrections))
     return lines
 
 
@@ -300,8 +304,24 @@ def show_rule(data: TOWRepository, slug: str) -> list[str]:
         lines.extend(["", "Effects:", *(f"  {line}" for line in dumped.rstrip().splitlines())])
     else:
         lines.extend(["", "Effects: none -- the engine holds this text and does not apply it"])
-    if rule.notes:
-        lines.extend(["", "Not covered:", *(f"  {line}" for line in _wrapped(rule.notes))])
+    lines.extend(_hand_authored(rule.caveats, rule.corrections))
+    return lines
+
+
+def _hand_authored(caveats: str | None, corrections: list[Correction]) -> list[str]:
+    """What this corpus wrote over the source: its modelling scope and its departures.
+
+    Returns:
+        The lines to print, empty for an entry taken as the source states it.
+    """
+    lines: list[str] = []
+    if caveats:
+        lines.extend(["", "Not covered:", *(f"  {line}" for line in _wrapped(caveats))])
+    if corrections:
+        lines.extend(["", "Corrected from the source:"])
+        for correction in corrections:
+            lines.append(f"  {correction.op} {correction.path}")
+            lines.extend(f"    {line}" for line in _wrapped(correction.why))
     return lines
 
 

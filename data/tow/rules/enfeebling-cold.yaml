@@ -16,6 +16,5 @@ effects:
       combat: true
     add:
       S: { amount: -1, minimum: 1 }
-notes: base contact is read as being engaged in the combat — the whole engaged
-  enemy unit suffers the malus, not only the models touching this one; mount
-  rows are read printed, so an engaged foe's mounts keep their own Strength.
+caveats: base contact is read as being engaged in the combat — the whole engaged enemy unit suffers the malus, not only the
+  models touching this one; mount rows are read printed, so an engaged foe's mounts keep their own Strength.

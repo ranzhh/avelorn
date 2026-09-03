@@ -2,6 +2,7 @@
 	let { data } = $props();
 
 	const rule = $derived(data.rule);
+	const corrections = $derived(rule.corrections ?? []);
 </script>
 
 <h1>{rule.name}</h1>
@@ -19,9 +20,19 @@
 	<p>{paragraph}</p>
 {/each}
 
-{#if rule.notes}
+{#if rule.caveats}
 	<h2>Left out</h2>
-	<p class="meta">{rule.notes}</p>
+	<p class="meta">{rule.caveats}</p>
+{/if}
+
+{#if corrections.length}
+	<h2>Corrected from the source</h2>
+	{#each corrections as correction}
+		<p class="meta">
+			<code>{correction.op} {correction.path}</code>
+			{correction.why}
+		</p>
+	{/each}
 {/if}
 
 <style>

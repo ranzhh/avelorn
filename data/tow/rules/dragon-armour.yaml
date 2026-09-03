@@ -12,4 +12,4 @@ paragraphs:
 effects:
   - set:
       ward-save: 6
-notes: The armour-without-penalty clause is for Wizards, and no Wizard exists to wear it (#10).
+caveats: The armour-without-penalty clause is for Wizards, and no Wizard exists to wear it (#10).

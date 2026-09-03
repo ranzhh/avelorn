@@ -442,7 +442,7 @@ def factored_notes(
 ) -> list[str]:
     """The authored ``notes`` of the factored rules that carry them.
 
-    A rule's hand-authored :attr:`~avelorn.tow.schema.rule.Rule.notes` (its
+    A rule's hand-authored :attr:`~avelorn.tow.schema.rule.Rule.caveats` (its
     modelling scope) surface wherever the rule was factored, labelled by rule
     and ``source`` (the unit) — the generic relay every seam shares, so a
     caveat is stated in the rule's data and shown beside the figure it
@@ -463,13 +463,13 @@ def factored_notes(
     for rule in rules:
         if rule.name not in factored:
             continue
-        if rule.notes:
-            notes[f"{rule.name} ({source}): {rule.notes}"] = None
+        if rule.caveats:
+            notes[f"{rule.name} ({source}): {rule.caveats}"] = None
         for effect in rule.effects:
             if isinstance(effect, GrantEffect):
                 conferred = (granted or {}).get(effect.grants)
-                if conferred is not None and conferred.notes:
-                    notes[f"{conferred.name} ({source}): {conferred.notes}"] = None
+                if conferred is not None and conferred.caveats:
+                    notes[f"{conferred.name} ({source}): {conferred.caveats}"] = None
     return list(notes)
 
 

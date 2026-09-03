@@ -1,7 +1,4 @@
 # Source: https://tow.whfb.app/special-rules/martial-prowess
-# Sources: Dark Elves (p. 25), Forces of Fantasy (pp. 129 & 185),
-# Arcane Journal: Wood Elf Realms (p. 39). Page set to the Forces of Fantasy
-# High Elf grouping (185), matching Valour of Ages.
 id: martial-prowess
 name: Martial Prowess
 page: 185
@@ -20,3 +17,11 @@ effects:
         first_round: true
     add:
       WS: 1
+corrections:
+  - op: replace
+    path: /page
+    expect: 25
+    value: 185
+    why: 'The rule is printed in Dark Elves (p. 25), Forces of Fantasy (pp. 129 & 185) and Arcane Journal: Wood Elf Realms
+      (p. 39). The source cites the Dark Elves printing; this corpus cites the Forces of Fantasy High Elf grouping, matching
+      Valour of Ages.'
