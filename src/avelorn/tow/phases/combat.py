@@ -934,6 +934,15 @@ class FightResult:
     (:class:`CombatPoints`), which :func:`combat_result` scores against each
     other. ``a_unit_strength`` and ``b_unit_strength`` are the Unit Strengths
     the round compared (reported, and the basis of an outnumbering bonus).
+
+    ``a_wounds`` and ``b_wounds`` are how many combat-result Wounds each side
+    inflicted — the Wounds row of the score, read one side at a time. They are
+    *marginals* of the same joint ``wound_margin`` relabels, for reading only:
+    differencing them would assume the two sides are independent, and they are
+    not (A striking first thins the blows B answers with; a Stand & Shoot both
+    thins a side and scores for its foe). Score from ``scoring_wounds``, which
+    keeps the joint. The same discipline ``losses`` and its two marginals
+    already follow.
     """
 
     # Covariant, so a caller holding a list[list[float]] can pass it: list is
@@ -951,6 +960,8 @@ class FightResult:
     # fight(); empty on a fixture-built result, which then scores off the melee
     # joint alone (see scoring_wounds).
     wound_margin: Mapping[int, Probability] = field(default_factory=dict)
+    a_wounds: Mapping[int, Probability] = field(default_factory=dict)
+    b_wounds: Mapping[int, Probability] = field(default_factory=dict)
 
     @property
     def a_casualties(self) -> list[Probability]:
@@ -1427,18 +1438,22 @@ def fight(
             lambda melee: _RoundOutcome(pre.a, pre.b, *melee)
         )
     )
-    # Both figures fight() reports are relabels of that one joint. ``losses``
+    # Every figure fight() reports is a relabel of that one joint. ``losses``
     # keeps the melee alone, since a Stand & Shoot volley's casualties are
     # reported on the volley. ``wound_margin`` is the combat-result wound
     # difference — the Wounds each side inflicted, which is what the rulebook
     # scores — and it counts the volley too: a side's pre-melee losses were the
-    # *other* side's volley, so they credit that other side. Reading both off
+    # *other* side's volley, so they credit that other side. The two per-side
+    # marginals are the same credit read one side at a time, which is why they
+    # are safe to publish and never to subtract. Reading them all off
     # the same outcomes is what keeps the credit correlated with the thinning it
     # caused. The volley's credit is still its casualties, exact while every
     # profile the corpus fields has one Wound; a multi-Wound Stand & Shoot would
     # need the volley's own inflicted count threaded here.
     zero = (a_strikes.p_unsaved + b_strikes.p_unsaved) * 0
     losses = _loss_grid(outcomes.map(lambda o: (o.a_lost, o.b_lost)), a.models, b.models, zero)
+    a_scoring = outcomes.map(lambda o: o.a_inflicted + o.pre_b)
+    b_scoring = outcomes.map(lambda o: o.b_inflicted + o.pre_a)
     wound_margin = outcomes.map(
         lambda o: (o.a_inflicted + o.pre_b) - (o.b_inflicted + o.pre_a)
     ).mass
@@ -1569,6 +1584,8 @@ def fight(
         a_unit_strength=a.unit_strength(),
         b_unit_strength=b.unit_strength(),
         wound_margin=wound_margin,
+        a_wounds=a_scoring.mass,
+        b_wounds=b_scoring.mass,
     )
 
 
