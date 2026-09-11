@@ -35,6 +35,7 @@ from avelorn.core.distribution import Probability
 from avelorn.core.registry import Registry
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
+from avelorn.tow.engine.derivation import Derivation as HitDerivation
 from avelorn.tow.engine.rules import printed_rule
 from avelorn.tow.muster import Complement
 from avelorn.tow.phases.combat import BreakResult, CombatResult, FightResult, SideBreak
@@ -486,6 +487,56 @@ def _side(
     )
 
 
+class Step(BaseModel):
+    """One line of a reported target's derivation.
+
+    ``modifier`` is in the rulebook's sign convention, where a penalty is
+    negative: a printed "-1 To Hit" reads -1 here and *raises* ``target`` by
+    one. ``source`` is the printed rule that emitted it, or ``None`` where the
+    engine moved the roll without a named record to credit.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    source: str | None
+    modifier: int
+    target: int
+
+
+class Derivation(BaseModel):
+    """A reported roll target with its operands still attached.
+
+    ``base`` is what the chart gave before anything moved it and ``basis``
+    names the characteristic behind it, so a 5+ is legible as a poor Ballistic
+    Skill or as a good one shooting through modifiers. The steps sum: the last
+    one's ``target`` is ``target``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    base: int
+    basis: str
+    steps: list[Step]
+    target: int
+
+    @classmethod
+    def of(cls, derived: HitDerivation) -> "Derivation":
+        """Carry a resolver's ledger over the wire.
+
+        Returns:
+            The ledger as the API serves it.
+        """
+        return cls(
+            base=derived.base,
+            basis=derived.basis,
+            steps=[
+                Step(source=step.source, modifier=step.modifier, target=step.target)
+                for step in derived.steps
+            ],
+            target=derived.target,
+        )
+
+
 class Panic(BaseModel):
     """What a volley's casualties do to the target's nerve.
 
@@ -544,6 +595,14 @@ class VolleyReport(BaseModel):
     p_hit: float
     p_wound: float
     p_unsaved: float
+    # The operands behind the reported targets. ``hit_from`` is the ledger of
+    # what moved the To Hit roll; the wound and save targets are single chart
+    # lookups, so they carry their inputs instead.
+    hit_from: Derivation
+    strength: int
+    toughness: int
+    armour_value: int | None
+    armour_piercing: int
     wounds: list[float]
     casualties: list[float]
     expected_wounds: float
@@ -580,6 +639,11 @@ class VolleyReport(BaseModel):
             p_hit=float(volley.p_hit),
             p_wound=float(volley.p_wound),
             p_unsaved=float(volley.p_unsaved),
+            hit_from=Derivation.of(_required(volley.hit_from)),
+            strength=_required(volley.strength),
+            toughness=_required(volley.toughness),
+            armour_value=volley.armour_value,
+            armour_piercing=volley.armour_piercing,
             wounds=[float(mass) for mass in volley.distribution],
             casualties=[float(mass) for mass in volley.casualties],
             expected_wounds=float(volley.expected_wounds),
@@ -594,6 +658,13 @@ class VolleyReport(BaseModel):
             ),
             not_modelled=sorted(set(volley.notes)),
         )
+
+
+def _required[T](value: T | None) -> T:
+    # shoot() sets every operand it reports; None here would be a resolver that
+    # skipped one, which is a bug rather than a case to render around.
+    assert value is not None
+    return value
 
 
 class RuleSummary(BaseModel):

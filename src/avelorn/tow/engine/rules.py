@@ -416,7 +416,7 @@ def compile_rules(
         if rule is None:
             buckets[_Disposition.UNFACTORED].append(printed)
             continue
-        disposition, compiled = _compile(rule, context, grants, seat)
+        disposition, compiled = _compile(rule, context, grants, seat, printed)
         buckets[disposition].append(printed)
         if compiled:
             logger.debug("rule factored: %s -> %d record(s)", printed, len(compiled))
@@ -537,6 +537,7 @@ def _compile(
     context: GateContext,
     grants: "Mapping[str, Rule] | None" = None,
     seat: Side = Side.ATTACKER,
+    printed: str | None = None,
 ) -> _Verdict:
     # All-or-nothing per rule: one effect the walk cannot honour leaves the
     # whole rule unfactored, whatever the others gave. A rule whose *every*
@@ -548,7 +549,9 @@ def _compile(
     records: list[Modifier | Transform] = []
     dispositions: set[_Disposition] = set()
     for effect in rule.effects:
-        disposition, compiled = _compile_effect(effect, context, grants, seat)
+        disposition, compiled = _compile_effect(
+            effect, context, grants, seat, printed or rule.name
+        )
         if disposition is _Disposition.UNFACTORED:
             return _UNFACTORED
         dispositions.add(disposition)
@@ -591,6 +594,7 @@ def _compile_effect(
     context: GateContext,
     grants: "Mapping[str, Rule] | None" = None,
     seat: Side = Side.ATTACKER,
+    source: str | None = None,
 ) -> _Verdict:
     # One effect, top to bottom, structural first: what this walk can never
     # honour is read off the effect alone — before any gate, so the verdict
@@ -671,7 +675,7 @@ def _compile_effect(
     return (
         _Disposition.FACTORED,
         [
-            Modifier(lands_on=roll.stage, move=roll.sign * amount, trigger=natural)
+            Modifier(lands_on=roll.stage, move=roll.sign * amount, trigger=natural, source=source)
             for roll, amount in zip(rolls, amounts, strict=True)
         ],
     )
@@ -724,7 +728,7 @@ def _compile_grant(
     granted = (grants or {}).get(effect.grants)
     if granted is None:
         return _UNFACTORED  # the granted rule is not resolvable/modelled
-    return _compile(granted, context, grants, seat)
+    return _compile(granted, context, grants, seat, granted.name)
 
 
 @dataclass(frozen=True)

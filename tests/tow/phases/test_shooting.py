@@ -708,3 +708,44 @@ def test_multiple_wounds_d3_shoots_as_a_distribution_not_an_expectation() -> Non
 
     plain = shoot_unit(Contingent.field(archers, 1, data=repo).wielding("Longbow"), target)
     assert plain.casualties == [1]  # one wound never fells a 3-Wound model
+
+
+def test_shoot_unit_ledger_names_the_chapter_rule_that_moved_the_roll() -> None:
+    """A volley past half range reports 4+ and says which printed rule made it 4+.
+
+    Elven Archers are BS 4, so the chart gives 3+. Firing at Long Range is a
+    Shooting phase rule the game puts in play, and it is the whole difference
+    between the two volleys below.
+    """
+    archers, warriors = REPO.units["elven-archers"], REPO.units["dwarf-warriors"]
+    shooter = _fielded(archers, 5).wielding("Longbow")
+    in_play = {
+        rule.name: rule for rule in REPO.rules.values() if rule.name == "Firing at Long Range"
+    }
+
+    close = shoot_unit(shooter, _fielded(warriors, 10), phase_rules=in_play, distance=6)
+    far = shoot_unit(shooter, _fielded(warriors, 10), phase_rules=in_play, distance=24)
+
+    assert close.hit_from is not None and close.hit_from.steps == ()
+    assert close.hit_from.base == 3
+    assert close.hit_from.basis == "BS 4"
+
+    assert far.hit_target == 4
+    assert far.hit_from is not None
+    assert [(step.source, step.modifier) for step in far.hit_from.steps] == [
+        ("Firing at Long Range", -1)
+    ]
+    assert far.hit_from.target == far.hit_target
+
+
+def test_shoot_unit_ledger_leads_with_the_callers_own_modifier() -> None:
+    """Cover is the caller's to know, and it is named apart from any printed rule."""
+    archers, warriors = REPO.units["elven-archers"], REPO.units["dwarf-warriors"]
+    shooter = _fielded(archers, 5).wielding("Longbow")
+
+    volley = shoot_unit(shooter, _fielded(warriors, 10), distance=6, hit_modifier=-1)
+
+    assert volley.hit_target == 4
+    assert volley.hit_from is not None
+    assert volley.hit_from.steps[0].source == "situational"
+    assert volley.hit_from.steps[0].modifier == -1

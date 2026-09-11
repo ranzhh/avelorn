@@ -385,7 +385,8 @@ class Modifier:
     the natural roll that fires it (the change then holds for the rest
     of that attack) — or None for a modifier applied before its roll on
     every attack. A trigger always precedes its landing roll; the
-    compiler refuses the rest.
+    compiler refuses the rest. ``source`` is the printed rule the record
+    came from, carried so a reported target can name what moved it.
 
     What a moved target *means* stays each roll's own knowledge (a To
     Hit of 7+ confirms, a save past 6+ takes no roll), and a target
@@ -395,6 +396,9 @@ class Modifier:
     lands_on: Stage
     move: int
     trigger: NaturalRoll | None = None
+    # The printed rule this was compiled from, for a ledger to name. None
+    # where nothing named emitted it -- a record built by hand in a test.
+    source: str | None = None
 
 
 @dataclass(frozen=True)

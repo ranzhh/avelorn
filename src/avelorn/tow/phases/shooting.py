@@ -43,6 +43,7 @@ from avelorn.tow.engine.charts import (
     wound_probability,
     wound_target,
 )
+from avelorn.tow.engine.derivation import Derivation, hit_derivation
 from avelorn.tow.engine.rules import (
     AttackFacts,
     GateContext,
@@ -85,6 +86,14 @@ class ShootingResult:
     casualties: list[Probability]  # index k = P(exactly k models removed)
     notes: tuple[str, ...] = ()
     target_models: int | None = None  # size of the target unit, if bounded
+    # The operands behind the reported targets. ``hit_from`` is the ledger of
+    # what moved the To Hit roll; the other three are single chart lookups, so
+    # they carry their inputs rather than a list of steps.
+    hit_from: Derivation | None = None
+    strength: int | None = None
+    toughness: int | None = None
+    armour_value: int | None = None
+    armour_piercing: int = 0
 
     @property
     def expected_wounds(self) -> Probability:
@@ -199,6 +208,13 @@ def shoot(
         save = None
     p_hit = hit_probability(hit)
     p_wound = wound_probability(wound)
+    ledger = hit_derivation(
+        base=shooting_hit_target(ballistic_skill),
+        basis=f"BS {ballistic_skill}",
+        reported=hit,
+        situational=hit_modifier,
+        modifiers=modifiers,
+    )
     logger.debug(
         "per-shot unsaved wound: p=%.3f = hit %.3f x wound %.3f x save-fail %.3f x ward-fail %.3f",
         p_unsaved,
@@ -230,6 +246,11 @@ def shoot(
         casualties=casualties,
         notes=notes,
         target_models=targets,
+        hit_from=ledger,
+        strength=strength,
+        toughness=toughness,
+        armour_value=armour_value,
+        armour_piercing=armour_piercing,
     )
 
 

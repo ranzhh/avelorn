@@ -12,6 +12,12 @@
 	let { fight = null, volley = null }: Props = $props();
 
 	const plus = (n: number | null) => (n === null ? '—' : `${n}+`);
+	// Printed sign convention: a penalty is negative, and it raises the target.
+	const signed = (n: number) => (n < 0 ? `${n}` : `+${n}`);
+
+	// The To Hit target opens to the ledger behind it; the wound and save
+	// targets are single chart lookups, so they wear their operands inline.
+	let ledger = $state(false);
 </script>
 
 {#if fight}
@@ -83,9 +89,48 @@
 	<table class="grid">
 		<tbody>
 			<tr><td>shots</td><td class="num">{volley.shots}</td></tr>
-			<tr><td>to hit</td><td class="num">{plus(volley.hit_target)}</td></tr>
-			<tr><td>to wound</td><td class="num">{plus(volley.wound_target)}</td></tr>
-			<tr><td>armour save</td><td class="num">{plus(volley.save_target)}</td></tr>
+			<tr class="opens" class:shown={ledger}>
+				<td>
+					<button class="open" aria-expanded={ledger} onclick={() => (ledger = !ledger)}>
+						to hit
+					</button>
+				</td>
+				<td class="num">{plus(volley.hit_target)}</td>
+			</tr>
+			{#if ledger}
+				<tr class="step">
+					<td>{volley.hit_from.basis}</td>
+					<td class="num">{plus(volley.hit_from.base)}</td>
+				</tr>
+				{#each volley.hit_from.steps as step}
+					<tr class="step">
+						<td>
+							<span class="by num" class:neg={step.modifier < 0} class:pos={step.modifier > 0}>
+								{signed(step.modifier)}
+							</span>
+							{step.source ?? 'unattributed'}
+						</td>
+						<td class="num">{plus(step.target)}</td>
+					</tr>
+				{/each}
+			{/if}
+			<tr>
+				<td>to wound <span class="from">S {volley.strength} vs T {volley.toughness}</span></td>
+				<td class="num">{plus(volley.wound_target)}</td>
+			</tr>
+			<tr>
+				<td>
+					armour save
+					{#if volley.armour_value !== null}
+						<span class="from">
+							AV {volley.armour_value}{volley.armour_piercing
+								? `, AP ${-volley.armour_piercing}`
+								: ''}
+						</span>
+					{/if}
+				</td>
+				<td class="num">{plus(volley.save_target)}</td>
+			</tr>
 			<tr><td>ward</td><td class="num">{plus(volley.ward_target)}</td></tr>
 			<tr><td>unsaved per shot</td><td class="num">{volley.p_unsaved.toFixed(4)}</td></tr>
 			<tr><td>wounds, mean</td><td class="num">{volley.expected_wounds.toFixed(2)}</td></tr>
@@ -142,6 +187,60 @@
 
 	.grid td:first-child {
 		color: var(--dim);
+	}
+
+	.open {
+		display: flex;
+		align-items: center;
+		gap: var(--space-1);
+		padding: 0;
+		font: inherit;
+		color: var(--dim);
+		background: none;
+		border: none;
+		cursor: pointer;
+	}
+
+	.open::before {
+		content: '';
+		width: 0;
+		height: 0;
+		border-left: 4px solid var(--faint);
+		border-top: 3px solid transparent;
+		border-bottom: 3px solid transparent;
+		transition: transform var(--transition);
+	}
+
+	.opens.shown .open::before {
+		transform: rotate(90deg);
+	}
+
+	.open:hover {
+		color: var(--ink);
+	}
+
+	/* The ledger's own rows: subordinate to the target they add up to. */
+	.step td {
+		border-bottom: none;
+		padding-top: 0;
+		padding-bottom: 0;
+		font-size: var(--text-xs);
+		color: var(--faint);
+	}
+
+	.step td:first-child {
+		padding-left: var(--space-5);
+	}
+
+	.by {
+		display: inline-block;
+		min-width: 1.6rem;
+	}
+
+	.from {
+		margin-left: var(--space-2);
+		font: var(--text-xs) / 1 var(--font-mono);
+		color: var(--faint);
 	}
 
 	.note {
