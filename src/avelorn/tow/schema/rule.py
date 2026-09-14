@@ -41,7 +41,7 @@ from pydantic import (
 )
 
 from avelorn.tow.schema.psychology import Outcome, PanicCause
-from avelorn.tow.schema.stage import Dice, Stage
+from avelorn.tow.schema.stage import Dice, Side, Stage
 from avelorn.tow.schema.unit import Characteristic, TroopType
 from avelorn.tow.schema.weapon import WeaponType
 
@@ -103,6 +103,16 @@ class Seam(StrEnum):
     COMBAT_RESULT = "combat-result"
     ARMOUR = "armour"
     WARD = "ward"
+    SHOTS = "shots"
+    CASUALTIES = "casualties"
+    MARKS = "attack-marks"
+
+
+class Landing(NamedTuple):
+    """Where an effect is consumed: the side whose consumer it is, and the stage or seam."""
+
+    side: Side
+    on: Stage | Seam
 
 
 class Quantity(StrEnum):
@@ -145,6 +155,28 @@ class Quantity(StrEnum):
             case unhandled:
                 assert_never(unhandled)
 
+    @property
+    def stage(self) -> Stage | None:
+        """The stage whose roll this quantity decides, for the roll quantities."""
+        match self:
+            case Quantity.TO_HIT:
+                return Stage.ROLL_TO_HIT
+            case Quantity.ARMOUR_PIERCING:
+                return Stage.MAKE_ARMOUR_SAVES
+            case _:
+                return None
+
+    @property
+    def owner(self) -> Side | None:
+        """Whose quantity this is, or None when it is the bearer's own whichever side it sits."""
+        match self:
+            case Quantity.TO_HIT | Quantity.ARMOUR_PIERCING:
+                return Side.ATTACKER
+            case Quantity.ARMOUR_VALUE | Quantity.WARD_SAVE:
+                return Side.TARGET
+            case _:
+                return None
+
 
 def seam_of(key: "Quantity | Characteristic") -> Seam:
     """The seam that consumes an operation's key.
@@ -154,6 +186,23 @@ def seam_of(key: "Quantity | Characteristic") -> Seam:
         characteristic (the quantity kept outside :class:`Quantity`).
     """
     return Seam.CHARACTERISTIC if isinstance(key, Characteristic) else key.seam
+
+
+def _lands_of(key: "Quantity | Characteristic", side: Side, enemy: bool) -> set[Landing]:
+    # A characteristic, a rank or a combat-result quantity is the bearer's own
+    # (the foe's, when the effect names the enemy). A roll or save quantity
+    # has an owner: it reaches this attack only when the bearer, flipped by
+    # ``enemy``, is that owner, and then lands on the roll's stage.
+    bearer = side.other if enemy else side
+    if not isinstance(key, Quantity):
+        return {Landing(bearer, Seam.CHARACTERISTIC)}
+    owner = key.owner
+    if owner is None:
+        return {Landing(bearer, key.seam)}
+    if (owner.other if enemy else owner) is not side:
+        return set()
+    stage = key.stage
+    return {Landing(stage.rolled_by, stage)} if stage is not None else {Landing(owner, key.seam)}
 
 
 class NaturalRoll(BaseModel):
@@ -548,6 +597,16 @@ class GatedEffect(BaseModel):
         """
         return self.when.natural if self.when is not None else None
 
+    def lands(self, side: Side, grants: Mapping[str, "Rule"]) -> frozenset[Landing]:
+        """Where this effect is consumed when its bearer is ``side`` of the attack.
+
+        Empty when nothing in the attack consumes it from that seat.
+
+        Returns:
+            The landings.
+        """
+        return frozenset()
+
 
 class ModifierEffect(GatedEffect):
     """One printed conditional modifier, shaped as the sentence prints it.
@@ -745,6 +804,12 @@ class ModifierEffect(GatedEffect):
             )
         return self
 
+    def lands(self, side: Side, grants: Mapping[str, "Rule"]) -> frozenset[Landing]:
+        found: set[Landing] = set()
+        for key in (*(self.add or {}), *(self.set_ or {})):
+            found |= _lands_of(key, side, self.enemy)
+        return frozenset(found)
+
 
 class RollResult(StrEnum):
     """One die's result, in the printed re-roll vocabulary.
@@ -817,6 +882,12 @@ class RerollEffect(GatedEffect):
             raise ValueError(f"enemy flips a per-attack die, not {self.reroll}")
         return self
 
+    def lands(self, side: Side, grants: Mapping[str, "Rule"]) -> frozenset[Landing]:
+        rolled = self.reroll.rolled_by
+        if (rolled.other if self.enemy else rolled) is not side:
+            return frozenset()
+        return frozenset({Landing(rolled, self.reroll)})
+
 
 class GrantEffect(GatedEffect):
     """Confer a named special rule, gated like any other effect.
@@ -836,6 +907,10 @@ class GrantEffect(GatedEffect):
     """
 
     grants: str  # the printed name of the rule conferred, e.g. "Armour Bane (1)"
+
+    def lands(self, side: Side, grants: Mapping[str, "Rule"]) -> frozenset[Landing]:
+        granted = grants.get(self.grants)
+        return frozenset() if granted is None else granted.lands(side, grants)
 
 
 def _as_outcome(value: object) -> "Outcome":
@@ -938,6 +1013,9 @@ class AttackMarkEffect(GatedEffect):
 
     attack: AttackMarks
 
+    def lands(self, side: Side, grants: Mapping[str, "Rule"]) -> frozenset[Landing]:
+        return frozenset({Landing(side, Seam.MARKS)}) if side is Side.ATTACKER else frozenset()
+
 
 class BarEffect(GatedEffect):
     """The bearer cannot use a piece of armour while this rule is in force.
@@ -954,6 +1032,9 @@ class BarEffect(GatedEffect):
     """
 
     bars: str  # the printed name of the armour piece barred, e.g. "Shield"
+
+    def lands(self, side: Side, grants: Mapping[str, "Rule"]) -> frozenset[Landing]:
+        return frozenset({Landing(side, Seam.ARMOUR)}) if side is Side.TARGET else frozenset()
 
 
 class BlowEffect(GatedEffect):
@@ -994,6 +1075,11 @@ class BlowEffect(GatedEffect):
             raise ValueError("a blow's trigger must precede the save it denies")
         return self
 
+    def lands(self, side: Side, grants: Mapping[str, "Rule"]) -> frozenset[Landing]:
+        if side is not Side.ATTACKER:
+            return frozenset()
+        return frozenset(Landing(stage.rolled_by, stage) for stage in self.denies)
+
 
 class WoundMultiplierEffect(GatedEffect):
     """The rulebook's Multiple Wounds shape: each unsaved wound is multiplied.
@@ -1021,6 +1107,11 @@ class WoundMultiplierEffect(GatedEffect):
             raise ValueError("multiplying each unsaved wound by less than 2 says nothing")
         return self
 
+    def lands(self, side: Side, grants: Mapping[str, "Rule"]) -> frozenset[Landing]:
+        return (
+            frozenset({Landing(side, Seam.CASUALTIES)}) if side is Side.ATTACKER else frozenset()
+        )
+
 
 class VolleyEffect(GatedEffect):
     """Volley Fire's printed mechanic: rear ranks join the volley by halves.
@@ -1034,6 +1125,9 @@ class VolleyEffect(GatedEffect):
     """
 
     volley: Literal["half-of-each-rear-rank"]
+
+    def lands(self, side: Side, grants: Mapping[str, "Rule"]) -> frozenset[Landing]:
+        return frozenset({Landing(side, Seam.SHOTS)}) if side is Side.ATTACKER else frozenset()
 
 
 class ReplaceEffect(GatedEffect):
@@ -1219,3 +1313,11 @@ class Rule(BaseModel):
                         f"but the name does not end in {PARAMETER_SUFFIX!r}"
                     )
         return self
+
+    def lands(self, side: Side, grants: Mapping[str, "Rule"]) -> frozenset[Landing]:
+        """Where this rule's effects are consumed when its bearer is ``side`` of the attack.
+
+        Returns:
+            The union of the effects' landings.
+        """
+        return frozenset().union(*(effect.lands(side, grants) for effect in self.effects))

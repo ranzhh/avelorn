@@ -103,8 +103,9 @@ def test_make_panic_tests_delegates() -> None:
     """game.shooting.make_panic_tests is the morale seam, bound."""
     archers = _fielded(REPO.units["elven-archers"], 3).wielding("Longbow")
     spearmen = _fielded(REPO.units["elven-spearmen"], 10)
-    volley = GAME.shooting.volley(archers, spearmen)
-    assert GAME.shooting.make_panic_tests(volley, spearmen) == make_panic_tests(volley, spearmen)
+    bound = GAME.shooting.make_panic_tests(GAME.shooting.volley(archers, spearmen))
+    direct = make_panic_tests(GAME.shooting.volley(archers, spearmen))
+    assert bound.value == direct.value
 
 
 def test_fight_result_and_break_test_delegate() -> None:

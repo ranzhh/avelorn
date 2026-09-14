@@ -95,8 +95,8 @@ def test_result_distributions_exposes_wounds_and_casualties() -> None:
     result = shoot(3, ballistic_skill=4, strength=3, toughness=3, armour_value=5)
     distributions = result_distributions(result)
     assert set(distributions) == {"wounds", "casualties"}
-    assert distributions["wounds"].pmf == tuple(result.distribution)
-    assert distributions["casualties"].pmf == tuple(result.casualties)
+    assert distributions["wounds"].pmf == tuple(result.wounds.value.counts())
+    assert distributions["casualties"].pmf == tuple(result.casualties.value.counts())
 
 
 def test_survivors_is_the_mirror_of_casualties_over_unit_size() -> None:
@@ -108,8 +108,8 @@ def test_survivors_is_the_mirror_of_casualties_over_unit_size() -> None:
     result = shoot(10, ballistic_skill=4, strength=3, toughness=3, targets=2)
     survivors = result_distributions(result)["survivors"]
     assert len(survivors.pmf) == 3
-    assert survivors.exactly(2) == pytest.approx(result.casualties[0])
-    assert survivors.exactly(0) == pytest.approx(result.casualties[2])
+    assert survivors.exactly(2) == pytest.approx(result.casualties.value.counts()[0])
+    assert survivors.exactly(0) == pytest.approx(result.casualties.value.counts()[2])
     assert sum(survivors.pmf) == pytest.approx(1.0)
 
 
@@ -123,7 +123,7 @@ def test_survivors_pads_when_volley_cannot_reach_unit_size() -> None:
     survivors = result_distributions(result)["survivors"]
     assert len(survivors.pmf) == 21
     assert survivors.at_most(16) == 0.0
-    assert survivors.exactly(20) == pytest.approx(result.casualties[0])
+    assert survivors.exactly(20) == pytest.approx(result.casualties.value.counts()[0])
     assert sum(survivors.pmf) == pytest.approx(1.0)
 
 

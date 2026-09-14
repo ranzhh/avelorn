@@ -1,9 +1,11 @@
 """Morale tests: hand-computed goldens over synthetic distributions."""
 
 from fractions import Fraction
+from typing import NamedTuple
 
 import pytest
 
+from avelorn.core.distribution import Distribution
 from avelorn.tow.contingent import Charge, ChargeArc, Contingent, Loadout
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.phases.combat import (
@@ -13,7 +15,7 @@ from avelorn.tow.phases.combat import (
     combat_result,
     fight,
 )
-from avelorn.tow.phases.shooting import ShootingResult, make_panic_tests
+from avelorn.tow.phases.shooting import PanicResult, panic_outcomes
 from avelorn.tow.schema.psychology import PanicCause
 from avelorn.tow.schema.rule import RerollEffect, Rule
 from avelorn.tow.schema.stage import Stage
@@ -38,34 +40,37 @@ def _spearmen(*rules: Rule) -> Contingent:
     )
 
 
-def _result(casualties: list[float], size: int) -> ShootingResult:
-    # Only the casualty distribution and unit size matter to the panic
-    # step; the attack-chain fields are inert scaffolding here.
-    return ShootingResult(
-        shots=len(casualties) - 1,
-        hit_target=3,
-        wound_target=4,
-        save_target=None,
-        ward_target=None,
-        p_hit=0.0,
-        p_wound=0.0,
-        p_unsaved=0.0,
-        distribution=list(casualties),
-        casualties=list(casualties),
-        target_models=size,
+class _Felled(NamedTuple):
+    casualties: Distribution[int]
+    size: int
+
+
+def _result(casualties: list[float], size: int) -> _Felled:
+    return _Felled(Distribution.from_counts(casualties), size)
+
+
+def _panic(
+    felled: _Felled, defender: Contingent, *, battle_strength: int | None = None
+) -> PanicResult:
+    return panic_outcomes(
+        felled.casualties,
+        felled.size,
+        defender,
+        defender.loadout.rules,
+        battle_strength=battle_strength,
     )
 
 
 def test_a_quarter_exactly_does_not_test() -> None:
     """The trigger is strictly more than 25%: 2 of 8 lost is no test."""
-    panic = make_panic_tests(_result([0.0, 0.0, 1.0], size=8), _spearmen())
+    panic = _panic(_result([0.0, 0.0, 1.0], size=8), _spearmen())
     assert panic.p_test == 0.0
     assert panic.p_holds == 1.0
 
 
 def test_more_than_a_quarter_tests_against_leadership() -> None:
     """3 of 8 lost forces the test; holding means passing it (Ld 8)."""
-    panic = make_panic_tests(_result([0.0, 0.0, 0.0, 1.0], size=8), _spearmen())
+    panic = _panic(_result([0.0, 0.0, 0.0, 1.0], size=8), _spearmen())
     assert panic.p_test == 1.0
     assert panic.p_holds == pytest.approx(P_PASS)
     assert panic.p_falls_back == pytest.approx(1 - P_PASS)  # 5 of 8 remain: > half
@@ -78,11 +83,11 @@ def test_fall_back_or_flee_splits_on_half_the_battle_strength() -> None:
     "More than half (50%) ... still remain" is strict: exactly half
     flees.
     """
-    six_remain = make_panic_tests(_result([0.0] * 4 + [1.0], size=10), _spearmen())
+    six_remain = _panic(_result([0.0] * 4 + [1.0], size=10), _spearmen())
     assert six_remain.p_falls_back == pytest.approx(1 - P_PASS)
     assert six_remain.p_flees == 0.0
 
-    five_remain = make_panic_tests(_result([0.0] * 5 + [1.0], size=10), _spearmen())
+    five_remain = _panic(_result([0.0] * 5 + [1.0], size=10), _spearmen())
     assert five_remain.p_falls_back == 0.0
     assert five_remain.p_flees == pytest.approx(1 - P_PASS)
 
@@ -93,14 +98,14 @@ def test_battle_strength_governs_the_split() -> None:
     10 remain of a 24-model battle line; losing 3 leaves 7 <= 12: flee.
     """
     result = _result([0.0, 0.0, 0.0, 1.0], size=10)
-    panic = make_panic_tests(result, _spearmen(), battle_strength=24)
+    panic = _panic(result, _spearmen(), battle_strength=24)
     assert panic.p_flees == pytest.approx(1 - P_PASS)
     assert panic.p_falls_back == 0.0
 
 
 def test_a_wiped_unit_is_destroyed_not_tested() -> None:
     """Losing every model leaves nothing to test."""
-    panic = make_panic_tests(_result([0.0, 0.0, 1.0], size=2), _spearmen())
+    panic = _panic(_result([0.0, 0.0, 1.0], size=2), _spearmen())
     assert panic.p_destroyed == 1.0
     assert panic.p_test == 0.0
 
@@ -108,7 +113,7 @@ def test_a_wiped_unit_is_destroyed_not_tested() -> None:
 def test_outcomes_partition_the_distribution() -> None:
     """Across a spread of casualty masses the outcomes sum to 1."""
     spread = [0.2, 0.1, 0.3, 0.25, 0.15]  # 0..4 of 4
-    panic = make_panic_tests(_result(spread, size=4), _spearmen())
+    panic = _panic(_result(spread, size=4), _spearmen())
     total = panic.p_holds + panic.p_falls_back + panic.p_flees + panic.p_destroyed
     assert total == pytest.approx(1.0)
 
@@ -116,13 +121,13 @@ def test_outcomes_partition_the_distribution() -> None:
 def test_missing_or_zero_size_rejected() -> None:
     """The panic step needs a real unit size."""
     with pytest.raises(ValueError, match="unit's size"):
-        make_panic_tests(_result([1.0], size=0), _spearmen())
+        _panic(_result([1.0], size=0), _spearmen())
 
 
 def test_battle_strength_below_current_size_rejected() -> None:
     """A unit cannot outnumber its own start-of-battle strength."""
     with pytest.raises(ValueError, match="battle strength"):
-        make_panic_tests(_result([1.0, 0.0], size=10), _spearmen(), battle_strength=5)
+        _panic(_result([1.0, 0.0], size=10), _spearmen(), battle_strength=5)
 
 
 def _valour(causes: list[PanicCause]) -> Rule:
@@ -142,7 +147,7 @@ def test_reroll_effect_lifts_the_pass_probability() -> None:
     """
     result = _result([0.0, 0.0, 0.0, 1.0], size=8)
     defender = _spearmen(_valour([PanicCause.HEAVY_CASUALTIES, PanicCause.FLED_THROUGH]))
-    panic = make_panic_tests(result, defender)
+    panic = _panic(result, defender)
     lifted = P_PASS + (1 - P_PASS) * P_PASS
     assert panic.reroll_from == "Valour of Ages"
     assert panic.p_holds == pytest.approx(lifted)
@@ -153,7 +158,7 @@ def test_reroll_restricted_to_other_causes_does_not_apply() -> None:
     """A fled-through-only re-roll grants nothing on a heavy-casualties test."""
     result = _result([0.0, 0.0, 0.0, 1.0], size=8)
     defender = _spearmen(_valour([PanicCause.FLED_THROUGH]))
-    panic = make_panic_tests(result, defender)
+    panic = _panic(result, defender)
     assert panic.reroll_from is None
     assert panic.p_holds == pytest.approx(P_PASS)
 
@@ -161,7 +166,7 @@ def test_reroll_restricted_to_other_causes_does_not_apply() -> None:
 def test_no_granting_rule_means_no_reroll() -> None:
     """A loadout with no re-roll grant leaves the test un-lifted."""
     result = _result([0.0, 0.0, 0.0, 1.0], size=8)
-    panic = make_panic_tests(result, _spearmen())
+    panic = _panic(result, _spearmen())
     assert panic.reroll_from is None
     assert panic.p_holds == pytest.approx(P_PASS)
 
@@ -174,7 +179,7 @@ def test_valour_of_ages_applies_from_the_data_file() -> None:
         data=REPO,
     )
     result = _result([0.0, 0.0, 0.0, 1.0], size=8)
-    panic = make_panic_tests(result, fielded)
+    panic = _panic(result, fielded)
     assert panic.reroll_from == "Valour of Ages"
     assert panic.p_holds == pytest.approx(P_PASS + (1 - P_PASS) * P_PASS)
 
@@ -186,7 +191,7 @@ def test_veteran_rerolls_a_failed_panic_test_from_the_data_file() -> None:
     cause filter and admits this seam's heavy casualties like any other.
     """
     fielded = Contingent.field(REPO.units["lion-guard"], 8, data=REPO)
-    panic = make_panic_tests(_result([0.0, 0.0, 0.0, 1.0], size=8), fielded)
+    panic = _panic(_result([0.0, 0.0, 0.0, 1.0], size=8), fielded)
     assert panic.reroll_from == "Veteran"
     # Lion Guard carry Ld 9: a Leadership test passes 30/36.
     p_pass = float(Fraction(30, 36))
