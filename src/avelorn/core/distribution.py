@@ -361,6 +361,20 @@ class Distribution[T: Hashable]:
         """
         return sum(self.mass.values())
 
+    def counts(self, upto: int | None = None) -> list[Probability]:
+        """The count-pmf list over ``0 .. upto``, index ``k`` = P(k); the inverse of from_counts.
+
+        ``upto`` defaults to the largest outcome. Unreached counts carry a
+        zero of the masses' own numeric kind.
+
+        Returns:
+            The list, of length ``upto + 1``.
+        """
+        reached = (k for k in self.mass if isinstance(k, int))
+        top = max(reached, default=0) if upto is None else upto
+        zero = self.total() * 0
+        return [self.mass.get(k, zero) for k in range(top + 1)]
+
     def collapse(self) -> "Distribution[T]":
         """Convert every mass to ``float``, giving up exactness deliberately.
 
