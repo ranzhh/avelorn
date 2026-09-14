@@ -580,7 +580,7 @@ class _Roll:
 # (a ward-save modifier, say) would join with ``Side.TARGET``. An effect
 # reaches the walks where its bearer sits on that side — flipped when the
 # printed sentence's subject is the enemy.
-_ROLLS: Mapping[Quantity, _Roll] = {
+ROLLS: Mapping[Quantity, _Roll] = {
     Quantity.TO_HIT: _Roll(Stage.ROLL_TO_HIT, sign=-1, side=Side.ATTACKER),
     Quantity.ARMOUR_PIERCING: _Roll(Stage.MAKE_ARMOUR_SAVES, sign=+1, side=Side.ATTACKER),
 }
@@ -629,12 +629,12 @@ def _compile_effect(
         return _UNFACTORED
     adds = effect.add or {}
     rolls = [
-        _ROLLS[quantity]
+        ROLLS[quantity]
         for quantity in adds
-        if isinstance(quantity, Quantity) and quantity in _ROLLS
+        if isinstance(quantity, Quantity) and quantity in ROLLS
     ]
     if len(rolls) != len(adds):
-        # The walk handles only roll quantities (the _ROLLS vocabulary). A
+        # The walk handles only roll quantities (the ROLLS vocabulary). A
         # characteristic is the effective-characteristic query's, a rank
         # quantity the fighting-rank query's, and each of those folds has its
         # own say on the rule. Settled here, ahead of the gate, so the same
