@@ -74,9 +74,9 @@ def test_stand_and_shoot_caps_casualties_at_the_charging_unit_size() -> None:
         _fielded(spearmen, 5),
         phase_rules=IN_FORCE,
     )
-    assert reaction.target_models == 5
-    assert len(reaction.casualties) == 6  # 0..5
-    assert sum(reaction.casualties) == pytest.approx(1.0)
+    assert reaction.models.value == 5
+    assert len(reaction.casualties.value.counts()) == 6  # 0..5
+    assert sum(reaction.casualties.value.counts()) == pytest.approx(1.0)
 
 
 # --- The whole sequence: Stand & Shoot feeding the composed melee ---
@@ -99,11 +99,11 @@ def test_charge_sequence_matches_mixing_the_survivor_fights_by_hand() -> None:
     composed = fight(
         charger,
         defender,
-        a_prior_losses=reaction.casualties,
+        a_prior_losses=reaction.casualties.value.counts(),
     )
 
     manual = [[0.0] * (defender.models + 1) for _ in range(models + 1)]
-    for felled, p_felled in enumerate(reaction.casualties):
+    for felled, p_felled in enumerate(reaction.casualties.value.counts()):
         survivors = fight(
             charger.remove_casualties(felled),
             defender,
@@ -141,7 +141,7 @@ def test_stand_and_shoot_erodes_the_chargers_combat_result() -> None:
         fight(
             charger,
             defender,
-            a_prior_losses=reaction.casualties,
+            a_prior_losses=reaction.casualties.value.counts(),
         )
     )
     assert shot.p_a_wins < unshot.p_a_wins
@@ -178,7 +178,10 @@ def test_charge_forms_an_engagement_and_its_reaction() -> None:
 
     assert engagement.a.movement.charge == move  # the charger entered carrying the charge
     assert engagement.b is target
-    assert volley == stand_and_shoot(target.wielding("Longbow"), charger, phase_rules=IN_FORCE)
+    by_hand = stand_and_shoot(target.wielding("Longbow"), charger, phase_rules=IN_FORCE)
+    assert volley is not None
+    assert volley.casualties.value == by_hand.casualties.value
+    assert volley.notes == by_hand.notes
     assert engagement.reaction is volley
 
 
@@ -195,7 +198,9 @@ def test_stand_and_shoot_defaults_to_the_sole_missile_weapon() -> None:
 
     named = charge(charger, target, move, shooting_rules=IN_FORCE).react(StandAndShoot("Longbow"))
     default = charge(charger, target, move, shooting_rules=IN_FORCE).react(StandAndShoot())
-    assert default == named
+    assert default is not None and named is not None
+    assert default.casualties.value == named.casualties.value
+    assert default.notes == named.notes
 
 
 def test_fighting_the_engagement_is_the_charges_first_round() -> None:
@@ -217,7 +222,7 @@ def test_fighting_the_engagement_is_the_charges_first_round() -> None:
     manual = fight(
         charger.charging(move),
         target,
-        a_prior_losses=volley.casualties,
+        a_prior_losses=volley.casualties.value.counts(),
         first_round=True,
     )
     assert outcome.losses == manual.losses

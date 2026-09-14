@@ -36,26 +36,26 @@ def test_shoot_golden_chain() -> None:
     """BS4, S3 vs T3, 5+ save: p = 2/3 * 1/2 * 2/3 = 2/9 per shot."""
     result = shoot(3, ballistic_skill=4, strength=3, toughness=3, armour_value=5)
     assert result.hit_target == 3
-    assert result.wound_target == 4
+    assert result.roll_to_wound.value.target == 4
     assert result.save_target == 5
-    assert result.p_unsaved == pytest.approx(2 / 9)
-    assert result.expected_wounds == pytest.approx(2 / 3)
-    assert sum(result.distribution) == pytest.approx(1.0)
-    assert result.distribution[0] == pytest.approx((7 / 9) ** 3)
+    assert result.attack.value.p_unsaved == pytest.approx(2 / 9)
+    assert result.wounds.value.expect(lambda k: k) == pytest.approx(2 / 3)
+    assert sum(result.wounds.value.counts()) == pytest.approx(1.0)
+    assert result.wounds.value.counts()[0] == pytest.approx((7 / 9) ** 3)
 
 
 def test_shoot_ward_save_stacks_multiplicatively() -> None:
     """A 4+ ward halves the unsaved-wound probability."""
     base = shoot(1, ballistic_skill=4, strength=3, toughness=3)
     warded = shoot(1, ballistic_skill=4, strength=3, toughness=3, ward_target=4)
-    assert warded.p_unsaved == pytest.approx(base.p_unsaved / 2)
+    assert warded.attack.value.p_unsaved == pytest.approx(base.attack.value.p_unsaved / 2)
 
 
 def test_shoot_impossible_wound_kills_nothing() -> None:
     """S1 vs T7 is a printed dash: zero wounds regardless of dice."""
     result = shoot(10, ballistic_skill=5, strength=1, toughness=7)
-    assert result.p_unsaved == 0.0
-    assert result.distribution[0] == pytest.approx(1.0)
+    assert result.attack.value.p_unsaved == 0.0
+    assert result.wounds.value.counts()[0] == pytest.approx(1.0)
 
 
 def test_shoot_unit_archers_vs_spearmen() -> None:
@@ -73,7 +73,9 @@ def test_shoot_unit_archers_vs_spearmen() -> None:
     )
     assert result.hit_target == 3  # BS 4
     assert result.save_target == 5  # 7 - light armour - shield (the chart value)
-    assert result.expected_wounds == pytest.approx(3 * 13 / 54)  # Armour Bane factored
+    assert result.wounds.value.expect(lambda k: k) == pytest.approx(
+        3 * 13 / 54
+    )  # Armour Bane factored
     # Equipment and the weapon's modelled rules resolved at fielding:
     # neither is left to report.
     assert not any("equipment not factored" in note for note in result.notes)
@@ -93,9 +95,9 @@ def test_defender_size_does_not_affect_wounds() -> None:
     vs_twenty = shoot_unit(archers.wielding("Longbow"), _fielded(spearmen, 20))
     vs_thirty = shoot_unit(archers.wielding("Longbow"), _fielded(spearmen, 30))
 
-    assert vs_twenty.p_unsaved == vs_thirty.p_unsaved
-    assert vs_twenty.distribution == vs_thirty.distribution
-    assert vs_twenty.expected_wounds == vs_thirty.expected_wounds
+    assert vs_twenty.attack.value.p_unsaved == vs_thirty.attack.value.p_unsaved
+    assert vs_twenty.wounds.value.counts() == vs_thirty.wounds.value.counts()
+    assert vs_twenty.wounds.value.expect(lambda k: k) == vs_thirty.wounds.value.expect(lambda k: k)
 
 
 def test_shoot_caps_casualties_at_target_size() -> None:
@@ -106,19 +108,23 @@ def test_shoot_caps_casualties_at_target_size() -> None:
     P(2) absorbing every outcome of 2+ wounds.
     """
     result = shoot(10, ballistic_skill=4, strength=3, toughness=3, targets=2)
-    assert len(result.distribution) == 11
-    assert len(result.casualties) == 3
-    assert result.casualties[2] == pytest.approx(sum(result.distribution[2:]))
-    assert sum(result.casualties) == pytest.approx(1.0)
-    assert result.expected_casualties < result.expected_wounds
+    assert len(result.wounds.value.counts()) == 11
+    assert len(result.casualties.value.counts()) == 3
+    assert result.casualties.value.counts()[2] == pytest.approx(
+        sum(result.wounds.value.counts()[2:])
+    )
+    assert sum(result.casualties.value.counts()) == pytest.approx(1.0)
+    assert result.casualties.value.expect(lambda k: k) < result.wounds.value.expect(lambda k: k)
 
 
 def test_shoot_casualties_equal_wounds_when_uncapped() -> None:
     """With no target size, casualties are exactly the wound distribution."""
     result = shoot(3, ballistic_skill=4, strength=3, toughness=3, armour_value=5)
-    assert result.target_models is None
-    assert result.casualties == result.distribution
-    assert result.expected_casualties == pytest.approx(result.expected_wounds)
+    assert result.models.value is None
+    assert result.casualties.value.counts() == result.wounds.value.counts()
+    assert result.casualties.value.expect(lambda k: k) == pytest.approx(
+        result.wounds.value.expect(lambda k: k)
+    )
 
 
 def test_shoot_rejects_negative_targets() -> None:
@@ -140,7 +146,7 @@ def test_only_the_front_rank_fires() -> None:
         _fielded(archers, 10, frontage=5, moved=True).wielding("Longbow"),
         _fielded(spearmen, 20),
     )
-    assert result.shots == 5
+    assert result.shots.value.count == 5
 
 
 def test_volley_fire_adds_half_of_each_rear_rank_when_stationary() -> None:
@@ -156,7 +162,7 @@ def test_volley_fire_adds_half_of_each_rear_rank_when_stationary() -> None:
         _fielded(archers, 10, frontage=5).wielding("Longbow"),
         _fielded(spearmen, 20),
     )
-    assert result.shots == 8
+    assert result.shots.value.count == 8
     assert not any("Volley Fire" in note for note in result.notes)
 
 
@@ -168,7 +174,7 @@ def test_volley_fire_does_not_apply_to_a_unit_that_moved() -> None:
         _fielded(archers, 10, frontage=5, moved=True).wielding("Longbow"),
         _fielded(spearmen, 20),
     )
-    assert result.shots == 5
+    assert result.shots.value.count == 5
     assert not any("Volley Fire" in note for note in result.notes)
 
 
@@ -181,7 +187,7 @@ def test_volley_fire_never_on_a_stand_and_shoot() -> None:
         _fielded(spearmen, 20),
         stand_and_shoot=True,
     )
-    assert result.shots == 5
+    assert result.shots.value.count == 5
     assert not any("Volley Fire" in note for note in result.notes)
 
 
@@ -198,7 +204,7 @@ def test_forcing_short_range_alone_does_not_forbid_volley_fire() -> None:
         _fielded(spearmen, 20),
         force_short_range=True,
     )
-    assert result.shots == 8  # front five plus three from the second rank
+    assert result.shots.value.count == 8  # front five plus three from the second rank
 
 
 def test_shoot_unit_caps_casualties_but_not_wounds() -> None:
@@ -214,10 +220,10 @@ def test_shoot_unit_caps_casualties_but_not_wounds() -> None:
         _fielded(archers, 30, frontage=30).wielding("Longbow"),
         _fielded(spearmen, 5),
     )
-    assert result.target_models == 5
-    assert len(result.distribution) == 31
-    assert len(result.casualties) == 6
-    assert result.expected_casualties < result.expected_wounds
+    assert result.models.value == 5
+    assert len(result.wounds.value.counts()) == 31
+    assert len(result.casualties.value.counts()) == 6
+    assert result.casualties.value.expect(lambda k: k) < result.wounds.value.expect(lambda k: k)
 
 
 def test_shoot_folds_wounds_into_multi_wound_models() -> None:
@@ -228,13 +234,15 @@ def test_shoot_folds_wounds_into_multi_wound_models() -> None:
     wound outcomes.
     """
     result = shoot(6, ballistic_skill=4, strength=3, toughness=3, wounds_per_model=3)
-    d = result.distribution
-    assert len(result.casualties) == 3  # 0, 1, 2 models from 0..6 wounds
-    assert result.casualties[0] == pytest.approx(d[0] + d[1] + d[2])
-    assert result.casualties[1] == pytest.approx(d[3] + d[4] + d[5])
-    assert result.casualties[2] == pytest.approx(d[6])
-    assert result.expected_casualties < result.expected_wounds  # 3 wounds per kill
-    assert sum(result.casualties) == pytest.approx(1.0)
+    d = result.wounds.value.counts()
+    assert len(result.casualties.value.counts()) == 3  # 0, 1, 2 models from 0..6 wounds
+    assert result.casualties.value.counts()[0] == pytest.approx(d[0] + d[1] + d[2])
+    assert result.casualties.value.counts()[1] == pytest.approx(d[3] + d[4] + d[5])
+    assert result.casualties.value.counts()[2] == pytest.approx(d[6])
+    assert result.casualties.value.expect(lambda k: k) < result.wounds.value.expect(
+        lambda k: k
+    )  # 3 wounds per kill
+    assert sum(result.casualties.value.counts()) == pytest.approx(1.0)
 
 
 def test_shoot_rejects_non_positive_wounds_per_model() -> None:
@@ -259,10 +267,10 @@ def test_shoot_unit_folds_multi_wound_casualties_and_caps() -> None:
         _fielded(archers, 30, frontage=30).wielding("Longbow"),
         _fielded(multi_wound, 5),
     )
-    assert result.target_models == 5  # cap now applied
-    assert len(result.casualties) == 6  # 0..5 models
-    assert result.expected_casualties < result.expected_wounds
-    assert sum(result.casualties) == pytest.approx(1.0)
+    assert result.models.value == 5  # cap now applied
+    assert len(result.casualties.value.counts()) == 6  # 0..5 models
+    assert result.casualties.value.expect(lambda k: k) < result.wounds.value.expect(lambda k: k)
+    assert sum(result.casualties.value.counts()) == pytest.approx(1.0)
     assert not any("carry-over" in note for note in result.notes)
 
 
@@ -280,8 +288,8 @@ def test_shoot_unit_warbow_uses_wielders_strength() -> None:
         _fielded(spearmen, 10),
     )
     assert result.hit_target == 3  # BS 4
-    assert result.wound_target == 4  # wielder's S3 vs T3
-    assert result.expected_wounds == pytest.approx(2 / 3)
+    assert result.roll_to_wound.value.target == 4  # wielder's S3 vs T3
+    assert result.wounds.value.expect(lambda k: k) == pytest.approx(2 / 3)
 
 
 def test_shoot_unit_rejects_wielder_strength_weapon_without_strength() -> None:
@@ -340,10 +348,10 @@ def test_shoot_instant_kills_remove_multi_wound_models_outright() -> None:
         targets=2,
         transforms=[_killing_blow_double()],
     )
-    assert result.casualties[2] == pytest.approx(1 / 81)
-    assert result.casualties[1] == pytest.approx(2 * (1 / 9) * (8 / 9))
-    assert result.casualties[0] == pytest.approx((8 / 9) ** 2)
-    assert sum(result.casualties) == pytest.approx(1.0)
+    assert result.casualties.value.counts()[2] == pytest.approx(1 / 81)
+    assert result.casualties.value.counts()[1] == pytest.approx(2 * (1 / 9) * (8 / 9))
+    assert result.casualties.value.counts()[0] == pytest.approx((8 / 9) ** 2)
+    assert sum(result.casualties.value.counts()) == pytest.approx(1.0)
 
 
 def test_shoot_instant_kills_match_the_spike_distribution() -> None:
@@ -362,11 +370,11 @@ def test_shoot_instant_kills_match_the_spike_distribution() -> None:
         targets=2,
         transforms=[_killing_blow_double()],
     )
-    assert result.casualties[0] == pytest.approx(0.165, abs=5e-4)
-    assert result.casualties[1] == pytest.approx(0.342, abs=5e-4)
-    assert result.casualties[2] == pytest.approx(0.493, abs=5e-4)
-    assert sum(result.casualties) == pytest.approx(1.0)
-    assert sum(result.distribution) == pytest.approx(1.0)
+    assert result.casualties.value.counts()[0] == pytest.approx(0.165, abs=5e-4)
+    assert result.casualties.value.counts()[1] == pytest.approx(0.342, abs=5e-4)
+    assert result.casualties.value.counts()[2] == pytest.approx(0.493, abs=5e-4)
+    assert sum(result.casualties.value.counts()) == pytest.approx(1.0)
+    assert sum(result.wounds.value.counts()) == pytest.approx(1.0)
 
 
 def test_engagement_conditions_build_the_shooting_facts() -> None:
@@ -479,8 +487,8 @@ def test_shoot_unit_gromril_armour_re_rolls_the_targets_save_against_arrows() ->
 
     plain = shoot_unit(shooter, _fielded(stripped, 10))
     gromril = shoot_unit(shooter, _fielded(ironbreakers, 10))
-    assert plain.p_unsaved == pytest.approx(25 / 324)
-    assert gromril.p_unsaved == pytest.approx(115 / 1944)
+    assert plain.attack.value.p_unsaved == pytest.approx(25 / 324)
+    assert gromril.attack.value.p_unsaved == pytest.approx(115 / 1944)
     assert not any("Gromril Armour" in note for note in gromril.notes)
 
 
@@ -552,9 +560,9 @@ def test_shoot_unit_factors_a_missile_profiles_own_re_roll_grant() -> None:
     magic = shoot_unit(_with_a_magic_bow(_fielded(archers, 5)), target)
 
     assert plain.save_target == 4
-    assert plain.p_unsaved == pytest.approx(5 / 27)
+    assert plain.attack.value.p_unsaved == pytest.approx(5 / 27)
     assert magic.save_target == 4  # a re-roll shifts the probability, not the target
-    assert magic.p_unsaved == pytest.approx(43 / 162)
+    assert magic.attack.value.p_unsaved == pytest.approx(43 / 162)
     assert not any("Doctored Bow" in note for note in magic.notes)
 
 
@@ -579,9 +587,9 @@ def test_shoot_unit_grants_the_defenders_ward_against_a_mundane_volley() -> None
     warded = shoot_unit(_fielded(archers, 5).wielding("Longbow"), breakers)
     unwarded = shoot_unit(_fielded(archers, 5).wielding("Longbow"), stripped)
 
-    assert warded.ward_target == 6
-    assert unwarded.ward_target is None
-    assert warded.p_unsaved == pytest.approx(unwarded.p_unsaved * 5 / 6)
+    assert warded.ward_saves.value.target == 6
+    assert unwarded.ward_saves.value.target is None
+    assert warded.attack.value.p_unsaved == pytest.approx(unwarded.attack.value.p_unsaved * 5 / 6)
     assert not any("Runes of Protection" in note for note in warded.notes)
 
 
@@ -596,7 +604,7 @@ def test_shoot_unit_denies_the_ward_to_a_magical_volley() -> None:
 
     result = shoot_unit(_fielded(sisters, 5).wielding("Bow of Avelorn"), breakers)
 
-    assert result.ward_target is None
+    assert result.ward_saves.value.target is None
     assert not any("Runes of Protection" in note for note in result.notes)
     # The bow's mark is in the facts, so it is claimed, never "not factored".
     assert not any("not factored: Magical Attacks" in note for note in result.notes)
@@ -618,9 +626,9 @@ def test_shoot_unit_at_cavalry_reads_the_riders_row_and_armour() -> None:
 
     result = shoot_unit(_fielded(archers, 5).wielding("Longbow"), helms)
 
-    assert result.wound_target == 4  # S3 vs the rider's T3
+    assert result.roll_to_wound.value.target == 4  # S3 vs the rider's T3
     assert result.save_target == 5  # the rider's heavy armour
-    assert result.target_models == 5
+    assert result.models.value == 5
 
 
 def test_shoot_unit_with_cavalry_fires_the_riders_ballistic_skill() -> None:
@@ -636,7 +644,7 @@ def test_shoot_unit_with_cavalry_fires_the_riders_ballistic_skill() -> None:
 
     result = shoot_unit(reavers, spearmen, distance=9)
 
-    assert result.shots == 5
+    assert result.shots.value.count == 5
     assert result.hit_target == 3
 
 
@@ -664,7 +672,7 @@ def test_a_blow_never_fires_in_a_volley() -> None:
     blow = shoot_unit(_fielded(marked, 5).wielding("Longbow"), target, distance=10)
     plain = shoot_unit(_fielded(archers, 5).wielding("Longbow"), target, distance=10)
 
-    assert blow.p_unsaved == plain.p_unsaved
+    assert blow.attack.value.p_unsaved == plain.attack.value.p_unsaved
     assert not any("not factored: Killing Blow" in n for n in blow.notes)
 
 
@@ -701,10 +709,34 @@ def test_multiple_wounds_d3_shoots_as_a_distribution_not_an_expectation() -> Non
 
     volley = shoot_unit(Contingent.field(armed, 1, data=repo).wielding("Maw Bow"), target)
 
-    assert volley.shots == 1
-    assert volley.p_unsaved == pytest.approx(1 / 3)
-    assert volley.casualties == [Fraction(8, 9), Fraction(1, 9)]
+    assert volley.shots.value.count == 1
+    assert volley.attack.value.p_unsaved == pytest.approx(1 / 3)
+    assert volley.casualties.value.counts() == [Fraction(8, 9), Fraction(1, 9)]
     assert not any("not factored: Multiple Wounds" in note for note in volley.notes)
 
     plain = shoot_unit(Contingent.field(archers, 1, data=repo).wielding("Longbow"), target)
-    assert plain.casualties == [1]  # one wound never fells a 3-Wound model
+    assert plain.casualties.value.counts() == [1]  # one wound never fells a 3-Wound model
+
+
+def test_shooting_graph_routes_rules_to_the_stages_they_modify() -> None:
+    archers = REPO.units["elven-archers"]
+    spearmen = REPO.units["elven-spearmen"]
+    result = shoot_unit(
+        _fielded(archers, 10, frontage=5).wielding("Longbow"), _fielded(spearmen, 20)
+    )
+    nodes = result.graph.nodes
+    assert nodes["attack"].inputs == (
+        "roll-to-hit",
+        "roll-to-wound",
+        "make-armour-saves",
+        "ward-saves",
+    )
+    assert nodes["remove-casualties"].inputs[:2] == ("shots", "attack")
+    assert "attacker.weapon.rule.volley-fire" in nodes["shots"].inputs
+    assert result.shots.value.count == 8
+    consumed = {i for node in nodes.values() for i in node.inputs}
+    assert "attacker.rule.elven-reflexes" not in consumed
+    assert any("not factored: Elven Reflexes (Elven Archers)" in n for n in result.notes)
+    assert not any("Volley Fire" in n for n in result.notes)
+    scalar = shoot(3, ballistic_skill=4, strength=3, toughness=3, armour_value=5)
+    assert list(scalar.graph.nodes)[-4:] == ["attack", "remove-casualties", "wounds", "casualties"]

@@ -321,10 +321,8 @@ def volley(request: Volley, data: Corpus) -> VolleyReport:
     fired = game.shooting.volley(
         shooter, target, distance=request.distance, hit_modifier=request.hit_modifier
     )
-    panicked = game.shooting.make_panic_tests(
-        fired, target, battle_strength=request.battle_strength
-    )
-    return VolleyReport.of(shooter, target, fired, panicked)
+    panicked = game.shooting.make_panic_tests(fired, battle_strength=request.battle_strength)
+    return VolleyReport.of(shooter, target, fired, panicked.value)
 
 
 @app.get("/weapons", summary="List every weapon entry in the corpus")

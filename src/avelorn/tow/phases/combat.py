@@ -2081,7 +2081,9 @@ class CombatPhase(Phase):
         """
         if isinstance(combat, Engagement):
             a, b = combat.a, combat.b
-            a_prior_losses = None if combat.reaction is None else combat.reaction.casualties
+            a_prior_losses = (
+                None if combat.reaction is None else combat.reaction.casualties.value.counts()
+            )
             first_round = combat.first_round
         elif opponent is None:
             raise ValueError("fighting two contingents needs both; pass an Engagement otherwise")

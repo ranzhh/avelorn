@@ -28,7 +28,7 @@ def main() -> None:
     with turn.combat() as combat:
         scored = combat.result(combat.fight(engagement))
 
-    toll = Distribution.from_counts(volley.casualties) if volley else Distribution.pure(0)
+    toll = volley.casualties.value if volley else Distribution.pure(0)
     print('Walking one turn -- 20 Spearmen charge 10 Archers (8"):')
     print(f"  Movement: Archers Stand & Shoot, {toll.expect(Fraction):.2f} chargers felled.")
     print("  Shooting: both locked in combat -- no shots.")

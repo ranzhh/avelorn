@@ -35,10 +35,11 @@ from avelorn.core.distribution import Probability
 from avelorn.core.registry import Registry
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
+from avelorn.tow.engine.charts import hit_probability, wound_probability
 from avelorn.tow.engine.rules import printed_rule
 from avelorn.tow.muster import Complement
 from avelorn.tow.phases.combat import BreakResult, CombatResult, FightResult, SideBreak
-from avelorn.tow.phases.shooting import PanicResult, ShootingResult
+from avelorn.tow.phases.shooting import PanicResult, Shooting
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.unit import TroopType, Unit, UnitSize
@@ -553,17 +554,16 @@ class VolleyReport(BaseModel):
 
     @classmethod
     def of(
-        cls,
-        shooter: Contingent,
-        target: Contingent,
-        volley: ShootingResult,
-        panicked: PanicResult,
+        cls, shooter: Contingent, target: Contingent, fired: Shooting, panicked: PanicResult
     ) -> "VolleyReport":
-        """Gather a resolved volley and its panic step into one answer.
+        """Gather a resolved shooting and its panic step into one answer.
 
         Returns:
             The report both surfaces show.
         """
+        wounds = fired.wounds.value
+        casualties = fired.casualties.value
+        wound = fired.roll_to_wound.value.target
         return cls(
             shooter=Volleyed(
                 unit=shooter.unit.id,
@@ -572,18 +572,18 @@ class VolleyReport(BaseModel):
                 weapon=shooter.in_hand().name,
             ),
             target=Volleyed(unit=target.unit.id, name=target.unit.name, size=target.models),
-            shots=volley.shots,
-            hit_target=volley.hit_target,
-            wound_target=volley.wound_target,
-            save_target=volley.save_target,
-            ward_target=volley.ward_target,
-            p_hit=float(volley.p_hit),
-            p_wound=float(volley.p_wound),
-            p_unsaved=float(volley.p_unsaved),
-            wounds=[float(mass) for mass in volley.distribution],
-            casualties=[float(mass) for mass in volley.casualties],
-            expected_wounds=float(volley.expected_wounds),
-            expected_casualties=float(volley.expected_casualties),
+            shots=fired.shots.value.count,
+            hit_target=fired.hit_target,
+            wound_target=wound,
+            save_target=fired.save_target,
+            ward_target=fired.ward_saves.value.target,
+            p_hit=float(hit_probability(fired.hit_target)),
+            p_wound=float(wound_probability(wound)),
+            p_unsaved=float(fired.attack.value.p_unsaved),
+            wounds=[float(mass) for mass in wounds.counts()],
+            casualties=[float(mass) for mass in casualties.counts()],
+            expected_wounds=float(wounds.expect(lambda k: k)),
+            expected_casualties=float(casualties.expect(lambda k: k)),
             panic=Panic(
                 tests=float(panicked.p_test),
                 holds=float(panicked.p_holds),
@@ -592,7 +592,7 @@ class VolleyReport(BaseModel):
                 destroyed=float(panicked.p_destroyed),
                 reroll_from=panicked.reroll_from,
             ),
-            not_modelled=sorted(set(volley.notes)),
+            not_modelled=sorted(set(fired.notes)),
         )
 
 

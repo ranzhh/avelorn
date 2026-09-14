@@ -34,7 +34,7 @@ def main() -> None:
             if standing == 0:
                 return Distribution.pure(0)
             fired = game.shooting.volley(shooters, game.field(target, standing), distance=12)
-            return standing - Distribution.from_counts(fired.casualties)
+            return standing - fired.casualties.value
 
         return Step(volley)
 
@@ -54,7 +54,7 @@ def main() -> None:
     print(f"  P(at least one falls):     {casualties.prob(lambda k: k >= 1):.3f}")
     print(f"  P(five or more fall):      {casualties.prob(lambda k: k >= 5):.3f}")
     print()
-    print(f"  an Archer's shot wounds:   {lone.p_unsaved} exactly")
+    print(f"  an Archer's shot wounds:   {lone.attack.value.p_unsaved} exactly")
     print(f"  the toll sums to:          {casualties.total()} exactly")
 
 

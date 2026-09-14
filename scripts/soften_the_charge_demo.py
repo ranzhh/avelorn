@@ -57,14 +57,16 @@ def win_if_shot(game: TOWGame, defender: Unit):
     lions = game.units["white-lions-of-chrace"]
     with game.turn().shooting() as shooting:
         opening = shooting.volley(game.field(defender, 10), game.field(lions, 10), distance=10)
-    standing = 10 - Distribution.from_counts(opening.casualties)
+    standing = 10 - opening.casualties.value
     folded = (standing >> (lambda left: win(game, defender, left))).prob(_defender_wins)
     return opening, folded
 
 
 def _report(defender: Unit, opening, dont: Probability, shoot: Probability) -> None:
     bs = defender.profiles[0][Characteristic.BALLISTIC_SKILL]
-    fells = "  ".join(f"{k}:{p:.0%}" for k, p in enumerate(opening.casualties) if p > 0.005)
+    fells = "  ".join(
+        f"{k}:{p:.0%}" for k, p in enumerate(opening.casualties.value.counts()) if p > 0.005
+    )
     print(f"  {defender.name} (BS {bs}, Lions save {opening.save_target}+):")
     print(f"    opening volley fells (of 10):  {fells}")
     print(f"    shoot elsewhere:       P(win) {dont:.3f}")

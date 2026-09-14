@@ -19,7 +19,7 @@ from typing import assert_never
 from avelorn.core.errors import UnmodelledRuleError
 from avelorn.core.game import Phase
 from avelorn.tow.contingent import Charge, Contingent
-from avelorn.tow.phases.shooting import ShootingResult, shoot_unit
+from avelorn.tow.phases.shooting import Shooting, shoot_unit
 from avelorn.tow.schema.rule import Rule
 
 logger = logging.getLogger(__name__)
@@ -38,7 +38,7 @@ def stand_and_shoot(
     target: Contingent,
     *,
     phase_rules: Mapping[str, Rule] = _NONE_IN_PLAY,
-) -> ShootingResult:
+) -> Shooting:
     """Resolve a Stand & Shoot charge reaction: ``shooter`` shoots the ``target``.
 
     The charged unit (``shooter``) looses one volley from the weapon it
@@ -142,9 +142,9 @@ class Engagement:
     shooting_rules: Mapping[str, Rule] = field(default_factory=dict)
     # A Stand & Shoot volley that thinned ``a`` (the charger), once reacted;
     # None while unanswered or on Hold.
-    reaction: ShootingResult | None = None
+    reaction: Shooting | None = None
 
-    def react(self, reaction: ChargeReaction = HOLD) -> ShootingResult | None:
+    def react(self, reaction: ChargeReaction = HOLD) -> Shooting | None:
         """Answer the charge — the inactive player's declared reaction.
 
         One of the printed three: :class:`Hold` (brace, no volley),

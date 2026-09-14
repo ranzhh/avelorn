@@ -15,7 +15,7 @@ This layer answers such questions *exactly*. It is deliberately split:
   type and is queried the same way.
 - :func:`result_distributions` and :func:`fight_distributions` are the
   combat-coupled pieces: each names the variables its result — a
-  :class:`ShootingResult`, a :class:`FightResult` — carries.
+  :class:`AttackSequence`, a :class:`FightResult` — carries.
 
 The intended division of labour: a caller (an agent, the CLI, a future
 MCP tool) translates a natural-language question into a structured
@@ -31,7 +31,7 @@ from enum import StrEnum
 from avelorn.core.dice import expected_value
 from avelorn.core.distribution import Probability
 from avelorn.tow.phases.combat import FightResult
-from avelorn.tow.phases.shooting import ShootingResult
+from avelorn.tow.phases.shooting import AttackSequence
 
 logger = logging.getLogger(__name__)
 
@@ -179,7 +179,7 @@ def evaluate(distribution: Distribution, predicate: Predicate) -> Probability:
     return probability
 
 
-def result_distributions(result: ShootingResult) -> dict[str, Distribution]:
+def result_distributions(result: AttackSequence) -> dict[str, Distribution]:
     """Expose a shooting result's outcomes as named, queryable distributions.
 
     Always provides ``wounds`` (unsaved wounds inflicted) and ``casualties``
@@ -192,12 +192,14 @@ def result_distributions(result: ShootingResult) -> dict[str, Distribution]:
         A mapping of variable name to :class:`Distribution`.
     """
     distributions = {
-        "wounds": Distribution("wounds", tuple(result.distribution)),
-        "casualties": Distribution("casualties", tuple(result.casualties)),
+        "wounds": Distribution("wounds", tuple(result.wounds.value.counts())),
+        "casualties": Distribution("casualties", tuple(result.casualties.value.counts())),
     }
-    size = result.target_models
+    size = result.models.value
     if size is not None:
-        distributions["survivors"] = _mirror_survivors("survivors", result.casualties, size)
+        distributions["survivors"] = _mirror_survivors(
+            "survivors", result.casualties.value.counts(), size
+        )
     return distributions
 
 
@@ -220,7 +222,7 @@ def _mirror_survivors(name: str, casualties: Sequence[Probability], size: int) -
     return Distribution(name, tuple(survivors))
 
 
-def query_result(result: ShootingResult, variable: str, predicate: Predicate) -> Probability:
+def query_result(result: AttackSequence, variable: str, predicate: Predicate) -> Probability:
     """Evaluate a predicate against one named variable of a shooting result.
 
     The convenience entry point a caller uses end to end: pick a variable

@@ -234,7 +234,7 @@ def test_shoot_unit_factors_armour_bane_from_data() -> None:
         _fielded(REPO.units["elven-spearmen"], 10),
         phase_rules=IN_FORCE,
     )
-    assert result.p_unsaved == pytest.approx(13 / 54)
+    assert result.attack.value.p_unsaved == pytest.approx(13 / 54)
     assert not any("Armour Bane" in note for note in result.notes)
     assert not any("Volley Fire" in note for note in result.notes)
 
@@ -251,7 +251,7 @@ def test_weapon_rules_factor_from_the_loadout_alone() -> None:
         _fielded(REPO.units["elven-archers"], 3).wielding("Longbow"),
         _fielded(REPO.units["elven-spearmen"], 10),
     )
-    assert result.p_unsaved == pytest.approx(13 / 54)
+    assert result.attack.value.p_unsaved == pytest.approx(13 / 54)
     assert not any("Armour Bane" in note for note in result.notes)
     assert not any("Volley Fire" in note for note in result.notes)
 
@@ -268,7 +268,7 @@ def test_long_range_penalty_applies_from_data() -> None:
         phase_rules=IN_FORCE,
         distance=20,
     )
-    assert result.p_unsaved == pytest.approx(13 / 72)
+    assert result.attack.value.p_unsaved == pytest.approx(13 / 72)
     assert not any("core rule" in note for note in result.notes)
 
 
@@ -283,7 +283,7 @@ def test_condition_false_applies_no_penalty_and_no_note() -> None:
         phase_rules=IN_FORCE,
         distance=10,
     )
-    assert result.p_unsaved == pytest.approx(13 / 54)
+    assert result.attack.value.p_unsaved == pytest.approx(13 / 54)
     assert not any("core rule" in note for note in result.notes)
 
 
@@ -298,7 +298,7 @@ def test_unknown_distance_leaves_only_the_range_rule_unfactored() -> None:
         _fielded(REPO.units["elven-spearmen"], 10),
         phase_rules=IN_FORCE,
     )
-    assert result.p_unsaved == pytest.approx(13 / 54)
+    assert result.attack.value.p_unsaved == pytest.approx(13 / 54)
     assert any("core rule not factored: Firing at Long Range" in n for n in result.notes)
     assert not any("Moving and Shooting" in n for n in result.notes)
 
@@ -338,9 +338,11 @@ def test_staying_still_volley_fires_while_the_to_hit_is_a_wash() -> None:
         distance=12,
     )
     assert stay.hit_target == move_in.hit_target == 4  # the To Hit is a wash
-    assert stay.p_unsaved == pytest.approx(move_in.p_unsaved)  # per shot, identical
-    assert stay.shots > move_in.shots  # but staying volley fires
-    assert stay.expected_casualties > move_in.expected_casualties
+    assert stay.attack.value.p_unsaved == pytest.approx(
+        move_in.attack.value.p_unsaved
+    )  # per shot, identical
+    assert stay.shots.value.count > move_in.shots.value.count  # but staying volley fires
+    assert stay.casualties.value.expect(lambda k: k) > move_in.casualties.value.expect(lambda k: k)
 
 
 def test_wielding_gate_is_tri_state() -> None:
@@ -494,14 +496,14 @@ def test_every_roll_quantity_declares_its_roll() -> None:
     a target for that roll's stage. The seam vocabulary is introspected, so
     new members are covered automatically.
     """
-    from avelorn.tow.engine.rules import _ROLLS
+    from avelorn.tow.engine.rules import ROLLS
     from avelorn.tow.schema.rule import Quantity, Seam
 
     profile = AttackProfile.shooting(hit_target=4, wound_target=4, save_target=4, ward_target=4)
     roll_quantities = [q for q in Quantity if q.seam is Seam.ROLL]
     for quantity in roll_quantities:
-        assert quantity in _ROLLS, quantity
-        profile.target(_ROLLS[quantity].stage)  # KeyError if the stage rolls no target
+        assert quantity in ROLLS, quantity
+        profile.target(ROLLS[quantity].stage)  # KeyError if the stage rolls no target
 
 
 def test_armour_bane_two_leaves_no_save_at_all() -> None:

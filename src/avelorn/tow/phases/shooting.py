@@ -1,27 +1,38 @@
-"""The shooting attack chain: hit, wound, armour save, ward save.
+"""The Shooting phase, built as a graph.
+
+A unit's shooting is the printed attack sequence: Roll to Hit, Roll to Wound,
+Make Armour Saves, Ward Saves, Remove Casualties, Make Panic Tests. Each
+stage is a node whose inputs are the characteristic reads and the rule nodes
+routed to it, and whose value is the roll's target together with the compiled
+records the rules put on that roll. The walk enumerates the four dice stages
+exactly; the fold turns per-attack outcomes into a distribution over what the
+target lost. Nothing is averaged on the way.
+
+Rules enter as source nodes. A rule that no node consumed, or that a node
+held without applying, is reported in the notes; the notes are read off the
+graph, not kept by hand.
 
 Targets are treated as a unit of identical models with a shared Wounds
-value; unsaved wounds accumulate into whole slain models (carry-over
-within the unit), and casualties cap at the unit's size. Heterogeneous
-units (e.g. a champion with a different profile) still resolve off the
-rank-and-file profile only. Anything the math cannot honour (special
-rules, unrecognised equipment) is reported in ``ShootingResult.notes``
-rather than silently ignored.
+value; unsaved wounds accumulate into whole slain models and casualties cap
+at the unit's size. Heterogeneous units still resolve off the rank-and-file
+profile.
 """
 
 import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from fractions import Fraction
-from typing import ClassVar
+from typing import ClassVar, NamedTuple, Protocol
 
-from avelorn.core.dice import expected_value
 from avelorn.core.distribution import Distribution, Probability
 from avelorn.core.game import Phase
-from avelorn.tow.contingent import Contingent, Loadout
+from avelorn.core.graph import Graph, Node, Provenance
+from avelorn.tow.contingent import Contingent
+from avelorn.tow.engine.armour import defender_armour
 from avelorn.tow.engine.attack import (
     ArmourSave,
     AttackProfile,
+    AttackResolution,
     Modifier,
     Outcome,
     Reroll,
@@ -33,15 +44,17 @@ from avelorn.tow.engine.attack import (
     resolve_attack,
     roll_target,
 )
-from avelorn.tow.engine.casualties import wound_and_casualties
+from avelorn.tow.engine.casualties import AttackBatch, Toll, strike_toll
 from avelorn.tow.engine.characteristic_tests import pass_probability
-from avelorn.tow.engine.charts import (
-    armour_save_target,
-    hit_probability,
-    save_probability,
-    shooting_hit_target,
-    wound_probability,
-    wound_target,
+from avelorn.tow.engine.charts import armour_save_target, shooting_hit_target, wound_target
+from avelorn.tow.engine.graph import (
+    MARKS,
+    MULTIPLE_WOUNDS,
+    SHOTS,
+    Bearing,
+    Kind,
+    Namespace,
+    routes,
 )
 from avelorn.tow.engine.rules import (
     AttackFacts,
@@ -49,64 +62,213 @@ from avelorn.tow.engine.rules import (
     MovementFacts,
     ShootingFacts,
     WeaponFacts,
+    attack_marks,
+    barred_worn,
     compile_rules,
+    effective_armour_value,
+    effective_rerolls,
     effective_volley,
+    effective_ward_target,
     effective_wound_multiplier,
     factored_notes,
 )
-from avelorn.tow.engine.seats import Defence, Offence
 from avelorn.tow.schema.psychology import PanicCause
 from avelorn.tow.schema.rule import AttackKind, RerollEffect, Rule
-from avelorn.tow.schema.stage import Stage
+from avelorn.tow.schema.stage import Side, Stage
 from avelorn.tow.schema.unit import Characteristic
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile
 
 logger = logging.getLogger(__name__)
 
-
-# An empty registry as the default: every rule stays unfactored, visibly.
-# No rules in force: the volley resolves under weapon and armour alone.
 _NONE_IN_PLAY: Mapping[str, Rule] = {}
+
+ATTACKER = "attacker"
+TARGET = "target"
+ATTACK = "attack"
+REMOVE_CASUALTIES = "remove-casualties"
+WOUNDS = "wounds"
+CASUALTIES = "casualties"
 
 
 @dataclass(frozen=True)
-class ShootingResult:
-    """Outcome of a volley of shooting attacks against a unit."""
+class StageRoll[T]:
+    target: T
+    modifiers: tuple[Modifier, ...] = ()
+    rerolls: tuple[Reroll, ...] = ()
+    transforms: tuple[Transform, ...] = ()
+    held: frozenset[str] = frozenset()
 
-    shots: int
-    hit_target: int
-    wound_target: int | None
-    save_target: int | None
-    ward_target: int | None
-    p_hit: Probability
-    p_wound: Probability
-    p_unsaved: Probability  # per-shot probability of an unsaved wound
-    distribution: list[Probability]  # index k = P(exactly k unsaved wounds)
-    casualties: list[Probability]  # index k = P(exactly k models removed)
-    notes: tuple[str, ...] = ()
-    target_models: int | None = None  # size of the target unit, if bounded
+
+class Shots(NamedTuple):
+    count: int
+    held: frozenset[str] = frozenset()
+
+
+class Damage(NamedTuple):
+    wounds: Distribution[int] | None
+    held: frozenset[str] = frozenset()
+
+
+class _Held(Protocol):
+    @property
+    def held(self) -> frozenset[str]: ...
+
+
+def _provenance(value: _Held) -> Provenance:
+    return Provenance(unfactored=value.held)
+
+
+@dataclass(frozen=True)
+class AttackSequence:
+    graph: Graph
+    shots: Node[Shots]
+    roll_to_hit: Node[StageRoll[int]]
+    roll_to_wound: Node[StageRoll[int | None]]
+    make_armour_saves: Node[StageRoll[int | None]]
+    ward_saves: Node[StageRoll[int | None]]
+    attack: Node[AttackResolution]
+    models: Node[int | None]
+    removed: Node[Distribution[Toll]]
+    wounds: Node[Distribution[int]]
+    casualties: Node[Distribution[int]]
 
     @property
-    def expected_wounds(self) -> Probability:
-        """Mean number of unsaved wounds.
-
-        Returns:
-            The expectation of the wound distribution.
-        """
-        return expected_value(self.distribution)
+    def hit_target(self) -> int:
+        """The To Hit target the walk used, unconditional modifiers applied."""
+        reported = self.attack.value.hit_target
+        return reported if isinstance(reported, int) else self.roll_to_hit.value.target
 
     @property
-    def expected_casualties(self) -> Probability:
-        """Mean number of models removed, capped at the target unit's size.
+    def save_target(self) -> int | None:
+        """The armour save the walk used; a save worsened past 6+ is no save."""
+        reported = self.attack.value.save_target
+        return reported if isinstance(reported, int) and reported <= 6 else None
 
-        Equals :attr:`expected_wounds` for a 1-Wound target large enough to
-        absorb every wound; it is lower only when the volley would overkill
-        the unit.
 
-        Returns:
-            The expectation of the casualty distribution.
-        """
-        return expected_value(self.casualties)
+@dataclass(frozen=True)
+class Shooting(AttackSequence):
+    attacker: Node[Contingent]
+    target: Node[Contingent]
+    weapon: Node[Weapon]
+    rules: tuple[Node[Bearing], ...]
+    notes: tuple[str, ...]
+
+
+def _attack(
+    hit: Node[StageRoll[int]],
+    wound: Node[StageRoll[int | None]],
+    save: Node[StageRoll[int | None]],
+    ward: Node[StageRoll[int | None]],
+) -> AttackResolution:
+    stages = (hit.value, wound.value, save.value, ward.value)
+    return resolve_attack(
+        AttackProfile.shooting(
+            hit_target=hit.value.target,
+            wound_target=roll_target(wound.value.target),
+            save_target=roll_target(save.value.target),
+            ward_target=roll_target(ward.value.target),
+        ),
+        [record for stage in stages for record in stage.modifiers],
+        [record for stage in stages for record in stage.transforms],
+        [record for stage in stages for record in stage.rerolls],
+    )
+
+
+def _remove_casualties(
+    shots: Node[Shots],
+    attack: Node[AttackResolution],
+    wounds_per_model: Node[int],
+    models: Node[int | None],
+    damage: Node[Damage],
+) -> Distribution[Toll]:
+    batch = AttackBatch(
+        shots.value.count, attack.value.p_unsaved, attack.value.p_of(Outcome.INSTANT_KILL)
+    )
+    return strike_toll(
+        [batch],
+        wounds_per_model=wounds_per_model.value,
+        targets=models.value,
+        damage=damage.value.wounds,
+    )
+
+
+def _wounds(removed: Node[Distribution[Toll]]) -> Distribution[int]:
+    return removed.value.map(lambda toll: toll.wounds)
+
+
+def _felled(removed: Node[Distribution[Toll]]) -> Distribution[int]:
+    return removed.value.map(lambda toll: toll.felled)
+
+
+def _sequence(
+    graph: Graph,
+    shots: Node[Shots],
+    hit: Node[StageRoll[int]],
+    wound: Node[StageRoll[int | None]],
+    save: Node[StageRoll[int | None]],
+    ward: Node[StageRoll[int | None]],
+    wounds_per_model: Node[int],
+    models: Node[int | None],
+    damage: Node[Damage],
+) -> AttackSequence:
+    attack = graph.node(ATTACK, Kind.WALK, "Attack", hit, wound, save, ward, body=_attack)
+    removed = graph.node(
+        REMOVE_CASUALTIES,
+        Kind.FOLD,
+        "Remove Casualties",
+        shots,
+        attack,
+        wounds_per_model,
+        models,
+        damage,
+        body=_remove_casualties,
+    )
+    wounds = graph.node(WOUNDS, Kind.FOLD, "Unsaved wounds", removed, body=_wounds)
+    casualties = graph.node(CASUALTIES, Kind.FOLD, "Casualties", removed, body=_felled)
+    logger.debug(
+        "%d shots at p_unsaved=%.3f -> %d casualty outcomes",
+        shots.value.count,
+        attack.value.p_unsaved,
+        len(casualties.value.mass),
+    )
+    return AttackSequence(
+        graph, shots, hit, wound, save, ward, attack, models, removed, wounds, casualties
+    )
+
+
+class _Given(NamedTuple):
+    modifiers: tuple[Modifier, ...]
+    transforms: tuple[Transform, ...]
+    rerolls: tuple[Reroll, ...]
+
+    def at[T](self, stage: Stage, target: T) -> StageRoll[T]:
+        return StageRoll(
+            target,
+            tuple(m for m in self.modifiers if m.lands_on is stage),
+            tuple(r for r in self.rerolls if r.stage is stage),
+            tuple(t for t in self.transforms if t.stage is stage),
+        )
+
+
+def _given_hit(skill: Node[int], modifier: Node[int], given: Node[_Given]) -> StageRoll[int]:
+    return given.value.at(Stage.ROLL_TO_HIT, shooting_hit_target(skill.value, modifier.value))
+
+
+def _given_wound(
+    strength: Node[int], toughness: Node[int], given: Node[_Given]
+) -> StageRoll[int | None]:
+    return given.value.at(Stage.ROLL_TO_WOUND, wound_target(strength.value, toughness.value))
+
+
+def _given_save(
+    armour_value: Node[int | None], armour_piercing: Node[int], given: Node[_Given]
+) -> StageRoll[int | None]:
+    target = armour_save_target(armour_value.value, armour_piercing.value)
+    return given.value.at(Stage.MAKE_ARMOUR_SAVES, target)
+
+
+def _given_ward(ward: Node[int | None], given: Node[_Given]) -> StageRoll[int | None]:
+    return given.value.at(Stage.WARD_SAVES, ward.value)
 
 
 def shoot(
@@ -125,34 +287,20 @@ def shoot(
     transforms: Sequence[Transform] = (),
     rerolls: Sequence[Reroll] = (),
     damage: Distribution[int] | None = None,
-    notes: tuple[str, ...] = (),
-) -> ShootingResult:
-    """Resolve a volley of identical shooting attacks probabilistically.
+) -> AttackSequence:
+    """Resolve identical shooting attacks from bare numbers and compiled records.
 
-    ``wounds_per_model`` is the target's Wounds: unsaved wounds accumulate
-    into whole slain models (three wounds fell one Ogre), with leftover
-    wounds sitting on a survivor; an instant kill removes a model outright
-    regardless of its Wounds. ``targets`` is the number of models in the
-    unit; when given, casualties cap at it — a volley cannot remove more
-    models than the unit contains. The unsaved-wound ``distribution`` is
-    unaffected by either; it never depends on the receiving unit.
-    ``damage`` is the wounds each unsaved wound inflicts (Multiple
-    Wounds (X)'s multiplier, a distribution); None is the plain single
-    wound, and the fold caps what one model can lose either way.
-
-    ``modifiers`` are the compiled records of printed conditional
-    modifiers, applied to each attack's dice walk; ``transforms`` are
-    bespoke code hooks — the escape hatch for what a record cannot say;
-    ``rerolls`` are the re-roll grants the walk applies to the dice they
-    cover, whichever side's rules granted them.
+    The characteristics are given, and ``modifiers``, ``transforms`` and
+    ``rerolls`` are already-compiled records placed on the stage each names.
+    ``targets`` caps casualties at the unit's size when known; ``damage`` is
+    what each unsaved wound inflicts (Multiple Wounds), None for one.
 
     Returns:
-        The per-shot probabilities, the distribution of unsaved wounds, and
-        the casualty (models-removed) distribution.
+        The resolved sequence.
 
     Raises:
-        ValueError: `shots` is negative, `targets` is negative, or
-            `wounds_per_model` is less than 1.
+        ValueError: ``shots`` or ``targets`` is negative, or
+            ``wounds_per_model`` is less than 1.
     """
     if shots < 0:
         raise ValueError("shots must be >= 0")
@@ -160,83 +308,46 @@ def shoot(
         raise ValueError("targets must be >= 0")
     if wounds_per_model < 1:
         raise ValueError("wounds_per_model must be >= 1")
-
-    hit = shooting_hit_target(ballistic_skill, hit_modifier)
-    wound = wound_target(strength, toughness)
-    save = armour_save_target(armour_value, armour_piercing)
-
-    # The per-shot probabilities come from the exact dice walk; the chart
-    # probabilities remain as the reported per-stage figures. The charts
-    # speak the printed convention (None for "-"/no save); the walk speaks
-    # roll states — converted here.
-    resolution = resolve_attack(
-        AttackProfile.shooting(
-            hit_target=hit,
-            wound_target=roll_target(wound),
-            save_target=roll_target(save),
-            ward_target=roll_target(ward_target),
-        ),
-        modifiers,
-        transforms,
-        rerolls,
+    graph = Graph()
+    skill = graph.source("ballistic-skill", Kind.READ, "Ballistic Skill", ballistic_skill)
+    modifier = graph.source("hit-modifier", Kind.CONDITION, "To Hit modifier", hit_modifier)
+    s = graph.source("strength", Kind.READ, "Strength", strength)
+    t = graph.source("toughness", Kind.READ, "Toughness", toughness)
+    armour = graph.source("armour-value", Kind.READ, "Armour Value", armour_value)
+    piercing = graph.source("armour-piercing", Kind.READ, "Armour Piercing", armour_piercing)
+    ward = graph.source("ward-target", Kind.READ, "Ward save", ward_target)
+    given = graph.source(
+        "records",
+        Kind.RULES,
+        "Compiled records",
+        _Given(tuple(modifiers), tuple(transforms), tuple(rerolls)),
     )
-    # Exact, not converted: the walk resolves in Fractions and the aggregations
-    # now carry whatever they are handed, so the volley is exact end to end.
-    p_unsaved = resolution.p_unsaved
-    p_kill = resolution.p_of(Outcome.INSTANT_KILL)
-    # Report the walk's effective targets (modifiers included) so the printed
-    # figures match the math. The To Hit target and the save target both carry
-    # their unconditional modifiers — the save's flat Armour Piercing from a
-    # unit rule (Arrows of Isha on a bow). A save worsened past 6+ is no save
-    # (None), matching the chart convention; a rollless target (no armour)
-    # likewise. A conditional bump (Armour Bane, on a natural 6) is not shown,
-    # as it applies only on that face.
-    if isinstance(resolution.hit_target, int):
-        hit = resolution.hit_target
-    if isinstance(resolution.save_target, int):
-        save = resolution.save_target if resolution.save_target <= 6 else None
-    else:
-        save = None
-    p_hit = hit_probability(hit)
-    p_wound = wound_probability(wound)
-    logger.debug(
-        "per-shot unsaved wound: p=%.3f = hit %.3f x wound %.3f x save-fail %.3f x ward-fail %.3f",
-        p_unsaved,
-        p_hit,
-        p_wound,
-        1 - save_probability(save),
-        1 - save_probability(ward_target),
+    hit = graph.node(
+        Stage.ROLL_TO_HIT.value, Kind.STAGE, "Roll to Hit", skill, modifier, given, body=_given_hit
     )
-
-    distribution, casualties = wound_and_casualties(
-        shots,
-        p_unsaved=p_unsaved,
-        p_kill=p_kill,
-        wounds_per_model=wounds_per_model,
-        targets=targets,
-        damage=damage,
+    wound = graph.node(
+        Stage.ROLL_TO_WOUND.value, Kind.STAGE, "Roll to Wound", s, t, given, body=_given_wound
     )
-
-    return ShootingResult(
-        shots=shots,
-        hit_target=hit,
-        wound_target=wound,
-        save_target=save,
-        ward_target=ward_target,
-        p_hit=p_hit,
-        p_wound=p_wound,
-        p_unsaved=p_unsaved,
-        distribution=distribution,
-        casualties=casualties,
-        notes=notes,
-        target_models=targets,
+    save = graph.node(
+        Stage.MAKE_ARMOUR_SAVES.value,
+        Kind.STAGE,
+        "Make Armour Saves",
+        armour,
+        piercing,
+        given,
+        body=_given_save,
     )
+    warded = graph.node(
+        Stage.WARD_SAVES.value, Kind.STAGE, "Ward Saves", ward, given, body=_given_ward
+    )
+    count = graph.source(SHOTS, Kind.COUNT, "Shots", Shots(shots))
+    per_model = graph.source("target.wounds", Kind.READ, "Wounds", wounds_per_model)
+    models = graph.source("target.models", Kind.READ, "Models", targets)
+    multiplier = graph.source(MULTIPLE_WOUNDS, Kind.EFFECTIVE, "Multiple Wounds", Damage(damage))
+    return _sequence(graph, count, hit, wound, save, warded, per_model, models, multiplier)
 
 
 def _at_long_range(profile: WeaponProfile, distance: int | None) -> bool | None:
-    # Whether the shot is at long range, "further away than half the
-    # weapon's maximum range". Needs both a known distance and a numeric
-    # weapon range; without them the band is unknown (None).
     if distance is None or not isinstance(profile.range, int):
         return None
     return distance > profile.range / 2
@@ -250,25 +361,296 @@ def _engagement_conditions(
     force_short_range: bool,
     stand_and_shoot: bool,
 ) -> GateContext:
-    # The gate facts for the shooter's volley: the weapon it fires (its family
-    # and name, for Arrows of Isha's "any bow"), the armour it wears, whether the
-    # model moved, and whether the shot is at long range (a shot forced short, a
-    # Stand & Shoot reaction, never is). The weapon is the one *chosen* for the
-    # volley, which need not be the one in hand (an unarmed unit fires its sole
-    # missile weapon), so it is passed rather than read off the shooter.
-    # ``combat`` is absent (a shooter is not engaged in close combat) and
-    # ``target_of`` is absent (the shooter is the attacker, not a target) — the
-    # defender's incoming-attack facts are built separately for its armour save.
+    # The weapon is the one chosen for the shot, which need not be the one in
+    # hand, so it is passed rather than read off the shooter. A shot forced
+    # short, or a Stand & Shoot reaction, is never at long range.
     return GateContext(
         wielding=WeaponFacts(type=weapon.weapon_type, name=weapon.name),
         worn=shooter.armour_facts,
-        # a shooter never charged: charge stays None
         movement=MovementFacts(moved=shooter.movement.moved),
         shooting=ShootingFacts(
             at_long_range=False if force_short_range else _at_long_range(profile, distance),
             stand_and_shoot=stand_and_shoot,
         ),
     )
+
+
+def _shooting_weapon(shooter: Node[Contingent]) -> Weapon:
+    return shooter.value.shooting_weapon()
+
+
+def _missile_profile(weapon: Node[Weapon]) -> WeaponProfile:
+    profile = weapon.value.missile_profile
+    if profile is None:
+        raise ValueError(f"{weapon.value.name} has no missile profile; it cannot shoot")
+    return profile
+
+
+def _ballistic_skill(shooter: Node[Contingent]) -> int:
+    value = shooter.value.unit.main[Characteristic.BALLISTIC_SKILL]
+    if value is None:
+        raise ValueError(f"{shooter.value.unit.name} has no Ballistic Skill; it cannot shoot")
+    return value
+
+
+def _toughness(target: Node[Contingent]) -> int:
+    value = target.value.unit.main[Characteristic.TOUGHNESS]
+    if value is None:
+        raise ValueError(f"{target.value.unit.name} has no Toughness; it cannot be wounded")
+    return value
+
+
+def _strength(
+    shooter: Node[Contingent], weapon: Node[Weapon], profile: Node[WeaponProfile]
+) -> int:
+    wielder = shooter.value.unit.main[Characteristic.STRENGTH]
+    if profile.value.strength.is_relative and wielder is None:
+        raise ValueError(
+            f"{weapon.value.name} shoots at the wielder's Strength, but "
+            f"{shooter.value.unit.name} has none"
+        )
+    return profile.value.strength.resolve(wielder or 0)
+
+
+def _wounds_per_model(target: Node[Contingent]) -> int:
+    # A profile with no printed Wounds ("-") is a single-Wound model.
+    return target.value.unit.main[Characteristic.WOUNDS] or 1
+
+
+def _models(target: Node[Contingent]) -> int:
+    return target.value.models
+
+
+def _conditions(
+    shooter: Node[Contingent],
+    weapon: Node[Weapon],
+    profile: Node[WeaponProfile],
+    distance: Node[int | None],
+    force_short_range: Node[bool],
+    stand_and_shoot: Node[bool],
+) -> GateContext:
+    return _engagement_conditions(
+        shooter.value,
+        weapon.value,
+        profile.value,
+        distance.value,
+        force_short_range.value,
+        stand_and_shoot.value,
+    )
+
+
+def _borne(rules: Sequence[Node[Bearing]], side: Side, origin: Namespace) -> list[Rule]:
+    return [n.value.rule for n in rules if n.value.side is side and n.value.origin is origin]
+
+
+def _incoming(
+    target: Node[Contingent],
+    conditions: Node[GateContext],
+    profile: Node[WeaponProfile],
+    *rules: Node[Bearing],
+) -> GateContext:
+    weapon_rules = {r.name: r for r in _borne(rules, Side.ATTACKER, Namespace.WEAPON)}
+    marks = attack_marks(
+        profile.value.special_rules, weapon_rules, _borne(rules, Side.ATTACKER, Namespace.UNIT)
+    )
+    return GateContext(
+        wielding=target.value.weapon_facts,
+        worn=target.value.armour_facts,
+        target_of=AttackFacts(
+            kind=AttackKind.SHOOTING,
+            magical=marks.magical,
+            flaming=marks.flaming,
+            at_long_range=conditions.value.shooting.at_long_range,
+        ),
+    )
+
+
+def _held(rules: Sequence[Node[Bearing]], *factored: Sequence[str]) -> frozenset[str]:
+    names = {name for names in factored for name in names}
+    return frozenset(n.id for n in rules if n.value.rule.name not in names)
+
+
+def _shots(
+    shooter: Node[Contingent], conditions: Node[GateContext], *rules: Node[Bearing]
+) -> Shots:
+    # Only the front rank fires on flat ground; Volley Fire adds half of each
+    # rank behind it, rounding up.
+    volley = effective_volley([n.value.rule for n in rules], conditions.value)
+    count = shooter.value.formation.files
+    if volley.fires:
+        count += sum((rank + 1) // 2 for rank in shooter.value.formation.rear_rank_sizes)
+    return Shots(count, _held(rules, volley.factored))
+
+
+def _multiple_wounds(conditions: Node[GateContext], *rules: Node[Bearing]) -> Damage:
+    multiplier = effective_wound_multiplier([n.value.rule for n in rules], conditions.value)
+    return Damage(multiplier.wounds, _held(rules, multiplier.factored))
+
+
+def _stage[T](
+    stage: Stage,
+    target: T,
+    conditions: GateContext,
+    incoming: GateContext,
+    rules: Sequence[Node[Bearing]],
+    *factored: Sequence[str],
+) -> StageRoll[T]:
+    # Each rule compiles from its bearer's seat under its bearer's facts. Only
+    # the records landing on this stage are kept; a rule reaching two stages is
+    # routed to both and compiled at each. ``factored`` adds the names other
+    # folds at this stage applied, so they are not reported as held.
+    modifiers: list[Modifier] = []
+    rerolls: list[Reroll] = []
+    transforms: list[Transform] = []
+    applied: set[str] = {name for names in factored for name in names}
+    for node in rules:
+        bearing = node.value
+        facts = conditions if bearing.side is Side.ATTACKER else incoming
+        compiled = compile_rules(
+            [bearing.rule.name],
+            {bearing.rule.name: bearing.rule},
+            facts,
+            seat=bearing.side,
+            grants=bearing.grants,
+        )
+        rerolled = effective_rerolls([bearing.rule], facts, seat=bearing.side)
+        modifiers.extend(m for m in compiled.modifiers if m.lands_on is stage)
+        transforms.extend(t for t in compiled.transforms if t.stage is stage)
+        rerolls.extend(r for r in rerolled.rerolls if r.stage is stage)
+        applied.update(compiled.factored, rerolled.factored)
+    held = frozenset(n.id for n in rules if n.value.rule.name not in applied)
+    return StageRoll(target, tuple(modifiers), tuple(rerolls), tuple(transforms), held)
+
+
+def _roll_to_hit(
+    skill: Node[int],
+    modifier: Node[int],
+    conditions: Node[GateContext],
+    incoming: Node[GateContext],
+    *rules: Node[Bearing],
+) -> StageRoll[int]:
+    target = shooting_hit_target(skill.value, modifier.value)
+    return _stage(Stage.ROLL_TO_HIT, target, conditions.value, incoming.value, rules)
+
+
+def _roll_to_wound(
+    strength: Node[int],
+    toughness: Node[int],
+    conditions: Node[GateContext],
+    incoming: Node[GateContext],
+    *rules: Node[Bearing],
+) -> StageRoll[int | None]:
+    target = wound_target(strength.value, toughness.value)
+    return _stage(Stage.ROLL_TO_WOUND, target, conditions.value, incoming.value, rules)
+
+
+def _make_armour_saves(
+    target: Node[Contingent],
+    profile: Node[WeaponProfile],
+    conditions: Node[GateContext],
+    incoming: Node[GateContext],
+    *rules: Node[Bearing],
+) -> StageRoll[int | None]:
+    # A barred piece (Requires Two Hands' shield) is withdrawn before any
+    # value is read. The unit's rules fold first, the weapon in use's on the
+    # result.
+    unit_rules = _borne(rules, Side.TARGET, Namespace.UNIT)
+    weapon_rules = _borne(rules, Side.TARGET, Namespace.WEAPON)
+    barred = barred_worn(weapon_rules, incoming.value)
+    usable = [piece for piece in target.value.loadout.armour if piece.name not in barred.names]
+    printed = defender_armour(usable)
+    unit_fold = effective_armour_value(printed, unit_rules, incoming.value)
+    after_unit = None if printed is None else unit_fold.value
+    weapon_fold = effective_armour_value(after_unit, weapon_rules, incoming.value)
+    armour_value = None if printed is None else weapon_fold.value
+    return _stage(
+        Stage.MAKE_ARMOUR_SAVES,
+        armour_save_target(armour_value, profile.value.armour_piercing),
+        conditions.value,
+        incoming.value,
+        rules,
+        unit_fold.factored,
+        weapon_fold.factored,
+        barred.factored,
+    )
+
+
+def _ward_saves(
+    conditions: Node[GateContext], incoming: Node[GateContext], *rules: Node[Bearing]
+) -> StageRoll[int | None]:
+    # Wards never stack: the best of the unit's and the weapon's grants applies.
+    unit_ward = effective_ward_target(_borne(rules, Side.TARGET, Namespace.UNIT), incoming.value)
+    weapon_ward = effective_ward_target(
+        _borne(rules, Side.TARGET, Namespace.WEAPON), incoming.value
+    )
+    granted = [t for t in (unit_ward.target, weapon_ward.target) if t is not None]
+    return _stage(
+        Stage.WARD_SAVES,
+        min(granted) if granted else None,
+        conditions.value,
+        incoming.value,
+        rules,
+        unit_ward.factored,
+        weapon_ward.factored,
+    )
+
+
+def _bear(
+    graph: Graph,
+    owner: str,
+    rules: Sequence[Rule],
+    side: Side,
+    origin: Namespace,
+    grants: Mapping[str, Rule],
+) -> list[Node[Bearing]]:
+    return [
+        graph.source(
+            f"{owner}.rule.{rule.id}", Kind.RULE, rule.name, Bearing(rule, side, origin, grants)
+        )
+        for rule in rules
+    ]
+
+
+def _notes(
+    graph: Graph,
+    rules: Sequence[Node[Bearing]],
+    attacker: Contingent,
+    target: Contingent,
+    weapon: Weapon,
+) -> tuple[str, ...]:
+    consumed = {i for node in graph.nodes.values() for i in node.inputs}
+    held = graph.provenance.unfactored
+    factored = {n.id for n in rules if n.id in consumed and n.id not in held}
+    notes: list[str] = []
+    for side, unit in ((Side.ATTACKER, attacker), (Side.TARGET, target)):
+        borne = [n for n in rules if n.value.side is side and n.value.origin is Namespace.UNIT]
+        names = {n.value.rule.name for n in borne if n.id in factored}
+        notes.extend(
+            f"special rule not factored: {name} ({unit.unit.name})"
+            for name in unit.unit.special_rules
+            if name not in names
+        )
+        notes.extend(
+            factored_notes(unit.loadout.rules, names, unit.unit.name, unit.loadout.granted_rules)
+        )
+    weapon_borne = {
+        n.value.rule.name: n
+        for n in rules
+        if n.value.side is Side.ATTACKER and n.value.origin is Namespace.WEAPON
+    }
+    profile = weapon.missile_profile
+    for name in () if profile is None else profile.special_rules:
+        node = weapon_borne.get(name)
+        if node is None or node.id not in factored:
+            notes.append(f"weapon rule not factored: {name} ({weapon.name})")
+    notes.extend(
+        f"core rule not factored: {n.value.rule.name}"
+        for n in rules
+        if n.value.origin is Namespace.CORE and n.id not in factored
+    )
+    if weapon.notes is not None:
+        notes.append(f"weapon notes not factored ({weapon.name}): {weapon.notes}")
+    return tuple(notes)
 
 
 def shoot_unit(
@@ -280,223 +662,189 @@ def shoot_unit(
     hit_modifier: int = 0,
     force_short_range: bool = False,
     stand_and_shoot: bool = False,
-) -> ShootingResult:
-    """Resolve ``attacker`` shooting a volley at ``defender``.
+) -> Shooting:
+    """Resolve ``attacker`` shooting at ``defender``.
 
-    One shot per model in the unit's front rank (``attacker.formation.files``),
-    using each side's first (rank-and-file) profile and the missile profile
-    of the weapon the attacker shoots with (``attacker.shooting_weapon()`` —
-    the weapon armed through
-    :meth:`~avelorn.tow.contingent.Contingent.wielding`, or the sole carried
-    missile weapon when none is armed); casualties cap at the defender's
-    fielded ``models``.
-    Only the front rank fires on flat ground; a hill would add a rank
-    (not modelled). A weapon with Volley Fire adds half of each rank
-    behind the front (rounding up) while the unit is stationary
-    (``attacker.movement.moved`` False) and not making a Stand & Shoot reaction.
-    To resolve a partial volley (only some models in range
-    or sight), field the shooting subset as its own contingent. The weapon's
-    rules compile from the loadout's resolved index, and the defender's save
-    folds from its loadout. ``phase_rules`` are the phase's rules in force —
-    the chapter rules that apply to every volley (Firing at Long Range,
-    Moving and Shooting), resolved by printed name; the Game assembles
-    the mapping once (game.in_play), the way a loadout resolves a
-    unit's names at fielding. Unit special rules are not factored into
-    the math yet — every one is listed in the result's notes.
+    The front rank fires, with the missile profile of the weapon the attacker
+    shoots with (``attacker.shooting_weapon()``); Volley Fire adds half of each
+    rear rank while the unit stands still and is not reacting to a charge.
+    ``phase_rules`` are the chapter rules in force. ``distance`` is the range
+    to the target; left None, a rule gated on range stays unapplied and is
+    noted. ``force_short_range`` treats the shot as within half range;
+    ``stand_and_shoot`` marks a charge reaction, which forbids Volley Fire.
 
-    Whether the shooter moved is the shooter's own state
-    (``attacker.movement.moved``). ``distance`` is the range to the target — the
-    one relational fact of the shot; a rule conditioned on a range left
-    unknown (``distance`` None) stays unfactored and noted. Rules whose
-    category is the shooting phase chapter apply to every volley, gated by
-    their conditions. ``force_short_range`` treats the
-    shot as within half range whatever the distance, so Firing at Long
-    Range is honoured as a no-op rather than left unknown and noted — a
-    mechanic a Stand & Shoot uses, but not only it. ``stand_and_shoot``
-    marks the shot as a Stand & Shoot charge reaction, which forbids
-    Volley Fire; it is kept separate from ``force_short_range`` so a
-    future ability that forces short range does not disable Volley Fire.
+    The steps that read the units raise ValueError when the attacker has no
+    missile weapon to shoot with, the weapon has no missile profile, the
+    attacker profile has no Ballistic Skill, the defender profile has no
+    Toughness, or the weapon shoots at the wielder's Strength and the
+    attacker profile has none.
 
     Returns:
-        The shooting outcome.
-
-    Raises:
-        ValueError: if the attacker has no missile weapon to shoot with (none
-            carried, or several unarmed), the weapon has no missile profile,
-            the attacker profile has no Ballistic Skill, the defender profile
-            has no Toughness, or the weapon shoots at the wielder's Strength
-            and the attacker profile has none.
+        The resolved shooting, its graph and its notes.
     """
-    # Only the unit's front rank fires (shooting-with-more-than-one-rank);
-    # a unit on a hill fires with one rank more, not modelled — flat ground
-    # is assumed. Casualties still cap at the whole target unit's size.
-    shooters, defenders = attacker.formation.files, defender.models
-    shooter, target = attacker.unit, defender.unit
-    # TODO: profile selection is naive. A unit that bought a champion
-    # shoots with the champion too (possibly at higher BS, e.g. an
-    # archers' Sentinel at BS 5), and units with split profiles need
-    # per-profile resolution with the volley combined. Requires a notion
-    # of unit composition (which models are actually fielded), which the
-    # schema does not have yet.
-    chosen = attacker.shooting_weapon()
-    profile = chosen.missile_profile
-    if profile is None:
-        raise ValueError(f"{chosen.name} has no missile profile; it cannot shoot")
-    ballistic_skill = shooter.main[Characteristic.BALLISTIC_SKILL]
-    toughness = target.main[Characteristic.TOUGHNESS]
-    if ballistic_skill is None:
-        raise ValueError(f"{shooter.name} has no Ballistic Skill; it cannot shoot")
-    if toughness is None:
-        raise ValueError(f"{target.name} has no Toughness; it cannot be wounded")
-
-    wielder_strength = shooter.main[Characteristic.STRENGTH]
-    if profile.strength.is_relative and wielder_strength is None:
-        raise ValueError(
-            f"{chosen.name} shoots at the wielder's Strength, but {shooter.name} has none"
-        )
-    strength = profile.strength.resolve(wielder_strength or 0)
-
-    conditions = _engagement_conditions(
-        attacker, chosen, profile, distance, force_short_range, stand_and_shoot
+    graph = Graph()
+    shooter = graph.source(ATTACKER, Kind.UNIT, attacker.unit.name, attacker)
+    target = graph.source(TARGET, Kind.UNIT, defender.unit.name, defender)
+    weapon = graph.node("attacker.weapon", Kind.WEAPON, "Weapon", shooter, body=_shooting_weapon)
+    profile = graph.node(
+        "attacker.missile-profile", Kind.WEAPON, "Missile profile", weapon, body=_missile_profile
     )
-    # Volley Fire: half of each rank behind the front (rounding up) also
-    # fires — a rank rule, not a dice modifier, so it lands here on the shot
-    # count, not in the walk. Read from the profile in use's resolved entries
-    # under the volley's own facts (the entry gates on no move this turn and
-    # on the volley not being a Stand & Shoot reaction, both always known),
-    # so it fires or is honoured with no extra shots, and is claimed out of
-    # the weapon-rule notes below.
-    in_use = [
-        attacker.loadout.weapon_rules[name]
-        for name in profile.special_rules
-        if name in attacker.loadout.weapon_rules
+    skill = graph.node(
+        "attacker.ballistic-skill", Kind.READ, "Ballistic Skill", shooter, body=_ballistic_skill
+    )
+    toughness = graph.node("target.toughness", Kind.READ, "Toughness", target, body=_toughness)
+    strength = graph.node(
+        "attacker.strength", Kind.READ, "Strength", shooter, weapon, profile, body=_strength
+    )
+    range_ = graph.source("distance", Kind.CONDITION, "Distance", distance)
+    modifier = graph.source("hit-modifier", Kind.CONDITION, "To Hit modifier", hit_modifier)
+    short = graph.source("short-range", Kind.CONDITION, "Forced short range", force_short_range)
+    reaction = graph.source("stand-and-shoot", Kind.CONDITION, "Stand & Shoot", stand_and_shoot)
+    conditions = graph.node(
+        "attacker.conditions",
+        Kind.CONDITION,
+        "Conditions",
+        shooter,
+        weapon,
+        profile,
+        range_,
+        short,
+        reaction,
+        body=_conditions,
+    )
+
+    in_use = attacker.loadout.weapon_rules
+    weapon_rules = [in_use[name] for name in profile.value.special_rules if name in in_use]
+    granted, foe_granted = attacker.loadout.granted_rules, defender.loadout.granted_rules
+    in_force = [phase_rules[name] for name in sorted(phase_rules)]
+    rules: list[Node[Bearing]] = [
+        *_bear(graph, "attacker.weapon", weapon_rules, Side.ATTACKER, Namespace.WEAPON, granted),
+        *_bear(graph, ATTACKER, attacker.loadout.rules, Side.ATTACKER, Namespace.UNIT, granted),
+        *_bear(graph, TARGET, defender.loadout.rules, Side.TARGET, Namespace.UNIT, foe_granted),
+        *_bear(
+            graph,
+            "target.weapon",
+            defender.in_hand_rules(),
+            Side.TARGET,
+            Namespace.WEAPON,
+            foe_granted,
+        ),
+        *_bear(graph, "core", in_force, Side.ATTACKER, Namespace.CORE, {}),
     ]
-    volley = effective_volley(in_use, conditions)
-    # Multiple Wounds (X): what each unsaved wound is worth lands on the
-    # casualty fold, never on the dice, so the multiplier is read here from
-    # the profile in use's resolved entries — a volley is a single batch, so
-    # the fold is exact — and claimed out of the weapon-rule notes below.
-    multiplier = effective_wound_multiplier(in_use, conditions)
-    if volley.fires:
-        shooters += sum((rank + 1) // 2 for rank in attacker.formation.rear_rank_sizes)
+    routed: dict[str, list[Node[Bearing]]] = {}
+    for node in rules:
+        for consumer in routes(node.value):
+            routed.setdefault(consumer, []).append(node)
+
+    def to(consumer: str) -> list[Node[Bearing]]:
+        return routed.get(consumer, [])
+
+    incoming = graph.node(
+        "target.incoming",
+        Kind.CONDITION,
+        "Incoming attack",
+        target,
+        conditions,
+        profile,
+        *to(MARKS),
+        body=_incoming,
+    )
+    shots = graph.node(
+        SHOTS,
+        Kind.COUNT,
+        "Shots",
+        shooter,
+        conditions,
+        *to(SHOTS),
+        body=_shots,
+        provenance=_provenance,
+    )
+    damage = graph.node(
+        MULTIPLE_WOUNDS,
+        Kind.EFFECTIVE,
+        "Multiple Wounds",
+        conditions,
+        *to(MULTIPLE_WOUNDS),
+        body=_multiple_wounds,
+        provenance=_provenance,
+    )
+    hit = graph.node(
+        Stage.ROLL_TO_HIT.value,
+        Kind.STAGE,
+        "Roll to Hit",
+        skill,
+        modifier,
+        conditions,
+        incoming,
+        *to(Stage.ROLL_TO_HIT.value),
+        body=_roll_to_hit,
+        provenance=_provenance,
+    )
+    wound = graph.node(
+        Stage.ROLL_TO_WOUND.value,
+        Kind.STAGE,
+        "Roll to Wound",
+        strength,
+        toughness,
+        conditions,
+        incoming,
+        *to(Stage.ROLL_TO_WOUND.value),
+        body=_roll_to_wound,
+        provenance=_provenance,
+    )
+    save = graph.node(
+        Stage.MAKE_ARMOUR_SAVES.value,
+        Kind.STAGE,
+        "Make Armour Saves",
+        target,
+        profile,
+        conditions,
+        incoming,
+        *to(Stage.MAKE_ARMOUR_SAVES.value),
+        body=_make_armour_saves,
+        provenance=_provenance,
+    )
+    ward = graph.node(
+        Stage.WARD_SAVES.value,
+        Kind.STAGE,
+        "Ward Saves",
+        conditions,
+        incoming,
+        *to(Stage.WARD_SAVES.value),
+        body=_ward_saves,
+        provenance=_provenance,
+    )
+    per_model = graph.node("target.wounds", Kind.READ, "Wounds", target, body=_wounds_per_model)
+    models = graph.node("target.models", Kind.READ, "Models", target, body=_models)
     logger.debug(
         "resolving %d %s (BS %d) shooting %s at %s (T %d), S %d AP %d",
-        shooters,
-        shooter.name,
-        ballistic_skill,
-        chosen.name,
-        target.name,
-        toughness,
-        strength,
-        profile.armour_piercing,
+        shots.value.count,
+        attacker.unit.name,
+        skill.value,
+        weapon.value.name,
+        defender.unit.name,
+        toughness.value,
+        strength.value,
+        profile.value.armour_piercing,
     )
-
-    # The walk's two seats, resolved once each (engine/seats): the attacker's
-    # weapon and unit rules compiled under the volley's facts, then the
-    # defender's armour, ward, re-rolls and enemy-subject maluses folded under
-    # the incoming attack's — whose marks (magical, Flaming) are the
-    # attacker's seat's to say (Parry stays inert here: it gates on close
-    # combat). The same two resolutions a melee strike makes.
-    offence = Offence.resolve(
-        profile,
-        weapon_rules=attacker.loadout.weapon_rules,
-        rules=attacker.loadout.rules,
-        grants=attacker.loadout.granted_rules,
-        conditions=conditions,
-    )
-    incoming = GateContext(
-        wielding=defender.weapon_facts,
-        worn=defender.armour_facts,
-        target_of=AttackFacts(
-            kind=AttackKind.SHOOTING,
-            magical=offence.marks.magical,
-            flaming=offence.marks.flaming,
-            at_long_range=conditions.shooting.at_long_range,  # duplicated; see #179
-        ),
-    )
-    defence = Defence.resolve(
-        armour=defender.loadout.armour,
-        rules=defender.loadout.rules,
-        grants=defender.loadout.granted_rules,
-        incoming=incoming,
-        weapon_rules_in_use=defender.in_hand_rules(),
-    )
-    modifiers = [*offence.modifiers, *defence.modifiers]
-    # One volley is one walk from the attacker's seat, so only what that walk
-    # factored is claimed: a rule belonging to its other seat is inapplicable
-    # and stays reported, since no second compile here covers it.
-    claimed = {*offence.factored, *offence.rerolls.factored}
-
-    notes: list[str] = []
-    notes.extend(
-        f"special rule not factored: {rule} ({shooter.name})"
-        for rule in shooter.special_rules
-        if rule not in claimed
-    )
-    notes.extend(
-        factored_notes(
-            attacker.loadout.rules, claimed, shooter.name, attacker.loadout.granted_rules
-        )
-    )
-    defender_claimed = {
-        *defence.armour.factored,
-        *defence.ward.factored,
-        *defence.rerolls.factored,
-        *defence.factored,
-    }
-    notes.extend(
-        f"special rule not factored: {rule} ({target.name})"
-        for rule in target.special_rules
-        if rule not in defender_claimed
-    )
-    notes.extend(
-        factored_notes(
-            defender.loadout.rules, defender_claimed, target.name, defender.loadout.granted_rules
-        )
-    )
-    # A weapon rule the walk cannot factor may be the re-roll seam's instead (a
-    # magic bow's grant), and Volley Fire lands on the shot count above rather
-    # than in the walk: both are claimed out of the weapon-rule notes. The
-    # profile in use is only ever compiled from its shooter's seat, so an
-    # inapplicable weapon rule is reported here — no second compile covers it.
-    weapon_claimed = {*offence.weapon_rerolls.factored, *volley.factored, *multiplier.factored}
-    notes.extend(
-        f"weapon rule not factored: {rule} ({chosen.name})"
-        for rule in offence.weapon_unfactored
-        if rule not in weapon_claimed
-    )
-    phase_compiled = compile_rules(sorted(phase_rules), phase_rules, conditions)
-    modifiers.extend(phase_compiled.modifiers)
-    notes.extend(
-        f"core rule not factored: {name}"
-        for name in (*phase_compiled.unfactored, *phase_compiled.inapplicable)
-    )
-    if chosen.notes is not None:
-        notes.append(f"weapon notes not factored ({chosen.name}): {chosen.notes}")
-
-    # Wounds accumulate into whole slain models; a profile with no printed
-    # Wounds ("-") is treated as a single-Wound model.
-    defender_wounds = target.main[Characteristic.WOUNDS] or 1
-
-    return shoot(
-        shots=shooters,
-        ballistic_skill=ballistic_skill,
-        strength=strength,
-        toughness=toughness,
-        armour_value=defence.armour_value,
-        armour_piercing=profile.armour_piercing,
-        ward_target=defence.ward.target,
-        hit_modifier=hit_modifier,
-        wounds_per_model=defender_wounds,
-        targets=defenders,
-        damage=multiplier.wounds,
-        modifiers=modifiers,
-        rerolls=(
-            *offence.rerolls.rerolls,
-            *offence.weapon_rerolls.rerolls,
-            *defence.rerolls.rerolls,
-        ),
-        notes=tuple(notes),
+    sequence = _sequence(graph, shots, hit, wound, save, ward, per_model, models, damage)
+    return Shooting(
+        graph=graph,
+        shots=shots,
+        roll_to_hit=hit,
+        roll_to_wound=wound,
+        make_armour_saves=save,
+        ward_saves=ward,
+        attack=sequence.attack,
+        models=models,
+        removed=sequence.removed,
+        wounds=sequence.wounds,
+        casualties=sequence.casualties,
+        attacker=shooter,
+        target=target,
+        weapon=weapon,
+        rules=tuple(rules),
+        notes=_notes(graph, rules, attacker, defender, weapon.value),
     )
 
 
@@ -504,28 +852,25 @@ def shoot_unit(
 class PanicTest(Roll):
     """The Make Panic Tests step's dice: 2D6 against the unit's Leadership.
 
-    Rolled once for the whole unit — no single natural face exists, so
-    it is no attack roll and a ``natural:`` trigger cannot name it. The
-    printed bounds (a double 6 always fails, a double 1 always passes)
-    live in the characteristic-test procedure this delegates to.
+    Rolled once for the whole unit, so no single natural face exists and a
+    ``natural:`` trigger cannot name it. The printed bounds (a double 6 always
+    fails, a double 1 always passes) live in the characteristic-test procedure.
     """
 
     leadership: int | None
     stage: ClassVar[Stage] = Stage.MAKE_PANIC_TESTS
 
     def chance(self) -> Fraction:
-        """The probability the test passes.
+        """The probability the test passes; 0 for no Leadership at all.
 
         Returns:
-            The exact pass probability, 0 for no Leadership at all.
+            The exact pass probability.
         """
         return pass_probability(Characteristic.LEADERSHIP, self.leadership)
 
 
 @dataclass(frozen=True)
 class PanicResult:
-    """Exact outcome probabilities of the Make Panic Tests step."""
-
     p_test: Probability  # lost more than 25% of start-of-phase models (and survived)
     p_holds: Probability  # never tested, or tested and passed
     p_falls_back: Probability  # failed with more than half its battle strength left
@@ -534,48 +879,41 @@ class PanicResult:
     reroll_from: str | None = None  # the rule that re-rolls a failed test, if any
 
 
-def make_panic_tests(
-    result: ShootingResult,
+def panic_outcomes(
+    casualties: Distribution[int],
+    size: int,
     defender: Contingent,
+    rules: Sequence[Rule],
     *,
     battle_strength: int | None = None,
 ) -> PanicResult:
-    """Resolve the panic step for one volley's casualty distribution.
+    """Resolve the panic step for a casualty distribution.
 
-    The defender's resolved loadout carries its rules: a re-roll effect
-    on this seam whose cause filter admits heavy casualties (this
-    seam's only cause) re-rolls a failed test — once, whatever the
-    source, per the printed re-roll rules. ``battle_strength`` is the
-    unit's model count at the start of the battle, governing the
-    printed Fall Back or Flee split; it defaults to the start-of-phase
-    count — a unit yet to take any casualties.
+    A unit that lost more than a quarter of its ``size`` tests against its
+    Leadership; a re-roll effect on this step among ``rules`` re-rolls a
+    failed test once. ``battle_strength`` is the model count at the start of
+    the battle, which governs the Fall Back or Flee split; it defaults to
+    ``size``.
 
     Returns:
         The exact probabilities of each panic outcome.
 
     Raises:
-        ValueError: the result has no target unit size, the size is
-            zero, or ``battle_strength`` is smaller than it.
+        ValueError: ``size`` is zero, or ``battle_strength`` is below it.
     """
-    size = result.target_models
-    if size is None or size == 0:
-        raise ValueError("panic needs the target unit's size; resolve with it set on the result")
+    if size == 0:
+        raise ValueError("panic needs the target unit's size")
     battle = battle_strength if battle_strength is not None else size
     if battle < size:
         raise ValueError(f"battle strength ({battle}) cannot be below current size ({size})")
-
     test = PanicTest(defender.unit.highest(Characteristic.LEADERSHIP))
     p_pass = test.chance()
-    reroll_from = _reroll_grant(defender.loadout, PanicCause.HEAVY_CASUALTIES)
+    reroll_from = _reroll_grant(rules, PanicCause.HEAVY_CASUALTIES)
     if reroll_from is not None:
-        # A failed test is taken again: both dice, same natural bounds,
-        # never more than once whatever the source.
         p_pass = p_pass + (1 - p_pass) * p_pass
-    # A zero of the volley's own numeric kind, so an outcome nothing reaches
-    # matches the rest rather than staying a bare int.
     zero = p_pass * 0
     tested = holds = falls_back = flees = destroyed = zero
-    for killed, mass in enumerate(result.casualties):
+    for killed, mass in casualties.mass.items():
         if killed == size:
             destroyed += mass
         elif killed * 4 > size:  # "more than a quarter (25%)"
@@ -607,36 +945,57 @@ def make_panic_tests(
     )
 
 
-def _reroll_grant(loadout: Loadout, cause: PanicCause) -> str | None:
-    # The first of the defender's resolved rules granting a re-roll on
-    # this seam for this cause; one grant is all a test can ever use.
-    # Unresolved rules have no entries, so they cannot grant.
-    for rule in loadout.rules:
+def _reroll_grant(rules: Sequence[Rule], cause: PanicCause) -> str | None:
+    # One grant is all a test can ever use.
+    for rule in rules:
         for effect in rule.effects:
             if (
                 isinstance(effect, RerollEffect)
                 and effect.reroll is Stage.MAKE_PANIC_TESTS
                 and (not effect.causes or cause in effect.causes)
             ):
-                logger.debug("panic re-roll granted by %s", rule.name)
                 return rule.name
     return None
 
 
+def _make_panic_tests(
+    casualties: Node[Distribution[int]],
+    target: Node[Contingent],
+    battle_strength: Node[int | None],
+    *rules: Node[Bearing],
+) -> PanicResult:
+    return panic_outcomes(
+        casualties.value,
+        target.value.models,
+        target.value,
+        [n.value.rule for n in rules],
+        battle_strength=battle_strength.value,
+    )
+
+
+def make_panic_tests(
+    shooting: Shooting, *, battle_strength: int | None = None
+) -> Node[PanicResult]:
+    strength = shooting.graph.source(
+        "battle-strength", Kind.CONDITION, "Battle strength", battle_strength
+    )
+    routed = [n for n in shooting.rules if Stage.MAKE_PANIC_TESTS.value in routes(n.value)]
+    return shooting.graph.node(
+        Stage.MAKE_PANIC_TESTS.value,
+        Kind.TEST,
+        "Make Panic Tests",
+        shooting.casualties,
+        shooting.target,
+        strength,
+        *routed,
+        body=_make_panic_tests,
+    )
+
+
 @dataclass(frozen=True)
 class ShootingPhase(Phase):
-    """The Shooting phase: its printed steps, its actions.
-
-    ``in_play`` are the chapter's rules in force — every volley
-    resolves under them.
-    """
-
     in_play: Mapping[str, Rule]
 
-    # The printed shooting sequence: every step knows what it rolls —
-    # attack dice with their semantics (this Roll to Hit confirms 7+),
-    # then the unit-wide 2D6 panic test. The declaration: drift guards
-    # hold the attack factory and the Stage order to it.
     steps: ClassVar[tuple[type[Roll], ...]] = (
         RollToHitShooting,
         RollToWound,
@@ -652,12 +1011,7 @@ class ShootingPhase(Phase):
         *,
         distance: int | None = None,
         hit_modifier: int = 0,
-    ) -> ShootingResult:
-        """One unit shoots another with the weapon in hand, under the rules in force.
-
-        Returns:
-            The shooting outcome.
-        """
+    ) -> Shooting:
         return shoot_unit(
             attacker,
             defender,
@@ -667,15 +1021,6 @@ class ShootingPhase(Phase):
         )
 
     def make_panic_tests(
-        self,
-        result: ShootingResult,
-        defender: Contingent,
-        *,
-        battle_strength: int | None = None,
-    ) -> PanicResult:
-        """The panic step for one volley's casualties.
-
-        Returns:
-            The panic outcome distribution.
-        """
-        return make_panic_tests(result, defender, battle_strength=battle_strength)
+        self, shooting: Shooting, *, battle_strength: int | None = None
+    ) -> Node[PanicResult]:
+        return make_panic_tests(shooting, battle_strength=battle_strength)
