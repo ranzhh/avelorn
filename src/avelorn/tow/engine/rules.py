@@ -580,9 +580,11 @@ class _Roll:
 # (a ward-save modifier, say) would join with ``Side.TARGET``. An effect
 # reaches the walks where its bearer sits on that side — flipped when the
 # printed sentence's subject is the enemy.
-ROLLS: Mapping[Quantity, _Roll] = {
-    Quantity.TO_HIT: _Roll(Stage.ROLL_TO_HIT, sign=-1, side=Side.ATTACKER),
-    Quantity.ARMOUR_PIERCING: _Roll(Stage.MAKE_ARMOUR_SAVES, sign=+1, side=Side.ATTACKER),
+_SIGN: Mapping[Quantity, int] = {Quantity.TO_HIT: -1, Quantity.ARMOUR_PIERCING: +1}
+_ROLLS: Mapping[Quantity, _Roll] = {
+    quantity: _Roll(stage, sign, owner)
+    for quantity, sign in _SIGN.items()
+    if (stage := quantity.stage) is not None and (owner := quantity.owner) is not None
 }
 
 
@@ -629,9 +631,9 @@ def _compile_effect(
         return _UNFACTORED
     adds = effect.add or {}
     rolls = [
-        ROLLS[quantity]
+        _ROLLS[quantity]
         for quantity in adds
-        if isinstance(quantity, Quantity) and quantity in ROLLS
+        if isinstance(quantity, Quantity) and quantity in _ROLLS
     ]
     if len(rolls) != len(adds):
         # The walk handles only roll quantities (the ROLLS vocabulary). A

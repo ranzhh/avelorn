@@ -496,14 +496,14 @@ def test_every_roll_quantity_declares_its_roll() -> None:
     a target for that roll's stage. The seam vocabulary is introspected, so
     new members are covered automatically.
     """
-    from avelorn.tow.engine.rules import ROLLS
+    from avelorn.tow.engine.rules import _ROLLS
     from avelorn.tow.schema.rule import Quantity, Seam
 
     profile = AttackProfile.shooting(hit_target=4, wound_target=4, save_target=4, ward_target=4)
     roll_quantities = [q for q in Quantity if q.seam is Seam.ROLL]
     for quantity in roll_quantities:
-        assert quantity in ROLLS, quantity
-        profile.target(ROLLS[quantity].stage)  # KeyError if the stage rolls no target
+        assert quantity in _ROLLS, quantity
+        profile.target(_ROLLS[quantity].stage)  # KeyError if the stage rolls no target
 
 
 def test_armour_bane_two_leaves_no_save_at_all() -> None:

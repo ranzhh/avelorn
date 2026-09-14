@@ -719,3 +719,19 @@ def test_a_wound_multiplier_is_a_constant_a_die_or_the_parameter() -> None:
         _EFFECT.validate_python({"multiplies": 1})
     with pytest.raises(ValidationError):
         _EFFECT.validate_python({"multiplies": "D3"})
+
+
+def test_a_rule_lands_where_its_effects_are_consumed() -> None:
+    from avelorn.tow.schema.rule import Landing, Seam
+    from avelorn.tow.schema.stage import Side, Stage
+
+    rules = TOWRepository().rules
+    attacker, target = Side.ATTACKER, Side.TARGET
+    assert rules["volley-fire"].lands(attacker, {}) == {Landing(attacker, Seam.SHOTS)}
+    assert rules["volley-fire"].lands(target, {}) == frozenset()
+    assert rules["armour-bane"].lands(attacker, {}) == {Landing(target, Stage.MAKE_ARMOUR_SAVES)}
+    assert rules["armour-bane"].lands(target, {}) == frozenset()
+    assert rules["abyssal-cloak"].lands(target, {}) == {Landing(attacker, Stage.ROLL_TO_HIT)}
+    assert rules["abyssal-cloak"].lands(attacker, {}) == frozenset()
+    assert rules["martial-prowess"].lands(attacker, {}) == {Landing(attacker, Seam.CHARACTERISTIC)}
+    assert rules["martial-prowess"].lands(target, {}) == {Landing(target, Seam.CHARACTERISTIC)}
