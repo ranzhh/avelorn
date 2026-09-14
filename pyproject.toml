@@ -67,7 +67,9 @@ select = [
     "RUF002", # ruff: ambiguous unicode char in a docstring - prefer ASCII
     "RUF003", # ruff: ambiguous unicode char in a comment - prefer ASCII
 ]
-ignore = ["TRY003"]
+# D100-D107 demand a docstring on every public name, which produces docstrings
+# that restate the name. A docstring is for what the code does not already say.
+ignore = ["TRY003", "D100", "D101", "D102", "D103", "D104", "D105", "D106", "D107"]
 
 [tool.ruff.lint.per-file-ignores]
 # CLI scripts report to the terminal by design.
