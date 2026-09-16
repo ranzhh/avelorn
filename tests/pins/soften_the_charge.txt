@@ -1,0 +1,12 @@
+10 White Lions charge next turn (10"). Shoot them first?
+
+  Sisters of Avelorn (BS 5, Lions save 6+):
+    opening volley fells (of 10):  0:2%  1:12%  2:24%  3:28%  4:21%  5:10%  6:3%
+    shoot elsewhere:       P(win) 0.298
+    shoot the Lions first: P(win) 0.731   (+0.434)
+
+  Elven Archers (BS 4, Lions save 4+):
+    opening volley fells (of 10):  0:19%  1:35%  2:28%  3:13%  4:4%  5:1%
+    shoot elsewhere:       P(win) 0.044
+    shoot the Lions first: P(win) 0.179   (+0.135)
+

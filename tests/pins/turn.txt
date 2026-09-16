@@ -1,0 +1,5 @@
+Walking one turn -- 20 Spearmen charge 10 Archers (8"):
+  Movement: Archers Stand & Shoot, 0.90 chargers felled.
+  Shooting: both locked in combat -- no shots.
+  Combat:   P(Spearmen win) 0.692  draw 0.155  P(Archers win) 0.153
+  ... those three sum to 1 exactly.
