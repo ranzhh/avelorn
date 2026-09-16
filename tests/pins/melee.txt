@@ -1,0 +1,5 @@
+20 Elven Spearmen charge 20 Elven Spearmen (8"):
+  P(charger wins)   0.088
+  P(draw)           0.156
+  P(receiver wins)  0.756   <- the charger's ranks lapse
+  the three sum to  1 exactly
