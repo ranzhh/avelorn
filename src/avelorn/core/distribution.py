@@ -10,7 +10,7 @@ maps each outcome to its probability and gives the engine one shared way to
   by probability. ``bind`` is the fold ("weight each branch, sum") written
   once, here, so no caller spells it out again.
 
-``dist >> step`` is :meth:`bind` spelled as an operator, and a :class:`Step`
+``dist >> step`` is :meth:`bind` spelled as an operator, and a :class:`Transition`
 wraps such a step as a value so a whole sequence composes before any
 distribution reaches it (``to_hit >> to_wound >> saves``). Arithmetic on
 outcomes — :meth:`__add__` and the rest — goes through :meth:`combine`.
@@ -76,7 +76,7 @@ from fractions import Fraction
 #
 # Chosen over parameterising the class as Distribution[T, P], which would let the
 # checker prove a chain never mixes the kinds. That costs a type parameter on
-# every signature and call site, including Step, and it fights the integer-seeded
+# every signature and call site, including Transition, and it fights the integer-seeded
 # folds below (sum starts at 0, so an exactly-typed total would not check). The
 # union documents the intent instead; see Distribution for the invariant it cannot
 # enforce.
@@ -173,7 +173,7 @@ class Distribution[T: Hashable]:
 
         It reads left to right, in the order the engine resolves: a distribution,
         then the step it flows into. ``step`` is any callable of that shape, so a
-        plain function and a :class:`Step` both chain.
+        plain function and a :class:`Transition` both chain.
 
         Returns:
             The mixed distribution over the downstream outcomes.
@@ -380,7 +380,7 @@ class Distribution[T: Hashable]:
 
 
 @dataclass(frozen=True)
-class Step[T: Hashable, U: Hashable]:
+class Transition[T: Hashable, U: Hashable]:
     """Hold one stochastic step, ``T -> Distribution[U]``, as a value.
 
     This is a :meth:`Distribution.bind` argument that can be named, stored, and
@@ -393,7 +393,7 @@ class Step[T: Hashable, U: Hashable]:
     resolve: Callable[[T], Distribution[U]]
 
     @classmethod
-    def certain(cls, relabel: Callable[[T], U]) -> "Step[T, U]":
+    def certain(cls, relabel: Callable[[T], U]) -> "Transition[T, U]":
         """Lift a deterministic ``relabel`` into a step that mixes nothing.
 
         This is how a plain change of variable joins a chain of stochastic steps,
@@ -412,7 +412,7 @@ class Step[T: Hashable, U: Hashable]:
         """
         return self.resolve(outcome)
 
-    def __rshift__[V: Hashable](self, then: Callable[[U], Distribution[V]]) -> "Step[T, V]":
+    def __rshift__[V: Hashable](self, then: Callable[[U], Distribution[V]]) -> "Transition[T, V]":
         """Compose two steps into the single step "this one, then ``then``".
 
         Composition is associative, so a chain of any length groups any way and
@@ -421,4 +421,4 @@ class Step[T: Hashable, U: Hashable]:
         Returns:
             The composed step from this one's input to ``then``'s output.
         """
-        return Step(lambda outcome: self.resolve(outcome).bind(then))
+        return Transition(lambda outcome: self.resolve(outcome).bind(then))

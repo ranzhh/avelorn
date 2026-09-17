@@ -4,7 +4,7 @@ Elven Archers and Sisters of Avelorn both fire at a block of Elven Spearmen.
 Two units shooting one target resolve one after the other, casualties removed
 between, so the Sisters shoot whatever the Archers leave standing.
 
-Each unit's fire is a `Step`: standing spearmen in, standing spearmen out. `>>`
+Each unit's fire is a `Transition`: standing spearmen in, standing spearmen out. `>>`
 composes the two into one step before any distribution reaches it, so adding a
 third shooter is one more `>>`. Survivors read as `standing - casualties` and the
 toll as `size - survivors`, because a distribution subtracts like the number it
@@ -16,7 +16,7 @@ rounding of one. No dice rolled, no arguments: run it and read the numbers.
 
 from fractions import Fraction
 
-from avelorn.core.distribution import Distribution, Step
+from avelorn.core.distribution import Distribution, Transition
 from avelorn.tow.game import TOWGame
 
 
@@ -28,7 +28,7 @@ def main() -> None:
     archers = game.field(game.units["elven-archers"], 10)
     sisters = game.field(game.units["sisters-of-avelorn"], 10)
 
-    def fire(shooters) -> Step[int, int]:
+    def fire(shooters) -> Transition[int, int]:
         # One unit's volley as a step: spearmen standing -> spearmen still standing.
         def volley(standing: int) -> Distribution[int]:
             if standing == 0:
@@ -36,7 +36,7 @@ def main() -> None:
             fired = game.shooting.volley(shooters, game.field(target, standing), distance=12)
             return standing - Distribution.from_counts(fired.casualties)
 
-        return Step(volley)
+        return Transition(volley)
 
     # The whole point: two units' fire is one step, built before it is run.
     both = fire(archers) >> fire(sisters)

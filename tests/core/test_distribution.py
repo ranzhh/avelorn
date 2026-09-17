@@ -6,7 +6,7 @@ from fractions import Fraction
 import pytest
 
 from avelorn.core.dice import binomial_distribution, cap_distribution, group_distribution
-from avelorn.core.distribution import Distribution, Probability, Step
+from avelorn.core.distribution import Distribution, Probability, Transition
 
 
 def _same[T: Hashable](a: Distribution[T], b: Distribution[T]) -> bool:
@@ -309,28 +309,28 @@ def test_rshift_chains_left_to_right() -> None:
     assert _same(_coin >> _step >> _other, _coin.bind(_step).bind(_other))
 
 
-def test_step_is_callable_and_binds() -> None:
-    """A Step resolves at an outcome, and chains as any callable of its shape."""
-    spread = Step(_step)
+def test_transition_is_callable_and_binds() -> None:
+    """A Transition resolves at an outcome, and chains as any callable of its shape."""
+    spread = Transition(_step)
     assert _same(spread(3), _step(3))
     assert _same(_coin >> spread, _coin.bind(_step))
 
 
-def test_step_composition_matches_binding_in_sequence() -> None:
+def test_transition_composition_matches_binding_in_sequence() -> None:
     """``a >> b`` as a value resolves the same as binding a then b."""
-    composed = Step(_step) >> Step(_other)
+    composed = Transition(_step) >> Transition(_other)
     assert _same(_coin >> composed, _coin.bind(_step).bind(_other))
 
 
-def test_step_composition_is_associative() -> None:
+def test_transition_composition_is_associative() -> None:
     """Grouping a chain of steps cannot change what it resolves to."""
-    a, b, c = Step(_step), Step(_step), Step(_other)
+    a, b, c = Transition(_step), Transition(_step), Transition(_other)
     assert _same(_coin >> ((a >> b) >> c), _coin >> (a >> (b >> c)))
 
 
-def test_certain_step_lifts_a_relabel() -> None:
-    """Step.certain is map's arrow — a deterministic step joins the same chain."""
-    parity: Step[int, int] = Step.certain(lambda k: k % 2)
+def test_certain_transition_lifts_a_relabel() -> None:
+    """Transition.certain is map's arrow — a deterministic step joins the same chain."""
+    parity: Transition[int, int] = Transition.certain(lambda k: k % 2)
     dist = Distribution({0: 0.2, 1: 0.3, 2: 0.5})
     assert _same(dist >> parity, dist.map(lambda k: k % 2))
 
