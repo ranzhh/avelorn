@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Hashable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
+from itertools import product
 from types import MappingProxyType
 from typing import Any, ClassVar
 
@@ -29,6 +30,19 @@ class BlockKind(StrEnum):
 class Side(StrEnum):
     THIS_MODEL = "this-model"
     THE_ENEMY = "the-enemy"
+
+
+class Bearer(StrEnum):
+    THIS_MODEL = "this-model"
+    THE_ENEMY = "the-enemy"
+    CORE = "core"
+
+
+class Verdict(StrEnum):
+    APPLIED = "applied"
+    HONOURED = "honoured"
+    HELD = "held"
+    INAPPLICABLE = "inapplicable"
 
 
 _NOTHING: Mapping[Any, Any] = MappingProxyType({})
@@ -258,6 +272,20 @@ class Lanes(Block):
             raise GraphError(f"{path} splits on {self.decision.name}, which is not in scope")
 
 
+@dataclass(frozen=True)
+class Landing:
+    at: Step[Any]
+    verdict: Verdict
+
+
+@dataclass(frozen=True)
+class RuleNode:
+    rule: str
+    name: str
+    bearer: Bearer
+    landings: tuple[Landing, ...] = ()
+
+
 @dataclass
 class _Draft:
     paths: dict[Any, str] = field(default_factory=dict)
@@ -291,6 +319,7 @@ class Program:
     steps: tuple[Step[Any], ...]
     blocks: tuple[Block, ...]
     decisions: tuple[Decision[Any], ...]
+    rules: list[RuleNode] = field(default_factory=list)
 
     @classmethod
     def build(cls, name: str, sides: Mapping[Side, str], items: tuple[Item, ...]) -> "Program":
@@ -308,8 +337,27 @@ class Program:
             decisions=tuple(draft.decisions),
         )
 
-    def evaluate(self, given: Mapping[Given[Any], Any] = _NOTHING) -> "Evaluated":
-        return Evaluated(lanes=(self._lane(Situation(given, {})),))
+    def attach(self, rule: RuleNode) -> None:
+        for landing in rule.landings:
+            if landing.at not in self.paths:
+                raise GraphError(f"{rule.rule} lands on {landing.at.name}, which is not declared")
+        self.rules.append(rule)
+
+    def evaluate(
+        self,
+        given: Mapping[Given[Any], Any] = _NOTHING,
+        choices: Mapping[Decision[Any], Any] = _NOTHING,
+    ) -> "Evaluated":
+        decisions = self.decisions
+        open_options = [
+            (decision.options if decision not in choices else (choices[decision],))
+            for decision in decisions
+        ]
+        lanes = [
+            self._lane(Situation(given, dict(zip(decisions, taken, strict=True))))
+            for taken in product(*open_options)
+        ]
+        return Evaluated(lanes=tuple(lanes))
 
     def _lane(self, situation: Situation) -> "Lane":
         run = _Run(situation=situation, joint=Distribution.pure(World()), count=None)

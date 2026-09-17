@@ -4,15 +4,21 @@ import pytest
 
 from avelorn.core.distribution import Distribution
 from avelorn.core.graph import (
+    Bearer,
     Consequence,
+    Decision,
     GraphError,
     Group,
+    Landing,
+    Lanes,
     Measurement,
     Program,
     Projection,
     Roll,
+    RuleNode,
     Scalar,
     Side,
+    Verdict,
     World,
 )
 
@@ -53,6 +59,8 @@ def test_a_path_is_the_step_place_in_the_block_tree() -> None:
     assert program.paths[shots] == "volley/shots"
     assert program.paths[attack] == "volley/attack"
     assert program.paths[hit] == "volley/attack/roll-to-hit"
+    assert program.steps == (shots, hit)
+    assert program.blocks == (attack,)
 
 
 _certain_shots = Measurement[int](name="shots", side=Side.THIS_MODEL, body=_three)
@@ -212,3 +220,70 @@ def test_two_steps_cannot_share_a_path() -> None:
 
     with pytest.raises(GraphError, match="volley/shots is declared twice"):
         Program.build("volley", _SIDES, (first, second))
+
+
+def _ground(reaction: str) -> int:
+    return 0 if reaction == "hold" else 6
+
+
+def _fight() -> tuple[Program, Decision[str], Consequence[int]]:
+    reaction = Decision[str](
+        name="declare-reaction", side=Side.THE_ENEMY, options=("hold", "flee")
+    )
+    given = Consequence[int](
+        name="ground-given", side=Side.THE_ENEMY, reads=(reaction,), body=_ground
+    )
+    program = Program.build(
+        "charge",
+        _SIDES,
+        (reaction, Lanes(name="reaction", decision=reaction, items=(given,))),
+    )
+    return program, reaction, given
+
+
+def test_an_open_decision_splits_the_program_into_lanes() -> None:
+    program, reaction, given = _fight()
+    lanes = program.evaluate().lanes
+    ground = [lane.read(given, given.output("ground")).mass for lane in lanes]
+
+    assert len(lanes) == 2
+    assert ground == [{0: 1}, {6: 1}]
+    assert [lane.choices[reaction] for lane in lanes] == ["hold", "flee"]
+
+
+def test_a_fixed_decision_leaves_one_lane() -> None:
+    program, reaction, given = _fight()
+    evaluated = program.evaluate(choices={reaction: "flee"})
+
+    assert len(evaluated.lanes) == 1
+    assert evaluated.only().read(given, given.output("ground")).mass == {6: 1}
+    assert evaluated.only().choices[reaction] == "flee"
+
+
+def test_a_rule_node_is_attached_with_its_landings() -> None:
+    program, reaction, given = _fight()
+    rule = RuleNode(
+        rule="give-ground",
+        name="Give Ground",
+        bearer=Bearer.THE_ENEMY,
+        landings=(Landing(given, Verdict.APPLIED),),
+    )
+    program.attach(rule)
+    program.attach(RuleNode(rule="stubborn", name="Stubborn", bearer=Bearer.CORE))
+
+    assert program.rules == [rule, RuleNode("stubborn", "Stubborn", Bearer.CORE)]
+
+
+def test_a_rule_cannot_land_on_a_step_the_program_lacks() -> None:
+    program, reaction, given = _fight()
+    stray = Measurement[int](name="stray", side=Side.THIS_MODEL, body=_three)
+
+    with pytest.raises(GraphError, match="lands on stray, which is not declared"):
+        program.attach(
+            RuleNode(
+                rule="hatred",
+                name="Hatred",
+                bearer=Bearer.THIS_MODEL,
+                landings=(Landing(stray, Verdict.HELD),),
+            )
+        )
