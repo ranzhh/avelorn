@@ -122,6 +122,41 @@ def test_a_reading_stacks_an_uncertain_count() -> None:
     }
 
 
+def _none_or_two() -> Distribution[int]:
+    return Distribution({0: _HALF, 2: _HALF})
+
+
+_spent_shots = Roll[int](
+    name="shots", side=Side.THIS_MODEL, body=_none_or_two, target=Scalar("t", 1)
+)
+_spent_die = Roll[int](name="roll", side=Side.THIS_MODEL, body=_d6, target=Scalar("t", 6))
+_spent = Program.build(
+    "spent",
+    _SIDES,
+    (_spent_shots, Group(name="attack", times=_spent_shots, items=(_spent_die,))),
+)
+
+
+def _spent_six(world: World) -> int:
+    return 1 if world.of(_spent_die) == 6 else 0
+
+
+_spent_die.show(Projection("sixes", _spent_six))
+
+
+def test_a_group_that_may_not_run_stacks_the_empty_tally() -> None:
+    lane = _spent.evaluate().only()
+    stacked = lane.read(_spent_die, Projection("sixes", _spent_six))
+    shown = lane.to_view()["nodes"][1]["edge"]["readings"][0]["outcomes"]
+
+    assert stacked.mass == {
+        0: Fraction(61, 72),
+        1: Fraction(10, 72),
+        2: Fraction(1, 72),
+    }
+    assert shown[0] == {"value": 0, "p": 61 / 72}
+
+
 def _one_or_two() -> Distribution[int]:
     return Distribution({1: _HALF, 2: _HALF})
 

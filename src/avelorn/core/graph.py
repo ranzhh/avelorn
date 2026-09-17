@@ -90,9 +90,10 @@ class Edge:
         classes = self.joint.map(projection.project)
         count = self.count
         if count is not None:
+            nothing = Distribution.pure(type(next(iter(classes.mass)))())
 
             def copies(times: int) -> Distribution[T]:
-                return times @ classes
+                return times @ classes if times else nothing
 
             classes = count.bind(copies)
         self.stacked[projection] = classes
