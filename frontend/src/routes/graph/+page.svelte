@@ -7,7 +7,7 @@
 {#if data.program}
 	<Graph program={data.program} />
 {:else}
-	<p class="meta empty">no program: GET /api/graph/volley did not answer</p>
+	<p class="meta empty">No program.</p>
 {/if}
 
 <style>
