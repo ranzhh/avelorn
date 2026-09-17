@@ -1,7 +1,9 @@
+import operator
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Hashable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
+from types import MappingProxyType
 from typing import Any, ClassVar
 
 from avelorn.core.distribution import Distribution
@@ -29,6 +31,9 @@ class Side(StrEnum):
     THE_ENEMY = "the-enemy"
 
 
+_NOTHING: Mapping[Any, Any] = MappingProxyType({})
+
+
 @dataclass(frozen=True, eq=False)
 class Given[T]:
     name: str
@@ -52,6 +57,28 @@ class World:
 class Situation:
     given: Mapping[Given[Any], Any]
     choices: Mapping["Decision[Any]", Any]
+
+
+@dataclass
+class Edge:
+    joint: Distribution[World]
+    count: Distribution[int] | None
+    stacked: dict["Projection[Any]", Distribution[Any]] = field(default_factory=dict)
+
+    def read[T: Hashable](self, projection: "Projection[T]") -> Distribution[T]:
+        held = self.stacked.get(projection)
+        if held is not None:
+            return held
+        classes = self.joint.map(projection.project)
+        count = self.count
+        if count is not None:
+
+            def copies(times: int) -> Distribution[T]:
+                return times @ classes
+
+            classes = count.bind(copies)
+        self.stacked[projection] = classes
+        return classes
 
 
 @dataclass(frozen=True, eq=False)
@@ -111,6 +138,16 @@ class Step[Out: Hashable](ABC):
 
     def collect(self, draft: "_Draft") -> None:
         draft.steps.append(self)
+
+    def run(self, run: "_Run") -> None:
+        def advance(world: World) -> Distribution[World]:
+            def attach(value: Out) -> World:
+                return world.then(self, value)
+
+            return self.outcomes(world, run.situation).map(attach)
+
+        run.joint = run.joint.bind(advance)
+        run.edges[self] = Edge(run.joint, run.count)
 
 
 @dataclass(frozen=True, eq=False, kw_only=True)
@@ -176,6 +213,16 @@ class Block(ABC):
     def collect(self, draft: "_Draft") -> None:
         draft.blocks.append(self)
 
+    def run(self, run: "_Run") -> None:
+        outer, count = run.joint, run.count
+        run.count = self.multiplier(run)
+        for item in self.items:
+            item.run(run)
+        run.joint, run.count = outer, count
+
+    def multiplier(self, run: "_Run") -> Distribution[int] | None:
+        return run.count
+
 
 @dataclass(frozen=True, eq=False, kw_only=True)
 class Group(Block):
@@ -186,6 +233,14 @@ class Group(Block):
     def check(self, path: str, visible: list[Step[Any]]) -> None:
         if self.times not in visible:
             raise GraphError(f"{path} runs {self.times.name} times, which is not in scope")
+
+    def multiplier(self, run: "_Run") -> Distribution[int]:
+        def counted(world: World) -> int:
+            return world.of(self.times)
+
+        mine = run.joint.map(counted)
+        outer = run.count
+        return mine if outer is None else outer.combine(mine, operator.mul)
 
 
 @dataclass(frozen=True, eq=False, kw_only=True)
@@ -220,6 +275,14 @@ class _Draft:
 
 
 @dataclass
+class _Run:
+    situation: Situation
+    joint: Distribution[World]
+    count: Distribution[int] | None
+    edges: dict[Step[Any], Edge] = field(default_factory=dict)
+
+
+@dataclass
 class Program:
     name: str
     sides: Mapping[Side, str]
@@ -244,3 +307,32 @@ class Program:
             blocks=tuple(draft.blocks),
             decisions=tuple(draft.decisions),
         )
+
+    def evaluate(self, given: Mapping[Given[Any], Any] = _NOTHING) -> "Evaluated":
+        return Evaluated(lanes=(self._lane(Situation(given, {})),))
+
+    def _lane(self, situation: Situation) -> "Lane":
+        run = _Run(situation=situation, joint=Distribution.pure(World()), count=None)
+        for item in self.items:
+            item.run(run)
+        return Lane(program=self, choices=situation.choices, edges=run.edges)
+
+
+@dataclass
+class Lane:
+    program: Program
+    choices: Mapping[Decision[Any], Any]
+    edges: Mapping[Step[Any], Edge]
+
+    def read[T: Hashable](self, step: Step[Any], projection: Projection[T]) -> Distribution[T]:
+        return self.edges[step].read(projection)
+
+
+@dataclass
+class Evaluated:
+    lanes: tuple[Lane, ...]
+
+    def only(self) -> Lane:
+        if len(self.lanes) != 1:
+            raise GraphError(f"{len(self.lanes)} lanes: fix a decision or read one lane")
+        return self.lanes[0]
