@@ -180,6 +180,25 @@ describe('moving what was laid out', () => {
 		expect(after).toEqual({ ...before, x: before.x + 15, y: before.y + 5 });
 	});
 
+	it('grows the frame around a child dragged past its edge, never letting it out', () => {
+		const frame = expanded.blocks.find((block) => block.path === GROUP)!.box;
+		const child = 'volley/attack/ward-saves';
+		const far = { x: frame.width, y: -3 * frame.height };
+		const shifted = moved(expanded, { [child]: far });
+		const after = shifted.blocks.find((block) => block.path === GROUP)!.box;
+		const box = shifted.steps.find((each) => each.path === child)!.box;
+		expect(inside(box, after)).toBe(true);
+		expect(after.width).toBeGreaterThan(frame.width);
+		expect(after.y).toBeLessThan(frame.y);
+		for (const path of children.filter((each) => each !== child)) {
+			expect(inside(shifted.steps.find((each) => each.path === path)!.box, after)).toBe(true);
+		}
+		const into = shifted.edges.find((edge) => edge.kind === 'times')!;
+		expect(into.end).toEqual({ x: after.x, y: after.y + after.height / 2 });
+		expect(shifted.width).toBeGreaterThanOrEqual(after.x + after.width);
+		expect(shifted.height).toBeGreaterThanOrEqual(after.y + after.height);
+	});
+
 	it('keeps every landing line pinned to its rule card and its step after moves', () => {
 		const shifted = moved(expanded, {
 			'volley/attack/make-armour-saves': { x: 30, y: 0 },

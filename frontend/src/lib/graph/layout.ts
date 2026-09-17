@@ -143,6 +143,50 @@ function boxesOf(steps: PlacedStep[], blocks: PlacedBlock[]): Map<string, Box> {
 	]);
 }
 
+function around(boxes: Box[], pad: number): Box {
+	const x = Math.min(...boxes.map((box) => box.x)) - pad;
+	const y = Math.min(...boxes.map((box) => box.y)) - FRAME.header - pad;
+	const right = Math.max(...boxes.map((box) => box.x + box.width)) + pad;
+	const bottom = Math.max(...boxes.map((box) => box.y + box.height)) + pad;
+	return { x, y, width: right - x, height: bottom - y };
+}
+
+export function framed(steps: PlacedStep[], blocks: PlacedBlock[]): PlacedBlock[] {
+	const fitted = new Map<string, Box>();
+	const innermostFirst = [...blocks].sort((a, b) => b.path.length - a.path.length);
+	for (const block of innermostFirst) {
+		if (block.collapsed) {
+			fitted.set(block.path, block.box);
+			continue;
+		}
+		const inside = (path: string) => path.startsWith(`${block.path}/`);
+		const nested = innermostFirst.filter(
+			(other) =>
+				inside(other.path) &&
+				!innermostFirst.some(
+					(between) =>
+						inside(between.path) &&
+						between.path !== other.path &&
+						other.path.startsWith(`${between.path}/`)
+				)
+		);
+		const direct = steps.filter(
+			(step) => inside(step.path) && !nested.some((other) => step.path.startsWith(`${other.path}/`))
+		);
+		const children = [...direct.map((step) => step.box), ...nested.map((n) => fitted.get(n.path)!)];
+		fitted.set(block.path, around(children, FRAME.pad));
+	}
+	return blocks.map((block) => ({ ...block, box: fitted.get(block.path)! }));
+}
+
+function extent(steps: PlacedStep[], blocks: PlacedBlock[], rail: PlacedRule[], gap: number) {
+	const boxes = [...steps, ...blocks, ...rail].map((placed) => placed.box);
+	return {
+		width: Math.max(...boxes.map((box) => box.x + box.width)) + gap + MARGIN,
+		height: Math.max(...boxes.map((box) => box.y + box.height)) + MARGIN
+	};
+}
+
 function wire(
 	edges: PlacedEdge[],
 	landings: PlacedLanding[],
@@ -177,7 +221,7 @@ export function layout(program: Program, collapsed: string[], metrics = METRICS)
 	const rowBottom = rowTop + node.height + levels * FRAME.pad;
 
 	const steps: PlacedStep[] = [];
-	const blocks: PlacedBlock[] = [];
+	const placed: PlacedBlock[] = [];
 	const standsFor = new Map<string, string>();
 
 	function place(list: Item[], x: number): number {
@@ -194,7 +238,7 @@ export function layout(program: Program, collapsed: string[], metrics = METRICS)
 			const held = stepPaths(item);
 			if (isGroup(item.block) && collapsed.includes(item.block.path)) {
 				const box = { x: cursor, y: rowTop, width: node.width, height: node.height };
-				blocks.push({
+				placed.push({
 					path: item.block.path,
 					block: item.block,
 					box,
@@ -206,15 +250,12 @@ export function layout(program: Program, collapsed: string[], metrics = METRICS)
 				cursor += node.width + gap;
 				continue;
 			}
-			const inner = 1 + depth(item.items);
-			const pad = FRAME.pad * inner;
+			const pad = FRAME.pad * (1 + depth(item.items));
 			const end = place(item.items, cursor + pad) - gap + pad;
-			const y = rowTop - (FRAME.header + FRAME.pad) * inner;
-			const box = { x: cursor, y, width: end - cursor, height: rowTop + node.height + pad - y };
-			blocks.push({
+			placed.push({
 				path: item.block.path,
 				block: item.block,
-				box,
+				box: { x: cursor, y: rowTop, width: end - cursor, height: node.height },
 				collapsed: false,
 				multiplier,
 				steps: held
@@ -224,7 +265,8 @@ export function layout(program: Program, collapsed: string[], metrics = METRICS)
 		return cursor;
 	}
 
-	const flowEnd = place(items, MARGIN) - gap;
+	place(items, MARGIN);
+	const blocks = framed(steps, placed);
 	const boxes = boxesOf(steps, blocks);
 
 	const edges: PlacedEdge[] = [];
@@ -306,14 +348,9 @@ export function layout(program: Program, collapsed: string[], metrics = METRICS)
 		}))
 	);
 
-	const width =
-		Math.max(flowEnd + gap, ...rail.map((each) => each.box.x + each.box.width)) + MARGIN;
-	const height = (rail.length ? railTop + RULE.height : rowBottom) + MARGIN;
-
 	return {
 		metrics,
-		width,
-		height,
+		...extent(steps, blocks, rail, gap),
 		steps,
 		blocks,
 		rail,
@@ -359,16 +396,20 @@ export function moved(drawn: Layout, moves: Moves): Layout {
 		...step,
 		box: shifted(step.box, sum([of(step.path), ...carriers(step.path)]))
 	}));
-	const blocks = drawn.blocks.map((block) => ({
-		...block,
-		box: shifted(block.box, sum([of(block.path), ...carriers(block.path)]))
-	}));
+	const blocks = framed(
+		steps,
+		drawn.blocks.map((block) => ({
+			...block,
+			box: shifted(block.box, sum([of(block.path), ...carriers(block.path)]))
+		}))
+	);
 	const rail = drawn.rail.map((placed) => ({
 		...placed,
 		box: shifted(placed.box, of(placed.rule.rule))
 	}));
 	return {
 		...drawn,
+		...extent(steps, blocks, rail, drawn.metrics.gap),
 		steps,
 		blocks,
 		rail,
