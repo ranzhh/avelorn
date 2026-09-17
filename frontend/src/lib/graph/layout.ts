@@ -1,11 +1,16 @@
-import type { Block, Group, Node, Program, Reading, Rule, Verdict } from './types';
+import type { Block, Distribution, Group, Node, Program, Reading, Rule, Verdict } from './types';
 
-export const NODE = { width: 168, height: 128 } as const;
-export const EDGE_GAP = 128;
-export const FRAME = { pad: 16, header: 24 } as const;
-export const RULE = { width: 168, height: 56, gap: 24 } as const;
-export const RAIL_GAP = 120;
-export const MARGIN = 16;
+export interface Metrics {
+	node: { width: number; height: number };
+	gap: number;
+}
+
+export const METRICS: Metrics = { node: { width: 168, height: 72 }, gap: 64 };
+export const LEAST: Metrics = { node: { width: 88, height: 72 }, gap: 32 };
+export const FRAME = { pad: 12, header: 24 } as const;
+export const RULE = { height: 40, gap: 16 } as const;
+export const RAIL_GAP = 72;
+export const MARGIN = 12;
 
 export interface Point {
 	x: number;
@@ -31,6 +36,7 @@ export interface PlacedBlock {
 	box: Box;
 	collapsed: boolean;
 	multiplier: Reading[];
+	steps: string[];
 }
 
 export type EdgeKind = 'input' | 'times' | 'output';
@@ -58,6 +64,7 @@ export interface PlacedLanding {
 }
 
 export interface Layout {
+	metrics: Metrics;
 	width: number;
 	height: number;
 	steps: PlacedStep[];
@@ -67,6 +74,8 @@ export interface Layout {
 	landings: PlacedLanding[];
 	unmodelled: Rule[];
 }
+
+export type Moves = Record<string, Point>;
 
 type Item = { kind: 'step'; node: Node } | { kind: 'block'; block: Block; items: Item[] };
 
@@ -127,61 +136,106 @@ function bottom(box: Box): Point {
 	return { x: box.x + box.width / 2, y: box.y + box.height };
 }
 
-export function layout(program: Program, collapsed: string[]): Layout {
+function boxesOf(steps: PlacedStep[], blocks: PlacedBlock[]): Map<string, Box> {
+	return new Map([
+		...steps.map((step): [string, Box] => [step.path, step.box]),
+		...blocks.map((block): [string, Box] => [block.path, block.box])
+	]);
+}
+
+function wire(
+	edges: PlacedEdge[],
+	landings: PlacedLanding[],
+	steps: PlacedStep[],
+	blocks: PlacedBlock[],
+	rail: PlacedRule[],
+	gap: number
+): { edges: PlacedEdge[]; landings: PlacedLanding[] } {
+	const boxes = boxesOf(steps, blocks);
+	const cards = new Map(rail.map((placed) => [placed.rule.rule, placed.box]));
+	return {
+		edges: edges.map((edge) => {
+			const start = right(boxes.get(edge.from)!);
+			const end = edge.to ? left(boxes.get(edge.to)!) : { x: start.x + gap, y: start.y };
+			return { ...edge, start, end };
+		}),
+		landings: landings.map((landing) => ({
+			...landing,
+			start: top(cards.get(landing.rule)!),
+			end: bottom(boxes.get(landing.at)!)
+		}))
+	};
+}
+
+const NOWHERE: Point = { x: 0, y: 0 };
+
+export function layout(program: Program, collapsed: string[], metrics = METRICS): Layout {
+	const { node, gap } = metrics;
 	const items = tree(program, undefined);
 	const levels = depth(items);
 	const rowTop = MARGIN + levels * (FRAME.header + FRAME.pad);
-	const rowBottom = rowTop + NODE.height + levels * FRAME.pad;
+	const rowBottom = rowTop + node.height + levels * FRAME.pad;
 
 	const steps: PlacedStep[] = [];
 	const blocks: PlacedBlock[] = [];
-	const boxes = new Map<string, Box>();
 	const standsFor = new Map<string, string>();
 
 	function place(list: Item[], x: number): number {
 		let cursor = x;
 		for (const item of list) {
 			if (item.kind === 'step') {
-				const box = { x: cursor, y: rowTop, width: NODE.width, height: NODE.height };
+				const box = { x: cursor, y: rowTop, width: node.width, height: node.height };
 				steps.push({ path: item.node.path, node: item.node, box });
-				boxes.set(item.node.path, box);
 				standsFor.set(item.node.path, item.node.path);
-				cursor += NODE.width + EDGE_GAP;
+				cursor += node.width + gap;
 				continue;
 			}
 			const multiplier = multiplierOf(item.block, program);
+			const held = stepPaths(item);
 			if (isGroup(item.block) && collapsed.includes(item.block.path)) {
-				const box = { x: cursor, y: rowTop, width: NODE.width, height: NODE.height };
-				blocks.push({ path: item.block.path, block: item.block, box, collapsed: true, multiplier });
-				boxes.set(item.block.path, box);
-				for (const path of stepPaths(item)) standsFor.set(path, item.block.path);
-				cursor += NODE.width + EDGE_GAP;
+				const box = { x: cursor, y: rowTop, width: node.width, height: node.height };
+				blocks.push({
+					path: item.block.path,
+					block: item.block,
+					box,
+					collapsed: true,
+					multiplier,
+					steps: held
+				});
+				for (const path of held) standsFor.set(path, item.block.path);
+				cursor += node.width + gap;
 				continue;
 			}
 			const inner = 1 + depth(item.items);
 			const pad = FRAME.pad * inner;
-			const end = place(item.items, cursor + pad) - EDGE_GAP + pad;
+			const end = place(item.items, cursor + pad) - gap + pad;
 			const y = rowTop - (FRAME.header + FRAME.pad) * inner;
-			const box = { x: cursor, y, width: end - cursor, height: rowTop + NODE.height + pad - y };
-			blocks.push({ path: item.block.path, block: item.block, box, collapsed: false, multiplier });
-			boxes.set(item.block.path, box);
-			cursor = end + EDGE_GAP;
+			const box = { x: cursor, y, width: end - cursor, height: rowTop + node.height + pad - y };
+			blocks.push({
+				path: item.block.path,
+				block: item.block,
+				box,
+				collapsed: false,
+				multiplier,
+				steps: held
+			});
+			cursor = end + gap;
 		}
 		return cursor;
 	}
 
-	const flowEnd = place(items, MARGIN) - EDGE_GAP;
+	const flowEnd = place(items, MARGIN) - gap;
+	const boxes = boxesOf(steps, blocks);
 
 	const edges: PlacedEdge[] = [];
 	const seen = new Set<string>();
 	const consumed = new Set<string>();
-	const groups = program.blocks.filter(isGroup);
 
-	for (const node of program.nodes) {
-		for (const input of node.inputs) {
+	for (const step of program.nodes) {
+		for (const input of step.inputs) {
 			consumed.add(input);
 			const from = standsFor.get(input)!;
-			const to = standsFor.get(node.path)!;
+			const to = standsFor.get(step.path)!;
 			if (from === to || seen.has(`${from}>${to}`)) continue;
 			seen.add(`${from}>${to}`);
 			const source = program.nodes.find((each) => each.path === input)!;
@@ -190,42 +244,36 @@ export function layout(program: Program, collapsed: string[]): Layout {
 				from,
 				to,
 				readings: source.edge.readings,
-				start: right(boxes.get(from)!),
-				end: left(boxes.get(to)!)
+				start: NOWHERE,
+				end: NOWHERE
 			});
 		}
 	}
 
-	for (const group of groups) {
+	for (const group of program.blocks.filter(isGroup)) {
 		consumed.add(group.times);
 		const from = standsFor.get(group.times)!;
 		const to = standsFor.get(group.path) ?? group.path;
 		if (from === to || !boxes.has(to)) continue;
-		const target = boxes.get(to)!;
-		const end = blocks.find((each) => each.path === to)!.collapsed
-			? left(target)
-			: { x: target.x, y: rowTop + NODE.height / 2 };
 		edges.push({
 			kind: 'times',
 			from,
 			to,
 			readings: multiplierOf(group, program),
-			start: right(boxes.get(from)!),
-			end
+			start: NOWHERE,
+			end: NOWHERE
 		});
 	}
 
-	for (const node of program.nodes) {
-		if (consumed.has(node.path)) continue;
-		const from = standsFor.get(node.path)!;
-		const start = right(boxes.get(from)!);
+	for (const step of program.nodes) {
+		if (consumed.has(step.path)) continue;
 		edges.push({
 			kind: 'output',
-			from,
+			from: standsFor.get(step.path)!,
 			to: null,
-			readings: node.edge.readings,
-			start,
-			end: { x: start.x + EDGE_GAP, y: start.y }
+			readings: step.edge.readings,
+			start: NOWHERE,
+			end: NOWHERE
 		});
 	}
 
@@ -243,24 +291,103 @@ export function layout(program: Program, collapsed: string[]): Layout {
 	const rail: PlacedRule[] = [];
 	let edge = MARGIN;
 	for (const { rule, centre } of wanted) {
-		const x = Math.max(centre - RULE.width / 2, edge);
-		rail.push({ rule, box: { x, y: railTop, width: RULE.width, height: RULE.height } });
-		edge = x + RULE.width + RULE.gap;
+		const x = Math.max(centre - node.width / 2, edge);
+		rail.push({ rule, box: { x, y: railTop, width: node.width, height: RULE.height } });
+		edge = x + node.width + RULE.gap;
 	}
 
-	const landings: PlacedLanding[] = rail.flatMap(({ rule, box }) =>
+	const landings: PlacedLanding[] = rail.flatMap(({ rule }) =>
 		rule.landings.map((landing) => ({
 			rule: rule.rule,
 			at: standsFor.get(landing.at)!,
 			verdict: landing.verdict,
-			start: top(box),
-			end: bottom(boxes.get(standsFor.get(landing.at)!)!)
+			start: NOWHERE,
+			end: NOWHERE
 		}))
 	);
 
 	const width =
-		Math.max(flowEnd + EDGE_GAP, ...rail.map((each) => each.box.x + each.box.width)) + MARGIN;
+		Math.max(flowEnd + gap, ...rail.map((each) => each.box.x + each.box.width)) + MARGIN;
 	const height = (rail.length ? railTop + RULE.height : rowBottom) + MARGIN;
 
-	return { width, height, steps, blocks, edges, rail, landings, unmodelled };
+	return {
+		metrics,
+		width,
+		height,
+		steps,
+		blocks,
+		rail,
+		unmodelled,
+		...wire(edges, landings, steps, blocks, rail, gap)
+	};
+}
+
+export function fitted(program: Program, collapsed: string[], available: number): Metrics {
+	const natural = layout(program, collapsed, METRICS);
+	if (natural.width <= available) return METRICS;
+	const columns = natural.steps.length + natural.blocks.filter((block) => block.collapsed).length;
+	const gaps = columns - 1 + natural.edges.filter((edge) => edge.kind === 'output').length;
+	const scalable = columns * METRICS.node.width + gaps * METRICS.gap;
+	const ratio = Math.max(0, (available - (natural.width - scalable)) / scalable);
+	return {
+		node: {
+			width: Math.max(Math.floor(METRICS.node.width * ratio), LEAST.node.width),
+			height: METRICS.node.height
+		},
+		gap: Math.max(Math.floor(METRICS.gap * ratio), LEAST.gap)
+	};
+}
+
+function shifted(box: Box, by: Point): Box {
+	return { ...box, x: box.x + by.x, y: box.y + by.y };
+}
+
+function sum(points: Point[]): Point {
+	return points.reduce((total, point) => ({ x: total.x + point.x, y: total.y + point.y }), {
+		x: 0,
+		y: 0
+	});
+}
+
+export function moved(drawn: Layout, moves: Moves): Layout {
+	const of = (path: string) => moves[path] ?? NOWHERE;
+	const carriers = (path: string) =>
+		drawn.blocks
+			.filter((block) => path.startsWith(`${block.path}/`))
+			.map((block) => of(block.path));
+	const steps = drawn.steps.map((step) => ({
+		...step,
+		box: shifted(step.box, sum([of(step.path), ...carriers(step.path)]))
+	}));
+	const blocks = drawn.blocks.map((block) => ({
+		...block,
+		box: shifted(block.box, sum([of(block.path), ...carriers(block.path)]))
+	}));
+	const rail = drawn.rail.map((placed) => ({
+		...placed,
+		box: shifted(placed.box, of(placed.rule.rule))
+	}));
+	return {
+		...drawn,
+		steps,
+		blocks,
+		rail,
+		...wire(drawn.edges, drawn.landings, steps, blocks, rail, drawn.metrics.gap)
+	};
+}
+
+export function expected(distribution: Distribution): number | null {
+	if (distribution.outcomes.some((outcome) => typeof outcome.value !== 'number')) return null;
+	return distribution.outcomes.reduce(
+		(mean, outcome) => mean + Number(outcome.value) * outcome.p,
+		0
+	);
+}
+
+export function caption(readings: Reading[]): string {
+	const first = readings[0];
+	if (!first) return '';
+	if (!('outcomes' in first)) return `${first.label} ${first.value}`;
+	const mean = expected(first);
+	return mean === null ? first.label : `${first.label} · ${mean.toFixed(1)}`;
 }

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import volley from './volley.json';
-import { layout, type Box } from './layout';
+import { LEAST, METRICS, caption, expected, fitted, layout, moved, type Box } from './layout';
 import type { Point } from './layout';
-import type { Program } from './types';
+import type { Distribution, Program } from './types';
 
 const program = volley as Program;
 const GROUP = 'volley/attack';
@@ -126,5 +126,89 @@ describe('layout of the volley', () => {
 			const previous = sorted[index - 1].box;
 			expect(sorted[index].box.x).toBeGreaterThanOrEqual(previous.x + previous.width);
 		}
+	});
+
+	it('fits the expanded volley into 904px and no narrower than the floor', () => {
+		expect(fitted(program, [], 2000)).toEqual(METRICS);
+		const snug = fitted(program, [], 904);
+		expect(layout(program, [], snug).width).toBeLessThanOrEqual(904);
+		expect(snug.node.width).toBeGreaterThanOrEqual(LEAST.node.width);
+		expect(snug.gap).toBeGreaterThanOrEqual(LEAST.gap);
+		expect(fitted(program, [], 300)).toEqual(LEAST);
+	});
+});
+
+describe('moving what was laid out', () => {
+	const step = 'volley/remove-casualties';
+
+	it('moves one step and re-aims the edges into and out of it', () => {
+		const shifted = moved(expanded, { [step]: { x: 40, y: -30 } });
+		const before = expanded.steps.find((each) => each.path === step)!.box;
+		const after = shifted.steps.find((each) => each.path === step)!.box;
+		expect(after).toEqual({ ...before, x: before.x + 40, y: before.y - 30 });
+		const into = shifted.edges.find((edge) => edge.to === step)!;
+		expect(into.end).toEqual({ x: after.x, y: after.y + after.height / 2 });
+		const out = shifted.edges.find((edge) => edge.from === step)!;
+		expect(out.start).toEqual({ x: after.x + after.width, y: after.y + after.height / 2 });
+		for (const other of shifted.steps.filter((each) => each.path !== step)) {
+			expect(other.box).toEqual(expanded.steps.find((each) => each.path === other.path)!.box);
+		}
+	});
+
+	it('moves a group frame together with every step inside it', () => {
+		const shifted = moved(expanded, { [GROUP]: { x: -25, y: 60 } });
+		const frame = shifted.blocks.find((block) => block.path === GROUP)!;
+		const was = expanded.blocks.find((block) => block.path === GROUP)!.box;
+		expect(frame.box).toEqual({ ...was, x: was.x - 25, y: was.y + 60 });
+		for (const path of children) {
+			const before = expanded.steps.find((each) => each.path === path)!.box;
+			const after = shifted.steps.find((each) => each.path === path)!.box;
+			expect(after).toEqual({ ...before, x: before.x - 25, y: before.y + 60 });
+			expect(inside(after, frame.box)).toBe(true);
+		}
+		const outside = shifted.steps.find((each) => each.path === 'volley/how-many-shots')!;
+		expect(outside.box).toEqual(expanded.steps[0].box);
+	});
+
+	it("adds a step's own move to the move of the frame carrying it", () => {
+		const shifted = moved(expanded, {
+			[GROUP]: { x: 10, y: 10 },
+			'volley/attack/roll-to-hit': { x: 5, y: -5 }
+		});
+		const before = expanded.steps.find((each) => each.path === 'volley/attack/roll-to-hit')!.box;
+		const after = shifted.steps.find((each) => each.path === 'volley/attack/roll-to-hit')!.box;
+		expect(after).toEqual({ ...before, x: before.x + 15, y: before.y + 5 });
+	});
+
+	it('keeps every landing line pinned to its rule card and its step after moves', () => {
+		const shifted = moved(expanded, {
+			'volley/attack/make-armour-saves': { x: 30, y: 0 },
+			'armour-bane': { x: 0, y: 20 }
+		});
+		const card = shifted.rail.find((placed) => placed.rule.rule === 'armour-bane')!.box;
+		expect(card.y).toBe(
+			expanded.rail.find((placed) => placed.rule.rule === 'armour-bane')!.box.y + 20
+		);
+		const landing = shifted.landings.find((each) => each.rule === 'armour-bane')!;
+		expect(landing.start).toEqual({ x: card.x + card.width / 2, y: card.y });
+		const target = shifted.steps.find((each) => each.path === landing.at)!.box;
+		expect(landing.end).toEqual({ x: target.x + target.width / 2, y: target.y + target.height });
+	});
+});
+
+describe('captions', () => {
+	const hits = program.nodes[1].edge.readings[0] as Distribution;
+	const panic = program.nodes[6].edge.readings[0] as Distribution;
+
+	it('takes the expected value of a numeric distribution', () => {
+		expect(expected(hits)).toBeCloseTo(13.33, 1);
+		expect(expected(panic)).toBeNull();
+	});
+
+	it('captions an edge with its first reading, one line', () => {
+		expect(caption(program.nodes[0].edge.readings)).toBe('shots 20');
+		expect(caption([hits])).toBe('hits of 20 · 13.3');
+		expect(caption([panic])).toBe('the knights');
+		expect(caption([])).toBe('');
 	});
 });
