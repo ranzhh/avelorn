@@ -48,6 +48,10 @@ class Verdict(StrEnum):
 _NOTHING: Mapping[Any, Any] = MappingProxyType({})
 
 
+def _shown(value: object) -> int | str:
+    return value if isinstance(value, int) else str(value)
+
+
 @dataclass(frozen=True, eq=False)
 class Given[T]:
     name: str
@@ -100,11 +104,19 @@ class Projection[T: Hashable]:
     label: str
     project: Callable[[World], T]
 
+    def view(self, edge: Edge) -> dict[str, Any]:
+        read = edge.read(self)
+        outcomes = [{"value": _shown(value), "p": float(p)} for value, p in read.mass.items()]
+        return {"label": self.label, "outcomes": outcomes}
+
 
 @dataclass(frozen=True, eq=False)
 class Scalar[T]:
     label: str
     value: T
+
+    def view(self, edge: Edge) -> dict[str, Any]:
+        return {"label": self.label, "value": _shown(self.value)}
 
 
 type Reading = Projection[Any] | Scalar[Any]
@@ -114,6 +126,9 @@ type Reading = Projection[Any] | Scalar[Any]
 class Modifier:
     rule: str
     move: int
+
+    def view(self) -> dict[str, Any]:
+        return {"rule": self.rule, "move": self.move}
 
 
 @dataclass(frozen=True, eq=False, kw_only=True)
@@ -163,6 +178,20 @@ class Step[Out: Hashable](ABC):
         run.joint = run.joint.bind(advance)
         run.edges[self] = Edge(run.joint, run.count)
 
+    def detail(self, edge: Edge) -> dict[str, Any]:
+        return {}
+
+    def view(self, paths: Mapping[Any, str], edge: Edge) -> dict[str, Any]:
+        return {
+            "path": paths[self],
+            "step": self.name,
+            "kind": self.kind.value,
+            "side": self.side.value,
+            "inputs": [paths[source] for source in self.reads],
+            "edge": {"readings": [reading.view(edge) for reading in self.readings]},
+            **self.detail(edge),
+        }
+
 
 @dataclass(frozen=True, eq=False, kw_only=True)
 class Certain[Out: Hashable](Step[Out]):
@@ -190,6 +219,12 @@ class Roll[Out: Hashable](Step[Out]):
     def outcomes(self, world: World, situation: Situation) -> Distribution[Out]:
         return self.body(*self.arguments(world, situation))
 
+    def detail(self, edge: Edge) -> dict[str, Any]:
+        return {
+            "target": self.target.view(edge),
+            "modifiers": [modifier.view() for modifier in self.modifiers],
+        }
+
 
 @dataclass(frozen=True, eq=False, kw_only=True)
 class Decision[Out: Hashable](Step[Out]):
@@ -202,6 +237,9 @@ class Decision[Out: Hashable](Step[Out]):
     def collect(self, draft: "_Draft") -> None:
         draft.steps.append(self)
         draft.decisions.append(self)
+
+    def detail(self, edge: Edge) -> dict[str, Any]:
+        return {"options": [str(option) for option in self.options]}
 
 
 type Item = Step[Any] | Block
@@ -237,6 +275,12 @@ class Block(ABC):
     def multiplier(self, run: "_Run") -> Distribution[int] | None:
         return run.count
 
+    @abstractmethod
+    def detail(self, paths: Mapping[Any, str]) -> dict[str, Any]: ...
+
+    def view(self, paths: Mapping[Any, str]) -> dict[str, Any]:
+        return {"path": paths[self], "kind": self.kind.value, **self.detail(paths)}
+
 
 @dataclass(frozen=True, eq=False, kw_only=True)
 class Group(Block):
@@ -256,10 +300,16 @@ class Group(Block):
         outer = run.count
         return mine if outer is None else outer.combine(mine, operator.mul)
 
+    def detail(self, paths: Mapping[Any, str]) -> dict[str, Any]:
+        return {"times": paths[self.times], "collapsed": self.collapsed}
+
 
 @dataclass(frozen=True, eq=False, kw_only=True)
 class Slot(Block):
     kind = BlockKind.SLOT
+
+    def detail(self, paths: Mapping[Any, str]) -> dict[str, Any]:
+        return {"empty": not self.items}
 
 
 @dataclass(frozen=True, eq=False, kw_only=True)
@@ -271,11 +321,17 @@ class Lanes(Block):
         if self.decision not in visible:
             raise GraphError(f"{path} splits on {self.decision.name}, which is not in scope")
 
+    def detail(self, paths: Mapping[Any, str]) -> dict[str, Any]:
+        return {"decision": paths[self.decision]}
+
 
 @dataclass(frozen=True)
 class Landing:
     at: Step[Any]
     verdict: Verdict
+
+    def view(self, paths: Mapping[Any, str]) -> dict[str, Any]:
+        return {"at": paths[self.at], "verdict": self.verdict.value}
 
 
 @dataclass(frozen=True)
@@ -284,6 +340,14 @@ class RuleNode:
     name: str
     bearer: Bearer
     landings: tuple[Landing, ...] = ()
+
+    def view(self, paths: Mapping[Any, str]) -> dict[str, Any]:
+        return {
+            "rule": self.rule,
+            "name": self.name,
+            "bearer": self.bearer.value,
+            "landings": [landing.view(paths) for landing in self.landings],
+        }
 
 
 @dataclass
@@ -375,6 +439,20 @@ class Lane:
     def read[T: Hashable](self, step: Step[Any], projection: Projection[T]) -> Distribution[T]:
         return self.edges[step].read(projection)
 
+    def to_view(self) -> dict[str, Any]:
+        paths = self.program.paths
+        return {
+            "program": self.program.name,
+            "sides": {side.value: label for side, label in self.program.sides.items()},
+            "nodes": [step.view(paths, self.edges[step]) for step in self.program.steps],
+            "blocks": [block.view(paths) for block in self.program.blocks],
+            "rules": [rule.view(paths) for rule in self.program.rules],
+            "lanes": [
+                {"decision": paths[decision], "outcome": str(outcome)}
+                for decision, outcome in self.choices.items()
+            ],
+        }
+
 
 @dataclass
 class Evaluated:
@@ -384,3 +462,6 @@ class Evaluated:
         if len(self.lanes) != 1:
             raise GraphError(f"{len(self.lanes)} lanes: fix a decision or read one lane")
         return self.lanes[0]
+
+    def to_view(self) -> dict[str, Any]:
+        return self.only().to_view()

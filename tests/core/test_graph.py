@@ -1,4 +1,7 @@
+import re
 from fractions import Fraction
+from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -12,12 +15,14 @@ from avelorn.core.graph import (
     Landing,
     Lanes,
     Measurement,
+    Modifier,
     Program,
     Projection,
     Roll,
     RuleNode,
     Scalar,
     Side,
+    Slot,
     Verdict,
     World,
 )
@@ -257,21 +262,9 @@ def test_a_fixed_decision_leaves_one_lane() -> None:
 
     assert len(evaluated.lanes) == 1
     assert evaluated.only().read(given, given.output("ground")).mass == {6: 1}
-    assert evaluated.only().choices[reaction] == "flee"
-
-
-def test_a_rule_node_is_attached_with_its_landings() -> None:
-    program, reaction, given = _fight()
-    rule = RuleNode(
-        rule="give-ground",
-        name="Give Ground",
-        bearer=Bearer.THE_ENEMY,
-        landings=(Landing(given, Verdict.APPLIED),),
-    )
-    program.attach(rule)
-    program.attach(RuleNode(rule="stubborn", name="Stubborn", bearer=Bearer.CORE))
-
-    assert program.rules == [rule, RuleNode("stubborn", "Stubborn", Bearer.CORE)]
+    assert evaluated.to_view()["lanes"] == [
+        {"decision": "charge/declare-reaction", "outcome": "flee"}
+    ]
 
 
 def test_a_rule_cannot_land_on_a_step_the_program_lacks() -> None:
@@ -287,3 +280,148 @@ def test_a_rule_cannot_land_on_a_step_the_program_lacks() -> None:
                 landings=(Landing(stray, Verdict.HELD),),
             )
         )
+
+
+def _hit_on(range_band: str) -> Distribution[int]:
+    return _d6()
+
+
+def _removed(range_band: str) -> int:
+    return 1 if range_band == "close" else 0
+
+
+_shots = Measurement[int](name="shots", side=Side.THIS_MODEL, body=_three)
+_range = Decision[str](name="choose-range", side=Side.THIS_MODEL, options=("close", "long"))
+_to_hit = Roll[int](
+    name="roll-to-hit",
+    side=Side.THIS_MODEL,
+    reads=(_range,),
+    body=_hit_on,
+    target=Scalar("to hit", 4),
+    modifiers=(Modifier("Volley Fire", 1),),
+)
+_casualties = Consequence[int](
+    name="remove-casualties", side=Side.THE_ENEMY, reads=(_range,), body=_removed
+)
+_stomp = Slot(name="stomp", items=())
+_volley = Program.build(
+    "volley",
+    _SIDES,
+    (
+        _shots,
+        _range,
+        Group(name="attack", times=_shots, items=(_to_hit,)),
+        _stomp,
+        Lanes(name="aftermath", decision=_range, items=(_casualties,)),
+    ),
+)
+
+
+def _landed(world: World) -> int:
+    return 1 if world.of(_to_hit) >= 4 else 0
+
+
+_shots.show(_shots.output("shots"))
+_to_hit.show(Projection("hits", _landed))
+_casualties.show(Scalar("models", 5))
+_volley.attach(
+    RuleNode(
+        rule="volley-fire",
+        name="Volley Fire",
+        bearer=Bearer.THIS_MODEL,
+        landings=(
+            Landing(_to_hit, Verdict.APPLIED),
+            Landing(_casualties, Verdict.HONOURED),
+        ),
+    )
+)
+_volley.attach(RuleNode(rule="stubborn", name="Stubborn", bearer=Bearer.CORE))
+
+
+def _view() -> dict[str, Any]:
+    return _volley.evaluate(choices={_range: "close"}).to_view()
+
+
+def test_a_rule_node_lists_its_landings() -> None:
+    rules = _view()["rules"]
+
+    assert rules[0]["landings"] == [
+        {"at": "volley/attack/roll-to-hit", "verdict": "applied"},
+        {"at": "volley/aftermath/remove-casualties", "verdict": "honoured"},
+    ]
+    assert rules[1] == {"rule": "stubborn", "name": "Stubborn", "bearer": "core", "landings": []}
+
+
+def test_the_view_carries_the_blocks_and_the_stacked_readings() -> None:
+    view = _view()
+    hits = next(node for node in view["nodes"] if node["step"] == "roll-to-hit")
+
+    assert view["blocks"] == [
+        {"path": "volley/attack", "kind": "group", "times": "volley/shots", "collapsed": False},
+        {"path": "volley/stomp", "kind": "slot", "empty": True},
+        {"path": "volley/aftermath", "kind": "lanes", "decision": "volley/choose-range"},
+    ]
+    assert hits["inputs"] == ["volley/choose-range"]
+    assert hits["target"] == {"label": "to hit", "value": 4}
+    assert hits["modifiers"] == [{"rule": "Volley Fire", "move": 1}]
+    assert hits["edge"]["readings"][0]["outcomes"] == [
+        {"value": 0, "p": 0.125},
+        {"value": 1, "p": 0.375},
+        {"value": 2, "p": 0.375},
+        {"value": 3, "p": 0.125},
+    ]
+
+
+_TYPES = Path(__file__).resolve().parents[2] / "frontend/src/lib/graph/types.ts"
+_NODE_OF = {
+    "measurement": "Measurement",
+    "decision": "Decision",
+    "roll": "Roll",
+    "consequence": "Consequence",
+}
+_BLOCK_OF = {"group": "Group", "slot": "Slot", "lanes": "Lanes"}
+
+
+def _declared() -> dict[str, set[str]]:
+    text = _TYPES.read_text()
+    fields: dict[str, set[str]] = {}
+    for match in re.finditer(r"interface (\w+)(?: extends (\w+))?\s*\{(.*?)\n\}", text, re.S):
+        name, parent, body = match.groups()
+        own = set(re.findall(r"^\s*(\w+)\??:", body, re.M))
+        fields[name] = own | fields.get(parent, set())
+    return fields
+
+
+def _reading_shape(reading: dict[str, Any], declared: dict[str, set[str]]) -> None:
+    assert set(reading) in (declared["Distribution"], declared["Scalar"])
+    for outcome in reading.get("outcomes", ()):
+        assert set(outcome) == declared["Outcome"]
+
+
+def test_the_view_matches_the_front_end_types() -> None:
+    declared = _declared()
+    view = _view()
+
+    assert set(view) == declared["Program"]
+    for node in view["nodes"]:
+        assert set(node) == declared[_NODE_OF[node["kind"]]]
+        assert set(node["edge"]) == declared["Edge"]
+        for reading in node["edge"]["readings"]:
+            _reading_shape(reading, declared)
+        for modifier in node.get("modifiers", ()):
+            assert set(modifier) == declared["Modifier"]
+    for block in view["blocks"]:
+        assert set(block) == declared[_BLOCK_OF[block["kind"]]]
+    for rule in view["rules"]:
+        assert set(rule) == declared["Rule"]
+        for landing in rule["landings"]:
+            assert set(landing) == declared["Landing"]
+    for lane in view["lanes"]:
+        assert set(lane) == declared["Lane"]
+
+
+def test_the_front_end_declares_the_interfaces_the_view_fills() -> None:
+    declared = _declared()
+
+    assert declared["Program"] == {"program", "sides", "nodes", "blocks", "rules", "lanes"}
+    assert declared["Roll"] > declared["Step"]
