@@ -288,35 +288,17 @@ class Distribution[T: Hashable]:
             raise ValueError("group_size must be >= 1")
         return self.map(lambda outcome: operator.floordiv(outcome, group_size))
 
+    def repeat(self, copies: int, identity: T) -> "Distribution[T]":
+        if copies < 0:
+            raise ValueError("copies must be >= 0")
+        if copies == 0:
+            return Distribution.pure(identity)
+        total = self
+        for _ in range(copies - 1):
+            total = total + self
+        return total
+
     def __rmatmul__(self, copies: int) -> "Distribution[T]":
-        """Sum ``copies`` independent copies of this distribution.
-
-        This is the repeat, and it is kept distinct from any scaling of the
-        outcomes. ``3 @ dist`` resolves the same quantity three times and totals
-        it, which is a different distribution from tripling one draw. Only this
-        direction is defined, so the two cannot be confused.
-
-        Zero copies has no answer for a general outcome type, because there is no
-        outcome meaning "nothing yet" to start from. A caller wanting one names
-        that identity itself with :meth:`pure`.
-
-        Being repeated ``+``, this takes its meaning of "sum" from the outcome
-        type, and the tuple-concatenation trap in :meth:`__add__` with it.
-
-        It is repeated ``+`` in cost too: one convolution per copy, each over a
-        support that grows as it goes, so the work is quadratic in ``copies``.
-        One case has a closed form. For n independent successes the answer is the
-        binomial, and :func:`avelorn.core.dice.binomial_distribution` gives the
-        same masses far more cheaply, identical to floating error and measured at
-        33x faster at n=10 and 190x at n=80. Prefer it on the wide volleys, where
-        the count is large and reached inside a loop.
-
-        Returns:
-            The distribution of the total over ``copies`` draws.
-
-        Raises:
-            ValueError: ``copies`` is less than 1.
-        """
         if copies < 1:
             raise ValueError("copies must be >= 1")
         total = self

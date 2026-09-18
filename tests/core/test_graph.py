@@ -54,7 +54,7 @@ def test_a_roll_edge_carries_its_own_distribution() -> None:
 
     (lane,) = program.evaluate()
 
-    assert lane.read(flip, flip.output("face")).mass == {0: _HALF, 1: _HALF}
+    assert lane.read(flip, flip.output("face", 0)).mass == {0: _HALF, 1: _HALF}
 
 
 def test_a_path_is_the_step_place_in_the_block_tree() -> None:
@@ -85,7 +85,7 @@ def _certain_six(world: World) -> int:
 
 def test_a_reading_stacks_a_certain_count() -> None:
     (lane,) = _certain.evaluate()
-    stacked = lane.read(_certain_die, Projection("sixes", _certain_six))
+    stacked = lane.read(_certain_die, Projection("sixes", _certain_six, 0))
 
     assert stacked.mass == {
         0: Fraction(125, 216),
@@ -116,7 +116,7 @@ def _open_six(world: World) -> int:
 
 def test_a_reading_stacks_an_uncertain_count() -> None:
     (lane,) = _open.evaluate()
-    stacked = lane.read(_open_die, Projection("sixes", _open_six))
+    stacked = lane.read(_open_die, Projection("sixes", _open_six, 0))
 
     assert stacked.mass == {
         0: Fraction(275, 432),
@@ -145,12 +145,12 @@ def _spent_six(world: World) -> int:
     return 1 if world.of(_spent_die) == 6 else 0
 
 
-_spent_die.show(Projection("sixes", _spent_six))
+_spent_die.show(Projection("sixes", _spent_six, 0))
 
 
 def test_a_group_that_may_not_run_stacks_the_empty_tally() -> None:
     (lane,) = _spent.evaluate()
-    stacked = lane.read(_spent_die, Projection("sixes", _spent_six))
+    stacked = lane.read(_spent_die, Projection("sixes", _spent_six, 0))
     shown = lane.to_view()["nodes"][1]["edge"]["readings"][0]["outcomes"]
 
     assert stacked.mass == {
@@ -175,7 +175,7 @@ _hit = Roll[int](name="roll-to-hit", side=Side.THIS_MODEL, body=_one_or_two, tar
 _wound = Roll[bool](
     name="roll-to-wound",
     side=Side.THIS_MODEL,
-    reads=(_hit,),
+    inputs=(_hit,),
     body=_wound_on,
     target=Scalar("t", 1),
 )
@@ -192,9 +192,9 @@ def _both(world: World) -> tuple[int, bool]:
 
 def test_a_reading_over_a_pair_keeps_the_coupling() -> None:
     (lane,) = _coupled.evaluate()
-    joint = lane.read(_wound, Projection("hit and wound", _both))
-    hits = lane.read(_wound, _hit.output("hit"))
-    wounds = lane.read(_wound, _wound.output("wound"))
+    joint = lane.read(_wound, Projection("hit and wound", _both, ()))
+    hits = lane.read(_wound, _hit.output("hit", 0))
+    wounds = lane.read(_wound, _wound.output("wound", False))
 
     assert joint.mass == {
         (1, True): Fraction(1, 6),
@@ -217,7 +217,7 @@ def test_a_step_reads_an_enclosing_block() -> None:
     wound = Roll[int](
         name="roll-to-wound",
         side=Side.THIS_MODEL,
-        reads=(strength,),
+        inputs=(strength,),
         body=_strong,
         target=Scalar("t", 4),
     )
@@ -227,7 +227,7 @@ def test_a_step_reads_an_enclosing_block() -> None:
         (attacks, strength, Group(name="attack", times=attacks, items=(wound,))),
     )
     (lane,) = program.evaluate()
-    faces = lane.read(wound, wound.output("face"))
+    faces = lane.read(wound, wound.output("face", 0))
 
     assert faces.mass == {face: _SIXTH for face in range(3, 9)}
 
@@ -240,7 +240,7 @@ def test_a_step_cannot_read_inside_a_nested_block() -> None:
     shots = Measurement[int](name="shots", side=Side.THIS_MODEL, body=_three)
     hit = Roll[int](name="roll-to-hit", side=Side.THIS_MODEL, body=_d6, target=Scalar("t", 4))
     removed = Consequence[int](
-        name="remove-casualties", side=Side.THE_ENEMY, reads=(hit,), body=_toll
+        name="remove-casualties", side=Side.THE_ENEMY, inputs=(hit,), body=_toll
     )
 
     with pytest.raises(GraphError, match="roll-to-hit, which is not in scope"):
@@ -276,7 +276,7 @@ def _fight() -> tuple[Program, Decision[str], Consequence[int]]:
         name="declare-reaction", side=Side.THE_ENEMY, options=("hold", "flee")
     )
     given = Consequence[int](
-        name="ground-given", side=Side.THE_ENEMY, reads=(reaction,), body=_ground
+        name="ground-given", side=Side.THE_ENEMY, inputs=(reaction,), body=_ground
     )
     program = Program.build(
         "charge",
@@ -289,7 +289,7 @@ def _fight() -> tuple[Program, Decision[str], Consequence[int]]:
 def test_an_open_decision_splits_the_program_into_lanes() -> None:
     program, reaction, given = _fight()
     lanes = program.evaluate()
-    ground = [lane.read(given, given.output("ground")).mass for lane in lanes]
+    ground = [lane.read(given, given.output("ground", 0)).mass for lane in lanes]
 
     assert len(lanes) == 2
     assert ground == [{0: 1}, {6: 1}]
@@ -300,7 +300,7 @@ def test_a_fixed_decision_leaves_one_lane() -> None:
     program, reaction, given = _fight()
     (lane,) = program.evaluate(choices={reaction: "flee"})
 
-    assert lane.read(given, given.output("ground")).mass == {6: 1}
+    assert lane.read(given, given.output("ground", 0)).mass == {6: 1}
     assert lane.to_view()["lanes"] == [{"decision": "charge/declare-reaction", "outcome": "flee"}]
 
 
@@ -332,13 +332,13 @@ _range = Decision[str](name="choose-range", side=Side.THIS_MODEL, options=("clos
 _to_hit = Roll[int](
     name="roll-to-hit",
     side=Side.THIS_MODEL,
-    reads=(_range,),
+    inputs=(_range,),
     body=_hit_on,
     target=Scalar("to hit", 4),
     modifiers=(Modifier("Volley Fire", 1),),
 )
 _casualties = Consequence[int](
-    name="remove-casualties", side=Side.THE_ENEMY, reads=(_range,), body=_removed
+    name="remove-casualties", side=Side.THE_ENEMY, inputs=(_range,), body=_removed
 )
 _stomp = Slot(name="stomp", items=())
 _volley = Program.build(
@@ -358,8 +358,8 @@ def _landed(world: World) -> int:
     return 1 if world.of(_to_hit) >= 4 else 0
 
 
-_shots.show(_shots.output("shots"))
-_to_hit.show(Projection("hits", _landed))
+_shots.show(_shots.output("shots", 0))
+_to_hit.show(Projection("hits", _landed, 0))
 _casualties.show(Scalar("models", 5))
 _volley.attach(
     RuleNode(

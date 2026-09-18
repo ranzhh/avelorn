@@ -63,10 +63,9 @@ class Edge:
         classes = self.joint.map(projection.project)
         count = self.count
         if count is not None:
-            nothing = Distribution.pure(type(next(iter(classes.mass)))())
 
             def copies(times: int) -> Distribution[T]:
-                return times @ classes if times else nothing
+                return classes.repeat(times, projection.identity)
 
             classes = count.bind(copies)
         self.stacked[projection] = classes
@@ -77,6 +76,7 @@ class Edge:
 class Projection[T: Hashable]:
     label: str
     project: Callable[[World], T]
+    identity: T
 
     def view(self, edge: Edge) -> dict[str, Any]:
         read = edge.read(self)
@@ -110,29 +110,30 @@ class Step[Out: Hashable](ABC):
     kind: ClassVar[str]
     name: str
     side: Side
-    reads: tuple["Step[Any]", ...] = ()
+    # Inputs are outputs of earlier in-scope steps, passed positionally to the body.
+    inputs: tuple["Step[Any]", ...] = ()
     readings: list[Reading] = field(default_factory=list)
 
     @abstractmethod
     def outcomes(self, world: World, lane: "Lane") -> Distribution[Out]: ...
 
-    def output(self, label: str) -> Projection[Out]:
+    def output(self, label: str, identity: Out) -> Projection[Out]:
         def project(world: World) -> Out:
             return world.of(self)
 
-        return Projection(label, project)
+        return Projection(label, project, identity)
 
     def show(self, reading: Reading) -> None:
         self.readings.append(reading)
 
     def arguments(self, world: World) -> tuple[Any, ...]:
-        return tuple(world.of(step) for step in self.reads)
+        return tuple(world.of(step) for step in self.inputs)
 
     def declare(self, program: "Program", prefix: str, visible: list["Step[Any]"]) -> None:
         path = f"{prefix}/{self.name}"
-        for source in self.reads:
+        for source in self.inputs:
             if source not in visible:
-                raise GraphError(f"{path} reads {source.name}, which is not in scope")
+                raise GraphError(f"{path} inputs {source.name}, which is not in scope")
         program.take(self, path)
         visible.append(self)
 
@@ -158,7 +159,7 @@ class Step[Out: Hashable](ABC):
             "step": self.name,
             "kind": self.kind,
             "side": self.side.value,
-            "inputs": [paths[source] for source in self.reads],
+            "inputs": [paths[source] for source in self.inputs],
             "edge": {"readings": [reading.view(edge) for reading in self.readings]},
             **self.detail(edge),
         }

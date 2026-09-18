@@ -268,8 +268,12 @@ def test_matmul_is_not_scaling_the_outcomes() -> None:
     assert not _same(3 @ _coin, _coin.map(lambda k: k * 3))
 
 
+def test_repeat_zero_uses_the_supplied_identity() -> None:
+    assert _coin.repeat(0, 0) == Distribution.pure(0)
+    assert Distribution({(): 1}).repeat(0, ()) == Distribution.pure(())
+
+
 def test_matmul_rejects_no_copies() -> None:
-    """Zero copies has no identity to return for a general outcome type."""
     with pytest.raises(ValueError, match="copies must be >= 1"):
         _ = 0 @ _coin
 
