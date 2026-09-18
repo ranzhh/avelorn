@@ -32,16 +32,8 @@ class Verdict(StrEnum):
     INAPPLICABLE = "inapplicable"
 
 
-_NOTHING: Mapping[Any, Any] = MappingProxyType({})
-
-
 def _shown(value: object) -> int | str:
     return value if isinstance(value, int) else str(value)
-
-
-@dataclass(frozen=True, eq=False)
-class Given[T]:
-    name: str
 
 
 @dataclass(frozen=True)
@@ -52,16 +44,10 @@ class World:
         for declared, value in self.outputs:
             if declared is step:
                 return value
-        raise GraphError(f"{step.name} has no output in this world")
+        raise GraphError(f"{step.name} has not run in this world")
 
     def then[Out: Hashable](self, step: "Step[Out]", value: Out) -> "World":
         return World((*self.outputs, (step, value)))
-
-
-@dataclass(frozen=True)
-class Situation:
-    given: Mapping[Given[Any], Any]
-    choices: Mapping["Decision[Any]", Any]
 
 
 @dataclass
@@ -125,11 +111,10 @@ class Step[Out: Hashable](ABC):
     name: str
     side: Side
     reads: tuple["Step[Any]", ...] = ()
-    given: tuple[Given[Any], ...] = ()
     readings: list[Reading] = field(default_factory=list)
 
     @abstractmethod
-    def outcomes(self, world: World, situation: Situation) -> Distribution[Out]: ...
+    def outcomes(self, world: World, lane: "Lane") -> Distribution[Out]: ...
 
     def output(self, label: str) -> Projection[Out]:
         def project(world: World) -> Out:
@@ -140,31 +125,29 @@ class Step[Out: Hashable](ABC):
     def show(self, reading: Reading) -> None:
         self.readings.append(reading)
 
-    def arguments(self, world: World, situation: Situation) -> tuple[Any, ...]:
-        read = (world.of(step) for step in self.reads)
-        supplied = (situation.given[declared] for declared in self.given)
-        return (*read, *supplied)
+    def arguments(self, world: World) -> tuple[Any, ...]:
+        return tuple(world.of(step) for step in self.reads)
 
-    def declare(self, draft: "_Draft", prefix: str, visible: list["Step[Any]"]) -> None:
+    def declare(self, program: "Program", prefix: str, visible: list["Step[Any]"]) -> None:
         path = f"{prefix}/{self.name}"
         for source in self.reads:
             if source not in visible:
                 raise GraphError(f"{path} reads {source.name}, which is not in scope")
-        draft.take(self, path)
+        program.take(self, path)
         visible.append(self)
 
-    def collect(self, draft: "_Draft") -> None:
-        draft.steps.append(self)
+    def collect(self, program: "Program") -> None:
+        program.steps.append(self)
 
-    def run(self, run: "_Run") -> None:
+    def run(self, lane: "Lane") -> None:
         def advance(world: World) -> Distribution[World]:
             def attach(value: Out) -> World:
                 return world.then(self, value)
 
-            return self.outcomes(world, run.situation).map(attach)
+            return self.outcomes(world, lane).map(attach)
 
-        run.joint = run.joint.bind(advance)
-        run.edges[self] = Edge(run.joint, run.count)
+        lane.joint = lane.joint.bind(advance)
+        lane.edges[self] = Edge(lane.joint, lane.count)
 
     def detail(self, edge: Edge) -> dict[str, Any]:
         return {}
@@ -182,19 +165,21 @@ class Step[Out: Hashable](ABC):
 
 
 @dataclass(frozen=True, eq=False, kw_only=True)
-class Certain[Out: Hashable](Step[Out]):
+class Measurement[Out: Hashable](Step[Out]):
+    kind = "measurement"
     body: Callable[..., Out]
 
-    def outcomes(self, world: World, situation: Situation) -> Distribution[Out]:
-        return Distribution.pure(self.body(*self.arguments(world, situation)))
+    def outcomes(self, world: World, lane: "Lane") -> Distribution[Out]:
+        return Distribution.pure(self.body(*self.arguments(world)))
 
 
-class Measurement[Out: Hashable](Certain[Out]):
-    kind = "measurement"
-
-
-class Consequence[Out: Hashable](Certain[Out]):
+@dataclass(frozen=True, eq=False, kw_only=True)
+class Consequence[Out: Hashable](Step[Out]):
     kind = "consequence"
+    body: Callable[..., Out]
+
+    def outcomes(self, world: World, lane: "Lane") -> Distribution[Out]:
+        return Distribution.pure(self.body(*self.arguments(world)))
 
 
 @dataclass(frozen=True, eq=False, kw_only=True)
@@ -204,8 +189,8 @@ class Roll[Out: Hashable](Step[Out]):
     target: Reading
     modifiers: tuple[Modifier, ...] = ()
 
-    def outcomes(self, world: World, situation: Situation) -> Distribution[Out]:
-        return self.body(*self.arguments(world, situation))
+    def outcomes(self, world: World, lane: "Lane") -> Distribution[Out]:
+        return self.body(*self.arguments(world))
 
     def detail(self, edge: Edge) -> dict[str, Any]:
         return {
@@ -219,12 +204,12 @@ class Decision[Out: Hashable](Step[Out]):
     kind = "decision"
     options: tuple[Out, ...]
 
-    def outcomes(self, world: World, situation: Situation) -> Distribution[Out]:
-        return Distribution.pure(situation.choices[self])
+    def outcomes(self, world: World, lane: "Lane") -> Distribution[Out]:
+        return Distribution.pure(lane.choices[self])
 
-    def collect(self, draft: "_Draft") -> None:
-        draft.steps.append(self)
-        draft.decisions.append(self)
+    def collect(self, program: "Program") -> None:
+        program.steps.append(self)
+        program.decisions.append(self)
 
     def detail(self, edge: Edge) -> dict[str, Any]:
         return {"options": [str(option) for option in self.options]}
@@ -239,29 +224,29 @@ class Block(ABC):
     name: str
     items: tuple[Item, ...]
 
-    def declare(self, draft: "_Draft", prefix: str, visible: list[Step[Any]]) -> None:
+    def declare(self, program: "Program", prefix: str, visible: list[Step[Any]]) -> None:
         path = f"{prefix}/{self.name}"
         self.check(path, visible)
-        draft.take(self, path)
+        program.take(self, path)
         inner = list(visible)
         for item in self.items:
-            item.declare(draft, path, inner)
+            item.declare(program, path, inner)
 
     def check(self, path: str, visible: list[Step[Any]]) -> None:
         return None
 
-    def collect(self, draft: "_Draft") -> None:
-        draft.blocks.append(self)
+    def collect(self, program: "Program") -> None:
+        program.blocks.append(self)
 
-    def run(self, run: "_Run") -> None:
-        outer, count = run.joint, run.count
-        run.count = self.multiplier(run)
+    def run(self, lane: "Lane") -> None:
+        outer, count = lane.joint, lane.count
+        lane.count = self.multiplier(lane)
         for item in self.items:
-            item.run(run)
-        run.joint, run.count = outer, count
+            item.run(lane)
+        lane.joint, lane.count = outer, count
 
-    def multiplier(self, run: "_Run") -> Distribution[int] | None:
-        return run.count
+    def multiplier(self, lane: "Lane") -> Distribution[int] | None:
+        return lane.count
 
     @abstractmethod
     def detail(self, paths: Mapping[Any, str]) -> dict[str, Any]: ...
@@ -280,12 +265,12 @@ class Group(Block):
         if self.times not in visible:
             raise GraphError(f"{path} runs {self.times.name} times, which is not in scope")
 
-    def multiplier(self, run: "_Run") -> Distribution[int]:
+    def multiplier(self, lane: "Lane") -> Distribution[int]:
         def counted(world: World) -> int:
             return world.of(self.times)
 
-        mine = run.joint.map(counted)
-        outer = run.count
+        mine = lane.joint.map(counted)
+        outer = lane.count
         return mine if outer is None else outer.combine(mine, operator.mul)
 
     def detail(self, paths: Mapping[Any, str]) -> dict[str, Any]:
@@ -339,55 +324,29 @@ class RuleNode:
 
 
 @dataclass
-class _Draft:
-    paths: dict[Any, str] = field(default_factory=dict)
-    taken: set[str] = field(default_factory=set)
-    steps: list[Step[Any]] = field(default_factory=list)
-    blocks: list[Block] = field(default_factory=list)
-    decisions: list[Decision[Any]] = field(default_factory=list)
-
-    def take(self, item: Item, path: str) -> None:
-        if path in self.taken:
-            raise GraphError(f"{path} is declared twice")
-        self.taken.add(path)
-        self.paths[item] = path
-        item.collect(self)
-
-
-@dataclass
-class _Run:
-    situation: Situation
-    joint: Distribution[World]
-    count: Distribution[int] | None
-    edges: dict[Step[Any], Edge] = field(default_factory=dict)
-
-
-@dataclass
 class Program:
     name: str
     sides: Mapping[Side, str]
     items: tuple[Item, ...]
-    paths: Mapping[Any, str]
-    steps: tuple[Step[Any], ...]
-    blocks: tuple[Block, ...]
-    decisions: tuple[Decision[Any], ...]
+    paths: dict[Any, str] = field(default_factory=dict)
+    steps: list[Step[Any]] = field(default_factory=list)
+    blocks: list[Block] = field(default_factory=list)
+    decisions: list[Decision[Any]] = field(default_factory=list)
     rules: list[RuleNode] = field(default_factory=list)
 
     @classmethod
     def build(cls, name: str, sides: Mapping[Side, str], items: tuple[Item, ...]) -> "Program":
-        draft = _Draft()
+        program = cls(name=name, sides=sides, items=items)
         visible: list[Step[Any]] = []
         for item in items:
-            item.declare(draft, name, visible)
-        return cls(
-            name=name,
-            sides=sides,
-            items=items,
-            paths=draft.paths,
-            steps=tuple(draft.steps),
-            blocks=tuple(draft.blocks),
-            decisions=tuple(draft.decisions),
-        )
+            item.declare(program, name, visible)
+        return program
+
+    def take(self, item: Item, path: str) -> None:
+        if path in self.paths.values():
+            raise GraphError(f"{path} is declared twice")
+        self.paths[item] = path
+        item.collect(self)
 
     def attach(self, rule: RuleNode) -> None:
         for landing in rule.landings:
@@ -396,33 +355,31 @@ class Program:
         self.rules.append(rule)
 
     def evaluate(
-        self,
-        given: Mapping[Given[Any], Any] = _NOTHING,
-        choices: Mapping[Decision[Any], Any] = _NOTHING,
-    ) -> "Evaluated":
-        decisions = self.decisions
+        self, choices: Mapping[Decision[Any], Any] = MappingProxyType({})
+    ) -> tuple["Lane", ...]:
         open_options = [
-            (decision.options if decision not in choices else (choices[decision],))
-            for decision in decisions
+            (choices[decision],) if decision in choices else decision.options
+            for decision in self.decisions
         ]
-        lanes = [
-            self._lane(Situation(given, dict(zip(decisions, taken, strict=True))))
+        return tuple(
+            self._lane(dict(zip(self.decisions, taken, strict=True)))
             for taken in product(*open_options)
-        ]
-        return Evaluated(lanes=tuple(lanes))
+        )
 
-    def _lane(self, situation: Situation) -> "Lane":
-        run = _Run(situation=situation, joint=Distribution.pure(World()), count=None)
+    def _lane(self, choices: Mapping[Decision[Any], Any]) -> "Lane":
+        lane = Lane(program=self, choices=choices, joint=Distribution.pure(World()))
         for item in self.items:
-            item.run(run)
-        return Lane(program=self, choices=situation.choices, edges=run.edges)
+            item.run(lane)
+        return lane
 
 
 @dataclass
 class Lane:
     program: Program
     choices: Mapping[Decision[Any], Any]
-    edges: Mapping[Step[Any], Edge]
+    joint: Distribution[World]
+    count: Distribution[int] | None = None
+    edges: dict[Step[Any], Edge] = field(default_factory=dict)
 
     def read[T: Hashable](self, step: Step[Any], projection: Projection[T]) -> Distribution[T]:
         return self.edges[step].read(projection)
@@ -440,16 +397,3 @@ class Lane:
                 for decision, outcome in self.choices.items()
             ],
         }
-
-
-@dataclass
-class Evaluated:
-    lanes: tuple[Lane, ...]
-
-    def only(self) -> Lane:
-        if len(self.lanes) != 1:
-            raise GraphError(f"{len(self.lanes)} lanes: fix a decision or read one lane")
-        return self.lanes[0]
-
-    def to_view(self) -> dict[str, Any]:
-        return self.only().to_view()

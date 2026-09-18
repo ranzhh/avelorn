@@ -52,7 +52,9 @@ def test_a_roll_edge_carries_its_own_distribution() -> None:
     flip = Roll[int](name="flip", side=Side.THIS_MODEL, body=_coin, target=Scalar("target", 1))
     program = Program.build("coin", _SIDES, (flip,))
 
-    assert program.evaluate().only().read(flip, flip.output("face")).mass == {0: _HALF, 1: _HALF}
+    (lane,) = program.evaluate()
+
+    assert lane.read(flip, flip.output("face")).mass == {0: _HALF, 1: _HALF}
 
 
 def test_a_path_is_the_step_place_in_the_block_tree() -> None:
@@ -64,8 +66,8 @@ def test_a_path_is_the_step_place_in_the_block_tree() -> None:
     assert program.paths[shots] == "volley/shots"
     assert program.paths[attack] == "volley/attack"
     assert program.paths[hit] == "volley/attack/roll-to-hit"
-    assert program.steps == (shots, hit)
-    assert program.blocks == (attack,)
+    assert program.steps == [shots, hit]
+    assert program.blocks == [attack]
 
 
 _certain_shots = Measurement[int](name="shots", side=Side.THIS_MODEL, body=_three)
@@ -82,7 +84,8 @@ def _certain_six(world: World) -> int:
 
 
 def test_a_reading_stacks_a_certain_count() -> None:
-    stacked = _certain.evaluate().only().read(_certain_die, Projection("sixes", _certain_six))
+    (lane,) = _certain.evaluate()
+    stacked = lane.read(_certain_die, Projection("sixes", _certain_six))
 
     assert stacked.mass == {
         0: Fraction(125, 216),
@@ -112,7 +115,8 @@ def _open_six(world: World) -> int:
 
 
 def test_a_reading_stacks_an_uncertain_count() -> None:
-    stacked = _open.evaluate().only().read(_open_die, Projection("sixes", _open_six))
+    (lane,) = _open.evaluate()
+    stacked = lane.read(_open_die, Projection("sixes", _open_six))
 
     assert stacked.mass == {
         0: Fraction(275, 432),
@@ -145,7 +149,7 @@ _spent_die.show(Projection("sixes", _spent_six))
 
 
 def test_a_group_that_may_not_run_stacks_the_empty_tally() -> None:
-    lane = _spent.evaluate().only()
+    (lane,) = _spent.evaluate()
     stacked = lane.read(_spent_die, Projection("sixes", _spent_six))
     shown = lane.to_view()["nodes"][1]["edge"]["readings"][0]["outcomes"]
 
@@ -187,7 +191,7 @@ def _both(world: World) -> tuple[int, bool]:
 
 
 def test_a_reading_over_a_pair_keeps_the_coupling() -> None:
-    lane = _coupled.evaluate().only()
+    (lane,) = _coupled.evaluate()
     joint = lane.read(_wound, Projection("hit and wound", _both))
     hits = lane.read(_wound, _hit.output("hit"))
     wounds = lane.read(_wound, _wound.output("wound"))
@@ -222,7 +226,8 @@ def test_a_step_reads_an_enclosing_block() -> None:
         _SIDES,
         (attacks, strength, Group(name="attack", times=attacks, items=(wound,))),
     )
-    faces = program.evaluate().only().read(wound, wound.output("face"))
+    (lane,) = program.evaluate()
+    faces = lane.read(wound, wound.output("face"))
 
     assert faces.mass == {face: _SIXTH for face in range(3, 9)}
 
@@ -283,7 +288,7 @@ def _fight() -> tuple[Program, Decision[str], Consequence[int]]:
 
 def test_an_open_decision_splits_the_program_into_lanes() -> None:
     program, reaction, given = _fight()
-    lanes = program.evaluate().lanes
+    lanes = program.evaluate()
     ground = [lane.read(given, given.output("ground")).mass for lane in lanes]
 
     assert len(lanes) == 2
@@ -293,13 +298,10 @@ def test_an_open_decision_splits_the_program_into_lanes() -> None:
 
 def test_a_fixed_decision_leaves_one_lane() -> None:
     program, reaction, given = _fight()
-    evaluated = program.evaluate(choices={reaction: "flee"})
+    (lane,) = program.evaluate(choices={reaction: "flee"})
 
-    assert len(evaluated.lanes) == 1
-    assert evaluated.only().read(given, given.output("ground")).mass == {6: 1}
-    assert evaluated.to_view()["lanes"] == [
-        {"decision": "charge/declare-reaction", "outcome": "flee"}
-    ]
+    assert lane.read(given, given.output("ground")).mass == {6: 1}
+    assert lane.to_view()["lanes"] == [{"decision": "charge/declare-reaction", "outcome": "flee"}]
 
 
 def test_a_rule_cannot_land_on_a_step_the_program_lacks() -> None:
@@ -374,7 +376,8 @@ _volley.attach(RuleNode(rule="stubborn", name="Stubborn", bearer=Bearer.CORE))
 
 
 def _view() -> dict[str, Any]:
-    return _volley.evaluate(choices={_range: "close"}).to_view()
+    (lane,) = _volley.evaluate(choices={_range: "close"})
+    return lane.to_view()
 
 
 def test_a_rule_node_lists_its_landings() -> None:
