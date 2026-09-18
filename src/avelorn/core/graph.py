@@ -14,19 +14,6 @@ from avelorn.core.errors import AvelornError
 class GraphError(AvelornError): ...
 
 
-class StepKind(StrEnum):
-    MEASUREMENT = "measurement"
-    DECISION = "decision"
-    ROLL = "roll"
-    CONSEQUENCE = "consequence"
-
-
-class BlockKind(StrEnum):
-    GROUP = "group"
-    SLOT = "slot"
-    LANES = "lanes"
-
-
 class Side(StrEnum):
     THIS_MODEL = "this-model"
     THE_ENEMY = "the-enemy"
@@ -134,7 +121,7 @@ class Modifier:
 
 @dataclass(frozen=True, eq=False, kw_only=True)
 class Step[Out: Hashable](ABC):
-    kind: ClassVar[StepKind]
+    kind: ClassVar[str]
     name: str
     side: Side
     reads: tuple["Step[Any]", ...] = ()
@@ -186,7 +173,7 @@ class Step[Out: Hashable](ABC):
         return {
             "path": paths[self],
             "step": self.name,
-            "kind": self.kind.value,
+            "kind": self.kind,
             "side": self.side.value,
             "inputs": [paths[source] for source in self.reads],
             "edge": {"readings": [reading.view(edge) for reading in self.readings]},
@@ -203,16 +190,16 @@ class Certain[Out: Hashable](Step[Out]):
 
 
 class Measurement[Out: Hashable](Certain[Out]):
-    kind = StepKind.MEASUREMENT
+    kind = "measurement"
 
 
 class Consequence[Out: Hashable](Certain[Out]):
-    kind = StepKind.CONSEQUENCE
+    kind = "consequence"
 
 
 @dataclass(frozen=True, eq=False, kw_only=True)
 class Roll[Out: Hashable](Step[Out]):
-    kind = StepKind.ROLL
+    kind = "roll"
     body: Callable[..., Distribution[Out]]
     target: Reading
     modifiers: tuple[Modifier, ...] = ()
@@ -229,7 +216,7 @@ class Roll[Out: Hashable](Step[Out]):
 
 @dataclass(frozen=True, eq=False, kw_only=True)
 class Decision[Out: Hashable](Step[Out]):
-    kind = StepKind.DECISION
+    kind = "decision"
     options: tuple[Out, ...]
 
     def outcomes(self, world: World, situation: Situation) -> Distribution[Out]:
@@ -248,7 +235,7 @@ type Item = Step[Any] | Block
 
 @dataclass(frozen=True, eq=False, kw_only=True)
 class Block(ABC):
-    kind: ClassVar[BlockKind]
+    kind: ClassVar[str]
     name: str
     items: tuple[Item, ...]
 
@@ -280,12 +267,12 @@ class Block(ABC):
     def detail(self, paths: Mapping[Any, str]) -> dict[str, Any]: ...
 
     def view(self, paths: Mapping[Any, str]) -> dict[str, Any]:
-        return {"path": paths[self], "kind": self.kind.value, **self.detail(paths)}
+        return {"path": paths[self], "kind": self.kind, **self.detail(paths)}
 
 
 @dataclass(frozen=True, eq=False, kw_only=True)
 class Group(Block):
-    kind = BlockKind.GROUP
+    kind = "group"
     times: Step[int]
     collapsed: bool = False
 
@@ -307,7 +294,7 @@ class Group(Block):
 
 @dataclass(frozen=True, eq=False, kw_only=True)
 class Slot(Block):
-    kind = BlockKind.SLOT
+    kind = "slot"
 
     def detail(self, paths: Mapping[Any, str]) -> dict[str, Any]:
         return {"empty": not self.items}
@@ -315,7 +302,7 @@ class Slot(Block):
 
 @dataclass(frozen=True, eq=False, kw_only=True)
 class Lanes(Block):
-    kind = BlockKind.LANES
+    kind = "lanes"
     decision: Decision[Any]
 
     def check(self, path: str, visible: list[Step[Any]]) -> None:

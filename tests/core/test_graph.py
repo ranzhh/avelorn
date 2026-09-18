@@ -408,13 +408,8 @@ def test_the_view_carries_the_blocks_and_the_stacked_readings() -> None:
 
 
 _TYPES = Path(__file__).resolve().parents[2] / "frontend/src/lib/graph/types.ts"
-_NODE_OF = {
-    "measurement": "Measurement",
-    "decision": "Decision",
-    "roll": "Roll",
-    "consequence": "Consequence",
-}
-_BLOCK_OF = {"group": "Group", "slot": "Slot", "lanes": "Lanes"}
+_NODE_OF = {step.kind: step.__name__ for step in (Measurement, Decision, Roll, Consequence)}
+_BLOCK_OF = {block.kind: block.__name__ for block in (Group, Slot, Lanes)}
 
 
 def _declared() -> dict[str, set[str]]:
