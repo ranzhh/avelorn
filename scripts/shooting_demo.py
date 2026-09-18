@@ -18,6 +18,7 @@ from collections.abc import Callable
 from fractions import Fraction
 
 from avelorn.core.distribution import Distribution
+from avelorn.tow.contingent import Contingent
 from avelorn.tow.game import TOWGame
 
 
@@ -29,7 +30,7 @@ def main() -> None:
     archers = game.field(game.units["elven-archers"], 10)
     sisters = game.field(game.units["sisters-of-avelorn"], 10)
 
-    def fire(shooters) -> Callable[[int], Distribution[int]]:
+    def fire(shooters: Contingent) -> Callable[[int], Distribution[int]]:
         # One unit's volley as a step: spearmen standing -> spearmen still standing.
         def volley(standing: int) -> Distribution[int]:
             if standing == 0:
@@ -43,7 +44,7 @@ def main() -> None:
     standing = Distribution.pure(size).bind(fire(archers)).bind(fire(sisters))
     casualties = size - standing
 
-    def toll(shooters) -> Distribution[int]:  # one unit alone, for comparison
+    def toll(shooters: Contingent) -> Distribution[int]:  # one unit alone, for comparison
         return size - Distribution.pure(size).bind(fire(shooters))
 
     lone = game.shooting.volley(archers, game.field(target, size), distance=12)
