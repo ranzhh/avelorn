@@ -10,9 +10,8 @@ maps each outcome to its probability and gives the engine one shared way to
   by probability. ``bind`` is the fold ("weight each branch, sum") written
   once, here, so no caller spells it out again.
 
-``dist >> step`` is :meth:`bind` spelled as an operator, and a :class:`Transition`
-wraps such a step as a value so a whole sequence composes before any
-distribution reaches it (``to_hit >> to_wound >> saves``). Arithmetic on
+``dist >> step`` is :meth:`bind` spelled as an operator, so a chain of steps
+reads left to right (``start >> to_hit >> to_wound``). Arithmetic on
 outcomes — :meth:`__add__` and the rest — goes through :meth:`combine`.
 
 The arithmetic operators mean whatever the *outcome type's* operator means, so
@@ -76,7 +75,7 @@ from fractions import Fraction
 #
 # Chosen over parameterising the class as Distribution[T, P], which would let the
 # checker prove a chain never mixes the kinds. That costs a type parameter on
-# every signature and call site, including Transition, and it fights the integer-seeded
+# every signature and call site, and it fights the integer-seeded
 # folds below (sum starts at 0, so an exactly-typed total would not check). The
 # union documents the intent instead; see Distribution for the invariant it cannot
 # enforce.
@@ -172,8 +171,7 @@ class Distribution[T: Hashable]:
         """Feed this distribution into ``step``, which is :meth:`bind`.
 
         It reads left to right, in the order the engine resolves: a distribution,
-        then the step it flows into. ``step`` is any callable of that shape, so a
-        plain function and a :class:`Transition` both chain.
+        then the step it flows into. ``step`` is any callable of that shape.
 
         Returns:
             The mixed distribution over the downstream outcomes.
@@ -377,48 +375,3 @@ class Distribution[T: Hashable]:
             The same outcomes with every mass converted to ``float``.
         """
         return Distribution({outcome: float(p) for outcome, p in self.mass.items()})
-
-
-@dataclass(frozen=True)
-class Transition[T: Hashable, U: Hashable]:
-    """Hold one stochastic step, ``T -> Distribution[U]``, as a value.
-
-    This is a :meth:`Distribution.bind` argument that can be named, stored, and
-    composed *before* any distribution reaches it. ``a >> b`` builds the two-step
-    chain, and applying it to a distribution runs the whole thing. A resolution
-    sequence can then be assembled as data, one edge per step, instead of only
-    being spellable as nested calls.
-    """
-
-    resolve: Callable[[T], Distribution[U]]
-
-    @classmethod
-    def certain(cls, relabel: Callable[[T], U]) -> "Transition[T, U]":
-        """Lift a deterministic ``relabel`` into a step that mixes nothing.
-
-        This is how a plain change of variable joins a chain of stochastic steps,
-        which is why :meth:`Distribution.map` needs no operator of its own.
-
-        Returns:
-            The step whose every outcome is a point mass on ``relabel``'s image.
-        """
-        return cls(lambda outcome: Distribution.pure(relabel(outcome)))
-
-    def __call__(self, outcome: T) -> Distribution[U]:
-        """Resolve the step at one outcome.
-
-        Returns:
-            The distribution this step reaches from ``outcome``.
-        """
-        return self.resolve(outcome)
-
-    def __rshift__[V: Hashable](self, then: Callable[[U], Distribution[V]]) -> "Transition[T, V]":
-        """Compose two steps into the single step "this one, then ``then``".
-
-        Composition is associative, so a chain of any length groups any way and
-        resolves the same. The tests check that.
-
-        Returns:
-            The composed step from this one's input to ``then``'s output.
-        """
-        return Transition(lambda outcome: self.resolve(outcome).bind(then))

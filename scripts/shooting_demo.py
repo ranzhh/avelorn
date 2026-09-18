@@ -4,9 +4,9 @@ Elven Archers and Sisters of Avelorn both fire at a block of Elven Spearmen.
 Two units shooting one target resolve one after the other, casualties removed
 between, so the Sisters shoot whatever the Archers leave standing.
 
-Each unit's fire is a `Transition`: standing spearmen in, standing spearmen out. `>>`
-composes the two into one step before any distribution reaches it, so adding a
-third shooter is one more `>>`. Survivors read as `standing - casualties` and the
+Each unit's fire is a step: standing spearmen in, standing spearmen out.
+`bind` chains one onto the distribution the last one left, so adding a third
+shooter is one more `bind`. Survivors read as `standing - casualties` and the
 toll as `size - survivors`, because a distribution subtracts like the number it
 stands for.
 
@@ -14,9 +14,10 @@ Resolved exactly -- the per-shot probability below is a true fraction, not a
 rounding of one. No dice rolled, no arguments: run it and read the numbers.
 """
 
+from collections.abc import Callable
 from fractions import Fraction
 
-from avelorn.core.distribution import Distribution, Transition
+from avelorn.core.distribution import Distribution
 from avelorn.tow.game import TOWGame
 
 
@@ -28,7 +29,7 @@ def main() -> None:
     archers = game.field(game.units["elven-archers"], 10)
     sisters = game.field(game.units["sisters-of-avelorn"], 10)
 
-    def fire(shooters) -> Transition[int, int]:
+    def fire(shooters) -> Callable[[int], Distribution[int]]:
         # One unit's volley as a step: spearmen standing -> spearmen still standing.
         def volley(standing: int) -> Distribution[int]:
             if standing == 0:
@@ -36,14 +37,14 @@ def main() -> None:
             fired = game.shooting.volley(shooters, game.field(target, standing), distance=12)
             return standing - Distribution.from_counts(fired.casualties)
 
-        return Transition(volley)
+        return volley
 
-    # The whole point: two units' fire is one step, built before it is run.
-    both = fire(archers) >> fire(sisters)
-    casualties = size - (Distribution.pure(size) >> both)
+    # The whole point: two units' fire is one chain, each step fed the last one's spread.
+    standing = Distribution.pure(size).bind(fire(archers)).bind(fire(sisters))
+    casualties = size - standing
 
     def toll(shooters) -> Distribution[int]:  # one unit alone, for comparison
-        return size - (Distribution.pure(size) >> fire(shooters))
+        return size - Distribution.pure(size).bind(fire(shooters))
 
     lone = game.shooting.volley(archers, game.field(target, size), distance=12)
 
