@@ -14,10 +14,9 @@ Resolved exactly -- the per-shot probability below is a true fraction, not a
 rounding of one. No dice rolled, no arguments: run it and read the numbers.
 """
 
-from collections.abc import Callable
 from fractions import Fraction
 
-from avelorn.core.distribution import Distribution
+from avelorn.core.distribution import Distribution, Kernel
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.game import TOWGame
 
@@ -30,7 +29,7 @@ def main() -> None:
     archers = game.field(game.units["elven-archers"], 10)
     sisters = game.field(game.units["sisters-of-avelorn"], 10)
 
-    def fire(shooters: Contingent) -> Callable[[int], Distribution[int]]:
+    def fire(shooters: Contingent) -> Kernel[int]:
         # One unit's volley as a step: spearmen standing -> spearmen still standing.
         def volley(standing: int) -> Distribution[int]:
             if standing == 0:

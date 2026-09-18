@@ -8,7 +8,7 @@ from itertools import product
 from types import MappingProxyType
 from typing import Any, ClassVar
 
-from avelorn.core.distribution import Distribution
+from avelorn.core.distribution import Distribution, Kernel
 from avelorn.core.errors import AvelornError
 
 
@@ -115,7 +115,7 @@ class Step[Out: Hashable](ABC):
     side: Side
     # Inputs are outputs of earlier in-scope steps, passed positionally to the kernel.
     inputs: tuple["Step[Any]", ...] = ()
-    kernel: Callable[..., Distribution[Out]] | None = None
+    kernel: Kernel[Out] | None = None
     readings: list[Reading] = field(default_factory=list)
 
     @abstractmethod
@@ -179,7 +179,7 @@ class Step[Out: Hashable](ABC):
 @dataclass(frozen=True, eq=False, kw_only=True)
 class Measurement[Out: Hashable](Step[Out]):
     kind = "measurement"
-    kernel: Callable[..., Distribution[Out]]
+    kernel: Kernel[Out]
 
     def outcomes(self, world: Trace, lane: "Lane") -> Distribution[Out]:
         return self.kernel(*self.arguments(world))
@@ -188,7 +188,7 @@ class Measurement[Out: Hashable](Step[Out]):
 @dataclass(frozen=True, eq=False, kw_only=True)
 class Consequence[Out: Hashable](Step[Out]):
     kind = "consequence"
-    kernel: Callable[..., Distribution[Out]]
+    kernel: Kernel[Out]
 
     def outcomes(self, world: Trace, lane: "Lane") -> Distribution[Out]:
         return self.kernel(*self.arguments(world))
@@ -197,7 +197,7 @@ class Consequence[Out: Hashable](Step[Out]):
 @dataclass(frozen=True, eq=False, kw_only=True)
 class Roll[Out: Hashable](Step[Out]):
     kind = "roll"
-    kernel: Callable[..., Distribution[Out]]
+    kernel: Kernel[Out]
     target: Reading
     modifiers: tuple[Modifier, ...] = ()
 

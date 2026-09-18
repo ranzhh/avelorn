@@ -80,6 +80,7 @@ from fractions import Fraction
 # union documents the intent instead; see Distribution for the invariant it cannot
 # enforce.
 type Probability = int | float | Fraction
+type Kernel[Out: Hashable] = Callable[..., "Distribution[Out]"]
 
 
 @dataclass(frozen=True)
@@ -150,7 +151,7 @@ class Distribution[T: Hashable]:
             folded[image] = folded.get(image, 0) + p
         return Distribution(folded)
 
-    def bind[U: Hashable](self, step: Callable[[T], "Distribution[U]"]) -> "Distribution[U]":
+    def bind[U: Hashable](self, step: Kernel[U]) -> "Distribution[U]":
         """Chain a stochastic ``step`` onto this distribution and mix — the fold.
 
         ``step`` maps each outcome to its own distribution (the downstream
@@ -167,7 +168,7 @@ class Distribution[T: Hashable]:
                 folded[downstream] = folded.get(downstream, 0) + p * q
         return Distribution(folded)
 
-    def __rshift__[U: Hashable](self, step: Callable[[T], "Distribution[U]"]) -> "Distribution[U]":
+    def __rshift__[U: Hashable](self, step: Kernel[U]) -> "Distribution[U]":
         """Feed this distribution into ``step``, which is :meth:`bind`.
 
         It reads left to right, in the order the engine resolves: a distribution,
