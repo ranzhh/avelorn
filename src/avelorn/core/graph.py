@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Hashable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
+from inspect import signature
 from itertools import product
 from types import MappingProxyType
 from typing import Any, ClassVar
@@ -136,6 +137,14 @@ class Step[Out: Hashable](ABC):
         for source in self.inputs:
             if source not in visible:
                 raise GraphError(f"{path} inputs {source.name}, which is not in scope")
+        body = getattr(self, "body", None)
+        if body is not None:
+            try:
+                signature(body).bind(*(None for _ in self.inputs))
+            except (TypeError, ValueError) as error:
+                raise GraphError(
+                    f"{path} body cannot accept {len(self.inputs)} positional inputs"
+                ) from error
         program.take(self, path)
         visible.append(self)
 

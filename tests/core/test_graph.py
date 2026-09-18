@@ -1,4 +1,5 @@
 import re
+from collections.abc import Callable
 from fractions import Fraction
 from pathlib import Path
 from typing import Any
@@ -257,6 +258,25 @@ def test_a_group_cannot_run_a_count_out_of_scope() -> None:
 
     with pytest.raises(GraphError, match="runs shots times, which is not in scope"):
         Program.build("volley", _SIDES, (Group(name="attack", times=hidden, items=(hit,)),))
+
+
+def _no_inputs() -> int:
+    return 3
+
+
+def _two_inputs(first: int, second: int) -> int:
+    return first + second
+
+
+@pytest.mark.parametrize("body", [_no_inputs, _two_inputs])
+def test_a_body_must_accept_its_inputs(body: Callable[..., int]) -> None:
+    source = Measurement[int](name="source", side=Side.THIS_MODEL, body=_three)
+    dependent = Measurement[int](
+        name="dependent", side=Side.THIS_MODEL, inputs=(source,), body=body
+    )
+
+    with pytest.raises(GraphError, match="body cannot accept 1 positional inputs"):
+        Program.build("arity", _SIDES, (source, dependent))
 
 
 def test_two_steps_cannot_share_a_path() -> None:
