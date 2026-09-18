@@ -5,10 +5,10 @@ Two units shooting one target resolve one after the other, casualties removed
 between, so the Sisters shoot whatever the Archers leave standing.
 
 Each unit's fire is a step: standing spearmen in, standing spearmen out.
-`bind` chains one onto the distribution the last one left, so adding a third
-shooter is one more `bind`. Survivors read as `standing - casualties` and the
-toll as `size - survivors`, because a distribution subtracts like the number it
-stands for.
+`>>` chains one kernel onto the distribution the last one left, so adding a
+third shooter is one more `>>`. Survivors read as `standing - casualties` and
+the toll as `size - survivors`, because a distribution subtracts like the number
+it stands for.
 
 Resolved exactly -- the per-shot probability below is a true fraction, not a
 rounding of one. No dice rolled, no arguments: run it and read the numbers.
@@ -40,11 +40,11 @@ def main() -> None:
         return volley
 
     # The whole point: two units' fire is one chain, each step fed the last one's spread.
-    standing = Distribution.pure(size).bind(fire(archers)).bind(fire(sisters))
+    standing = Distribution.pure(size) >> fire(archers) >> fire(sisters)
     casualties = size - standing
 
     def toll(shooters: Contingent) -> Distribution[int]:  # one unit alone, for comparison
-        return size - Distribution.pure(size).bind(fire(shooters))
+        return size - (Distribution.pure(size) >> fire(shooters))
 
     lone = game.shooting.volley(archers, game.field(target, size), distance=12)
 
