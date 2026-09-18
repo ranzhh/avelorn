@@ -37,22 +37,24 @@ def _shown(value: object) -> int | str:
 
 
 @dataclass(frozen=True)
-class World:
+class Trace:
+    """Partial execution trace so far."""
+
     outputs: tuple[tuple["Step[Any]", Any], ...] = ()
 
     def of[Out: Hashable](self, step: "Step[Out]") -> Out:
         for declared, value in self.outputs:
             if declared is step:
                 return value
-        raise GraphError(f"{step.name} has not run in this world")
+        raise GraphError(f"{step.name} has not run in this trace")
 
-    def then[Out: Hashable](self, step: "Step[Out]", value: Out) -> "World":
-        return World((*self.outputs, (step, value)))
+    def then[Out: Hashable](self, step: "Step[Out]", value: Out) -> "Trace":
+        return Trace((*self.outputs, (step, value)))
 
 
 @dataclass
 class Edge:
-    joint: Distribution[World]
+    joint: Distribution[Trace]
     count: Distribution[int] | None
     stacked: dict["Projection[Any]", Distribution[Any]] = field(default_factory=dict)
 
@@ -75,7 +77,7 @@ class Edge:
 @dataclass(frozen=True, eq=False)
 class Projection[T: Hashable]:
     label: str
-    project: Callable[[World], T]
+    project: Callable[[Trace], T]
     identity: T
 
     def view(self, edge: Edge) -> dict[str, Any]:
@@ -115,10 +117,10 @@ class Step[Out: Hashable](ABC):
     readings: list[Reading] = field(default_factory=list)
 
     @abstractmethod
-    def outcomes(self, world: World, lane: "Lane") -> Distribution[Out]: ...
+    def outcomes(self, world: Trace, lane: "Lane") -> Distribution[Out]: ...
 
     def output(self, label: str, identity: Out) -> Projection[Out]:
-        def project(world: World) -> Out:
+        def project(world: Trace) -> Out:
             return world.of(self)
 
         return Projection(label, project, identity)
@@ -126,7 +128,7 @@ class Step[Out: Hashable](ABC):
     def show(self, reading: Reading) -> None:
         self.readings.append(reading)
 
-    def arguments(self, world: World) -> tuple[Any, ...]:
+    def arguments(self, world: Trace) -> tuple[Any, ...]:
         return tuple(world.of(step) for step in self.inputs)
 
     def declare(self, program: "Program", prefix: str, visible: list["Step[Any]"]) -> None:
@@ -141,8 +143,8 @@ class Step[Out: Hashable](ABC):
         program.steps.append(self)
 
     def run(self, lane: "Lane") -> None:
-        def advance(world: World) -> Distribution[World]:
-            def attach(value: Out) -> World:
+        def advance(world: Trace) -> Distribution[Trace]:
+            def attach(value: Out) -> Trace:
                 return world.then(self, value)
 
             return self.outcomes(world, lane).map(attach)
@@ -170,7 +172,7 @@ class Measurement[Out: Hashable](Step[Out]):
     kind = "measurement"
     body: Callable[..., Out]
 
-    def outcomes(self, world: World, lane: "Lane") -> Distribution[Out]:
+    def outcomes(self, world: Trace, lane: "Lane") -> Distribution[Out]:
         return Distribution.pure(self.body(*self.arguments(world)))
 
 
@@ -179,7 +181,7 @@ class Consequence[Out: Hashable](Step[Out]):
     kind = "consequence"
     body: Callable[..., Out]
 
-    def outcomes(self, world: World, lane: "Lane") -> Distribution[Out]:
+    def outcomes(self, world: Trace, lane: "Lane") -> Distribution[Out]:
         return Distribution.pure(self.body(*self.arguments(world)))
 
 
@@ -190,7 +192,7 @@ class Roll[Out: Hashable](Step[Out]):
     target: Reading
     modifiers: tuple[Modifier, ...] = ()
 
-    def outcomes(self, world: World, lane: "Lane") -> Distribution[Out]:
+    def outcomes(self, world: Trace, lane: "Lane") -> Distribution[Out]:
         return self.body(*self.arguments(world))
 
     def detail(self, edge: Edge) -> dict[str, Any]:
@@ -205,7 +207,7 @@ class Decision[Out: Hashable](Step[Out]):
     kind = "decision"
     options: tuple[Out, ...]
 
-    def outcomes(self, world: World, lane: "Lane") -> Distribution[Out]:
+    def outcomes(self, world: Trace, lane: "Lane") -> Distribution[Out]:
         return Distribution.pure(lane.choices[self])
 
     def collect(self, program: "Program") -> None:
@@ -267,7 +269,7 @@ class Group(Block):
             raise GraphError(f"{path} runs {self.times.name} times, which is not in scope")
 
     def multiplier(self, lane: "Lane") -> Distribution[int]:
-        def counted(world: World) -> int:
+        def counted(world: Trace) -> int:
             return world.of(self.times)
 
         mine = lane.joint.map(counted)
@@ -368,7 +370,7 @@ class Program:
         )
 
     def _lane(self, choices: Mapping[Decision[Any], Any]) -> "Lane":
-        lane = Lane(program=self, choices=choices, joint=Distribution.pure(World()))
+        lane = Lane(program=self, choices=choices, joint=Distribution.pure(Trace()))
         for item in self.items:
             item.run(lane)
         return lane
@@ -378,7 +380,7 @@ class Program:
 class Lane:
     program: Program
     choices: Mapping[Decision[Any], Any]
-    joint: Distribution[World]
+    joint: Distribution[Trace]
     count: Distribution[int] | None = None
     edges: dict[Step[Any], Edge] = field(default_factory=dict)
 

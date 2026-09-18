@@ -23,8 +23,8 @@ from avelorn.core.graph import (
     Scalar,
     Side,
     Slot,
+    Trace,
     Verdict,
-    World,
 )
 
 _SIXTH = Fraction(1, 6)
@@ -79,7 +79,7 @@ _certain = Program.build(
 )
 
 
-def _certain_six(world: World) -> int:
+def _certain_six(world: Trace) -> int:
     return 1 if world.of(_certain_die) == 6 else 0
 
 
@@ -110,7 +110,7 @@ _open = Program.build(
 )
 
 
-def _open_six(world: World) -> int:
+def _open_six(world: Trace) -> int:
     return 1 if world.of(_open_die) == 6 else 0
 
 
@@ -141,7 +141,7 @@ _spent = Program.build(
 )
 
 
-def _spent_six(world: World) -> int:
+def _spent_six(world: Trace) -> int:
     return 1 if world.of(_spent_die) == 6 else 0
 
 
@@ -186,7 +186,7 @@ _coupled = Program.build(
 )
 
 
-def _both(world: World) -> tuple[int, bool]:
+def _both(world: Trace) -> tuple[int, bool]:
     return world.of(_hit), world.of(_wound)
 
 
@@ -354,7 +354,7 @@ _volley = Program.build(
 )
 
 
-def _landed(world: World) -> int:
+def _landed(world: Trace) -> int:
     return 1 if world.of(_to_hit) >= 4 else 0
 
 
