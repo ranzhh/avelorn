@@ -115,6 +115,7 @@ class Step[Out: Hashable](ABC):
     side: Side
     # Inputs are outputs of earlier in-scope steps, passed positionally to the kernel.
     inputs: tuple["Step[Any]", ...] = ()
+    kernel: Callable[..., Distribution[Out]] | None = None
     readings: list[Reading] = field(default_factory=list)
 
     @abstractmethod
@@ -137,10 +138,9 @@ class Step[Out: Hashable](ABC):
         for source in self.inputs:
             if source not in visible:
                 raise GraphError(f"{path} inputs {source.name}, which is not in scope")
-        kernel = getattr(self, "kernel", None)
-        if kernel is not None:
+        if self.kernel is not None:
             try:
-                signature(kernel).bind(*(None for _ in self.inputs))
+                signature(self.kernel).bind(*(None for _ in self.inputs))
             except (TypeError, ValueError) as error:
                 raise GraphError(
                     f"{path} kernel cannot accept {len(self.inputs)} positional inputs"
