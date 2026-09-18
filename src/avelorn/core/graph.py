@@ -113,7 +113,7 @@ class Step[Out: Hashable](ABC):
     kind: ClassVar[str]
     name: str
     side: Side
-    # Inputs are outputs of earlier in-scope steps, passed positionally to the body.
+    # Inputs are outputs of earlier in-scope steps, passed positionally to the kernel.
     inputs: tuple["Step[Any]", ...] = ()
     readings: list[Reading] = field(default_factory=list)
 
@@ -137,13 +137,13 @@ class Step[Out: Hashable](ABC):
         for source in self.inputs:
             if source not in visible:
                 raise GraphError(f"{path} inputs {source.name}, which is not in scope")
-        body = getattr(self, "body", None)
-        if body is not None:
+        kernel = getattr(self, "kernel", None)
+        if kernel is not None:
             try:
-                signature(body).bind(*(None for _ in self.inputs))
+                signature(kernel).bind(*(None for _ in self.inputs))
             except (TypeError, ValueError) as error:
                 raise GraphError(
-                    f"{path} body cannot accept {len(self.inputs)} positional inputs"
+                    f"{path} kernel cannot accept {len(self.inputs)} positional inputs"
                 ) from error
         program.take(self, path)
         visible.append(self)
@@ -179,30 +179,30 @@ class Step[Out: Hashable](ABC):
 @dataclass(frozen=True, eq=False, kw_only=True)
 class Measurement[Out: Hashable](Step[Out]):
     kind = "measurement"
-    body: Callable[..., Out]
+    kernel: Callable[..., Distribution[Out]]
 
     def outcomes(self, world: Trace, lane: "Lane") -> Distribution[Out]:
-        return Distribution.pure(self.body(*self.arguments(world)))
+        return self.kernel(*self.arguments(world))
 
 
 @dataclass(frozen=True, eq=False, kw_only=True)
 class Consequence[Out: Hashable](Step[Out]):
     kind = "consequence"
-    body: Callable[..., Out]
+    kernel: Callable[..., Distribution[Out]]
 
     def outcomes(self, world: Trace, lane: "Lane") -> Distribution[Out]:
-        return Distribution.pure(self.body(*self.arguments(world)))
+        return self.kernel(*self.arguments(world))
 
 
 @dataclass(frozen=True, eq=False, kw_only=True)
 class Roll[Out: Hashable](Step[Out]):
     kind = "roll"
-    body: Callable[..., Distribution[Out]]
+    kernel: Callable[..., Distribution[Out]]
     target: Reading
     modifiers: tuple[Modifier, ...] = ()
 
     def outcomes(self, world: Trace, lane: "Lane") -> Distribution[Out]:
-        return self.body(*self.arguments(world))
+        return self.kernel(*self.arguments(world))
 
     def detail(self, edge: Edge) -> dict[str, Any]:
         return {

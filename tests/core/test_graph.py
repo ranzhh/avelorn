@@ -41,16 +41,16 @@ def _coin() -> Distribution[int]:
     return Distribution({0: _HALF, 1: _HALF})
 
 
-def _three() -> int:
-    return 3
+def _three() -> Distribution[int]:
+    return Distribution.pure(3)
 
 
-def _one() -> int:
-    return 1
+def _one() -> Distribution[int]:
+    return Distribution.pure(1)
 
 
 def test_a_roll_edge_carries_its_own_distribution() -> None:
-    flip = Roll[int](name="flip", side=Side.THIS_MODEL, body=_coin, target=Scalar("target", 1))
+    flip = Roll[int](name="flip", side=Side.THIS_MODEL, kernel=_coin, target=Scalar("target", 1))
     program = Program.build("coin", _SIDES, (flip,))
 
     (lane,) = program.evaluate()
@@ -59,8 +59,8 @@ def test_a_roll_edge_carries_its_own_distribution() -> None:
 
 
 def test_a_path_is_the_step_place_in_the_block_tree() -> None:
-    shots = Measurement[int](name="shots", side=Side.THIS_MODEL, body=_three)
-    hit = Roll[int](name="roll-to-hit", side=Side.THIS_MODEL, body=_d6, target=Scalar("t", 4))
+    shots = Measurement[int](name="shots", side=Side.THIS_MODEL, kernel=_three)
+    hit = Roll[int](name="roll-to-hit", side=Side.THIS_MODEL, kernel=_d6, target=Scalar("t", 4))
     attack = Group(name="attack", times=shots, items=(hit,))
     program = Program.build("volley", _SIDES, (shots, attack))
 
@@ -71,8 +71,8 @@ def test_a_path_is_the_step_place_in_the_block_tree() -> None:
     assert program.blocks == [attack]
 
 
-_certain_shots = Measurement[int](name="shots", side=Side.THIS_MODEL, body=_three)
-_certain_die = Roll[int](name="roll", side=Side.THIS_MODEL, body=_d6, target=Scalar("t", 6))
+_certain_shots = Measurement[int](name="shots", side=Side.THIS_MODEL, kernel=_three)
+_certain_die = Roll[int](name="roll", side=Side.THIS_MODEL, kernel=_d6, target=Scalar("t", 6))
 _certain = Program.build(
     "certain",
     _SIDES,
@@ -101,9 +101,9 @@ def _two_or_three() -> Distribution[int]:
 
 
 _open_shots = Roll[int](
-    name="shots", side=Side.THIS_MODEL, body=_two_or_three, target=Scalar("t", 1)
+    name="shots", side=Side.THIS_MODEL, kernel=_two_or_three, target=Scalar("t", 1)
 )
-_open_die = Roll[int](name="roll", side=Side.THIS_MODEL, body=_d6, target=Scalar("t", 6))
+_open_die = Roll[int](name="roll", side=Side.THIS_MODEL, kernel=_d6, target=Scalar("t", 6))
 _open = Program.build(
     "open",
     _SIDES,
@@ -132,9 +132,9 @@ def _none_or_two() -> Distribution[int]:
 
 
 _spent_shots = Roll[int](
-    name="shots", side=Side.THIS_MODEL, body=_none_or_two, target=Scalar("t", 1)
+    name="shots", side=Side.THIS_MODEL, kernel=_none_or_two, target=Scalar("t", 1)
 )
-_spent_die = Roll[int](name="roll", side=Side.THIS_MODEL, body=_d6, target=Scalar("t", 6))
+_spent_die = Roll[int](name="roll", side=Side.THIS_MODEL, kernel=_d6, target=Scalar("t", 6))
 _spent = Program.build(
     "spent",
     _SIDES,
@@ -171,13 +171,15 @@ def _wound_on(hit: int) -> Distribution[bool]:
     return Distribution({True: through, False: 1 - through})
 
 
-_once = Measurement[int](name="attacks", side=Side.THIS_MODEL, body=_one)
-_hit = Roll[int](name="roll-to-hit", side=Side.THIS_MODEL, body=_one_or_two, target=Scalar("t", 1))
+_once = Measurement[int](name="attacks", side=Side.THIS_MODEL, kernel=_one)
+_hit = Roll[int](
+    name="roll-to-hit", side=Side.THIS_MODEL, kernel=_one_or_two, target=Scalar("t", 1)
+)
 _wound = Roll[bool](
     name="roll-to-wound",
     side=Side.THIS_MODEL,
     inputs=(_hit,),
-    body=_wound_on,
+    kernel=_wound_on,
     target=Scalar("t", 1),
 )
 _coupled = Program.build(
@@ -213,13 +215,13 @@ def _strong(strength: int) -> Distribution[int]:
 
 
 def test_a_step_reads_an_enclosing_block() -> None:
-    attacks = Measurement[int](name="attacks", side=Side.THIS_MODEL, body=_one)
-    strength = Measurement[int](name="strength", side=Side.THIS_MODEL, body=_three)
+    attacks = Measurement[int](name="attacks", side=Side.THIS_MODEL, kernel=_one)
+    strength = Measurement[int](name="strength", side=Side.THIS_MODEL, kernel=_three)
     wound = Roll[int](
         name="roll-to-wound",
         side=Side.THIS_MODEL,
         inputs=(strength,),
-        body=_strong,
+        kernel=_strong,
         target=Scalar("t", 4),
     )
     program = Program.build(
@@ -233,15 +235,15 @@ def test_a_step_reads_an_enclosing_block() -> None:
     assert faces.mass == {face: _SIXTH for face in range(3, 9)}
 
 
-def _toll(face: int) -> int:
-    return face
+def _toll(face: int) -> Distribution[int]:
+    return Distribution.pure(face)
 
 
 def test_a_step_cannot_read_inside_a_nested_block() -> None:
-    shots = Measurement[int](name="shots", side=Side.THIS_MODEL, body=_three)
-    hit = Roll[int](name="roll-to-hit", side=Side.THIS_MODEL, body=_d6, target=Scalar("t", 4))
+    shots = Measurement[int](name="shots", side=Side.THIS_MODEL, kernel=_three)
+    hit = Roll[int](name="roll-to-hit", side=Side.THIS_MODEL, kernel=_d6, target=Scalar("t", 4))
     removed = Consequence[int](
-        name="remove-casualties", side=Side.THE_ENEMY, inputs=(hit,), body=_toll
+        name="remove-casualties", side=Side.THE_ENEMY, inputs=(hit,), kernel=_toll
     )
 
     with pytest.raises(GraphError, match="roll-to-hit, which is not in scope"):
@@ -253,42 +255,42 @@ def test_a_step_cannot_read_inside_a_nested_block() -> None:
 
 
 def test_a_group_cannot_run_a_count_out_of_scope() -> None:
-    hidden = Measurement[int](name="shots", side=Side.THIS_MODEL, body=_three)
-    hit = Roll[int](name="roll-to-hit", side=Side.THIS_MODEL, body=_d6, target=Scalar("t", 4))
+    hidden = Measurement[int](name="shots", side=Side.THIS_MODEL, kernel=_three)
+    hit = Roll[int](name="roll-to-hit", side=Side.THIS_MODEL, kernel=_d6, target=Scalar("t", 4))
 
     with pytest.raises(GraphError, match="runs shots times, which is not in scope"):
         Program.build("volley", _SIDES, (Group(name="attack", times=hidden, items=(hit,)),))
 
 
-def _no_inputs() -> int:
-    return 3
+def _no_inputs() -> Distribution[int]:
+    return Distribution.pure(3)
 
 
-def _two_inputs(first: int, second: int) -> int:
-    return first + second
+def _two_inputs(first: int, second: int) -> Distribution[int]:
+    return Distribution.pure(first + second)
 
 
-@pytest.mark.parametrize("body", [_no_inputs, _two_inputs])
-def test_a_body_must_accept_its_inputs(body: Callable[..., int]) -> None:
-    source = Measurement[int](name="source", side=Side.THIS_MODEL, body=_three)
+@pytest.mark.parametrize("kernel", [_no_inputs, _two_inputs])
+def test_a_kernel_must_accept_its_inputs(kernel: Callable[..., Distribution[int]]) -> None:
+    source = Measurement[int](name="source", side=Side.THIS_MODEL, kernel=_three)
     dependent = Measurement[int](
-        name="dependent", side=Side.THIS_MODEL, inputs=(source,), body=body
+        name="dependent", side=Side.THIS_MODEL, inputs=(source,), kernel=kernel
     )
 
-    with pytest.raises(GraphError, match="body cannot accept 1 positional inputs"):
+    with pytest.raises(GraphError, match="kernel cannot accept 1 positional inputs"):
         Program.build("arity", _SIDES, (source, dependent))
 
 
 def test_two_steps_cannot_share_a_path() -> None:
-    first = Measurement[int](name="shots", side=Side.THIS_MODEL, body=_three)
-    second = Measurement[int](name="shots", side=Side.THIS_MODEL, body=_three)
+    first = Measurement[int](name="shots", side=Side.THIS_MODEL, kernel=_three)
+    second = Measurement[int](name="shots", side=Side.THIS_MODEL, kernel=_three)
 
     with pytest.raises(GraphError, match="volley/shots is declared twice"):
         Program.build("volley", _SIDES, (first, second))
 
 
-def _ground(reaction: str) -> int:
-    return 0 if reaction == "hold" else 6
+def _ground(reaction: str) -> Distribution[int]:
+    return Distribution.pure(0 if reaction == "hold" else 6)
 
 
 def _fight() -> tuple[Program, Decision[str], Consequence[int]]:
@@ -296,7 +298,7 @@ def _fight() -> tuple[Program, Decision[str], Consequence[int]]:
         name="declare-reaction", side=Side.THE_ENEMY, options=("hold", "flee")
     )
     given = Consequence[int](
-        name="ground-given", side=Side.THE_ENEMY, inputs=(reaction,), body=_ground
+        name="ground-given", side=Side.THE_ENEMY, inputs=(reaction,), kernel=_ground
     )
     program = Program.build(
         "charge",
@@ -326,7 +328,7 @@ def test_a_fixed_decision_leaves_one_lane() -> None:
 
 def test_a_rule_cannot_land_on_a_step_the_program_lacks() -> None:
     program, reaction, given = _fight()
-    stray = Measurement[int](name="stray", side=Side.THIS_MODEL, body=_three)
+    stray = Measurement[int](name="stray", side=Side.THIS_MODEL, kernel=_three)
 
     with pytest.raises(GraphError, match="lands on stray, which is not declared"):
         program.attach(
@@ -343,22 +345,22 @@ def _hit_on(range_band: str) -> Distribution[int]:
     return _d6()
 
 
-def _removed(range_band: str) -> int:
-    return 1 if range_band == "close" else 0
+def _removed(range_band: str) -> Distribution[int]:
+    return Distribution.pure(1 if range_band == "close" else 0)
 
 
-_shots = Measurement[int](name="shots", side=Side.THIS_MODEL, body=_three)
+_shots = Measurement[int](name="shots", side=Side.THIS_MODEL, kernel=_three)
 _range = Decision[str](name="choose-range", side=Side.THIS_MODEL, options=("close", "long"))
 _to_hit = Roll[int](
     name="roll-to-hit",
     side=Side.THIS_MODEL,
     inputs=(_range,),
-    body=_hit_on,
+    kernel=_hit_on,
     target=Scalar("to hit", 4),
     modifiers=(Modifier("Volley Fire", 1),),
 )
 _casualties = Consequence[int](
-    name="remove-casualties", side=Side.THE_ENEMY, inputs=(_range,), body=_removed
+    name="remove-casualties", side=Side.THE_ENEMY, inputs=(_range,), kernel=_removed
 )
 _stomp = Slot(name="stomp", items=())
 _volley = Program.build(
