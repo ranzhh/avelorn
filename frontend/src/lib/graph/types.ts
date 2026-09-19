@@ -59,9 +59,9 @@ export interface Consequence extends Step {
 
 export type Node = Measurement | Decision | Roll | Consequence;
 
-export interface Group {
+export interface Repeat {
 	path: string;
-	kind: 'group';
+	kind: 'repeat';
 	times: string;
 	collapsed: boolean;
 }
@@ -78,7 +78,7 @@ export interface Lanes {
 	decision: string;
 }
 
-export type Block = Group | Slot | Lanes;
+export type Block = Repeat | Slot | Lanes;
 
 export interface Landing {
 	at: string;

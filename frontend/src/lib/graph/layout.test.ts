@@ -82,7 +82,7 @@ const program: Program = {
 			}
 		}
 	],
-	blocks: [{ path: 'p/g', kind: 'group', times: 'p/a', collapsed: false }],
+	blocks: [{ path: 'p/g', kind: 'repeat', times: 'p/a', collapsed: false }],
 	rules: [
 		{
 			rule: 'r1',
@@ -145,7 +145,7 @@ describe('the program the tests draw', () => {
 	it('puts every block around at least one node and multiplies it by an edge that exists', () => {
 		for (const block of program.blocks) {
 			expect(paths.some((path) => path.startsWith(`${block.path}/`))).toBe(true);
-			if (block.kind === 'group') expect(paths).toContain(block.times);
+			if (block.kind === 'repeat') expect(paths).toContain(block.times);
 		}
 	});
 
