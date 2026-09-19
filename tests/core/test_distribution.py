@@ -6,7 +6,7 @@ from fractions import Fraction
 import pytest
 
 from avelorn.core.dice import binomial_distribution, cap_distribution, group_distribution
-from avelorn.core.distribution import Distribution, Probability
+from avelorn.core.distribution import Distribution, Monoid, Probability
 
 
 def _same[T: Hashable](a: Distribution[T], b: Distribution[T]) -> bool:
@@ -269,8 +269,12 @@ def test_matmul_is_not_scaling_the_outcomes() -> None:
 
 
 def test_repeat_zero_uses_the_supplied_identity() -> None:
-    assert _coin.repeat(0, 0) == Distribution.pure(0)
-    assert Distribution({(): 1}).repeat(0, ()) == Distribution.pure(())
+    assert _coin.repeat(0, Monoid(0)) == Distribution.pure(0)
+    assert Distribution({(): 1}).repeat(0, Monoid(())) == Distribution.pure(())
+
+
+def test_repeat_uses_the_monoid_operation() -> None:
+    assert Distribution({1: 1}).repeat(3, Monoid(0, max)) == Distribution({1: 1})
 
 
 def test_matmul_rejects_no_copies() -> None:

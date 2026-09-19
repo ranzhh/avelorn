@@ -8,7 +8,7 @@ from itertools import product
 from types import MappingProxyType
 from typing import Any, ClassVar
 
-from avelorn.core.distribution import Distribution, Kernel
+from avelorn.core.distribution import Distribution, Kernel, Monoid
 from avelorn.core.errors import AvelornError
 
 
@@ -68,7 +68,7 @@ class Edge:
         if count is not None:
 
             def copies(times: int) -> Distribution[T]:
-                return classes.repeat(times, projection.identity)
+                return classes.repeat(times, projection.monoid)
 
             classes = count.bind(copies)
         self.stacked[projection] = classes
@@ -79,7 +79,7 @@ class Edge:
 class Projection[T: Hashable]:
     label: str
     project: Callable[[Trace], T]
-    identity: T
+    monoid: Monoid[T]
 
     def view(self, edge: Edge) -> dict[str, Any]:
         read = edge.read(self)
@@ -121,11 +121,11 @@ class Step[Out: Hashable](ABC):
     @abstractmethod
     def outcomes(self, world: Trace, lane: "Lane") -> Distribution[Out]: ...
 
-    def output(self, label: str, identity: Out) -> Projection[Out]:
+    def output(self, label: str, monoid: Monoid[Out]) -> Projection[Out]:
         def project(world: Trace) -> Out:
             return world.of(self)
 
-        return Projection(label, project, identity)
+        return Projection(label, project, monoid)
 
     def show(self, reading: Reading) -> None:
         self.readings.append(reading)

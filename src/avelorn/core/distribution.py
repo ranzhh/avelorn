@@ -34,6 +34,7 @@ import operator
 from collections.abc import Callable, Hashable, Mapping, Sequence
 from dataclasses import dataclass
 from fractions import Fraction
+from typing import cast
 
 # Alternatives, if we ever outgrow this hand-roll — noted so we remember them:
 #   - icepool (https://github.com/HighDiceRoller/icepool): exact dice-pool
@@ -81,6 +82,12 @@ from fractions import Fraction
 # enforce.
 type Probability = int | float | Fraction
 type Kernel[Out: Hashable] = Callable[..., "Distribution[Out]"]
+
+
+@dataclass(frozen=True)
+class Monoid[T: Hashable]:
+    identity: T
+    operation: Callable[[T, T], T] = cast(Callable[[T, T], T], operator.add)
 
 
 @dataclass(frozen=True)
@@ -289,14 +296,14 @@ class Distribution[T: Hashable]:
             raise ValueError("group_size must be >= 1")
         return self.map(lambda outcome: operator.floordiv(outcome, group_size))
 
-    def repeat(self, copies: int, identity: T) -> "Distribution[T]":
+    def repeat(self, copies: int, monoid: Monoid[T]) -> "Distribution[T]":
         if copies < 0:
             raise ValueError("copies must be >= 0")
         if copies == 0:
-            return Distribution.pure(identity)
+            return Distribution.pure(monoid.identity)
         total = self
         for _ in range(copies - 1):
-            total = total + self
+            total = total.combine(self, monoid.operation)
         return total
 
     def __rmatmul__(self, copies: int) -> "Distribution[T]":
