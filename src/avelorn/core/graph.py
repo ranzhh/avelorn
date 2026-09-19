@@ -268,14 +268,29 @@ class Block(ABC):
 
 
 @dataclass(frozen=True, eq=False, kw_only=True)
-class Group(Block):
+class Group(Block, ABC):
     kind = "group"
+
+    @abstractmethod
+    def run(self, lane: "Lane") -> None: ...
+
+
+@dataclass(frozen=True, eq=False, kw_only=True)
+class Repeat(Group):
+    kind = "repeat"
     times: Step[int]
     collapsed: bool = False
 
     def check(self, path: str, visible: list[Step[Any]]) -> None:
         if self.times not in visible:
             raise GraphError(f"{path} runs {self.times.name} times, which is not in scope")
+
+    def run(self, lane: "Lane") -> None:
+        outer, count = lane.joint, lane.count
+        lane.count = self.multiplier(lane)
+        for item in self.items:
+            item.run(lane)
+        lane.joint, lane.count = outer, count
 
     def multiplier(self, lane: "Lane") -> Distribution[int]:
         def counted(world: Trace) -> int:

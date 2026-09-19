@@ -12,13 +12,13 @@ from avelorn.core.graph import (
     Consequence,
     Decision,
     GraphError,
-    Group,
     Landing,
     Lanes,
     Measurement,
     Modifier,
     Program,
     Projection,
+    Repeat,
     Roll,
     RuleNode,
     Scalar,
@@ -61,7 +61,7 @@ def test_a_roll_edge_carries_its_own_distribution() -> None:
 def test_a_path_is_the_step_place_in_the_block_tree() -> None:
     shots = Measurement[int](name="shots", side=Side.THIS_MODEL, kernel=_three)
     hit = Roll[int](name="roll-to-hit", side=Side.THIS_MODEL, kernel=_d6, target=Scalar("t", 4))
-    attack = Group(name="attack", times=shots, items=(hit,))
+    attack = Repeat(name="attack", times=shots, items=(hit,))
     program = Program.build("volley", _SIDES, (shots, attack))
 
     assert program.paths[shots] == "volley/shots"
@@ -76,7 +76,7 @@ _certain_die = Roll[int](name="roll", side=Side.THIS_MODEL, kernel=_d6, target=S
 _certain = Program.build(
     "certain",
     _SIDES,
-    (_certain_shots, Group(name="attack", times=_certain_shots, items=(_certain_die,))),
+    (_certain_shots, Repeat(name="attack", times=_certain_shots, items=(_certain_die,))),
 )
 
 
@@ -107,7 +107,7 @@ _open_die = Roll[int](name="roll", side=Side.THIS_MODEL, kernel=_d6, target=Scal
 _open = Program.build(
     "open",
     _SIDES,
-    (_open_shots, Group(name="attack", times=_open_shots, items=(_open_die,))),
+    (_open_shots, Repeat(name="attack", times=_open_shots, items=(_open_die,))),
 )
 
 
@@ -138,7 +138,7 @@ _spent_die = Roll[int](name="roll", side=Side.THIS_MODEL, kernel=_d6, target=Sca
 _spent = Program.build(
     "spent",
     _SIDES,
-    (_spent_shots, Group(name="attack", times=_spent_shots, items=(_spent_die,))),
+    (_spent_shots, Repeat(name="attack", times=_spent_shots, items=(_spent_die,))),
 )
 
 
@@ -185,7 +185,7 @@ _wound = Roll[bool](
 _coupled = Program.build(
     "coupled",
     _SIDES,
-    (_once, Group(name="attack", times=_once, items=(_hit, _wound))),
+    (_once, Repeat(name="attack", times=_once, items=(_hit, _wound))),
 )
 
 
@@ -227,7 +227,7 @@ def test_a_step_reads_an_enclosing_block() -> None:
     program = Program.build(
         "volley",
         _SIDES,
-        (attacks, strength, Group(name="attack", times=attacks, items=(wound,))),
+        (attacks, strength, Repeat(name="attack", times=attacks, items=(wound,))),
     )
     (lane,) = program.evaluate()
     faces = lane.read(wound, wound.output("face", 0))
@@ -250,7 +250,7 @@ def test_a_step_cannot_read_inside_a_nested_block() -> None:
         Program.build(
             "volley",
             _SIDES,
-            (shots, Group(name="attack", times=shots, items=(hit,)), removed),
+            (shots, Repeat(name="attack", times=shots, items=(hit,)), removed),
         )
 
 
@@ -259,7 +259,7 @@ def test_a_group_cannot_run_a_count_out_of_scope() -> None:
     hit = Roll[int](name="roll-to-hit", side=Side.THIS_MODEL, kernel=_d6, target=Scalar("t", 4))
 
     with pytest.raises(GraphError, match="runs shots times, which is not in scope"):
-        Program.build("volley", _SIDES, (Group(name="attack", times=hidden, items=(hit,)),))
+        Program.build("volley", _SIDES, (Repeat(name="attack", times=hidden, items=(hit,)),))
 
 
 def _no_inputs() -> Distribution[int]:
@@ -369,7 +369,7 @@ _volley = Program.build(
     (
         _shots,
         _range,
-        Group(name="attack", times=_shots, items=(_to_hit,)),
+        Repeat(name="attack", times=_shots, items=(_to_hit,)),
         _stomp,
         Lanes(name="aftermath", decision=_range, items=(_casualties,)),
     ),
@@ -417,7 +417,7 @@ def test_the_view_carries_the_blocks_and_the_stacked_readings() -> None:
     hits = next(node for node in view["nodes"] if node["step"] == "roll-to-hit")
 
     assert view["blocks"] == [
-        {"path": "volley/attack", "kind": "group", "times": "volley/shots", "collapsed": False},
+        {"path": "volley/attack", "kind": "repeat", "times": "volley/shots", "collapsed": False},
         {"path": "volley/stomp", "kind": "slot", "empty": True},
         {"path": "volley/aftermath", "kind": "lanes", "decision": "volley/choose-range"},
     ]
@@ -434,7 +434,7 @@ def test_the_view_carries_the_blocks_and_the_stacked_readings() -> None:
 
 _TYPES = Path(__file__).resolve().parents[2] / "frontend/src/lib/graph/types.ts"
 _NODE_OF = {step.kind: step.__name__ for step in (Measurement, Decision, Roll, Consequence)}
-_BLOCK_OF = {block.kind: block.__name__ for block in (Group, Slot, Lanes)}
+_BLOCK_OF = {block.kind: block.__name__ for block in (Repeat, Slot, Lanes)}
 
 
 def _declared() -> dict[str, set[str]]:
