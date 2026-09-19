@@ -87,8 +87,6 @@ The graph core can currently:
 
 The graph frontend is available at `/graph`. It lays out steps left to right, draws groups as frames, displays readings on edges, and connects rule nodes to their landings. The current graph work is deliberately a foundation: program loading from YAML and rule effects are the next layers, and the existing shooting and combat resolvers remain the production game surface while that migration proceeds.
 
-The design is documented in [`DESIGN-GRAPH.md`](DESIGN-GRAPH.md) and the printed step vocabulary in [`DESIGN-GRAPH-rules.md`](DESIGN-GRAPH-rules.md).
-
 ## Project shape
 
 - `src/avelorn/tow/schema` — validated corpus models.
