@@ -8,7 +8,7 @@
 	let folded = $state<Record<string, boolean>>({});
 	const collapsed = $derived(
 		program.blocks
-			.filter((block) => block.kind === 'group' && (folded[block.path] ?? block.collapsed))
+			.filter((block) => block.kind === 'repeat' && (folded[block.path] ?? block.collapsed))
 			.map((block) => block.path)
 	);
 	let moves = $state<Moves>({});
@@ -196,7 +196,7 @@
 						>
 							<span class="mark" title={each.block.kind}>{MARK.group}</span>
 							<h3>{printed(last(each.path))}</h3>
-							{#if each.block.kind === 'group'}
+							{#if each.block.kind === 'repeat'}
 								<span class="side">× {caption(each.multiplier)}</span>
 								<button class="btn btn-ghost btn-sm fold" onclick={() => toggle(each.path)}>
 									collapse
@@ -342,7 +342,7 @@
 			<div class="field"><span>kind</span><span>{block.block.kind}</span></div>
 			<div class="field"><span>steps</span><span class="num">{block.steps.length}</span></div>
 			<div class="field"><span>path</span><span class="path">{block.path}</span></div>
-			{#if block.block.kind === 'group'}
+			{#if block.block.kind === 'repeat'}
 				<h2>multiplier</h2>
 				<Readings readings={block.multiplier} width={STRIP} />
 				<button class="btn btn-sm" onclick={() => toggle(block.path)}>
