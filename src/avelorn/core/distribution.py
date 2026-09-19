@@ -10,9 +10,8 @@ maps each outcome to its probability and gives the engine one shared way to
   by probability. ``bind`` is the fold ("weight each branch, sum") written
   once, here, so no caller spells it out again.
 
-``dist >> step`` is :meth:`bind` spelled as an operator, and a :class:`Step`
-wraps such a step as a value so a whole sequence composes before any
-distribution reaches it (``to_hit >> to_wound >> saves``). Arithmetic on
+``dist >> step`` is :meth:`bind` spelled as an operator, so a chain of steps
+reads left to right (``start >> to_hit >> to_wound``). Arithmetic on
 outcomes — :meth:`__add__` and the rest — goes through :meth:`combine`.
 
 The arithmetic operators mean whatever the *outcome type's* operator means, so
@@ -35,6 +34,7 @@ import operator
 from collections.abc import Callable, Hashable, Mapping, Sequence
 from dataclasses import dataclass
 from fractions import Fraction
+from typing import cast
 
 # Alternatives, if we ever outgrow this hand-roll — noted so we remember them:
 #   - icepool (https://github.com/HighDiceRoller/icepool): exact dice-pool
@@ -76,11 +76,18 @@ from fractions import Fraction
 #
 # Chosen over parameterising the class as Distribution[T, P], which would let the
 # checker prove a chain never mixes the kinds. That costs a type parameter on
-# every signature and call site, including Step, and it fights the integer-seeded
+# every signature and call site, and it fights the integer-seeded
 # folds below (sum starts at 0, so an exactly-typed total would not check). The
 # union documents the intent instead; see Distribution for the invariant it cannot
 # enforce.
 type Probability = int | float | Fraction
+type Kernel[Out: Hashable] = Callable[..., "Distribution[Out]"]
+
+
+@dataclass(frozen=True)
+class Monoid[T: Hashable]:
+    identity: T
+    operation: Callable[[T, T], T] = cast(Callable[[T, T], T], operator.add)
 
 
 @dataclass(frozen=True)
@@ -151,7 +158,7 @@ class Distribution[T: Hashable]:
             folded[image] = folded.get(image, 0) + p
         return Distribution(folded)
 
-    def bind[U: Hashable](self, step: Callable[[T], "Distribution[U]"]) -> "Distribution[U]":
+    def bind[U: Hashable](self, step: Kernel[U]) -> "Distribution[U]":
         """Chain a stochastic ``step`` onto this distribution and mix — the fold.
 
         ``step`` maps each outcome to its own distribution (the downstream
@@ -168,12 +175,11 @@ class Distribution[T: Hashable]:
                 folded[downstream] = folded.get(downstream, 0) + p * q
         return Distribution(folded)
 
-    def __rshift__[U: Hashable](self, step: Callable[[T], "Distribution[U]"]) -> "Distribution[U]":
+    def __rshift__[U: Hashable](self, step: Kernel[U]) -> "Distribution[U]":
         """Feed this distribution into ``step``, which is :meth:`bind`.
 
         It reads left to right, in the order the engine resolves: a distribution,
-        then the step it flows into. ``step`` is any callable of that shape, so a
-        plain function and a :class:`Step` both chain.
+        then the step it flows into. ``step`` is any callable of that shape.
 
         Returns:
             The mixed distribution over the downstream outcomes.
@@ -290,35 +296,17 @@ class Distribution[T: Hashable]:
             raise ValueError("group_size must be >= 1")
         return self.map(lambda outcome: operator.floordiv(outcome, group_size))
 
+    def repeat(self, copies: int, aggregation: Monoid[T]) -> "Distribution[T]":
+        if copies < 0:
+            raise ValueError("copies must be >= 0")
+        if copies == 0:
+            return Distribution.pure(aggregation.identity)
+        total = self
+        for _ in range(copies - 1):
+            total = total.combine(self, aggregation.operation)
+        return total
+
     def __rmatmul__(self, copies: int) -> "Distribution[T]":
-        """Sum ``copies`` independent copies of this distribution.
-
-        This is the repeat, and it is kept distinct from any scaling of the
-        outcomes. ``3 @ dist`` resolves the same quantity three times and totals
-        it, which is a different distribution from tripling one draw. Only this
-        direction is defined, so the two cannot be confused.
-
-        Zero copies has no answer for a general outcome type, because there is no
-        outcome meaning "nothing yet" to start from. A caller wanting one names
-        that identity itself with :meth:`pure`.
-
-        Being repeated ``+``, this takes its meaning of "sum" from the outcome
-        type, and the tuple-concatenation trap in :meth:`__add__` with it.
-
-        It is repeated ``+`` in cost too: one convolution per copy, each over a
-        support that grows as it goes, so the work is quadratic in ``copies``.
-        One case has a closed form. For n independent successes the answer is the
-        binomial, and :func:`avelorn.core.dice.binomial_distribution` gives the
-        same masses far more cheaply, identical to floating error and measured at
-        33x faster at n=10 and 190x at n=80. Prefer it on the wide volleys, where
-        the count is large and reached inside a loop.
-
-        Returns:
-            The distribution of the total over ``copies`` draws.
-
-        Raises:
-            ValueError: ``copies`` is less than 1.
-        """
         if copies < 1:
             raise ValueError("copies must be >= 1")
         total = self
@@ -377,48 +365,3 @@ class Distribution[T: Hashable]:
             The same outcomes with every mass converted to ``float``.
         """
         return Distribution({outcome: float(p) for outcome, p in self.mass.items()})
-
-
-@dataclass(frozen=True)
-class Step[T: Hashable, U: Hashable]:
-    """Hold one stochastic step, ``T -> Distribution[U]``, as a value.
-
-    This is a :meth:`Distribution.bind` argument that can be named, stored, and
-    composed *before* any distribution reaches it. ``a >> b`` builds the two-step
-    chain, and applying it to a distribution runs the whole thing. A resolution
-    sequence can then be assembled as data, one edge per step, instead of only
-    being spellable as nested calls.
-    """
-
-    resolve: Callable[[T], Distribution[U]]
-
-    @classmethod
-    def certain(cls, relabel: Callable[[T], U]) -> "Step[T, U]":
-        """Lift a deterministic ``relabel`` into a step that mixes nothing.
-
-        This is how a plain change of variable joins a chain of stochastic steps,
-        which is why :meth:`Distribution.map` needs no operator of its own.
-
-        Returns:
-            The step whose every outcome is a point mass on ``relabel``'s image.
-        """
-        return cls(lambda outcome: Distribution.pure(relabel(outcome)))
-
-    def __call__(self, outcome: T) -> Distribution[U]:
-        """Resolve the step at one outcome.
-
-        Returns:
-            The distribution this step reaches from ``outcome``.
-        """
-        return self.resolve(outcome)
-
-    def __rshift__[V: Hashable](self, then: Callable[[U], Distribution[V]]) -> "Step[T, V]":
-        """Compose two steps into the single step "this one, then ``then``".
-
-        Composition is associative, so a chain of any length groups any way and
-        resolves the same. The tests check that.
-
-        Returns:
-            The composed step from this one's input to ``then``'s output.
-        """
-        return Step(lambda outcome: self.resolve(outcome).bind(then))

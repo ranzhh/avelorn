@@ -1,4 +1,4 @@
-import type { Block, Distribution, Group, Node, Program, Reading, Rule, Verdict } from './types';
+import type { Block, Distribution, Repeat, Node, Program, Reading, Rule, Verdict } from './types';
 
 export interface Metrics {
 	node: { width: number; height: number };
@@ -107,12 +107,12 @@ function depth(items: Item[]): number {
 	return Math.max(0, ...items.map((item) => (item.kind === 'block' ? 1 + depth(item.items) : 0)));
 }
 
-function isGroup(block: Block): block is Group {
-	return block.kind === 'group';
+function isRepeat(block: Block): block is Repeat {
+	return block.kind === 'repeat';
 }
 
 function multiplierOf(block: Block, program: Program): Reading[] {
-	if (!isGroup(block)) return [];
+	if (!isRepeat(block)) return [];
 	return program.nodes.find((node) => node.path === block.times)?.edge.readings ?? [];
 }
 
@@ -236,7 +236,7 @@ export function layout(program: Program, collapsed: string[], metrics = METRICS)
 			}
 			const multiplier = multiplierOf(item.block, program);
 			const held = stepPaths(item);
-			if (isGroup(item.block) && collapsed.includes(item.block.path)) {
+			if (isRepeat(item.block) && collapsed.includes(item.block.path)) {
 				const box = { x: cursor, y: rowTop, width: node.width, height: node.height };
 				placed.push({
 					path: item.block.path,
@@ -292,7 +292,7 @@ export function layout(program: Program, collapsed: string[], metrics = METRICS)
 		}
 	}
 
-	for (const group of program.blocks.filter(isGroup)) {
+	for (const group of program.blocks.filter(isRepeat)) {
 		consumed.add(group.times);
 		const from = standsFor.get(group.times)!;
 		const to = standsFor.get(group.path) ?? group.path;
