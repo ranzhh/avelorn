@@ -326,6 +326,21 @@ def test_a_fixed_decision_leaves_one_lane() -> None:
     assert lane.to_view()["lanes"] == [{"decision": "charge/declare-reaction", "outcome": "flee"}]
 
 
+def test_an_unknown_decision_is_rejected() -> None:
+    program, _, _ = _fight()
+    stray = Decision[str](name="stray", side=Side.THIS_MODEL, options=("yes",))
+
+    with pytest.raises(GraphError, match="stray is not a decision in charge"):
+        program.evaluate(choices={stray: "yes"})
+
+
+def test_an_invalid_decision_choice_is_rejected() -> None:
+    program, reaction, _ = _fight()
+
+    with pytest.raises(GraphError, match="'charge' is not an option for declare-reaction"):
+        program.evaluate(choices={reaction: "charge"})
+
+
 def test_a_rule_cannot_land_on_a_step_the_program_lacks() -> None:
     program, reaction, given = _fight()
     stray = Measurement[int](name="stray", side=Side.THIS_MODEL, kernel=_three)

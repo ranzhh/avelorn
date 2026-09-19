@@ -384,6 +384,11 @@ class Program:
     def evaluate(
         self, choices: Mapping[Decision[Any], Any] = MappingProxyType({})
     ) -> tuple["Lane", ...]:
+        for decision, choice in choices.items():
+            if decision not in self.decisions:
+                raise GraphError(f"{decision.name} is not a decision in {self.name}")
+            if choice not in decision.options:
+                raise GraphError(f"{choice!r} is not an option for {decision.name}")
         open_options = [
             (choices[decision],) if decision in choices else decision.options
             for decision in self.decisions
