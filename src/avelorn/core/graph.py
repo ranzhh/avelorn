@@ -68,7 +68,7 @@ class Edge:
         if count is not None:
 
             def copies(times: int) -> Distribution[T]:
-                return classes.repeat(times, projection.monoid)
+                return classes.repeat(times, projection.aggregation)
 
             classes = count.bind(copies)
         self.stacked[projection] = classes
@@ -79,7 +79,7 @@ class Edge:
 class Projection[T: Hashable]:
     label: str
     project: Callable[[Trace], T]
-    monoid: Monoid[T]
+    aggregation: Monoid[T]
 
     def view(self, edge: Edge) -> dict[str, Any]:
         read = edge.read(self)
@@ -121,11 +121,11 @@ class Step[Out: Hashable](ABC):
     @abstractmethod
     def outcomes(self, world: Trace, lane: "Lane") -> Distribution[Out]: ...
 
-    def output(self, label: str, monoid: Monoid[Out]) -> Projection[Out]:
+    def output(self, label: str, aggregation: Monoid[Out]) -> Projection[Out]:
         def project(world: Trace) -> Out:
             return world.of(self)
 
-        return Projection(label, project, monoid)
+        return Projection(label, project, aggregation)
 
     def show(self, reading: Reading) -> None:
         self.readings.append(reading)

@@ -296,14 +296,14 @@ class Distribution[T: Hashable]:
             raise ValueError("group_size must be >= 1")
         return self.map(lambda outcome: operator.floordiv(outcome, group_size))
 
-    def repeat(self, copies: int, monoid: Monoid[T]) -> "Distribution[T]":
+    def repeat(self, copies: int, aggregation: Monoid[T]) -> "Distribution[T]":
         if copies < 0:
             raise ValueError("copies must be >= 0")
         if copies == 0:
-            return Distribution.pure(monoid.identity)
+            return Distribution.pure(aggregation.identity)
         total = self
         for _ in range(copies - 1):
-            total = total.combine(self, monoid.operation)
+            total = total.combine(self, aggregation.operation)
         return total
 
     def __rmatmul__(self, copies: int) -> "Distribution[T]":
