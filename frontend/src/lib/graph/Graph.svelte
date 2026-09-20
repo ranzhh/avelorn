@@ -8,7 +8,11 @@
 	let folded = $state<Record<string, boolean>>({});
 	const collapsed = $derived(
 		program.blocks
-			.filter((block) => block.kind === 'repeat' && (folded[block.path] ?? block.collapsed))
+			.filter(
+				(block) =>
+					(block.kind === 'sequence' || block.kind === 'repeat') &&
+					(folded[block.path] ?? block.collapsed)
+			)
 			.map((block) => block.path)
 	);
 	let moves = $state<Moves>({});
@@ -175,7 +179,7 @@
 								<span class="mark" title="group">{MARK.group}</span>
 								<h3>{printed(last(each.path))}</h3>
 							</header>
-							<span class="side">{each.steps.length} steps · {caption(each.multiplier)}</span>
+							<span class="side">{each.summary}</span>
 							<button class="btn btn-ghost btn-sm fold" onclick={() => toggle(each.path)}>
 								expand
 							</button>
@@ -198,10 +202,10 @@
 							<h3>{printed(last(each.path))}</h3>
 							{#if each.block.kind === 'repeat'}
 								<span class="side">× {caption(each.multiplier)}</span>
-								<button class="btn btn-ghost btn-sm fold" onclick={() => toggle(each.path)}>
-									collapse
-								</button>
 							{/if}
+							<button class="btn btn-ghost btn-sm fold" onclick={() => toggle(each.path)}>
+								collapse
+							</button>
 						</div>
 					{/if}
 				{/each}
@@ -227,7 +231,6 @@
 							<span class="mark" title={node.kind}>{MARK[node.kind]}</span>
 							<h3>{printed(node.step)}</h3>
 						</header>
-						<span class="side">{program.sides[node.side]}</span>
 					</div>
 				{/each}
 
@@ -559,8 +562,14 @@
 	}
 
 	.frame-head h3,
+	.card.group h3,
 	.card.rule h3 {
 		white-space: nowrap;
+	}
+
+	.frame-head h3,
+	.card.group h3 {
+		text-transform: uppercase;
 	}
 
 	.mark {
