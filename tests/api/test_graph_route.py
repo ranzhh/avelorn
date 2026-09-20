@@ -13,15 +13,19 @@ def test_the_volley_graph_has_steps_blocks_readings_and_rules() -> None:
     program = body.json()
     assert program["program"] == "volley"
     assert [node["step"] for node in program["nodes"]] == [
-        "shots",
-        "choose-range",
+        "attacker-models",
+        "attacker-frontage",
+        "target-models",
+        "distance",
+        "weapon-range",
+        "check-range",
+        "how-many-shots",
         "roll-to-hit",
         "roll-to-wound",
         "remove-casualties",
     ]
-    assert [block["kind"] for block in program["blocks"]] == ["repeat", "lanes"]
-    assert program["nodes"][2]["edge"]["readings"][0]["label"] == "hits"
+    assert [block["kind"] for block in program["blocks"]] == ["repeat"]
+    assert program["nodes"][7]["edge"]["readings"][0]["label"] == "hits"
     assert program["rules"][0]["landings"] == [
-        {"at": "volley/attack/roll-to-hit", "verdict": "applied"},
-        {"at": "volley/aftermath/remove-casualties", "verdict": "honoured"},
+        {"at": "volley/how-many-shots", "verdict": "held"},
     ]
