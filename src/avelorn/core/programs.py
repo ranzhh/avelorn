@@ -14,6 +14,7 @@ from avelorn.core.graph import (
     Roll,
     RuleNode,
     Scalar,
+    Sequence,
     Side,
     Verdict,
 )
@@ -49,14 +50,17 @@ def volley_program() -> dict[str, object]:
     def casualties(range_band: str, target_models: int) -> Distribution[int]:
         return Distribution.pure(int(range_band == "close" and target_models > 0))
 
+    def panic(removed: int) -> Distribution[str]:
+        return Distribution.pure("flight" if removed else "holds")
+
     attacker_models = Measurement[int](
-        name="archer-models", side=Side.THIS_MODEL, kernel=lambda: certain(10)
+        name="models", side=Side.THIS_MODEL, kernel=lambda: certain(10)
     )
     attacker_frontage = Measurement[int](
-        name="archer-frontage", side=Side.THIS_MODEL, kernel=lambda: certain(5)
+        name="frontage", side=Side.THIS_MODEL, kernel=lambda: certain(5)
     )
     target_models = Measurement[int](
-        name="spearman-models", side=Side.THE_ENEMY, kernel=lambda: certain(20)
+        name="target-models", side=Side.THE_ENEMY, kernel=lambda: certain(20)
     )
     distance = Measurement[int](
         name="distance", side=Side.THIS_MODEL, kernel=lambda: certain(12)
@@ -65,7 +69,7 @@ def volley_program() -> dict[str, object]:
         name="weapon-range", side=Side.THIS_MODEL, kernel=lambda: certain(24)
     )
     range_band = Measurement[str](
-        name="check-range",
+        name="range",
         side=Side.THIS_MODEL,
         inputs=(distance, weapon_range),
         kernel=check_range,
@@ -96,12 +100,18 @@ def volley_program() -> dict[str, object]:
         inputs=(range_band, target_models),
         kernel=casualties,
     )
+    flight = Consequence[str](
+        name="panic-flight",
+        side=Side.THE_ENEMY,
+        inputs=(remove,),
+        kernel=panic,
+    )
 
     attacker_models.show(attacker_models.output("models", Monoid(0)))
     attacker_frontage.show(attacker_frontage.output("frontage", Monoid(0)))
-    target_models.show(target_models.output("models", Monoid(0)))
-    distance.show(distance.output("inches", Monoid(0)))
-    weapon_range.show(weapon_range.output("inches", Monoid(0)))
+    target_models.show(target_models.output("target", Monoid(0)))
+    distance.show(distance.output("distance", Monoid(0)))
+    weapon_range.show(weapon_range.output("range", Monoid(0)))
     range_band.show(
         Projection("range", lambda world: world.of(range_band), Monoid("unknown"))
     )
@@ -114,6 +124,8 @@ def volley_program() -> dict[str, object]:
         )
     )
     wound_roll.show(wound_roll.output("wounds", Monoid(0)))
+    remove.show(remove.output("casualties", Monoid(0)))
+    flight.show(flight.output("panic", Monoid("unknown")))
 
     program = Program.build(
         "volley",
@@ -122,15 +134,23 @@ def volley_program() -> dict[str, object]:
             Side.THE_ENEMY: "Spearmen",
         },
         (
-            attacker_models,
-            attacker_frontage,
-            target_models,
-            distance,
-            weapon_range,
-            range_band,
-            shots,
-            Repeat(name="attack", times=shots, items=(hit, wound_roll)),
-            remove,
+            Sequence(
+                name="pre-volley",
+                items=(
+                    attacker_models,
+                    attacker_frontage,
+                    target_models,
+                    distance,
+                    weapon_range,
+                    range_band,
+                    shots,
+                ),
+            ),
+            Sequence(
+                name="volley",
+                items=(Repeat(name="attack", times=shots, items=(hit, wound_roll)),),
+            ),
+            Sequence(name="result", items=(remove, flight)),
         ),
     )
     program.attach(

@@ -22,6 +22,7 @@ from avelorn.core.graph import (
     Roll,
     RuleNode,
     Scalar,
+    Sequence,
     Side,
     Slot,
     Trace,
@@ -451,7 +452,7 @@ def test_the_view_carries_the_blocks_and_the_stacked_readings() -> None:
 
 _TYPES = Path(__file__).resolve().parents[2] / "frontend/src/lib/graph/types.ts"
 _NODE_OF = {step.kind: step.__name__ for step in (Measurement, Decision, Roll, Consequence)}
-_BLOCK_OF = {block.kind: block.__name__ for block in (Repeat, Slot, Lanes)}
+_BLOCK_OF = {block.kind: block.__name__ for block in (Sequence, Repeat, Slot, Lanes)}
 
 
 def _declared() -> dict[str, set[str]]:

@@ -226,7 +226,18 @@ describe('layout', () => {
 		const node = collapsed.blocks.find((block) => block.path === GROUP)!;
 		expect(node.collapsed).toBe(true);
 		expect(node.box.width).toBe(expanded.steps[0].box.width);
+		expect(node.summary).toBe('x 0–2 · y 0–2');
 		expect(collapsed.width).toBeLessThan(expanded.width);
+	});
+
+	it('collapses an ordinary semantic sequence as well as a repeat', () => {
+		const semantic = {
+			...program,
+			blocks: [{ path: GROUP, kind: 'sequence' as const, collapsed: false }]
+		};
+		const drawn = layout(semantic, [GROUP]);
+		expect(drawn.steps.map((step) => step.path)).not.toContain('p/g/b');
+		expect(drawn.blocks.find((block) => block.path === GROUP)?.summary).toBe('x 0–2 · y 0–2');
 	});
 
 	it('keeps the edges into and out of the collapsed group', () => {

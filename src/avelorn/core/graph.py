@@ -276,6 +276,26 @@ class Group(Block, ABC):
 
 
 @dataclass(frozen=True, eq=False, kw_only=True)
+class Sequence(Group):
+    kind = "sequence"
+    collapsed: bool = False
+
+    def declare(self, program: "Program", prefix: str, visible: list[Step[Any]]) -> None:
+        path = f"{prefix}/{self.name}"
+        self.check(path, visible)
+        program.take(self, path)
+        for item in self.items:
+            item.declare(program, path, visible)
+
+    def run(self, lane: "Lane") -> None:
+        for item in self.items:
+            item.run(lane)
+
+    def detail(self, paths: Mapping[Any, str]) -> dict[str, Any]:
+        return {"collapsed": self.collapsed}
+
+
+@dataclass(frozen=True, eq=False, kw_only=True)
 class Repeat(Group):
     kind = "repeat"
     times: Step[int]

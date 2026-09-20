@@ -36,6 +36,7 @@ export interface PlacedBlock {
 	box: Box;
 	collapsed: boolean;
 	multiplier: Reading[];
+	summary: string;
 	steps: string[];
 }
 
@@ -109,6 +110,29 @@ function depth(items: Item[]): number {
 
 function isRepeat(block: Block): block is Repeat {
 	return block.kind === 'repeat';
+}
+
+function summaryOf(paths: string[], program: Program): string {
+	const readings = paths.flatMap(
+		(path) => program.nodes.find((node) => node.path === path)?.edge.readings ?? []
+	);
+	const seen = new Set<string>();
+	return readings
+		.filter((reading) => {
+			if (seen.has(reading.label)) return false;
+			seen.add(reading.label);
+			return true;
+		})
+		.map((reading) => {
+			if (!('outcomes' in reading)) return `${reading.label} ${reading.value}`;
+			const values = reading.outcomes.map((outcome) => outcome.value);
+			if (!values.length) return '';
+			const first = values[0];
+			const last = values[values.length - 1];
+			return `${reading.label} ${first === last ? first : `${first}–${last}`}`;
+		})
+		.filter(Boolean)
+		.join(' · ');
 }
 
 function multiplierOf(block: Block, program: Program): Reading[] {
@@ -236,7 +260,7 @@ export function layout(program: Program, collapsed: string[], metrics = METRICS)
 			}
 			const multiplier = multiplierOf(item.block, program);
 			const held = stepPaths(item);
-			if (isRepeat(item.block) && collapsed.includes(item.block.path)) {
+			if (collapsed.includes(item.block.path)) {
 				const box = { x: cursor, y: rowTop, width: node.width, height: node.height };
 				placed.push({
 					path: item.block.path,
@@ -244,6 +268,7 @@ export function layout(program: Program, collapsed: string[], metrics = METRICS)
 					box,
 					collapsed: true,
 					multiplier,
+					summary: summaryOf(held, program),
 					steps: held
 				});
 				for (const path of held) standsFor.set(path, item.block.path);
@@ -258,6 +283,7 @@ export function layout(program: Program, collapsed: string[], metrics = METRICS)
 				box: { x: cursor, y: rowTop, width: end - cursor, height: node.height },
 				collapsed: false,
 				multiplier,
+				summary: summaryOf(held, program),
 				steps: held
 			});
 			cursor = end + gap;
