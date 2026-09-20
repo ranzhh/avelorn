@@ -50,13 +50,13 @@ def volley_program() -> dict[str, object]:
         return Distribution.pure(int(range_band == "close" and target_models > 0))
 
     attacker_models = Measurement[int](
-        name="attacker-models", side=Side.THIS_MODEL, kernel=lambda: certain(10)
+        name="archer-models", side=Side.THIS_MODEL, kernel=lambda: certain(10)
     )
     attacker_frontage = Measurement[int](
-        name="attacker-frontage", side=Side.THIS_MODEL, kernel=lambda: certain(5)
+        name="archer-frontage", side=Side.THIS_MODEL, kernel=lambda: certain(5)
     )
     target_models = Measurement[int](
-        name="target-models", side=Side.THE_ENEMY, kernel=lambda: certain(20)
+        name="spearman-models", side=Side.THE_ENEMY, kernel=lambda: certain(20)
     )
     distance = Measurement[int](
         name="distance", side=Side.THIS_MODEL, kernel=lambda: certain(12)
@@ -71,7 +71,7 @@ def volley_program() -> dict[str, object]:
         kernel=check_range,
     )
     shots = Measurement[int](
-        name="how-many-shots",
+        name="shots",
         side=Side.THIS_MODEL,
         inputs=(attacker_models, attacker_frontage),
         kernel=how_many_shots,
@@ -118,8 +118,8 @@ def volley_program() -> dict[str, object]:
     program = Program.build(
         "volley",
         {
-            Side.THIS_MODEL: "the archers",
-            Side.THE_ENEMY: "the spearmen",
+            Side.THIS_MODEL: "Archers",
+            Side.THE_ENEMY: "Spearmen",
         },
         (
             attacker_models,

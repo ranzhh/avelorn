@@ -95,7 +95,7 @@
 			<h1>{program.program}</h1>
 			<div class="cluster sides">
 				{#each SIDES as side}
-					<span class="who {side}"><i></i>{printed(side)} · {program.sides[side]}</span>
+					<span class="who {side}"><i></i>{program.sides[side]}</span>
 				{/each}
 			</div>
 			<div class="cluster legend">
@@ -227,7 +227,7 @@
 							<span class="mark" title={node.kind}>{MARK[node.kind]}</span>
 							<h3>{printed(node.step)}</h3>
 						</header>
-						<span class="side">{printed(node.side)}</span>
+						<span class="side">{program.sides[node.side]}</span>
 					</div>
 				{/each}
 
@@ -304,7 +304,7 @@
 			</header>
 			<div class="field"><span>kind</span><span>{node.kind}</span></div>
 			<div class="field">
-				<span>side</span><span>{printed(node.side)} · {program.sides[node.side]}</span>
+				<span>side</span><span>{program.sides[node.side]}</span>
 			</div>
 			<div class="field"><span>path</span><span class="path">{node.path}</span></div>
 			{#if node.kind === 'roll'}
