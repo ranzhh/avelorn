@@ -22,6 +22,7 @@ from typing import Annotated, Literal, NamedTuple
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from avelorn.core.programs import volley_program
 from avelorn.tow.contingent import Charge, ChargeArc, Contingent
 from avelorn.tow.data import TOWRepository, default_repository
 from avelorn.tow.game import TOWGame
@@ -64,6 +65,12 @@ def corpus() -> TOWRepository:
 
 
 Corpus = Annotated[TOWRepository, Depends(corpus)]
+
+
+@app.get("/graph/volley", summary="Evaluate the example volley graph")
+def graph_volley() -> dict[str, object]:
+    """Return the evaluated graph used by the graph frontend."""
+    return volley_program()
 
 
 @app.get("/units", summary="List every datasheet in the corpus")
