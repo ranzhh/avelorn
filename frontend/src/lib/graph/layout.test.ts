@@ -330,7 +330,7 @@ describe('moving what was laid out', () => {
 		const box = shifted.steps.find((each) => each.path === child)!.box;
 		expect(inside(box, after)).toBe(true);
 		expect(after.width).toBeGreaterThan(frame.width);
-		expect(after.y).toBeLessThan(frame.y);
+		expect(after.height).toBeGreaterThan(frame.height);
 		for (const path of children.filter((each) => each !== child)) {
 			expect(inside(shifted.steps.find((each) => each.path === path)!.box, after)).toBe(true);
 		}
@@ -338,6 +338,32 @@ describe('moving what was laid out', () => {
 		expect(into.end).toEqual({ x: after.x, y: after.y + after.height / 2 });
 		expect(shifted.width).toBeGreaterThanOrEqual(after.x + after.width);
 		expect(shifted.height).toBeGreaterThanOrEqual(after.y + after.height);
+	});
+
+	it('keeps a step dragged off the top left on the canvas, carrying the rest with it', () => {
+		const shifted = moved(expanded, { 'p/g/c': { x: -400, y: -400 } });
+		const boxes = [
+			...shifted.steps.map((each) => each.box),
+			...shifted.blocks.map((each) => each.box),
+			...shifted.rail.map((each) => each.box)
+		];
+		for (const box of boxes) {
+			expect(box.x).toBeGreaterThanOrEqual(0);
+			expect(box.y).toBeGreaterThanOrEqual(0);
+			expect(box.x + box.width).toBeLessThanOrEqual(shifted.width);
+			expect(box.y + box.height).toBeLessThanOrEqual(shifted.height);
+		}
+		for (const point of shifted.edges.flatMap((edge) => [edge.start, edge.end])) {
+			expect(point.x).toBeGreaterThanOrEqual(0);
+			expect(point.y).toBeGreaterThanOrEqual(0);
+		}
+		const dragged = shifted.steps.find((each) => each.path === 'p/g/c')!.box;
+		const still = shifted.steps.find((each) => each.path === 'p/a')!.box;
+		const was = expanded.steps.find((each) => each.path === 'p/a')!.box;
+		expect(still.x - dragged.x).toBe(
+			was.x - expanded.steps.find((e) => e.path === 'p/g/c')!.box.x + 400
+		);
+		expect(still.y).toBeGreaterThan(was.y);
 	});
 
 	it('keeps every landing line pinned to its rule card and its step after moves', () => {

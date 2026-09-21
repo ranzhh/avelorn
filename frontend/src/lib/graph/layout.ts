@@ -211,6 +211,15 @@ function extent(steps: PlacedStep[], blocks: PlacedBlock[], rail: PlacedRule[], 
 	};
 }
 
+// The svg clips to its own viewport, so nothing may sit left of or above the origin.
+function nudge(steps: PlacedStep[], blocks: PlacedBlock[], rail: PlacedRule[]): Point {
+	const boxes = [...steps, ...blocks, ...rail].map((placed) => placed.box);
+	return {
+		x: MARGIN - Math.min(MARGIN, ...boxes.map((box) => box.x)),
+		y: MARGIN - Math.min(MARGIN, ...boxes.map((box) => box.y))
+	};
+}
+
 function wire(
 	edges: PlacedEdge[],
 	landings: PlacedLanding[],
@@ -418,21 +427,25 @@ export function moved(drawn: Layout, moves: Moves): Layout {
 		drawn.blocks
 			.filter((block) => path.startsWith(`${block.path}/`))
 			.map((block) => of(block.path));
-	const steps = drawn.steps.map((step) => ({
+	const dragged = drawn.steps.map((step) => ({
 		...step,
 		box: shifted(step.box, sum([of(step.path), ...carriers(step.path)]))
 	}));
-	const blocks = framed(
-		steps,
+	const reframed = framed(
+		dragged,
 		drawn.blocks.map((block) => ({
 			...block,
 			box: shifted(block.box, sum([of(block.path), ...carriers(block.path)]))
 		}))
 	);
-	const rail = drawn.rail.map((placed) => ({
+	const carded = drawn.rail.map((placed) => ({
 		...placed,
 		box: shifted(placed.box, of(placed.rule.rule))
 	}));
+	const by = nudge(dragged, reframed, carded);
+	const steps = dragged.map((step) => ({ ...step, box: shifted(step.box, by) }));
+	const blocks = reframed.map((block) => ({ ...block, box: shifted(block.box, by) }));
+	const rail = carded.map((placed) => ({ ...placed, box: shifted(placed.box, by) }));
 	return {
 		...drawn,
 		...extent(steps, blocks, rail, drawn.metrics.gap),
