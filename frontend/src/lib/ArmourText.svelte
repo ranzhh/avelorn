@@ -21,22 +21,3 @@
 	<h4>not covered</h4>
 	<p class="meta">{armour.notes}</p>
 {/if}
-
-<style>
-	h4 {
-		margin: var(--space-3) 0 var(--space-1);
-		font: 600 var(--text-xs) / 1 var(--font-sans);
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: var(--dim);
-	}
-
-	.meta {
-		font-family: var(--font-mono);
-		font-size: var(--text-xs);
-	}
-
-	td:first-child {
-		color: var(--dim);
-	}
-</style>

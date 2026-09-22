@@ -31,25 +31,3 @@
 		{/if}
 	{/each}
 </div>
-
-<style>
-	.tight {
-		gap: var(--space-1);
-	}
-
-	.link {
-		color: var(--accent-ink);
-		cursor: pointer;
-		font-family: var(--font-mono);
-	}
-
-	.link:hover {
-		border-color: var(--accent);
-	}
-
-	/* Nothing to open: the name is printed and no entry stands behind it. */
-	.dead {
-		color: var(--faint);
-		border-style: dashed;
-	}
-</style>

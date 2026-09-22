@@ -9,9 +9,3 @@
 {:else}
 	<p class="meta empty">No program.</p>
 {/if}
-
-<style>
-	.empty {
-		padding: 0 var(--space-3);
-	}
-</style>

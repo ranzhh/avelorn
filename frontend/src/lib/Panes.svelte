@@ -101,10 +101,3 @@
 		{/if}
 	</Pane>
 {/each}
-
-<style>
-	.pending {
-		font: var(--text-xs) / 1.5 var(--font-mono);
-		color: var(--dim);
-	}
-</style>

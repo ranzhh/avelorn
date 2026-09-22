@@ -24,20 +24,11 @@
 
 <style>
 	.reading {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
+		display: grid;
+		gap: 0.15rem;
 	}
-
 	.label {
-		font-size: var(--text-xs);
-		color: var(--dim);
-		white-space: nowrap;
-	}
-
-	b {
-		font-weight: 400;
-		font-size: var(--text-sm);
-		color: var(--ink);
+		font-size: 0.75rem;
+		color: #555;
 	}
 </style>
