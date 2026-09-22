@@ -7,6 +7,7 @@ import pytest
 
 from avelorn.core.registry import UnknownNameError
 from avelorn.tow.data import DATA_DIR, TOWRepository
+from avelorn.tow.schema.reference import printed_name
 
 REPO = TOWRepository()
 
@@ -124,19 +125,19 @@ def test_printed_references_are_spelled_as_their_entries() -> None:
         for name in unit.equipment:
             references.append((unit.id, name, equipment))
         for name in unit.special_rules:
-            references.append((unit.id, name, rules))
+            references.append((unit.id, printed_name(name), rules))
         for option in unit.options:
             for name in (*option.adds_equipment, *option.removes_equipment):
                 references.append((unit.id, name, equipment))
             for name in (*option.adds_rules, *option.removes_rules):
-                references.append((unit.id, name, rules))
+                references.append((unit.id, printed_name(name), rules))
     for weapon in REPO.weapons.values():
         for profile in weapon.profiles:
             for name in profile.special_rules:
-                references.append((weapon.id, name, rules))
+                references.append((weapon.id, printed_name(name), rules))
     for troop_type in REPO.troop_types.values():
         for name in troop_type.special_rules:
-            references.append((troop_type.id, name, rules))
+            references.append((troop_type.id, printed_name(name), rules))
     for rule in REPO.rules.values():
         for effect in rule.effects:
             if isinstance(effect, GrantEffect):

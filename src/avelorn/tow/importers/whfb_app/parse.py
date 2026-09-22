@@ -11,9 +11,11 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import cast
 
 from pydantic import ValidationError
 
+from avelorn.tow.schema.reference import RuleReference
 from avelorn.tow.schema.unit import (
     BaseSize,
     OptionKind,
@@ -83,7 +85,10 @@ def parse_unit(entry: Node) -> ImportResult:
         # can differ from the linked entry ("Detachment" links to the
         # "Detachment Special Rules" section).
         equipment=_rule_list(slug, "equipment", fields, warnings),
-        special_rules=_rule_list(slug, "specialRules", fields, warnings, as_displayed=True),
+        special_rules=cast(
+            list[RuleReference],
+            _rule_list(slug, "specialRules", fields, warnings, as_displayed=True),
+        ),
         options=_parse_options(slug, fields.get("options"), profiles, warnings),
     )
     return ImportResult(unit=unit, warnings=warnings)

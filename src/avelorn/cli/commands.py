@@ -12,6 +12,7 @@ import yaml
 
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.schema.armour import Armour
+from avelorn.tow.schema.reference import printed_name
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.unit import (
     BaseSize,
@@ -146,8 +147,9 @@ def show_weapon(data: TOWRepository, slug: str) -> list[str]:
     # the same rule on both.
     printed: dict[str, Reference] = {}
     for profile in weapon.profiles:
-        for name in profile.special_rules:
-            printed.setdefault(name, Reference.rule(name, data.rules))
+        for reference in profile.special_rules:
+            name = printed_name(reference)
+            printed.setdefault(name, Reference.rule(reference, data.rules))
     lines.extend(_listing("Special rules", [_named(ref) for ref in printed.values()]))
     if any(ref.slug is None for ref in printed.values()):
         lines.append("  * no entry: the engine holds the name and never applies it")

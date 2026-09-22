@@ -56,6 +56,7 @@ from avelorn.tow.engine.rules import (
 )
 from avelorn.tow.engine.seats import Defence, Offence
 from avelorn.tow.schema.psychology import PanicCause
+from avelorn.tow.schema.reference import printed_name
 from avelorn.tow.schema.rule import AttackKind, RerollEffect, Rule
 from avelorn.tow.schema.stage import Stage
 from avelorn.tow.schema.unit import Characteristic
@@ -368,8 +369,8 @@ def shoot_unit(
     # the weapon-rule notes below.
     in_use = [
         attacker.loadout.weapon_rules[name]
-        for name in profile.special_rules
-        if name in attacker.loadout.weapon_rules
+        for reference in profile.special_rules
+        if (name := printed_name(reference)) in attacker.loadout.weapon_rules
     ]
     volley = effective_volley(in_use, conditions)
     # Multiple Wounds (X): what each unsaved wound is worth lands on the

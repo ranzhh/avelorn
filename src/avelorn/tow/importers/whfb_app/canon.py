@@ -19,6 +19,7 @@ heals it. The rules' parameterised convention passes through untouched:
 
 from collections.abc import Iterable
 
+from avelorn.tow.schema.reference import RuleRef, RuleReference
 from avelorn.tow.schema.unit import Unit
 from avelorn.tow.schema.weapon import Weapon
 
@@ -70,13 +71,25 @@ def canonical_unit(
             rewritten.append(found if found is not None else reference)
         return rewritten
 
+    def fixed_rules(references: list[RuleReference]) -> list[RuleReference]:
+        rewritten = []
+        for reference in references:
+            if isinstance(reference, RuleRef):
+                rewritten.append(reference)
+                continue
+            found = canonical(reference, rule_names)
+            if found is not None:
+                fixes.append(f"reference {reference!r} canonicalised to {found!r}")
+            rewritten.append(found if found is not None else reference)
+        return rewritten
+
     options = [
         option.model_copy(
             update={
                 "adds_equipment": fixed(option.adds_equipment, equipment_names),
                 "removes_equipment": fixed(option.removes_equipment, equipment_names),
-                "adds_rules": fixed(option.adds_rules, rule_names),
-                "removes_rules": fixed(option.removes_rules, rule_names),
+                "adds_rules": fixed_rules(option.adds_rules),
+                "removes_rules": fixed_rules(option.removes_rules),
             }
         )
         for option in unit.options
@@ -84,7 +97,7 @@ def canonical_unit(
     rewritten = unit.model_copy(
         update={
             "equipment": fixed(unit.equipment, equipment_names),
-            "special_rules": fixed(unit.special_rules, rule_names),
+            "special_rules": fixed_rules(unit.special_rules),
             "options": options,
         }
     )
@@ -106,6 +119,9 @@ def canonical_weapon(weapon: Weapon, *, rules: Iterable[str]) -> tuple[Weapon, l
     for profile in weapon.profiles:
         rewritten = []
         for reference in profile.special_rules:
+            if isinstance(reference, RuleRef):
+                rewritten.append(reference)
+                continue
             found = canonical(reference, rule_names)
             if found is not None:
                 fixes.append(f"reference {reference!r} canonicalised to {found!r}")

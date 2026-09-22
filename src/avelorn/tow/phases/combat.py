@@ -82,6 +82,7 @@ from avelorn.tow.engine.rules import (
 from avelorn.tow.engine.seats import Defence, Offence
 from avelorn.tow.phases.movement import Engagement
 from avelorn.tow.schema.psychology import BreakOutcome
+from avelorn.tow.schema.reference import printed_name
 from avelorn.tow.schema.rule import AttackKind, Decision, HitOrder, Rule
 from avelorn.tow.schema.unit import Characteristic, Profile, ProfileRole
 from avelorn.tow.schema.weapon import Weapon
@@ -488,8 +489,8 @@ def _engage(
     # and so claim it — is decided where batches pool (_pooled_damage).
     in_use = [
         striker.loadout.weapon_rules[name]
-        for name in profile.special_rules
-        if name in striker.loadout.weapon_rules
+        for reference in profile.special_rules
+        if (name := printed_name(reference)) in striker.loadout.weapon_rules
     ]
     multiplier = effective_wound_multiplier(in_use, conditions)
     logger.debug(
@@ -747,8 +748,11 @@ def strike_unit(
     # What the striker's blows *are* (magical, Flaming) is its rules' say —
     # the profile in use's and the unit's own (attack_marks); the same read
     # the striker's seat makes for claiming, so the fact and the note agree.
+    in_hand_names = (
+        [] if in_hand is None else [printed_name(reference) for reference in in_hand.special_rules]
+    )
     marks = attack_marks(
-        in_hand.special_rules if in_hand is not None else [],
+        in_hand_names,
         striker.loadout.weapon_rules,
         striker.loadout.rules,
     )
@@ -1022,7 +1026,9 @@ def _combat_conditions(first_round: bool | None, side: Contingent, foe: Continge
     foe_weapon = foe.weapon
     foe_profile = foe_weapon.combat_profile if foe_weapon is not None else None
     foe_marks = attack_marks(
-        foe_profile.special_rules if foe_profile is not None else [],
+        []
+        if foe_profile is None
+        else [printed_name(reference) for reference in foe_profile.special_rules],
         foe.loadout.weapon_rules,
         foe.loadout.rules,
     )

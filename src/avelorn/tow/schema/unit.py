@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.functional_validators import BeforeValidator
 
 from avelorn.core.registry import Registry
+from avelorn.tow.schema.reference import RuleReference
 from avelorn.tow.schema.troop_type import TroopTypeProfile
 
 
@@ -184,8 +185,8 @@ class UnitOption(BaseModel):
     points: int | None = Field(default=None, ge=0)
     per_model: bool = False
     points_budget: int | None = Field(default=None, ge=1)
-    adds_rules: list[str] = Field(default_factory=list)
-    removes_rules: list[str] = Field(default_factory=list)
+    adds_rules: list[RuleReference] = Field(default_factory=list)
+    removes_rules: list[RuleReference] = Field(default_factory=list)
     adds_equipment: list[str] = Field(default_factory=list)
     removes_equipment: list[str] = Field(default_factory=list)
     # Availability restriction, free text for now (e.g. "0-1 unit per
@@ -220,7 +221,7 @@ class Unit(BaseModel):
     base_size: BaseSize | None = None
     profiles: list[Profile] = Field(min_length=1)
     equipment: list[str] = Field(default_factory=list)
-    special_rules: list[str] = Field(default_factory=list)  # rule names, as printed
+    special_rules: list[RuleReference] = Field(default_factory=list)
     options: list[UnitOption] = Field(default_factory=list)
 
     # An option attached to a named model needs that model's profile row:

@@ -40,6 +40,7 @@ from avelorn.tow.muster import Complement
 from avelorn.tow.phases.combat import BreakResult, CombatResult, FightResult, SideBreak
 from avelorn.tow.phases.shooting import PanicResult, ShootingResult
 from avelorn.tow.schema.armour import Armour
+from avelorn.tow.schema.reference import RuleReference, printed_name
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.unit import TroopType, Unit, UnitSize
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile, WeaponType
@@ -113,13 +114,14 @@ class Reference(BaseModel):
     slug: str | None
 
     @classmethod
-    def rule(cls, printed: str, rules: Registry[Rule]) -> "Reference":
-        """Resolve one printed rule name.
+    def rule(cls, reference: RuleReference, rules: Registry[Rule]) -> "Reference":
+        """Resolve one printed rule reference.
 
         Returns:
             The name, carrying the entry it addresses or nothing.
         """
-        entry = printed_rule(printed, rules)
+        entry = printed_rule(reference, rules)
+        printed = printed_name(reference)
         if entry is None:
             return cls(name=printed, kind=None, slug=None)
         return cls(name=printed, kind=Kind.RULE, slug=entry.id)
@@ -709,10 +711,10 @@ def _references(data: TOWRepository) -> tuple[dict[str, set[str]], dict[str, set
         conferred = (
             () if unit.troop_type_profile is None else unit.troop_type_profile.special_rules
         )
-        for name in (*unit.special_rules, *conferred):
-            units[name].add(slug)
+        for reference in (*unit.special_rules, *conferred):
+            units[printed_name(reference)].add(slug)
     for slug, weapon in data.weapons.items():
         for profile in weapon.profiles:
-            for name in profile.special_rules:
-                weapons[name].add(slug)
+            for reference in profile.special_rules:
+                weapons[printed_name(reference)].add(slug)
     return units, weapons

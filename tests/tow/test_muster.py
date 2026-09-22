@@ -5,6 +5,7 @@ from pydantic import ValidationError
 
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.muster import Complement
+from avelorn.tow.schema.reference import RuleRef, printed_name
 from avelorn.tow.schema.unit import OptionKind, Unit, UnitOption
 
 REPO = TOWRepository()
@@ -36,6 +37,38 @@ def test_complement_per_model_option_costs_once_per_model(spearmen_unit: Unit) -
     assert mustered.points == 10 * spearmen_unit.points + 10 * 1
     assert "Veteran" in mustered.special_rules
     assert "Valour of Ages" not in mustered.special_rules
+
+
+def test_complement_removes_explicit_rule_references_by_id(spearmen_unit: Unit) -> None:
+    """A rule swap uses item identity rather than the two pages' spellings."""
+    veteran = next(option for option in spearmen_unit.options if option.name == "Veteran")
+    referenced_veteran = veteran.model_copy(
+        update={
+            "adds_rules": [RuleRef(rule="veteran", printed="Veteran")],
+            "removes_rules": [RuleRef(rule="valour-of-ages", printed="Valour Of Ages")],
+        }
+    )
+    unit = spearmen_unit.model_copy(
+        update={
+            "special_rules": [
+                RuleRef(rule="valour-of-ages", printed="Valour of Ages")
+                if name == "Valour of Ages"
+                else name
+                for name in spearmen_unit.special_rules
+            ],
+            "options": [
+                referenced_veteran if option.name == "Veteran" else option
+                for option in spearmen_unit.options
+            ],
+        }
+    )
+
+    mustered = Complement(unit=unit, size=10, options=["Veteran"])
+
+    assert "Veteran" in [printed_name(reference) for reference in mustered.special_rules]
+    assert "Valour of Ages" not in [
+        printed_name(reference) for reference in mustered.special_rules
+    ]
 
 
 def test_complement_option_adds_rule(spearmen_unit: Unit) -> None:

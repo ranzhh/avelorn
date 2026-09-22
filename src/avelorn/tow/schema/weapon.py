@@ -14,6 +14,8 @@ from typing import Annotated, Literal, Self
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.functional_validators import BeforeValidator
 
+from avelorn.tow.schema.reference import RuleReference
+
 _RELATIVE_STRENGTH_RE = re.compile(r"S([+-]\d+)?")
 
 
@@ -117,7 +119,7 @@ class WeaponProfile(BaseModel):
     range: WeaponRange = Field(alias="R")
     strength: WeaponStrength = Field(alias="S")
     armour_piercing: ArmourPiercing = Field(alias="AP", default=0)
-    special_rules: list[str] = Field(default_factory=list)  # rule names, as printed
+    special_rules: list[RuleReference] = Field(default_factory=list)
 
     @property
     def is_missile(self) -> bool:

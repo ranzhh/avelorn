@@ -11,6 +11,7 @@ from avelorn.api.app import app, corpus
 from avelorn.cli import commands
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.schema.armour import Armour
+from avelorn.tow.schema.reference import printed_name
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.unit import Unit
 from avelorn.tow.schema.weapon import Weapon
@@ -65,7 +66,7 @@ def test_show_covers_every_field_the_detail_endpoint_serves() -> None:
         "base_size": "25 x 25 mm" in printed,
         "profiles": all(profile.name in printed for profile in unit.profiles),
         "equipment": all(item in printed for item in unit.equipment),
-        "special_rules": all(rule in printed for rule in unit.special_rules),
+        "special_rules": all(printed_name(rule) in printed for rule in unit.special_rules),
         "options": all(option.name in printed for option in unit.options),
     }
     assert set(shown) == set(Unit.model_fields)

@@ -12,6 +12,7 @@ import re
 import yaml
 
 from avelorn.tow.schema.armour import Armour
+from avelorn.tow.schema.reference import RuleRef, RuleReference
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.unit import Characteristic, Profile, ProfileRole, Unit, UnitOption
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile
@@ -64,7 +65,7 @@ def unit_to_yaml(unit: Unit, source_url: str | None = None) -> str:
     if unit.equipment:
         doc["equipment"] = list(unit.equipment)
     if unit.special_rules:
-        doc["special_rules"] = list(unit.special_rules)
+        doc["special_rules"] = _rule_references(unit.special_rules)
     if unit.options:
         doc["options"] = [_option_row(o) for o in unit.options]
     return _dump(doc, source_url)
@@ -137,6 +138,18 @@ def _dump(doc: dict, source_url: str | None) -> str:
     return text
 
 
+def _rule_references(references: list[RuleReference]) -> list[str | dict[str, str]]:
+    """Render rule references in their backwards-compatible YAML forms.
+
+    Returns:
+        Strings for legacy references and ``rule``/``printed`` mappings for explicit ones.
+    """
+    return [
+        reference.model_dump(by_alias=True) if isinstance(reference, RuleRef) else reference
+        for reference in references
+    ]
+
+
 def _profile_row(profile: Profile) -> _FlowMap:
     row: dict = {"name": profile.name}
     # Written only when it is not the default, so a plain infantry datasheet
@@ -158,7 +171,7 @@ def _weapon_profile_row(profile: WeaponProfile) -> _FlowMap:
     row["S"] = strength.base if not strength.is_relative else strength.printed
     row["AP"] = profile.armour_piercing or "-"
     if profile.special_rules:
-        row["special_rules"] = _FlowList(profile.special_rules)
+        row["special_rules"] = _FlowList(_rule_references(profile.special_rules))
     return _FlowMap(row)
 
 
@@ -176,9 +189,9 @@ def _option_row(option: UnitOption) -> dict:
     if option.points_budget is not None:
         row["points_budget"] = option.points_budget
     if option.adds_rules:
-        row["adds_rules"] = _FlowList(option.adds_rules)
+        row["adds_rules"] = _FlowList(_rule_references(option.adds_rules))
     if option.removes_rules:
-        row["removes_rules"] = _FlowList(option.removes_rules)
+        row["removes_rules"] = _FlowList(_rule_references(option.removes_rules))
     if option.adds_equipment:
         row["adds_equipment"] = _FlowList(option.adds_equipment)
     if option.removes_equipment:

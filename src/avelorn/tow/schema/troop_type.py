@@ -13,6 +13,7 @@ from typing import assert_never
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from avelorn.tow.schema.reference import RuleReference
 from avelorn.tow.schema.unit_strength import UnitStrength, UnitStrengthMarker
 
 
@@ -40,7 +41,7 @@ class TroopTypeProfile(BaseModel):
     unit_strength: UnitStrength
     models_per_rank: int | None = Field(default=None, ge=1)
     max_rank_bonus: int = Field(default=0, ge=0)
-    special_rules: tuple[str, ...] = ()
+    special_rules: tuple[RuleReference, ...] = ()
 
     def unit_strength_per_model(self, wounds: int | None) -> int:
         """This troop type's Unit Strength for one model of ``wounds`` Wounds.

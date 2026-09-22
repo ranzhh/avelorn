@@ -28,6 +28,7 @@ from avelorn.tow.engine.rules import (
 )
 from avelorn.tow.muster import Complement
 from avelorn.tow.schema.armour import Armour
+from avelorn.tow.schema.reference import printed_name
 from avelorn.tow.schema.rule import GrantEffect, Rule
 from avelorn.tow.schema.unit import Characteristic, Unit
 from avelorn.tow.schema.weapon import Weapon
@@ -544,7 +545,8 @@ class Contingent:
         if profile is None:
             return []
         index = self.loadout.weapon_rules
-        return [index[name] for name in profile.special_rules if name in index]
+        names = [printed_name(reference) for reference in profile.special_rules]
+        return [index[name] for name in names if name in index]
 
     def effective_attacks(self) -> EffectiveValue:
         """The Attacks each fighting-rank model makes, rule modifiers included.
@@ -866,17 +868,18 @@ def _resolve_loadout(
     # feeds the "not factored" notes.
     troop_type = unit.troop_type_profile
     conferred = troop_type.special_rules if troop_type is not None else ()
-    for printed in (*unit.special_rules, *conferred):
-        entry = printed_rule(printed, rules)
+    for reference in (*unit.special_rules, *conferred):
+        entry = printed_rule(reference, rules)
         if entry is None:
-            unresolved.append(printed)
+            unresolved.append(printed_name(reference))
         else:
             resolved.append(entry)
     weapon_rules: dict[str, Rule] = {}
     for weapon in wielded:
         for profile in weapon.profiles:
-            for printed in profile.special_rules:
-                if printed not in weapon_rules and (entry := printed_rule(printed, rules)):
+            for reference in profile.special_rules:
+                printed = printed_name(reference)
+                if printed not in weapon_rules and (entry := printed_rule(reference, rules)):
                     weapon_rules[printed] = entry
     # Rules a resolved rule grants (Arrows of Isha -> Armour Bane (1)): resolved
     # by name, once, so a grant effect can expand through the loadout at compile

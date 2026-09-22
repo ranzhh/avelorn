@@ -1988,6 +1988,36 @@
         "title": "Rule",
         "description": "A rules-page entry (special rule or core rule), text verbatim."
       },
+      "RuleRef": {
+        "properties": {
+          "rule": {
+            "type": "string",
+            "title": "Rule"
+          },
+          "printed": {
+            "type": "string",
+            "title": "Printed"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "rule",
+          "printed"
+        ],
+        "title": "RuleRef",
+        "description": "One printed rule reference, addressed by its stable rule id.\n\n``printed`` remains the text the owning page used. ``rule`` is the identity\nused to find the catalogued rule, so a page spelling can differ without\nbecoming a different rule."
+      },
+      "RuleReference": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "$ref": "#/components/schemas/RuleRef"
+          }
+        ]
+      },
       "RuleSummary": {
         "properties": {
           "id": {
@@ -2125,7 +2155,7 @@
           },
           "special_rules": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/RuleReference"
             },
             "type": "array",
             "title": "Special Rules",
@@ -2280,14 +2310,14 @@
           },
           "adds_rules": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/RuleReference"
             },
             "type": "array",
             "title": "Adds Rules"
           },
           "removes_rules": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/RuleReference"
             },
             "type": "array",
             "title": "Removes Rules"

@@ -34,6 +34,7 @@ from avelorn.tow.engine.rules import (
     effective_ward_target,
 )
 from avelorn.tow.schema.armour import Armour
+from avelorn.tow.schema.reference import printed_name
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.stage import Side
 from avelorn.tow.schema.weapon import WeaponProfile
@@ -84,11 +85,12 @@ class Offence:
         Returns:
             The seat, compiled under the attacker's ``conditions``.
         """
-        weapon_compiled = compile_rules(profile.special_rules, weapon_rules, conditions)
+        weapon_names = [printed_name(reference) for reference in profile.special_rules]
+        weapon_compiled = compile_rules(weapon_names, weapon_rules, conditions)
         index = {rule.name: rule for rule in rules}
         unit_compiled = compile_rules(list(index), index, conditions, grants=grants)
-        in_use = [weapon_rules[name] for name in profile.special_rules if name in weapon_rules]
-        marks = attack_marks(profile.special_rules, weapon_rules, rules)
+        in_use = [weapon_rules[name] for name in weapon_names if name in weapon_rules]
+        marks = attack_marks(weapon_names, weapon_rules, rules)
         return cls(
             modifiers=(*weapon_compiled.modifiers, *unit_compiled.modifiers),
             transforms=(*weapon_compiled.transforms, *unit_compiled.transforms),
