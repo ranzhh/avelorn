@@ -4,6 +4,7 @@ import pytest
 
 from avelorn.cli import commands
 from avelorn.tow.data import TOWRepository
+from avelorn.tow.schema.reference import printed_name
 
 REPO = TOWRepository()
 
@@ -73,7 +74,7 @@ def test_unmodelled_resolves_a_printed_parameter_before_judging_it() -> None:
         name
         for weapon in REPO.weapons.values()
         for p in weapon.profiles
-        for name in p.special_rules
+        for name in (printed_name(reference) for reference in p.special_rules)
     }
     assert "Armour Bane (1)" in printed_by
     assert "Armour Bane" not in "\n".join(commands.list_unmodelled(REPO))
