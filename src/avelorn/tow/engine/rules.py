@@ -48,6 +48,7 @@ from avelorn.tow.engine.attack import (
 )
 from avelorn.tow.engine.attack import Outcome as AttackOutcome
 from avelorn.tow.schema.psychology import Outcome
+from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import (
     PARAMETER_SUFFIX,
     Add,
@@ -238,10 +239,13 @@ def _as_context(context: GateContext | None) -> GateContext:
     return context if context is not None else GateContext()
 
 
-def printed_rule(printed: str, rules: Registry[Rule]) -> Rule | None:
-    """Resolve a printed rule name to the rule exactly as printed.
+def printed_rule(printed: str | RuleRef, rules: Registry[Rule]) -> Rule | None:
+    """Resolve a printed rule reference to the rule exactly as it prints.
 
-    An exact name match returns the entry itself. Otherwise a bracketed
+    An explicit :class:`RuleRef` addresses an entry by stable id, retaining its
+    owning page's spelling on the resolved copy. A missing explicit id is a
+    corpus error and therefore raises. An exact string name match returns the
+    entry itself. Otherwise a bracketed
     numeric parameter matches the rule filed under the "(X)" placeholder
     and returns a copy carrying the printed name, the parameter
     substituted into its effects ("the amount shown in brackets after
@@ -255,6 +259,11 @@ def printed_rule(printed: str, rules: Registry[Rule]) -> Rule | None:
     Returns:
         The rule as printed, or None if nothing matches.
     """
+    if isinstance(printed, RuleRef):
+        entry = rules[printed.rule_id]
+        if entry.name == printed.printed:
+            return entry
+        return entry.model_copy(update={"name": printed.printed})
     with suppress(UnknownNameError):
         return rules.by_name(printed)
     if match := _PARAMETERISED.match(printed):

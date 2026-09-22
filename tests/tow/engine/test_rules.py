@@ -38,6 +38,7 @@ from avelorn.tow.engine.rules import (
 )
 from avelorn.tow.phases.shooting import shoot_unit
 from avelorn.tow.schema.phase import Phase
+from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import (
     Add,
     ArmourGate,
@@ -85,6 +86,19 @@ def _one_rule(effect: RuleEffect) -> dict[str, Rule]:
 def test_printed_rule_exact_name_is_the_entry_itself() -> None:
     """A printed name matching an entry name returns that entry, unchanged."""
     assert printed_rule("Stubborn", REPO.rules) is REPO.rules["stubborn"]
+
+
+def test_explicit_rule_reference_resolves_a_variant_spelling_by_id() -> None:
+    """One YAML-shaped rule reference retains its spelling and stable identity."""
+    reference = RuleRef.model_validate(
+        {"rule": "fight-in-extra-rank", "printed": "Fight in Extra Rank"}
+    )
+
+    resolved = printed_rule(reference, REPO.rules)
+
+    assert resolved is not None
+    assert resolved.id == "fight-in-extra-rank"
+    assert resolved.name == "Fight in Extra Rank"
 
 
 def test_printed_rule_substitutes_the_parameter() -> None:
