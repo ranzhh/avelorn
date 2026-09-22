@@ -40,6 +40,14 @@ def test_a_weapon_resolves_its_rules_per_profile(client: TestClient) -> None:
     assert printed == [{"name": "Armour Bane (1)", "kind": "rule", "slug": "armour-bane"}]
 
 
+def test_a_slug_only_rule_reference_is_served_with_its_catalogued_name(client: TestClient) -> None:
+    """The corpus stores a rule id while the API resolves its display name."""
+    body = client.get("/weapons/thrusting-spear").json()
+    assert body["profiles"][0]["special_rules"] == [
+        {"name": "Fight In Extra Rank", "kind": "rule", "slug": "fight-in-extra-rank"}
+    ]
+
+
 def test_two_profiles_keep_the_rules_each_one_prints(client: TestClient) -> None:
     """Drakefire Pistols carry Quick Shot when fired and Extra Attacks in combat.
 

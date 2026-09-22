@@ -114,15 +114,16 @@ class Reference(BaseModel):
 
     @classmethod
     def rule(cls, printed: str, rules: Registry[Rule]) -> "Reference":
-        """Resolve one printed rule name.
+        """Resolve one rule reference for presentation.
 
         Returns:
-            The name, carrying the entry it addresses or nothing.
+            The printed name, carrying the entry it addresses or nothing.
         """
         entry = printed_rule(printed, rules)
         if entry is None:
             return cls(name=printed, kind=None, slug=None)
-        return cls(name=printed, kind=Kind.RULE, slug=entry.id)
+        name = entry.name if printed == entry.id else printed
+        return cls(name=name, kind=Kind.RULE, slug=entry.id)
 
     @classmethod
     def equipment(
