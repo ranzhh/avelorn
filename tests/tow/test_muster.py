@@ -64,6 +64,21 @@ def test_complement_duplicate_option_rejected(spearmen_unit: Unit) -> None:
         Complement(unit=spearmen_unit, size=10, options=["Musician", "Musician"])
 
 
+def test_complement_rejects_an_option_that_removes_an_absent_rule(spearmen_unit: Unit) -> None:
+    """A stale removal cannot silently leave the original rule in place."""
+    stale = UnitOption(
+        name="Stale swap",
+        kind=OptionKind.SPECIAL_RULE,
+        points=0,
+        removes_rules=["Absent Rule"],
+    )
+    unit = spearmen_unit.model_copy(update={"options": [*spearmen_unit.options, stale]})
+    mustered = Complement(unit=unit, size=10, options=["Stale swap"])
+
+    with pytest.raises(ValueError, match="Stale swap removes absent Absent Rule"):
+        _ = mustered.special_rules
+
+
 @pytest.fixture
 def spearmen_with_a_sentinel_option(spearmen_unit: Unit) -> Unit:
     """Elven Spearmen with a blade bought for the Sentinel alone.
