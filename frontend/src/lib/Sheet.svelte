@@ -70,38 +70,3 @@
 		</tbody>
 	</table>
 {/if}
-
-<style>
-	h4 {
-		margin: var(--space-3) 0 var(--space-1);
-		font: 600 var(--text-xs) / 1 var(--font-sans);
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: var(--dim);
-	}
-
-	.meta {
-		font-family: var(--font-mono);
-		font-size: var(--text-xs);
-	}
-
-	table {
-		margin-top: var(--space-2);
-	}
-
-	th,
-	td {
-		padding: 1px var(--space-1);
-	}
-
-	.who {
-		width: 99%;
-		color: var(--ink);
-	}
-
-	.role {
-		margin-left: var(--space-1);
-		font-size: var(--text-xs);
-		color: var(--faint);
-	}
-</style>

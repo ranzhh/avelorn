@@ -77,24 +77,3 @@
 		{/each}
 	</ul>
 {/if}
-
-<style>
-	h1 {
-		margin-bottom: 0.2rem;
-	}
-
-	h2 {
-		font-size: 1rem;
-		margin-top: 1.5rem;
-	}
-
-	.meta {
-		color: var(--dim);
-		font-size: 0.85rem;
-	}
-
-	.unmodelled {
-		color: var(--dim);
-		text-decoration: underline dotted var(--line);
-	}
-</style>

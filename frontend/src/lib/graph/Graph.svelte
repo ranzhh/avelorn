@@ -374,330 +374,126 @@
 <style>
 	.shell {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) 272px;
-		height: calc(100vh - 2.4rem - 3rem);
+		grid-template-columns: minmax(0, 1fr) 15rem;
+		min-height: 32rem;
+		border: 1px solid #bbb;
 	}
-
 	.stage {
 		display: flex;
 		flex-direction: column;
 		min-width: 0;
-		min-height: 0;
 	}
-
-	.head {
-		display: flex;
-		align-items: baseline;
-		gap: var(--space-5);
-		padding: 0 var(--space-3) var(--space-2);
-	}
-
-	.sides {
-		gap: var(--space-4);
-	}
-
-	.who {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-2);
-		font-size: var(--text-sm);
-		color: var(--dim);
-	}
-
-	.who i {
-		width: 8px;
-		height: 8px;
-		border-radius: 1px;
-	}
-
-	.who.this-model i {
-		background: var(--series-1);
-	}
-
-	.who.the-enemy i {
-		background: var(--series-2);
-	}
-
-	.legend {
-		margin-left: auto;
-		gap: var(--space-3);
-		font-size: var(--text-xs);
-		color: var(--dim);
-	}
-
-	.legend > span {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-1);
-	}
-
-	.scroll {
-		flex: 1;
-		min-height: 0;
-		display: grid;
-		align-content: center;
-		justify-content: start;
-		overflow: auto;
-		padding: 0 var(--space-3);
-		background: var(--sunken);
-		border-top: 1px solid var(--line);
-		border-bottom: 1px solid var(--line);
-	}
-
-	.canvas {
-		position: relative;
-		user-select: none;
-	}
-
-	svg {
-		position: absolute;
-		inset: 0;
-	}
-
-	marker path {
-		fill: var(--faint);
-	}
-
-	.frame {
-		fill: color-mix(in oklab, var(--panel) 60%, var(--plane));
-		stroke: var(--line);
-		stroke-dasharray: 4 3;
-	}
-
-	.frame.on {
-		stroke: var(--accent);
-	}
-
-	.edge {
-		stroke: var(--faint);
-		stroke-width: 1;
-	}
-
-	.edge.times {
-		stroke-dasharray: 3 3;
-	}
-
-	.landing {
-		stroke: var(--line);
-		stroke-width: 1;
-	}
-
-	.landing.applied {
-		stroke: var(--faint);
-	}
-
-	.landing.on {
-		stroke: var(--accent);
-	}
-
-	.card,
-	.frame-head {
-		position: absolute;
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		cursor: grab;
-		touch-action: none;
-	}
-
-	.card.held,
-	.frame-head.held {
-		cursor: grabbing;
-	}
-
-	.card {
-		padding: var(--space-1) var(--space-2);
-		background: var(--panel);
-		border: 1px solid var(--line);
-		border-left-width: 3px;
-		border-radius: var(--radius-md);
-		overflow: hidden;
-	}
-
-	.card.on {
-		border-color: var(--accent);
-	}
-
-	.card.this-model {
-		border-left-color: var(--series-1);
-	}
-
-	.card.the-enemy {
-		border-left-color: var(--series-2);
-	}
-
-	.card.group {
-		border-left-color: var(--faint);
-		border-style: dashed;
-	}
-
-	.card.rule {
-		border-left-color: var(--line);
-		background: var(--sunken);
-		justify-content: center;
-	}
-
-	.card header,
-	.frame-head {
-		display: flex;
-		flex-direction: row;
-		align-items: center;
-		gap: var(--space-2);
-	}
-
-	.frame-head {
-		padding: 0 var(--space-2);
-	}
-
-	.card h3,
-	.frame-head h3 {
-		font-size: var(--text-sm);
-		line-height: 1.2;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-
-	.card header h3 {
-		white-space: normal;
-	}
-
-	.frame-head h3,
-	.card.group h3,
-	.card.rule h3 {
-		white-space: nowrap;
-	}
-
-	.frame-head h3,
-	.card.group h3 {
-		text-transform: uppercase;
-	}
-
-	.mark {
-		display: inline-grid;
-		place-items: center;
-		width: 16px;
-		height: 16px;
-		flex: none;
-		font: 600 var(--text-xs) / 1 var(--font-mono);
-		color: var(--ink);
-		background: var(--neutral);
-		border-radius: var(--radius-sm);
-	}
-
-	.side {
-		font-size: var(--text-xs);
-		color: var(--dim);
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-
-	.fold {
-		align-self: flex-start;
-		margin-left: auto;
-		font-family: var(--font-mono);
-		color: var(--accent-ink);
-	}
-
-	.card.group .fold {
-		margin-top: auto;
-		margin-left: 0;
-	}
-
-	.caption {
-		position: absolute;
-		transform: translate(-50%, calc(-100% - 3px));
-		font: 10px / 1.4 var(--font-mono);
-		color: var(--dim);
-		white-space: nowrap;
-		pointer-events: none;
-	}
-
-	.verdict {
-		position: absolute;
-		transform: translate(-50%, -50%);
-		padding: 0 var(--space-2);
-		font: var(--text-xs) / 1.7 var(--font-mono);
-		color: var(--dim);
-		background: var(--sunken);
-		border: 1px solid var(--line);
-		border-radius: var(--radius-sm);
-		white-space: nowrap;
-		pointer-events: none;
-	}
-
-	.verdict.applied {
-		color: var(--pos);
-	}
-
-	.verdict.held {
-		color: var(--neg);
-	}
-
-	.verdict.inapplicable {
-		color: var(--faint);
-	}
-
+	.head,
 	.unmodelled {
 		display: flex;
 		align-items: center;
-		gap: var(--space-3);
-		padding: var(--space-1) var(--space-3);
-		font-size: var(--text-sm);
-		white-space: nowrap;
-		overflow: hidden;
+		gap: 1rem;
+		padding: 0.6rem;
+		border-bottom: 1px solid #bbb;
 	}
-
-	.unmodelled .legend,
-	.explore .verdict {
-		position: static;
-		transform: none;
-	}
-
-	.explore {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1);
-		min-height: 0;
-		overflow-y: auto;
-		padding: 0 var(--space-3);
-		border-left: 1px solid var(--line);
-	}
-
-	.explore header {
+	.cluster,
+	.who,
+	.legend > span {
 		display: flex;
 		align-items: center;
-		gap: var(--space-2);
-		padding-bottom: var(--space-1);
+		gap: 0.35rem;
 	}
-
-	.explore h2 {
-		margin-top: var(--space-3);
+	.legend {
+		margin-left: auto;
+		font-size: 0.75rem;
 	}
-
-	.explore .field span:first-child {
-		color: var(--dim);
+	.who i,
+	.mark {
+		display: inline-grid;
+		place-items: center;
+		width: 1.1rem;
+		height: 1.1rem;
+		border: 1px solid #555;
+		font-size: 0.65rem;
+		font-style: normal;
 	}
-
-	.explore .field span:last-child {
-		color: var(--ink);
-		text-align: right;
+	.this-model i {
+		background: #dcecff;
 	}
-
-	.explore .field .path {
-		font: var(--text-xs) / 1.6 var(--font-mono);
+	.the-enemy i {
+		background: #ffe0dc;
+	}
+	.scroll {
+		flex: 1;
+		overflow: auto;
+		padding: 1rem;
+		background: #fafafa;
+	}
+	.canvas {
+		position: relative;
+	}
+	svg {
+		position: absolute;
+		inset: 0;
+		pointer-events: none;
+	}
+	marker path {
+		fill: #555;
+	}
+	.frame {
+		fill: #f5f5f5;
+		stroke: #999;
+		stroke-dasharray: 4 3;
+	}
+	.edge,
+	.landing {
+		stroke: #555;
+		stroke-width: 1;
+	}
+	.edge.times {
+		stroke-dasharray: 4 3;
+	}
+	.card,
+	.frame-head {
+		position: absolute;
+		padding: 0.35rem;
+		border: 1px solid #777;
+		background: #fff;
+		cursor: grab;
 		overflow: hidden;
-		text-overflow: ellipsis;
 	}
-
-	.explore .readings {
+	.card header,
+	.frame-head {
 		display: flex;
-		flex-direction: column;
-		gap: var(--space-3);
+		align-items: center;
+		gap: 0.35rem;
 	}
-
-	.explore .btn {
-		align-self: flex-start;
-		margin-top: var(--space-2);
+	.card.this-model {
+		border-left: 3px solid #3677b8;
+	}
+	.card.the-enemy {
+		border-left: 3px solid #b84a3d;
+	}
+	.card.rule {
+		background: #f5f5f5;
+	}
+	.card.on,
+	.frame.on {
+		outline: 2px solid #111;
+	}
+	.caption,
+	.verdict {
+		position: absolute;
+		transform: translate(-50%, -50%);
+		padding: 0 0.2rem;
+		background: #fff;
+		font:
+			0.7rem ui-monospace,
+			monospace;
+	}
+	.fold {
+		margin-left: auto;
+	}
+	.explore {
+		padding: 0.75rem;
+		border-left: 1px solid #bbb;
+	}
+	.explore > * + * {
+		margin-top: 0.5rem;
 	}
 </style>

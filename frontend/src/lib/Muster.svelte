@@ -95,23 +95,3 @@
 		</div>
 	{/if}
 </div>
-
-<style>
-	.options {
-		margin: var(--space-2) 0;
-	}
-
-	.actions {
-		gap: var(--space-2);
-		margin-top: var(--space-2);
-	}
-
-	.tight {
-		gap: var(--space-2);
-	}
-
-	.warn {
-		font: var(--text-xs) / 1.7 var(--font-mono);
-		color: var(--ordinal-1);
-	}
-</style>

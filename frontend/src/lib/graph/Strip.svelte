@@ -50,63 +50,38 @@
 	.strip {
 		position: relative;
 	}
-
 	.bars,
 	.values {
 		display: flex;
-		align-items: flex-end;
+		align-items: end;
 		gap: 1px;
 	}
-
 	.bar {
-		flex: 1 1 0;
-		min-width: 0;
+		flex: 1;
 		height: 100%;
-		display: flex;
-		align-items: flex-end;
 		padding: 0;
+		border: 0;
 		background: none;
-		border: none;
-		cursor: default;
 	}
-
 	.bar i {
 		display: block;
 		width: 100%;
-		background: var(--series-1);
-		border-radius: 1px 1px 0 0;
+		background: #333;
 	}
-
-	.bar.lit i {
-		background: var(--accent-ink);
-	}
-
 	.values {
-		border-top: 1px solid var(--faint);
-		padding-top: 1px;
+		border-top: 1px solid #777;
+		font-size: 0.65rem;
 	}
-
 	.values span {
-		flex: 1 1 0;
-		min-width: 0;
-		overflow: hidden;
+		flex: 1;
 		text-align: center;
-		font: 9px var(--font-mono);
-		color: var(--dim);
 	}
-
 	.tip {
 		position: absolute;
-		bottom: calc(100% + 2px);
-		transform: translateX(-50%);
-		padding: 1px var(--space-2);
-		font: var(--text-xs) / 1.5 var(--font-mono);
-		color: var(--ink);
-		background: var(--panel);
-		border: 1px solid var(--faint);
-		border-radius: var(--radius-sm);
-		white-space: nowrap;
-		pointer-events: none;
-		z-index: 1;
+		bottom: 100%;
+		padding: 0.15rem;
+		border: 1px solid #777;
+		background: #fff;
+		font-size: 0.7rem;
 	}
 </style>

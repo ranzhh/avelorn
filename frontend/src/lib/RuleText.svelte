@@ -28,33 +28,3 @@
 	<h4>left out</h4>
 	<p class="meta">{rule.notes}</p>
 {/if}
-
-<style>
-	h4 {
-		margin: var(--space-3) 0 var(--space-1);
-		font: 600 var(--text-xs) / 1 var(--font-sans);
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: var(--dim);
-	}
-
-	.meta {
-		font-family: var(--font-mono);
-		font-size: var(--text-xs);
-	}
-
-	.text {
-		margin-top: var(--space-2);
-		font-size: var(--text-sm);
-	}
-
-	.reach {
-		margin-top: var(--space-3);
-		font: var(--text-xs) / 1.5 var(--font-mono);
-		color: var(--dim);
-	}
-
-	.dim {
-		color: var(--faint);
-	}
-</style>
