@@ -17,4 +17,4 @@ when:
 effects:
   - add:
       armour-piercing: 1
-  - grants: Armour Bane (1)
+  - grants: armour-bane-1

@@ -35,7 +35,7 @@ def test_show_prints_what_the_datasheet_offers() -> None:
 def test_show_marks_the_rules_the_engine_does_not_apply() -> None:
     """A printed rule with no entry is starred, and the star is explained once."""
     printed = "\n".join(commands.show_unit(REPO, "dwarf-warriors"))
-    assert "Close Order *" in printed
+    assert "close-order *" in printed
     assert "Shieldwall\n" in printed
     assert printed.count("* no entry") == 1
 
@@ -59,7 +59,7 @@ def test_rules_list_says_which_entries_reach_the_maths() -> None:
 def test_unmodelled_reports_a_name_with_no_entry_and_who_prints_it() -> None:
     """A rule the corpus prints without an entry is invisible in the registry."""
     printed = "\n".join(commands.list_unmodelled(REPO))
-    assert "\nClose Order\n" in printed
+    assert "\nclose-order\n" in printed
     assert "elven-spearmen" in printed
 
 
@@ -75,7 +75,7 @@ def test_unmodelled_resolves_a_printed_parameter_before_judging_it() -> None:
         for p in weapon.profiles
         for name in p.special_rules
     }
-    assert "Armour Bane (1)" in printed_by
+    assert "armour-bane-1" in printed_by
     assert "Armour Bane" not in "\n".join(commands.list_unmodelled(REPO))
 
 

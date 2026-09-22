@@ -3,4 +3,4 @@ id: bow-of-avelorn
 name: Bow of Avelorn
 weapon_type: bow
 profiles:
-  - { R: 30, S: S, AP: '-', special_rules: [Armour Bane (1), Magical Attacks, Volley Fire] }
+  - { R: 30, S: S, AP: '-', special_rules: [armour-bane-1, magical-attacks, volley-fire] }

@@ -2,4 +2,4 @@
 id: drakegun
 name: Drakegun
 profiles:
-  - { R: 18, S: 5, AP: -1, special_rules: [Armour Bane (2), Dwarf Crafted, Flaming Attacks, Quick Shot] }
+  - { R: 18, S: 5, AP: -1, special_rules: [armour-bane-2, dwarf-crafted, flaming-attacks, quick-shot] }

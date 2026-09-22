@@ -16,15 +16,15 @@ equipment:
   - Bow of Avelorn
   - Light Armour
 special_rules:
-  - Arrows of Isha
-  - Evasive
-  - Ignores Cover
-  - Immune to Psychology
-  - Ithilmar Armour
-  - Ithilmar Weapons
-  - Open Order
-  - Skirmishers
-  - Strike First
+  - arrows-of-isha
+  - evasive
+  - ignores-cover
+  - immune-to-psychology
+  - ithilmar-armour
+  - ithilmar-weapons
+  - open-order
+  - skirmishers
+  - strike-first
 options:
   - name: High Sister
     kind: champion
@@ -36,11 +36,11 @@ options:
     kind: special_rule
     points: 1
     per_model: true
-    adds_rules: [Ambushers]
+    adds_rules: [ambushers]
     limit: '0-1 unit in your army may:'
   - name: Stubborn
     kind: special_rule
     points: 1
     per_model: true
-    adds_rules: [Stubborn]
+    adds_rules: [stubborn]
     limit: '0-1 unit in your army may:'

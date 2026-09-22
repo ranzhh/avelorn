@@ -15,10 +15,10 @@ equipment:
   - Wicked Claws
   - Full Plate Armour
 special_rules:
-  - Blizzard Aura
-  - Close Order
-  - Fear
-  - Fly (9)
-  - Large Target
-  - Stomp Attacks (2)
-  - Swiftstride
+  - blizzard-aura
+  - close-order
+  - fear
+  - fly-9
+  - large-target
+  - stomp-attacks-2
+  - swiftstride

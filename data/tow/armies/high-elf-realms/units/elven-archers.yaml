@@ -15,10 +15,10 @@ equipment:
   - Hand Weapon
   - Longbow
 special_rules:
-  - Close Order
-  - Detachment
-  - Elven Reflexes
-  - Valour of Ages
+  - close-order
+  - detachment
+  - elven-reflexes
+  - valour-of-ages
 options:
   - name: Sentinel
     kind: champion
@@ -38,8 +38,8 @@ options:
     kind: special_rule
     points: 1
     per_model: true
-    adds_rules: [Veteran]
-    removes_rules: [Valour of Ages]
+    adds_rules: [veteran]
+    removes_rules: [valour-of-ages]
     limit: 0-1 unit per 1000 points
   - name: Magic standard
     kind: magic_standard

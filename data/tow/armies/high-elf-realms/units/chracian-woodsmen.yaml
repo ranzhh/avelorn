@@ -16,11 +16,11 @@ equipment:
   - Chracian Great Blade
   - Light Armour
 special_rules:
-  - Elven Reflexes
-  - Move Through Cover
-  - Skirmishers
-  - Valour of Ages
-  - Vanguard
+  - elven-reflexes
+  - move-through-cover
+  - skirmishers
+  - valour-of-ages
+  - vanguard
 options:
   - name: Warbow
     kind: equipment
@@ -46,17 +46,17 @@ options:
     kind: special_rule
     points: 1
     per_model: true
-    adds_rules: [Lion Cloak]
+    adds_rules: [lion-cloak]
   - name: Scouts
     kind: special_rule
     points: 0
-    adds_rules: [Scouts]
-    removes_rules: [Vanguard]
+    adds_rules: [scouts]
+    removes_rules: [vanguard]
     limit: 0-1 unit
   - name: Ambushers
     kind: special_rule
     points: 1
     per_model: true
-    adds_rules: [Ambushers]
-    removes_rules: [Vanguard]
+    adds_rules: [ambushers]
+    removes_rules: [vanguard]
     limit: 0-1 unit

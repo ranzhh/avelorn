@@ -17,11 +17,11 @@ equipment:
   - Warbow
   - Light Armour
 special_rules:
-  - Close Order
-  - Elven Reflexes
-  - Martial Prowess
-  - Naval Discipline
-  - Valour of Ages
+  - close-order
+  - elven-reflexes
+  - martial-prowess
+  - naval-discipline
+  - valour-of-ages
 options:
   - name: Shield
     kind: equipment
@@ -44,8 +44,8 @@ options:
     kind: special_rule
     points: 1
     per_model: true
-    adds_rules: [Veteran]
-    removes_rules: [Valour of Ages]
+    adds_rules: [veteran]
+    removes_rules: [valour-of-ages]
     limit: 0-1 unit per 1000 points
   - name: Magic standard
     kind: magic_standard

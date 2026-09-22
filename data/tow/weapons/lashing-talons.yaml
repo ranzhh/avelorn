@@ -2,4 +2,4 @@
 id: lashing-talons
 name: Lashing Talons
 profiles:
-  - { R: Combat, S: S, AP: -1, special_rules: [Armour Bane (1)] }
+  - { R: Combat, S: S, AP: -1, special_rules: [armour-bane-1] }

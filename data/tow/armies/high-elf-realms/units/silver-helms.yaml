@@ -17,12 +17,12 @@ equipment:
   - Lance
   - Heavy Armour
 special_rules:
-  - Close Order
-  - Elven Reflexes
-  - First Charge
-  - Ithilmar Barding
-  - Swiftstride
-  - Valour of Ages
+  - close-order
+  - elven-reflexes
+  - first-charge
+  - ithilmar-barding
+  - swiftstride
+  - valour-of-ages
 options:
   - name: Shield
     kind: equipment

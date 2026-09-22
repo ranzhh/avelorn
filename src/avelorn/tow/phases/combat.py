@@ -972,13 +972,17 @@ def _unit_rule_notes(side: Contingent, claimed: Collection[str] = ()) -> list[st
     # troop type confers (Press of Battle, ...) by the troop type.
     unit = side.unit
     troop_type = unit.troop_type_profile
-    owned = [(printed, unit.name) for printed in unit.special_rules]
+    resolved = {rule.id: rule.name for rule in side.loadout.rules}
+    owned = [(resolved.get(rule_id, rule_id), unit.name) for rule_id in unit.special_rules]
     if troop_type is not None:
-        owned += [(printed, troop_type.name) for printed in troop_type.special_rules]
+        owned += [
+            (resolved.get(rule_id, rule_id), troop_type.name)
+            for rule_id in troop_type.special_rules
+        ]
     unfactored = [
-        f"special rule not factored: {printed} ({owner})"
-        for printed, owner in owned
-        if printed not in claimed
+        f"special rule not factored: {name} ({owner})"
+        for name, owner in owned
+        if name not in claimed
     ]
     return unfactored + factored_notes(
         side.loadout.rules, claimed, unit.name, side.loadout.granted_rules
@@ -998,10 +1002,15 @@ def _weapon_rule_notes(engagement: _Engagement, claimed: Collection[str] = ()) -
     # The weapon rules this batch's walk could not factor, less what its own
     # seams claimed and what the ``claimed`` extra covers — in a full round,
     # the names the bearer's own defence consumed from the other walk's seat.
+    weapon_names = {
+        rule_id: rule.name for rule_id, rule in engagement.striker.loadout.weapon_rules.items()
+    }
     return [
-        f"weapon rule not factored: {rule} ({engagement.weapon_name})"
-        for rule in engagement.offence.weapon_unfactored
-        if rule not in engagement.weapon_claimed and rule not in claimed
+        "weapon rule not factored: "
+        f"{weapon_names.get(rule_id, rule_id)} ({engagement.weapon_name})"
+        for rule_id in engagement.offence.weapon_unfactored
+        if weapon_names.get(rule_id, rule_id) not in engagement.weapon_claimed
+        and weapon_names.get(rule_id, rule_id) not in claimed
     ]
 
 

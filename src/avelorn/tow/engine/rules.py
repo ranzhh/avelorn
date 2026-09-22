@@ -259,6 +259,8 @@ def printed_rule(printed: str, rules: Registry[Rule]) -> Rule | None:
     """
     if printed in rules:
         return rules[printed]
+    if entry := _slugged_parameter_rule(printed, rules):
+        return entry
     with suppress(UnknownNameError):
         return rules.by_name(printed)
     if match := _PARAMETERISED.match(printed):
@@ -269,6 +271,32 @@ def printed_rule(printed: str, rules: Registry[Rule]) -> Rule | None:
                 return None
             effects = [_with_parameter(effect, parameter) for effect in entry.effects]
             return entry.model_copy(update={"name": printed, "effects": effects})
+    return None
+
+
+def _slugged_parameter_rule(reference: str, rules: Registry[Rule]) -> Rule | None:
+    """Resolve a parameterised rule instance written as one scalar slug.
+
+    ``stomp-attacks-d3-plus-1`` identifies the ``stomp-attacks`` item and
+    encodes its printed ``D3+1`` parameter without putting display text in the
+    reference.
+
+    Returns:
+        The bound rule, or None when the reference is not a parameterised slug.
+    """
+    for rule_id in sorted(rules, key=len, reverse=True):
+        entry = rules[rule_id]
+        prefix = f"{rule_id}-"
+        if not entry.name.endswith(PARAMETER_SUFFIX) or not reference.startswith(prefix):
+            continue
+        encoded = reference.removeprefix(prefix)
+        printed = encoded.upper().replace("-PLUS-", "+")
+        if (parameter := _parameter(printed)) is None:
+            return None
+        effects = [_with_parameter(effect, parameter) for effect in entry.effects]
+        return entry.model_copy(
+            update={"name": entry.name.replace("X", printed), "effects": effects}
+        )
     return None
 
 

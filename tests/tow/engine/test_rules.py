@@ -92,6 +92,14 @@ def test_rule_slug_resolves_the_catalogued_entry() -> None:
     assert printed_rule("fight-in-extra-rank", REPO.rules) is REPO.rules["fight-in-extra-rank"]
 
 
+def test_rule_slug_encodes_a_parameter_without_display_text() -> None:
+    """A scalar reference binds a parameterised rule by its id and suffix."""
+    rule = printed_rule("stomp-attacks-d3-plus-1", REPO.rules)
+    assert rule is not None
+    assert rule.id == "stomp-attacks"
+    assert rule.name == "Stomp Attacks (D3+1)"
+
+
 def test_printed_rule_substitutes_the_parameter() -> None:
     """A bracketed number matches the (X) entry, returned as printed.
 
@@ -154,8 +162,8 @@ def test_compile_armour_bane_from_data_reproduces_the_golden() -> None:
     proven by a hand-written test double, now driven by the rule file.
     """
     index = _fielded(REPO.units["elven-archers"], 1).loadout.weapon_rules
-    compiled = compile_rules(["Armour Bane (1)"], index)
-    assert compiled.factored == ("Armour Bane (1)",)
+    compiled = compile_rules(["armour-bane-1"], index)
+    assert compiled.factored == ("armour-bane-1",)
     transforms = compiled.modifiers
     profile = AttackProfile.shooting(
         hit_target=3, wound_target=4, save_target=5, ward_target=RollState.IMPOSSIBLE

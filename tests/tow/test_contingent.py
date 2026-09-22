@@ -49,7 +49,7 @@ def test_field_a_complement_carries_size_and_loadout(spearmen_unit: Unit) -> Non
 
     assert contingent.models == 18
     # The chosen option's rule is what the engine reads, not the printed profile.
-    assert "Shieldwall" in contingent.unit.special_rules
+    assert "shieldwall" in contingent.unit.special_rules
     assert "Shieldwall" not in spearmen_unit.special_rules
 
 
@@ -167,8 +167,8 @@ def test_field_resolves_equipment_into_the_loadout(spearmen_unit: Unit) -> None:
             REPO.rules["parry"],
         ),
         unresolved_rules=(
-            "Close Order",
-            "Regimental Unit",
+            "close-order",
+            "regimental-unit",
         ),
         weapon_rules={"fight-in-extra-rank": REPO.rules["fight-in-extra-rank"]},
     )
@@ -289,7 +289,7 @@ def test_field_tolerates_rules_without_entries(spearmen_unit: Unit) -> None:
         "massed-infantry",  # also conferred by the troop type
         "parry",  # also conferred by the troop type
     ]
-    assert "Close Order" in contingent.loadout.unresolved_rules
+    assert "close-order" in contingent.loadout.unresolved_rules
 
 
 def test_field_substitutes_rule_parameters_as_printed(spearmen_unit: Unit) -> None:
@@ -334,8 +334,8 @@ def test_loadout_resolves_the_carried_weapons_rules(spearmen_unit: Unit) -> None
         data=REPO,
     )
     index = archers.loadout.weapon_rules
-    assert set(index) == {"Armour Bane (1)", "Volley Fire"}
-    assert index["Armour Bane (1)"].name == "Armour Bane (1)"
+    assert set(index) == {"armour-bane-1", "volley-fire"}
+    assert index["armour-bane-1"].name == "Armour Bane (1)"
 
 
 def test_thrusting_spear_resolves_fight_in_extra_rank(spearmen_unit: Unit) -> None:
@@ -459,15 +459,15 @@ def test_infantry_troop_types_confer_their_special_rules() -> None:
     any one datasheet.
     """
     assert REPO.troop_types["regular-infantry"].special_rules == (
-        "Press of Battle",
-        "Massed Infantry",
-        "Parry",
+        "press-of-battle",
+        "massed-infantry",
+        "parry",
     )
     assert REPO.troop_types["heavy-infantry"].special_rules == (
-        "Steady in the Ranks",
-        "Press of Battle",
-        "Massed Infantry",
-        "Parry",
+        "steady-in-the-ranks",
+        "press-of-battle",
+        "massed-infantry",
+        "parry",
     )
 
 

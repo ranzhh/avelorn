@@ -12,6 +12,7 @@ difference is the rule under test. Exact amounts stay in the spec; what is
 asserted here is that the real datasheet reaches them.
 """
 
+import re
 from fractions import Fraction
 
 from avelorn.tow.data import TOWRepository
@@ -47,17 +48,21 @@ UNMODELLED = {
 
 
 def _without(unit: Unit, rule: str) -> Unit:
-    # The same datasheet with one printed rule struck out, so a comparison
-    # isolates that rule and nothing else about the unit.
-    assert rule in unit.special_rules, f"{unit.name} does not print {rule}"
-    return unit.model_copy(update={"special_rules": [r for r in unit.special_rules if r != rule]})
+    # Tests name a rule for readability; the corpus carries its stable id.
+    rule_id = next((entry.id for entry in REPO.rules.values() if entry.name == rule), rule)
+    assert rule_id in unit.special_rules, f"{unit.name} does not reference {rule}"
+    return unit.model_copy(
+        update={"special_rules": [r for r in unit.special_rules if r != rule_id]}
+    )
 
 
 def test_each_datasheet_models_everything_but_the_named_rules() -> None:
     """Per unit, exactly the listed rules lack an entry. The rest reach the maths."""
     report = unmodelled_rules(REPO)
     for slug, expected in UNMODELLED.items():
-        assert {rule.name for rule in report if slug in rule.units} == expected, slug
+        assert {rule.name for rule in report if slug in rule.units} == {
+            re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") for name in expected
+        }, slug
 
 
 def test_blizzard_aura_makes_a_foe_of_the_frostheart_strike_last() -> None:

@@ -15,8 +15,8 @@ equipment:
   - Wicked Claws
   - Serrated Maw
 special_rules:
-  - Close Order
-  - Fear
-  - Fly (10)
-  - Stomp Attacks (1)
-  - Swiftstride
+  - close-order
+  - fear
+  - fly-10
+  - stomp-attacks-1
+  - swiftstride

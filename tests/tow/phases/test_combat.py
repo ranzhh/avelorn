@@ -173,7 +173,7 @@ def test_strike_unit_ithilmar_weapons_re_rolls_to_hit_ones() -> None:
     """
     sisters = REPO.units["sisters-of-avelorn"]
     without = sisters.model_copy(
-        update={"special_rules": [r for r in sisters.special_rules if r != "Ithilmar Weapons"]}
+        update={"special_rules": [r for r in sisters.special_rules if r != "ithilmar-weapons"]}
     )
     target = _fielded(REPO.units["elven-spearmen"], 10)
 
@@ -182,7 +182,7 @@ def test_strike_unit_ithilmar_weapons_re_rolls_to_hit_ones() -> None:
 
     assert with_reroll.p_unsaved > without_reroll.p_unsaved  # re-rolling 1s lands more blows
     assert with_reroll.hit_target == without_reroll.hit_target  # the target itself is unchanged
-    assert not any("Ithilmar Weapons" in note for note in with_reroll.notes)  # factored, claimed
+    assert not any("ithilmar-weapons" in note for note in with_reroll.notes)  # factored, claimed
 
 
 def test_strike_unit_notes_the_troop_types_conferred_rules() -> None:
@@ -1492,7 +1492,7 @@ def test_strike_unit_gromril_armour_re_rolls_the_dwarfs_own_save_natural_ones() 
     """
     spearmen, ironbreakers = REPO.units["elven-spearmen"], REPO.units["ironbreakers"]
     stripped = ironbreakers.model_copy(
-        update={"special_rules": [r for r in ironbreakers.special_rules if r != "Gromril Armour"]}
+        update={"special_rules": [r for r in ironbreakers.special_rules if r != "gromril-armour"]}
     )
     attacker = _fielded(spearmen, 5).wielding("Thrusting Spear")
 
@@ -1500,7 +1500,7 @@ def test_strike_unit_gromril_armour_re_rolls_the_dwarfs_own_save_natural_ones() 
     gromril = strike_unit(attacker, _fielded(ironbreakers, 10).wielding("Hand Weapon"))
     assert plain.p_unsaved == pytest.approx(5 / 108)
     assert gromril.p_unsaved == pytest.approx(5 / 162)
-    assert not any("Gromril Armour" in note for note in gromril.notes)
+    assert not any("gromril-armour" in note for note in gromril.notes)
 
 
 def test_strike_unit_gromril_armour_never_re_rolls_the_enemys_save() -> None:
@@ -1514,7 +1514,7 @@ def test_strike_unit_gromril_armour_never_re_rolls_the_enemys_save() -> None:
     """
     spearmen, ironbreakers = REPO.units["elven-spearmen"], REPO.units["ironbreakers"]
     stripped = ironbreakers.model_copy(
-        update={"special_rules": [r for r in ironbreakers.special_rules if r != "Gromril Armour"]}
+        update={"special_rules": [r for r in ironbreakers.special_rules if r != "gromril-armour"]}
     )
     target = _fielded(spearmen, 10).wielding("Thrusting Spear")
 
@@ -1562,7 +1562,7 @@ def test_strike_unit_notes_the_targets_rules_only_its_own_blows_could_use() -> N
     )
 
     both = fight(striking, struck)
-    assert not any("Ithilmar Weapons" in note for note in both.notes)
+    assert not any("ithilmar-weapons" in note for note in both.notes)
 
 
 def test_strike_unit_notes_the_strikers_save_re_roll_nothing_saves_against() -> None:
@@ -1580,7 +1580,7 @@ def test_strike_unit_notes_the_strikers_save_re_roll_nothing_saves_against() -> 
     assert any("not factored: Gromril Armour (Ironbreakers)" in note for note in one_sided.notes)
 
     both = fight(striking, struck)
-    assert not any("Gromril Armour" in note for note in both.notes)
+    assert not any("gromril-armour" in note for note in both.notes)
 
 
 def test_strike_unit_rolls_the_targets_rule_granted_ward_after_its_armour() -> None:
@@ -1595,7 +1595,7 @@ def test_strike_unit_rolls_the_targets_rule_granted_ward_after_its_armour() -> N
     stripped_unit = REPO.units["ironbreakers"].model_copy(
         update={
             "special_rules": [
-                r for r in REPO.units["ironbreakers"].special_rules if r != "Runes of Protection"
+                r for r in REPO.units["ironbreakers"].special_rules if r != "runes-of-protection"
             ]
         }
     )
@@ -1608,7 +1608,7 @@ def test_strike_unit_rolls_the_targets_rule_granted_ward_after_its_armour() -> N
     assert warded.ward_target == 6
     assert unwarded.ward_target is None
     assert warded.p_unsaved == pytest.approx(unwarded.p_unsaved * 5 / 6)
-    assert not any("Runes of Protection" in note for note in warded.notes)
+    assert not any("runes-of-protection" in note for note in warded.notes)
 
 
 def test_fight_claims_each_sides_ward_from_its_own_seat() -> None:
@@ -1618,7 +1618,7 @@ def test_fight_claims_each_sides_ward_from_its_own_seat() -> None:
 
     result = fight(spearmen, breakers, first_round=True)
 
-    assert not any("Runes of Protection" in note for note in result.notes)
+    assert not any("runes-of-protection" in note for note in result.notes)
 
 
 # --- cavalry: a ridden model fights as rider and mount, two batches ---
@@ -1931,7 +1931,7 @@ def test_a_killing_blow_still_rolls_the_targets_ward() -> None:
             "special_rules": [
                 r
                 for r in REPO.units["phoenix-guard"].special_rules
-                if r not in ("Witness to Destiny", "Blessings of Asuryan")
+                if r not in ("witness-to-destiny", "blessings-of-asuryan")
             ]
         }
     )

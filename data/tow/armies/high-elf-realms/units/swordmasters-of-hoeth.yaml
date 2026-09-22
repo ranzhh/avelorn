@@ -16,14 +16,14 @@ equipment:
   - Sword of Hoeth
   - Heavy Armour
 special_rules:
-  - Cleaving Blow
-  - Close Order
-  - Deflect Shots
-  - Elven Reflexes
-  - Ithilmar Armour
-  - Magic Resistance (-1)
-  - Valour of Ages
-  - Warriors of the White Tower
+  - cleaving-blow
+  - close-order
+  - deflect-shots
+  - elven-reflexes
+  - ithilmar-armour
+  - magic-resistance-minus-1
+  - valour-of-ages
+  - warriors-of-the-white-tower
 options:
   - name: Bladelord
     kind: champion
@@ -38,7 +38,7 @@ options:
     kind: special_rule
     points: 1
     per_model: true
-    adds_rules: [Drilled]
+    adds_rules: [drilled]
   - name: Magic standard
     kind: magic_standard
     points_budget: 50

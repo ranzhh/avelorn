@@ -16,15 +16,15 @@ equipment:
   - Longbow
   - Light Armour
 special_rules:
-  - Elven Reflexes
-  - Evasive
-  - Fire & Flee
-  - Ithilmar Weapons
-  - Move Through Cover
-  - Scouts
-  - Skirmishers
-  - Veteran
-  - Warriors of Nagarythe
+  - elven-reflexes
+  - evasive
+  - fire-flee
+  - ithilmar-weapons
+  - move-through-cover
+  - scouts
+  - skirmishers
+  - veteran
+  - warriors-of-nagarythe
 options:
   - name: Shadow-walker
     kind: champion
@@ -36,17 +36,17 @@ options:
     kind: special_rule
     points: 1
     per_model: true
-    adds_rules: [Ambushers]
+    adds_rules: [ambushers]
     limit: '0-1 unit in your army may:'
   - name: Chariot Runners
     kind: special_rule
     points: 1
     per_model: true
-    adds_rules: [Chariot Runners]
+    adds_rules: [chariot-runners]
     limit: '0-1 unit in your army may:'
   - name: Feigned Flight
     kind: special_rule
     points: 1
     per_model: true
-    adds_rules: [Feigned Flight]
+    adds_rules: [feigned-flight]
     limit: '0-1 unit in your army may:'
