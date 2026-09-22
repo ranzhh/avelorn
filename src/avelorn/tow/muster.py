@@ -26,12 +26,16 @@ def _fold(
     Returns:
         A new list: ``base`` minus removed names plus added ones, appended
         in option order.
+
+    Raises:
+        ValueError: An option removes a name not in the effective list.
     """
     result = list(base)
     for option in options:
         for name in getattr(option, removes_attr):
-            if name in result:
-                result.remove(name)
+            if name not in result:
+                raise ValueError(f"{option.name} removes absent {name}")
+            result.remove(name)
         for name in getattr(option, adds_attr):
             if name not in result:
                 result.append(name)

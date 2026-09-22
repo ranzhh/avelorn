@@ -49,7 +49,7 @@ options:
     kind: special_rule
     points: 0
     adds_rules: [Skirmish Formation]
-    removes_rules: [Open Order Formation]
+    removes_rules: [Open Order]
     limit: 0-1 unit per 1000 points
   - name: Veteran
     kind: special_rule
