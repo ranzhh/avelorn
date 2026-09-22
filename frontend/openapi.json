@@ -6,6 +6,27 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/graph/volley": {
+      "get": {
+        "summary": "Evaluate the example volley graph",
+        "description": "Return the evaluated graph used by the graph frontend.",
+        "operationId": "graph_volley_graph_volley_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Graph Volley Graph Volley Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/units": {
       "get": {
         "summary": "List every datasheet in the corpus",

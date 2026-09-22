@@ -1,0 +1,9 @@
+20 Elven Spearmen under fire -- expected casualties:
+  Elven Archers alone:       1.93
+  Sisters of Avelorn alone:  2.96
+  both, composed:            4.89
+  P(at least one falls):     0.997
+  P(five or more fall):      0.571
+
+  an Archer's shot wounds:   13/54 exactly
+  the toll sums to:          1 exactly
