@@ -62,9 +62,7 @@ def volley_program() -> dict[str, object]:
     target_models = Measurement[int](
         name="target-models", side=Side.THE_ENEMY, kernel=lambda: certain(20)
     )
-    distance = Measurement[int](
-        name="distance", side=Side.THIS_MODEL, kernel=lambda: certain(12)
-    )
+    distance = Measurement[int](name="distance", side=Side.THIS_MODEL, kernel=lambda: certain(12))
     weapon_range = Measurement[int](
         name="weapon-range", side=Side.THIS_MODEL, kernel=lambda: certain(24)
     )
@@ -112,9 +110,7 @@ def volley_program() -> dict[str, object]:
     target_models.show(target_models.output("target", Monoid(0)))
     distance.show(distance.output("distance", Monoid(0)))
     weapon_range.show(weapon_range.output("range", Monoid(0)))
-    range_band.show(
-        Projection("range", lambda world: world.of(range_band), Monoid("unknown"))
-    )
+    range_band.show(Projection("range", lambda world: world.of(range_band), Monoid("unknown")))
     shots.show(shots.output("shots", Monoid(0)))
     hit.show(
         Projection(
