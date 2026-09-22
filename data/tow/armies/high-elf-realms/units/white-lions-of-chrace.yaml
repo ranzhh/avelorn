@@ -16,15 +16,15 @@ equipment:
   - Chracian Great Blade
   - Heavy Armour
 special_rules:
-  - Chracian Warriors
-  - Elven Reflexes
-  - Furious Charge
-  - King's Guard
-  - Lion Cloak
-  - Move Through Cover
-  - Open Order
-  - Stubborn
-  - Valour of Ages
+  - chracian-warriors
+  - elven-reflexes
+  - furious-charge
+  - king-s-guard
+  - lion-cloak
+  - move-through-cover
+  - open-order
+  - stubborn
+  - valour-of-ages
 options:
   - name: Guardian
     kind: champion
@@ -39,8 +39,8 @@ options:
     kind: special_rule
     points: 1
     per_model: true
-    adds_rules: [Veteran]
-    removes_rules: [Valour of Ages]
+    adds_rules: [veteran]
+    removes_rules: [valour-of-ages]
   - name: Magic standard
     kind: magic_standard
     points_budget: 50

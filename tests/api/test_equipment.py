@@ -58,9 +58,9 @@ def test_two_profiles_keep_the_rules_each_one_prints(client: TestClient) -> None
         profile["name"]: {rule["name"] for rule in profile["special_rules"]}
         for profile in body["profiles"]
     }
-    assert "Quick Shot" in by_profile["Ranged"]
-    assert "Quick Shot" not in by_profile["Combat"]
-    assert "Extra Attacks (+1)" in by_profile["Combat"]
+    assert "quick-shot" in by_profile["Ranged"]
+    assert "quick-shot" not in by_profile["Combat"]
+    assert "extra-attacks-plus-1" in by_profile["Combat"]
 
 
 def test_armour_is_served_whole(client: TestClient) -> None:

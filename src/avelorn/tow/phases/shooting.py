@@ -428,10 +428,11 @@ def shoot_unit(
     claimed = {*offence.factored, *offence.rerolls.factored}
 
     notes: list[str] = []
+    attacker_names = {rule.id: rule.name for rule in attacker.loadout.rules}
     notes.extend(
-        f"special rule not factored: {rule} ({shooter.name})"
-        for rule in shooter.special_rules
-        if rule not in claimed
+        f"special rule not factored: {attacker_names.get(rule_id, rule_id)} ({shooter.name})"
+        for rule_id in shooter.special_rules
+        if attacker_names.get(rule_id, rule_id) not in claimed
     )
     notes.extend(
         factored_notes(
@@ -444,10 +445,11 @@ def shoot_unit(
         *defence.rerolls.factored,
         *defence.factored,
     }
+    defender_names = {rule.id: rule.name for rule in defender.loadout.rules}
     notes.extend(
-        f"special rule not factored: {rule} ({target.name})"
-        for rule in target.special_rules
-        if rule not in defender_claimed
+        f"special rule not factored: {defender_names.get(rule_id, rule_id)} ({target.name})"
+        for rule_id in target.special_rules
+        if defender_names.get(rule_id, rule_id) not in defender_claimed
     )
     notes.extend(
         factored_notes(
@@ -459,11 +461,17 @@ def shoot_unit(
     # than in the walk: both are claimed out of the weapon-rule notes. The
     # profile in use is only ever compiled from its shooter's seat, so an
     # inapplicable weapon rule is reported here — no second compile covers it.
-    weapon_claimed = {*offence.weapon_rerolls.factored, *volley.factored, *multiplier.factored}
+    weapon_claimed = {
+        *offence.weapon_rerolls.factored,
+        *offence.marks.weapon_factored,
+        *volley.factored,
+        *multiplier.factored,
+    }
+    weapon_names = {rule_id: rule.name for rule_id, rule in attacker.loadout.weapon_rules.items()}
     notes.extend(
-        f"weapon rule not factored: {rule} ({chosen.name})"
-        for rule in offence.weapon_unfactored
-        if rule not in weapon_claimed
+        f"weapon rule not factored: {weapon_names.get(rule_id, rule_id)} ({chosen.name})"
+        for rule_id in offence.weapon_unfactored
+        if weapon_names.get(rule_id, rule_id) not in weapon_claimed
     )
     phase_compiled = compile_rules(sorted(phase_rules), phase_rules, conditions)
     modifiers.extend(phase_compiled.modifiers)

@@ -14,9 +14,9 @@ profiles:
 equipment:
   - Hand Weapon
 special_rules:
-  - Cleaving Blow
-  - Fear
-  - Move Through Cover
-  - Open Order
-  - Swiftstride
-  - Vanguard
+  - cleaving-blow
+  - fear
+  - move-through-cover
+  - open-order
+  - swiftstride
+  - vanguard

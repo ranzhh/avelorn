@@ -9,4 +9,4 @@
 id: daiths-reaper
 name: Daith's Reaper
 profiles:
-  - { R: Combat, S: S+1, AP: -1, special_rules: [Magical Attacks, Daith's Reaper] }
+  - { R: Combat, S: S+1, AP: -1, special_rules: [magical-attacks, daiths-reaper] }

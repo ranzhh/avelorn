@@ -310,7 +310,7 @@ def test_shieldwall_gives_ground_where_it_would_fall_back_on_the_turn_it_was_cha
     no_wall_unit = REPO.units["ironbreakers"].model_copy(
         update={
             "special_rules": [
-                r for r in REPO.units["ironbreakers"].special_rules if r != "Shieldwall"
+                r for r in REPO.units["ironbreakers"].special_rules if r != "shieldwall"
             ]
         }
     )

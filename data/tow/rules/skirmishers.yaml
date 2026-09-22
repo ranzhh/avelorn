@@ -10,6 +10,6 @@ paragraphs:
 # skirmishing. The -1 To Hit is the formation's own rule, conferred by a grant
 # so its effects stay authored on that entry.
 effects:
-  - grants: Enemy Fire (Skirmishers)
+  - grants: enemy-fire-skirmishers
 notes: the Skirmish formation is not modelled; a unit with this rule is taken
   to be skirmishing at all times.

@@ -1,5 +1,6 @@
 """avelorn.tow.data: the TOWRepository registries and their two keys."""
 
+import re
 import shutil
 from pathlib import Path
 
@@ -117,7 +118,7 @@ def test_printed_references_are_spelled_as_their_entries() -> None:
     from avelorn.tow.schema.rule import GrantEffect
 
     equipment = {item.name for item in (*REPO.weapons.values(), *REPO.armoury.values())}
-    rules = {rule.name for rule in REPO.rules.values()}
+    rules = set(REPO.rules)
 
     references: list[tuple[str, str, set[str]]] = []
     for unit in REPO.units.values():
@@ -141,6 +142,12 @@ def test_printed_references_are_spelled_as_their_entries() -> None:
         for effect in rule.effects:
             if isinstance(effect, GrantEffect):
                 references.append((rule.id, effect.grants, rules))
+
+    assert all(
+        re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", name)
+        for _, name, names in references
+        if names is rules
+    )
 
     offences = [
         f"{owner}: {name!r} should be spelled {found!r}"

@@ -65,7 +65,7 @@ def test_show_covers_every_field_the_detail_endpoint_serves() -> None:
         "base_size": "25 x 25 mm" in printed,
         "profiles": all(profile.name in printed for profile in unit.profiles),
         "equipment": all(item in printed for item in unit.equipment),
-        "special_rules": all(rule in printed for rule in unit.special_rules),
+        "special_rules": all(rule["name"] in printed for rule in served["special_rules"]),
         "options": all(option.name in printed for option in unit.options),
     }
     assert set(shown) == set(Unit.model_fields)

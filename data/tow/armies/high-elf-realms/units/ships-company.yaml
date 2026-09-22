@@ -16,12 +16,12 @@ equipment:
   - Hand Weapon
   - Warbow
 special_rules:
-  - Detachment
-  - Elven Reflexes
-  - Evasive
-  - Fire & Flee
-  - Open Order
-  - Valour of Ages
+  - detachment
+  - elven-reflexes
+  - evasive
+  - fire-flee
+  - open-order
+  - valour-of-ages
 options:
   - name: Thrusting Spear and Shield
     kind: equipment
@@ -48,13 +48,13 @@ options:
   - name: Skirmish Formation
     kind: special_rule
     points: 0
-    adds_rules: [Skirmish Formation]
-    removes_rules: [Open Order]
+    adds_rules: [skirmish-formation]
+    removes_rules: [open-order]
     limit: 0-1 unit per 1000 points
   - name: Veteran
     kind: special_rule
     points: 1
     per_model: true
-    adds_rules: [Veteran]
-    removes_rules: [Valour of Ages]
+    adds_rules: [veteran]
+    removes_rules: [valour-of-ages]
     limit: 0-1 unit per 1000 points

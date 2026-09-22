@@ -425,7 +425,7 @@ def test_shoot_unit_skirmishers_impose_minus_one_to_hit_on_the_shooter() -> None
     """
     archers, shadows = REPO.units["elven-archers"], REPO.units["shadow-warriors"]
     formed = shadows.model_copy(
-        update={"special_rules": [r for r in shadows.special_rules if r != "Skirmishers"]}
+        update={"special_rules": [r for r in shadows.special_rules if r != "skirmishers"]}
     )
     shooter = _fielded(archers, 5).wielding("Longbow")
 
@@ -473,7 +473,7 @@ def test_shoot_unit_gromril_armour_re_rolls_the_targets_save_against_arrows() ->
     """
     archers, ironbreakers = REPO.units["elven-archers"], REPO.units["ironbreakers"]
     stripped = ironbreakers.model_copy(
-        update={"special_rules": [r for r in ironbreakers.special_rules if r != "Gromril Armour"]}
+        update={"special_rules": [r for r in ironbreakers.special_rules if r != "gromril-armour"]}
     )
     shooter = _fielded(archers, 5).wielding("Longbow")
 
@@ -481,7 +481,7 @@ def test_shoot_unit_gromril_armour_re_rolls_the_targets_save_against_arrows() ->
     gromril = shoot_unit(shooter, _fielded(ironbreakers, 10))
     assert plain.p_unsaved == pytest.approx(25 / 324)
     assert gromril.p_unsaved == pytest.approx(115 / 1944)
-    assert not any("Gromril Armour" in note for note in gromril.notes)
+    assert not any("gromril-armour" in note for note in gromril.notes)
 
 
 def test_shoot_unit_notes_the_defenders_rules_no_volley_could_use() -> None:
@@ -570,7 +570,7 @@ def test_shoot_unit_grants_the_defenders_ward_against_a_mundane_volley() -> None
     stripped_unit = REPO.units["ironbreakers"].model_copy(
         update={
             "special_rules": [
-                r for r in REPO.units["ironbreakers"].special_rules if r != "Runes of Protection"
+                r for r in REPO.units["ironbreakers"].special_rules if r != "runes-of-protection"
             ]
         }
     )
@@ -582,7 +582,7 @@ def test_shoot_unit_grants_the_defenders_ward_against_a_mundane_volley() -> None
     assert warded.ward_target == 6
     assert unwarded.ward_target is None
     assert warded.p_unsaved == pytest.approx(unwarded.p_unsaved * 5 / 6)
-    assert not any("Runes of Protection" in note for note in warded.notes)
+    assert not any("runes-of-protection" in note for note in warded.notes)
 
 
 def test_shoot_unit_denies_the_ward_to_a_magical_volley() -> None:
@@ -597,7 +597,7 @@ def test_shoot_unit_denies_the_ward_to_a_magical_volley() -> None:
     result = shoot_unit(_fielded(sisters, 5).wielding("Bow of Avelorn"), breakers)
 
     assert result.ward_target is None
-    assert not any("Runes of Protection" in note for note in result.notes)
+    assert not any("runes-of-protection" in note for note in result.notes)
     # The bow's mark is in the facts, so it is claimed, never "not factored".
     assert not any("not factored: Magical Attacks" in note for note in result.notes)
 

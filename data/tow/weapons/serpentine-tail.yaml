@@ -2,5 +2,5 @@
 id: serpentine-tail
 name: Serpentine Tail
 profiles:
-  - { R: Combat, S: S+2, AP: -2, special_rules: [Strike Last] }
+  - { R: Combat, S: S+2, AP: -2, special_rules: [strike-last] }
 notes: In combat, this model must make one of its attacks each turn with this weapon.

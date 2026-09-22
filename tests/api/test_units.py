@@ -77,9 +77,9 @@ def test_a_rule_the_corpus_does_not_model_resolves_to_nothing(client: TestClient
     """An unmodelled name is served as printed, with no entry to link to."""
     body = client.get("/units/dwarf-warriors").json()
     resolved = {r["name"]: r["slug"] for r in body["special_rules"]}
-    assert resolved["Close Order"] is None
+    assert resolved["close-order"] is None
     reported = {r["name"] for r in client.get("/rules/unmodelled").json()}
-    assert "Close Order" in reported
+    assert "close-order" in reported
 
 
 def test_a_parameterised_rule_resolves_to_the_template_it_is_filed_under(
@@ -115,7 +115,7 @@ def test_rules_are_listed_through_the_shared_summary(client: TestClient) -> None
 def test_an_unmodelled_report_names_the_rules_and_who_prints_them(client: TestClient) -> None:
     """The report is the per-action "not factored" notes, totalled."""
     body = client.get("/rules/unmodelled").json()
-    close_order = next(r for r in body if r["name"] == "Close Order")
+    close_order = next(r for r in body if r["name"] == "close-order")
     assert "elven-spearmen" in close_order["units"]
     assert set(close_order) == {"name", "units", "weapons"}
 

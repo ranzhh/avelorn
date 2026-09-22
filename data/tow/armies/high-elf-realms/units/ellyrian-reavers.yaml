@@ -17,11 +17,11 @@ equipment:
   - Cavalry Spear
   - Light Armour
 special_rules:
-  - Elven Reflexes
-  - Fast Cavalry
-  - Open Order
-  - Swiftstride
-  - Valour of Ages
+  - elven-reflexes
+  - fast-cavalry
+  - open-order
+  - swiftstride
+  - valour-of-ages
 options:
   - name: Shortbow
     kind: equipment
@@ -50,13 +50,13 @@ options:
     kind: special_rule
     points: 2
     per_model: true
-    adds_rules: [Scouts]
+    adds_rules: [scouts]
     limit: 0-1 unit per 1000 points
   - name: Skirmish Formation
     kind: special_rule
     points: 1
     per_model: true
-    adds_rules: [Skirmish Formation]
+    adds_rules: [skirmish-formation]
     limit: 0-1 unit per 1000 points
   - name: Magic standard
     kind: magic_standard

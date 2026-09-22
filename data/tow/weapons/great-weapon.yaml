@@ -2,4 +2,4 @@
 id: great-weapon
 name: Great Weapon
 profiles:
-  - { R: Combat, S: S+2, AP: -2, special_rules: [Armour Bane (1), Requires Two Hands, Strike Last] }
+  - { R: Combat, S: S+2, AP: -2, special_rules: [armour-bane-1, requires-two-hands, strike-last] }

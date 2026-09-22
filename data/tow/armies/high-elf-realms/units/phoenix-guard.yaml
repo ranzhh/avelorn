@@ -16,13 +16,13 @@ equipment:
   - Ceremonial Halberd
   - Full Plate Armour
 special_rules:
-  - Blessings of Asuryan
-  - Close Order
-  - Elven Reflexes
-  - Fear
-  - Martial Prowess
-  - Veteran
-  - Witness to Destiny
+  - blessings-of-asuryan
+  - close-order
+  - elven-reflexes
+  - fear
+  - martial-prowess
+  - veteran
+  - witness-to-destiny
 options:
   - name: Keeper of the Flame
     kind: champion
@@ -37,7 +37,7 @@ options:
     kind: special_rule
     points: 1
     per_model: true
-    adds_rules: [Drilled]
+    adds_rules: [drilled]
   - name: Magic standard
     kind: magic_standard
     points_budget: 100

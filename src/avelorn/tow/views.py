@@ -122,8 +122,7 @@ class Reference(BaseModel):
         entry = printed_rule(printed, rules)
         if entry is None:
             return cls(name=printed, kind=None, slug=None)
-        name = entry.name if printed == entry.id else printed
-        return cls(name=name, kind=Kind.RULE, slug=entry.id)
+        return cls(name=entry.name, kind=Kind.RULE, slug=entry.id)
 
     @classmethod
     def equipment(
@@ -706,14 +705,19 @@ def _references(data: TOWRepository) -> tuple[dict[str, set[str]], dict[str, set
     """
     units: dict[str, set[str]] = defaultdict(set)
     weapons: dict[str, set[str]] = defaultdict(set)
+
+    def name_of(rule_id: str) -> str:
+        entry = printed_rule(rule_id, data.rules)
+        return entry.name if entry is not None else rule_id
+
     for slug, unit in data.units.items():
         conferred = (
             () if unit.troop_type_profile is None else unit.troop_type_profile.special_rules
         )
-        for name in (*unit.special_rules, *conferred):
-            units[name].add(slug)
+        for rule_id in (*unit.special_rules, *conferred):
+            units[name_of(rule_id)].add(slug)
     for slug, weapon in data.weapons.items():
         for profile in weapon.profiles:
-            for name in profile.special_rules:
-                weapons[name].add(slug)
+            for rule_id in profile.special_rules:
+                weapons[name_of(rule_id)].add(slug)
     return units, weapons

@@ -15,11 +15,11 @@ equipment:
   - Hand Weapon
   - Heavy Armour
 special_rules:
-  - Close Order
-  - Hatred (Orcs & Goblins)
-  - Magic Resistance (-1)
-  - Resolute
-  - Shieldwall
+  - close-order
+  - hatred-orcs-goblins
+  - magic-resistance-minus-1
+  - resolute
+  - shieldwall
 options:
   - name: Great Weapon
     kind: equipment
@@ -44,11 +44,11 @@ options:
     kind: special_rule
     points: 1
     per_model: true
-    adds_rules: [Drilled]
+    adds_rules: [drilled]
     limit: 0-1 unit per 1000 points
   - name: Veteran
     kind: special_rule
     points: 1
     per_model: true
-    adds_rules: [Veteran]
+    adds_rules: [veteran]
     limit: 0-1 unit per 1000 points
