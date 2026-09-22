@@ -239,9 +239,11 @@ def _as_context(context: GateContext | None) -> GateContext:
 
 
 def printed_rule(printed: str, rules: Registry[Rule]) -> Rule | None:
-    """Resolve a printed rule name to the rule exactly as printed.
+    """Resolve a rule reference to its catalogued item.
 
-    An exact name match returns the entry itself. Otherwise a bracketed
+    A corpus reference may already be the entry's stable slug; that resolves
+    before legacy printed-name handling. An exact name match returns the entry
+    itself. Otherwise a bracketed
     numeric parameter matches the rule filed under the "(X)" placeholder
     and returns a copy carrying the printed name, the parameter
     substituted into its effects ("the amount shown in brackets after
@@ -255,6 +257,8 @@ def printed_rule(printed: str, rules: Registry[Rule]) -> Rule | None:
     Returns:
         The rule as printed, or None if nothing matches.
     """
+    if printed in rules:
+        return rules[printed]
     with suppress(UnknownNameError):
         return rules.by_name(printed)
     if match := _PARAMETERISED.match(printed):

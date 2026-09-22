@@ -231,6 +231,26 @@ def test_strike_unit_fights_two_full_ranks_plus_a_supporting_rank() -> None:
     assert four_ranks.attacks == 15  # the fourth rank neither fights nor supports
 
 
+def test_slugged_fight_in_extra_rank_lapses_for_three_ranks_on_the_charge() -> None:
+    """Fifteen spearmen prove the slug reaches both the loadout and combat paths.
+
+    The carried Thrusting Spear names the rule only by its corpus slug. While
+    stationary, Press of Battle supplies two fighting ranks and the resolved
+    Fight In Extra Rank supplies one supporting rank: 5 + 5 + 5 attacks. On
+    the charge both rules are gated off, although the body remains three ranks
+    deep, so only the front five models fight.
+    """
+    spearmen = REPO.units["elven-spearmen"]
+    standing = _fielded(spearmen, 15).wielding("Thrusting Spear")
+    charging = standing.charging(Charge(3, ChargeArc.FRONT))
+
+    assert (
+        standing.loadout.weapon_rules["fight-in-extra-rank"] is REPO.rules["fight-in-extra-rank"]
+    )
+    assert strike_unit(standing, _fielded(spearmen, 40)).attacks == 15
+    assert strike_unit(charging, _fielded(spearmen, 40)).attacks == 5
+
+
 def test_strike_unit_supporting_models_strike_at_one_attack_each() -> None:
     """A supporting-rank model makes one attack, whatever its Attacks value.
 

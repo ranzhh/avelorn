@@ -87,6 +87,11 @@ def test_printed_rule_exact_name_is_the_entry_itself() -> None:
     assert printed_rule("Stubborn", REPO.rules) is REPO.rules["stubborn"]
 
 
+def test_rule_slug_resolves_the_catalogued_entry() -> None:
+    """A corpus slug addresses its rule item without carrying display text."""
+    assert printed_rule("fight-in-extra-rank", REPO.rules) is REPO.rules["fight-in-extra-rank"]
+
+
 def test_printed_rule_substitutes_the_parameter() -> None:
     """A bracketed number matches the (X) entry, returned as printed.
 
