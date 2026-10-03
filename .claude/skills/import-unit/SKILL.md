@@ -33,8 +33,9 @@ Run everything with `uv run` from your own root, never another checkout's.
 Run `uv run avelorn coverage` first and read it. It is every gap between the
 corpus and the engine -- printed rules with no entry, parameters that do not
 bind, profile rows nothing reads, printed notes, options that change nothing --
-each with the ledger's reason it stays open. That is what the engine models and
-what it does not; a rule the unit shares with another is usually already there.
+each with the ledger's reason it stays open. That is what the engine leaves
+out; a rule the unit prints that is not listed there, and has an entry under
+`data/tow/rules/`, already reaches the maths.
 
 Then read what the unit needs before importing, so a blocker is found in one
 pass rather than four:
@@ -119,8 +120,8 @@ and only looks authored, and `test_every_rule_entry_carries_effects` refuses it.
 must be true and short -- say which mechanic is missing (psychology, terrain,
 deployment, challenges, magic, ...) or which shape the vocabulary lacks, having
 read the printed text. Reuse the wording of an entry blocked the same way. A
-note may be "descriptive; nothing to model" only when it is. Coverage's own
-reasons are the reference for what is modelled; there is no other list.
+note may be "descriptive; nothing to model" only when it is. The ledger's
+reasons are the reference for what the engine leaves out; there is no other list.
 
 ## Prove it works
 
