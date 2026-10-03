@@ -486,7 +486,7 @@ def test_a_repeat_exit_drops_what_only_its_inside_read() -> None:
     assert len(lane.joint.mass) == 1
 
 
-def test_a_group_cannot_write_state() -> None:
+def test_a_repeat_cannot_write_state() -> None:
     models = State[int]("models")
     shots = Measurement[int](name="shots", side=Side.THIS_MODEL, kernel=_three)
     hit = Measurement[int](name="hit", side=Side.THIS_MODEL, kernel=_coin)
@@ -498,7 +498,7 @@ def test_a_group_cannot_write_state() -> None:
         writes=models,
     )
 
-    with pytest.raises(GraphError, match="remove-casualties writes models inside a group"):
+    with pytest.raises(GraphError, match="remove-casualties writes models inside a repeat"):
         Program.build(
             "volley", _SIDES, (shots, Repeat(name="attack", times=shots, items=(hit, remove)))
         )

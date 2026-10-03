@@ -193,7 +193,7 @@ class Step[Out: Hashable](ABC):
         program.steps.append(self)
         program.readings[self] = self.shown()
 
-    # Returns what must be held before the step runs.
+    # Records what is read after the step; returns what must be held before it.
     def liveness(
         self, after: frozenset[Key], live: dict["Item", frozenset[Key]]
     ) -> frozenset[Key]:
@@ -293,7 +293,7 @@ type Item = Step[Any] | Block
 @dataclass(frozen=True, eq=False, kw_only=True)
 class Block(ABC):
     kind: ClassVar[str]
-    # A scoped block's locals die at its exit; its state writes survive it.
+    # A scoped block's locals die at its exit.
     scoped: ClassVar[bool] = True
     name: str
     items: tuple[Item, ...]
@@ -347,7 +347,7 @@ class Sequence(Group):
 
 @dataclass(frozen=True, eq=False, kw_only=True)
 class Repeat(Group):
-    """Runs its items for one attack; the outer worlds resume unchanged at its exit."""
+    """Runs its items for one attack; the outer worlds resume at its exit, cut to what is live."""
 
     kind = "repeat"
     times: Step[int]
@@ -359,7 +359,7 @@ class Repeat(Group):
         for step in program.steps[first:]:
             if step.writes is not None:
                 raise GraphError(
-                    f"{program.paths[step]} writes {step.writes.name} inside a group, "
+                    f"{program.paths[step]} writes {step.writes.name} inside a repeat, "
                     "which cannot carry state out"
                 )
 
@@ -456,7 +456,7 @@ class Program:
     rules: list[RuleNode] = field(default_factory=list)
     states: list[State[Any]] = field(default_factory=list)
     readings: dict[Step[Any], tuple[Reading, ...]] = field(default_factory=dict)
-    # What each step's edge, and each group's exit, keeps of a world.
+    # What each step and each repeat hands on: the values read after it.
     live: dict[Item, frozenset[Key]] = field(default_factory=dict)
     entry: frozenset[Key] = frozenset()
 
