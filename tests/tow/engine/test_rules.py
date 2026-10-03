@@ -164,11 +164,7 @@ def test_compile_armour_bane_from_data_reproduces_the_golden() -> None:
 
 
 def test_compile_effectless_rule_stays_unfactored() -> None:
-    """A resolved rule with no effects is recognised but not factored.
-
-    Built here rather than taken from data/, where no such entry is allowed to
-    exist: a rule the engine cannot apply is filed by not filing it at all.
-    """
+    """A resolved rule with no effects is recognised but not factored, as a missing one is."""
     effectless = Rule(id="effectless", name="Effectless", paragraphs=["Says nothing."])
     compiled = compile_rules(["Effectless"], {effectless.name: effectless})
     assert compiled.modifiers == ()

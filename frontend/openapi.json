@@ -2164,7 +2164,7 @@
           "references"
         ],
         "title": "RuleSummary",
-        "description": "A rule entry as a listing shows it: what it is, and whether it reaches the maths.\n\n``factors`` says whether the entry carries effects; every filed entry does\n(``test_every_rule_entry_carries_effects``). ``references`` counts the\nplaces printing it -- units, options, troop types, weapons, and other\nrules' grants, in any spelling that resolves to it -- so a listing sorts by\nwhat would matter most to model next."
+        "description": "A rule entry as a listing shows it: what it is, and whether it reaches the maths.\n\n``factors`` says whether the entry carries effects; a text-only entry does\nnot. ``references`` counts the places printing it -- units, options, troop\ntypes, weapons, and other rules' grants, in any spelling that resolves to\nit -- so a listing sorts by what would matter most to model next."
       },
       "ShootingGate": {
         "properties": {

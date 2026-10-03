@@ -597,11 +597,10 @@ class VolleyReport(BaseModel):
 class RuleSummary(BaseModel):
     """A rule entry as a listing shows it: what it is, and whether it reaches the maths.
 
-    ``factors`` says whether the entry carries effects; every filed entry does
-    (``test_every_rule_entry_carries_effects``). ``references`` counts the
-    places printing it -- units, options, troop types, weapons, and other
-    rules' grants, in any spelling that resolves to it -- so a listing sorts by
-    what would matter most to model next.
+    ``factors`` says whether the entry carries effects; a text-only entry does
+    not. ``references`` counts the places printing it -- units, options, troop
+    types, weapons, and other rules' grants, in any spelling that resolves to
+    it -- so a listing sorts by what would matter most to model next.
     """
 
     model_config = ConfigDict(extra="forbid")
