@@ -452,6 +452,40 @@ def test_a_lane_keeps_its_state_writes() -> None:
     assert lane.read(after, left).mass == {5: _HALF, 4: _HALF}
 
 
+def test_a_lane_local_is_out_of_scope_after_it() -> None:
+    reaction = Decision[str](name="declare-reaction", side=Side.THE_ENEMY, options=("hold",))
+    hit = Measurement[int](name="hit", side=Side.THIS_MODEL, kernel=_coin)
+    after = Consequence[int](name="after", side=Side.THE_ENEMY, inputs=(hit,), kernel=_toll)
+
+    with pytest.raises(GraphError, match="after inputs hit, which is not in scope"):
+        Program.build(
+            "charge",
+            _SIDES,
+            (reaction, Lanes(name="reaction", decision=reaction, items=(hit,)), after),
+        )
+
+
+def test_a_repeat_holds_inside_only_what_its_inside_reads() -> None:
+    outer = Measurement[int](name="outer", side=Side.THIS_MODEL, kernel=_d6)
+    shots = Measurement[int](name="shots", side=Side.THIS_MODEL, kernel=_one_or_two)
+    roll = Measurement[int](name="roll", side=Side.THIS_MODEL, kernel=_d6)
+    roll.show(roll.output("face", Monoid(0)))
+    later = Consequence[int](name="later", side=Side.THIS_MODEL, inputs=(outer,), kernel=_toll)
+    attack = Repeat(name="attack", times=shots, items=(roll,))
+    (lane,) = Program.build("volley", _SIDES, (outer, shots, attack, later)).evaluate()
+
+    assert len(lane.edges[roll].joint.mass) == 6
+
+
+def test_a_repeat_exit_drops_what_only_its_inside_read() -> None:
+    shots = Measurement[int](name="shots", side=Side.THIS_MODEL, kernel=_one_or_two)
+    roll = Measurement[int](name="roll", side=Side.THIS_MODEL, kernel=_d6)
+    attack = Repeat(name="attack", times=shots, items=(roll,))
+    (lane,) = Program.build("volley", _SIDES, (shots, attack)).evaluate()
+
+    assert len(lane.joint.mass) == 1
+
+
 def test_a_group_cannot_write_state() -> None:
     models = State[int]("models")
     shots = Measurement[int](name="shots", side=Side.THIS_MODEL, kernel=_three)
