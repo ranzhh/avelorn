@@ -310,5 +310,5 @@
   issue: 120
 - kind: inert-option
   subject: maneaters/A standard bearer may have the Look-out Gnoblar special rule
-  reason: Imported as prose, adding no rule; Look Out, Sir! is not modelled.
+  reason: Imported as prose, adding no rule. It is bought for the standard bearer, who has no profile row, so neither scope fits until command models are parts; Look Out, Sir! is not modelled.
   issue: 33
