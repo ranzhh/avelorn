@@ -150,6 +150,8 @@ def _profile_row(profile: Profile) -> _FlowMap:
     for characteristic in Characteristic:
         value = profile[characteristic]
         row[characteristic.value] = "-" if value is None else value
+    if profile.equipment:
+        row["equipment"] = _FlowList(profile.equipment)
     return _FlowMap(row)
 
 

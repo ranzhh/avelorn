@@ -7,12 +7,13 @@ from avelorn.tow.importers.whfb_app.yamlout import (
     _option_row,
     armour_to_yaml,
     rule_to_yaml,
+    unit_to_yaml,
     weapon_to_yaml,
 )
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import Rule
-from avelorn.tow.schema.unit import OptionKind, OptionScope, UnitOption
+from avelorn.tow.schema.unit import OptionKind, OptionScope, Unit, UnitOption
 from avelorn.tow.schema.weapon import Weapon
 
 REPO = TOWRepository()
@@ -54,6 +55,15 @@ def test_option_row_writes_every_field_of_the_schema() -> None:
 
     written = set(_option_row(flat)) | set(_option_row(budget)) | set(_option_row(champion))
     assert written == set(UnitOption.model_fields)
+
+
+def test_profile_rows_keep_the_mount_s_equipment() -> None:
+    """A mount row's weapons survive a write and a reload."""
+    unit = REPO.units["silver-helms"]
+    rider, champion, steed = unit.profiles
+    hooves = steed.model_copy(update={"equipment": ["Hand Weapon"]})
+    armed = unit.model_copy(update={"profiles": [rider, champion, hooves]})
+    assert Unit.model_validate(yaml.safe_load(unit_to_yaml(armed))).profiles == armed.profiles
 
 
 def _written(text: str) -> set[str]:

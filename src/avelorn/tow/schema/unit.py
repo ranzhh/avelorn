@@ -76,6 +76,9 @@ class Profile(BaseModel):
 
     ``role`` says which part of the model the row describes
     (:class:`ProfileRole`). Every row states it.
+
+    A mount row lists its own weapons in ``equipment``; the unit's equipment
+    belongs to the other rows.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -83,6 +86,7 @@ class Profile(BaseModel):
     name: str
     role: ProfileRole
     characteristics: dict[Characteristic, Stat]
+    equipment: list[str] = Field(default_factory=list)
 
     @model_validator(mode="before")
     @classmethod
@@ -99,6 +103,12 @@ class Profile(BaseModel):
         missing = [c.value for c in Characteristic if c not in self.characteristics]
         if missing:
             raise ValueError(f"profile row is missing characteristics: {missing}")
+        return self
+
+    @model_validator(mode="after")
+    def _only_a_mount_lists_equipment(self) -> Self:
+        if self.equipment and self.role is not ProfileRole.MOUNT:
+            raise ValueError(f"{self.name}: only a mount row lists equipment")
         return self
 
     def __getitem__(self, characteristic: Characteristic) -> int | None:

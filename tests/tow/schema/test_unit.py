@@ -212,6 +212,10 @@ def _unit_scope_for_a_named_model(unit: dict) -> None:
     unit["options"][3].update(applies_to="Sentinel", scope="unit")
 
 
+def _equipment_on_the_rank_and_file(unit: dict) -> None:
+    unit["profiles"][0]["equipment"] = ["Hand Weapon"]
+
+
 @pytest.mark.parametrize(
     ("edit", "refusal"),
     [
@@ -219,12 +223,14 @@ def _unit_scope_for_a_named_model(unit: dict) -> None:
         (_champion_naming_the_rank_and_file, "name no champion row"),
         (_champion_naming_no_row, "names its profile"),
         (_unit_scope_for_a_named_model, "has model scope"),
+        (_equipment_on_the_rank_and_file, "only a mount row lists equipment"),
     ],
     ids=[
         "champion-row-unnamed",
         "champion-names-rank-and-file",
         "champion-names-no-row",
         "named-model-unit-scope",
+        "rank-and-file-lists-equipment",
     ],
 )
 def test_parts_are_checked_at_load(
