@@ -59,11 +59,11 @@ def test_weapon_writer_emits_every_schema_field() -> None:
 
 
 def test_rule_writer_emits_every_schema_field() -> None:
-    """Likewise for a rule: effects and notes are hand-authored and easy to lose."""
-    rule = REPO.rules["strike-first"].model_copy(
-        update={"notes": "What the engine does with it.", "flavour": "Quicksilver.", "page": 177}
+    """Likewise for a rule: its parameter, effects and notes are hand-authored."""
+    rule = REPO.rules["armour-bane"].model_copy(
+        update={"notes": "What the engine does with it.", "flavour": "Piercing.", "page": 166}
     )
-    assert rule.effects and rule.notes and rule.category  # the premise
+    assert rule.parameter and rule.effects and rule.notes and rule.category
     assert _written(rule_to_yaml(rule)) == set(Rule.model_fields)
 
 

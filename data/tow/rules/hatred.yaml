@@ -1,6 +1,13 @@
 # Source: https://tow.whfb.app/special-rules/hatred
 id: hatred
 name: Hatred (X)
+parameter:
+  kind: selector
+  values:
+    all-enemies:
+      printed: all enemies
+    orcs-and-goblins:
+      printed: Orcs & Goblins
 page: 171
 category: Special Rules
 flavour: Enmity is rife in the Warhammer world, but hatred is nurtured over thousands of years.

@@ -27,7 +27,6 @@ third bucket, claimed by whoever resolves that seat too.
 """
 
 import logging
-import re
 from collections.abc import Collection, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
@@ -49,13 +48,11 @@ from avelorn.tow.engine.attack import (
 from avelorn.tow.engine.attack import Outcome as AttackOutcome
 from avelorn.tow.schema.psychology import Outcome
 from avelorn.tow.schema.rule import (
-    PARAMETER_SUFFIX,
     Add,
     AttackKind,
     AttackMarkEffect,
     BarEffect,
     BlowEffect,
-    Bounded,
     ChoiceEffect,
     Comparison,
     Decision,
@@ -76,6 +73,7 @@ from avelorn.tow.schema.rule import (
     Seam,
     VolleyEffect,
     WoundMultiplierEffect,
+    printed_base,
     seam_of,
 )
 from avelorn.tow.schema.stage import Dice, Side, Stage
@@ -83,8 +81,6 @@ from avelorn.tow.schema.unit import Characteristic, TroopType
 from avelorn.tow.schema.weapon import WeaponType
 
 logger = logging.getLogger(__name__)
-
-_PARAMETERISED = re.compile(r"^(?P<base>.+) \((?P<value>[^()]+)\)$")
 
 # The attack sequence's order, for "can this die still shape that roll".
 _SEQUENCE = {stage: position for position, stage in enumerate(Stage)}
@@ -241,123 +237,41 @@ def _as_context(context: GateContext | None) -> GateContext:
 def printed_rule(printed: str, rules: Registry[Rule]) -> Rule | None:
     """Resolve a rule reference to its catalogued item.
 
-    A corpus reference may already be the entry's stable slug; that resolves
-    before legacy printed-name handling. An exact name match returns the entry
-    itself. Otherwise a bracketed
-    numeric parameter matches the rule filed under the "(X)" placeholder
-    and returns a copy carrying the printed name, the parameter
-    substituted into its effects ("the amount shown in brackets after
-    the name of this special rule") — the rule as this unit prints it,
-    not as it is filed. A name the registry does not know is not an
-    error here but the answer — the rule is not modelled yet — so this
-    is the seam where the registry's loud :class:`UnknownNameError`
-    becomes the domain's quiet None, and unfactored reporting takes
-    over.
+    A slug or an exact name returns the entry itself. Otherwise the name less
+    its bracket finds the entry, and the bracket binds as the entry declares
+    its X ("Armour Bane (1)", "Extra Attacks (+1)"): a copy named as printed,
+    X substituted into its effects. A name the registry does not know, or a
+    bracket that does not bind, is not an error here but the answer -- the
+    rule is not modelled yet -- so unfactored reporting takes over.
 
     Returns:
-        The rule as printed, or None if nothing matches.
+        The rule as printed, or None if nothing binds.
     """
-    if printed in rules:
-        return rules[printed]
-    with suppress(UnknownNameError):
-        return rules.by_name(printed)
-    placeholder, value = split_parameter(printed)
-    if value is not None:
-        with suppress(UnknownNameError):
-            entry = rules.by_name(placeholder)
-            parameter = _parameter(value)
-            if parameter is None:
-                return None
-            effects = [_with_parameter(effect, parameter) for effect in entry.effects]
-            return entry.model_copy(update={"name": printed, "effects": effects})
-    return None
+    entry = filed_rule(printed, rules)
+    if entry is None or printed in (entry.id, entry.name):
+        return entry
+    try:
+        return entry.bound(entry.read(printed).x)
+    except ValueError:
+        return None
 
 
 def filed_rule(printed: str, rules: Registry[Rule]) -> Rule | None:
     """Find the entry a rule reference is filed under, binding nothing.
 
-    A slug or an exact name, else the "(X)" template, else for a signed value
-    ("Extra Attacks (+1)") the signed template ("Extra Attacks (+X)"). For
-    presentation and coverage; the engine resolves with :func:`printed_rule`.
+    A slug or an exact name, else the entry whose name less its bracket is the
+    printed name less its own. For presentation and coverage; the engine
+    resolves with :func:`printed_rule`.
 
     Returns:
         The entry as filed, or None if the corpus holds none.
     """
     if printed in rules:
         return rules[printed]
-    placeholder, value = split_parameter(printed)
-    names = [printed, placeholder]
-    if value is not None and value[0] in "+-":
-        names.append(placeholder.removesuffix(PARAMETER_SUFFIX) + f" ({value[0]}X)")
-    for name in names:
-        with suppress(UnknownNameError):
-            return rules.by_name(name)
-    return None
-
-
-def split_parameter(printed: str) -> tuple[str, str | None]:
-    """Split a printed rule name into its "(X)" entry's name and the bracketed value.
-
-    "Armour Bane (1)" is filed under "Armour Bane (X)" with the value "1"; a
-    bare "Armour Bane" names the same entry with no value printed.
-
-    Returns:
-        The name the "(X)" entry would be filed under, and the printed value
-        (None when the name prints no bracket).
-    """
-    if match := _PARAMETERISED.match(printed):
-        return match.group("base") + PARAMETER_SUFFIX, match.group("value")
-    return printed + PARAMETER_SUFFIX, None
-
-
-def _parameter(printed: str) -> int | DiceQuantity | None:
-    # The bracketed parameter as printed: a number ("Armour Bane (1)") or a
-    # dice quantity ("Impact Hits (D6)", "Stomp Attacks (D3+1)"). Any other
-    # text is no parameter at all — the name does not resolve.
-    if printed.isdigit():
-        return int(printed)
-    return DiceQuantity.parse(printed)
-
-
-def _with_parameter(effect: RuleEffect, parameter: int | DiceQuantity) -> RuleEffect:
-    # Substitute the printed parameter into every "X" placeholder the
-    # effect carries, looking inside mappings (an operation's amounts).
-    # Introspects the effect's fields, so a new X-bearing field
-    # participates automatically. An operation's amounts are numbers, so a
-    # dice parameter substitutes into bare fields only — a mapping's "X"
-    # then stays unbound, and the rule reports unfactored rather than
-    # carrying a quantity its seam cannot read. What does bind revalidates
-    # through the effect's own model, so a bound value the field's own
-    # validators reject ("Multiple Wounds (1)") fails loudly rather than
-    # slipping past them on a copy.
-    placeholders: dict = {}
-    for name in type(effect).model_fields:
-        value = getattr(effect, name)
-        if value == "X":
-            placeholders[name] = parameter
-        elif isinstance(value, Mapping) and isinstance(parameter, int):
-            bound = {key: _bind(amount, parameter) for key, amount in value.items()}
-            if bound != dict(value):
-                placeholders[name] = bound
-    if not placeholders:
-        return effect
-    fields = type(effect).model_fields
-    substituted = {
-        **effect.model_dump(by_alias=True),
-        **{fields[name].alias or name: value for name, value in placeholders.items()},
-    }
-    return type(effect).model_validate(substituted)
-
-
-def _bind(amount: object, parameter: int) -> object:
-    # One operation amount with the parameter bound into its "X", in either
-    # spelling: a bare amount, or one carrying a printed bound, where the
-    # placeholder sits a level down and would otherwise never be found.
-    if amount == "X":
-        return parameter
-    if isinstance(amount, Bounded) and amount.amount == "X":
-        return amount.model_copy(update={"amount": parameter})
-    return amount
+    with suppress(UnknownNameError):
+        return rules.by_name(printed)
+    base = printed_base(printed)
+    return next((rule for rule in rules.values() if rule.base == base), None)
 
 
 class _Disposition(Enum):

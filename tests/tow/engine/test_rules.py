@@ -40,6 +40,7 @@ from avelorn.tow.phases.shooting import shoot_unit
 from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.rule import (
     Add,
+    AmountParameter,
     ArmourGate,
     AttackKind,
     AttackMarkEffect,
@@ -121,6 +122,7 @@ def test_printed_rule_substitutes_under_a_printed_bound() -> None:
     entry = Rule(
         id="doctored",
         name="Doctored (X)",
+        parameter=AmountParameter(kind="amount"),
         paragraphs=["…"],
         effects=[ModifierEffect.model_validate({"add": {"S": {"amount": "X", "minimum": 1}}})],
     )
@@ -132,13 +134,7 @@ def test_printed_rule_substitutes_under_a_printed_bound() -> None:
     assert isinstance(effect, ModifierEffect)
     assert effect.added(Characteristic.STRENGTH) == Add(2, None, 1)
 
-    # A dice parameter cannot be an operation's amount, bound or bare: it
-    # stays unbound, and the seam reports the rule unfactored.
-    dice = printed_rule("Doctored (D3)", rules)
-    assert dice is not None
-    diced = dice.effects[0]
-    assert isinstance(diced, ModifierEffect)
-    assert diced.added(Characteristic.STRENGTH).amount == "X"
+    assert printed_rule("Doctored (D3)", rules) is None
 
 
 def test_printed_rule_unknown_name() -> None:
@@ -538,7 +534,13 @@ def _initiative_rule(
     if when is not None:
         payload["when"] = when
     effect = ModifierEffect.model_validate(payload)
-    return Rule(id="doctored", name="Doctored (X)", paragraphs=["…"], effects=[effect])
+    return Rule(
+        id="doctored",
+        name="Doctored (X)",
+        parameter=AmountParameter(kind="amount"),
+        paragraphs=["…"],
+        effects=[effect],
+    )
 
 
 def test_effective_characteristic_applies_a_modifier() -> None:
@@ -1435,13 +1437,7 @@ def test_printed_rule_substitutes_a_dice_multiplier() -> None:
     effect = rule.effects[0]
     assert isinstance(effect, WoundMultiplierEffect)
     assert effect.multiplies == DiceQuantity(sides=3)
-    # A die has no place in a modifier's numeric amount: the "X" stays
-    # unbound and the rule rides along unfactored, never misread.
-    bane = printed_rule("Armour Bane (D3)", REPO.rules)
-    assert bane is not None
-    effect = bane.effects[0]
-    assert isinstance(effect, ModifierEffect)
-    assert effect.add is not None and "X" in effect.add.values()
+    assert printed_rule("Armour Bane (D3)", REPO.rules) is None
 
 
 def test_effective_wound_multiplier_reads_the_printed_value() -> None:

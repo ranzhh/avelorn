@@ -1,6 +1,9 @@
 # Source: https://tow.whfb.app/special-rules/impact-hits
 id: impact-hits
 name: Impact Hits (X)
+parameter:
+  kind: amount
+  dice: true
 page: 172
 category: Special Rules
 flavour: The impact of a charge can itself cause severe casualties amongst the foe.

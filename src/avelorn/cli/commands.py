@@ -322,6 +322,8 @@ def show_rule(data: TOWRepository, slug: str) -> list[str]:
     rule = _rule(data, slug)
     page = "" if rule.page is None else f", page {rule.page}"
     lines = [f"{rule.name}  ({rule.id})", f"{rule.category or 'uncategorised'}{page}"]
+    if rule.parameter is not None:
+        lines.append(f"X: {rule.parameter.expected}")
     if rule.flavour:
         lines.extend(["", *(f"  {line}" for line in _wrapped(rule.flavour))])
     for paragraph in rule.paragraphs:

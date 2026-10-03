@@ -1,6 +1,9 @@
 # Source: https://tow.whfb.app/special-rules/multiple-wounds
 id: multiple-wounds
 name: Multiple Wounds (X)
+parameter:
+  kind: amount
+  dice: true
 page: 175
 category: Special Rules
 flavour: The most powerful attacks strike with crushing force, causing massive damage to their victim.

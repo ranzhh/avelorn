@@ -455,6 +455,57 @@
         "title": "Acknowledgement",
         "description": "One gap, known and left open, with why.\n\n``subject`` is how the gap is addressed: the printed rule name for the rule\nkinds (one entry covers every place printing it), ``<unit>/<row>`` for a\nprofile row, the weapon or armour slug for printed notes, and\n``<unit>/<option>`` for an option."
       },
+      "AmountParameter": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "amount",
+            "title": "Kind"
+          },
+          "dice": {
+            "type": "boolean",
+            "title": "Dice",
+            "default": false
+          },
+          "min": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min"
+          },
+          "max": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max"
+          },
+          "combine": {
+            "type": "string",
+            "const": "sum",
+            "title": "Combine",
+            "default": "sum"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "title": "AmountParameter",
+        "description": "An X that is a number, or a dice roll where ``dice`` allows one.\n\n``min`` and ``max`` bound a number. Two sources of one rule sum their X\n(``combine``)."
+      },
       "Armour": {
         "properties": {
           "id": {
@@ -1377,7 +1428,7 @@
           "grants"
         ],
         "title": "GrantEffect",
-        "description": "Confer a named special rule, gated like any other effect.\n\n\"gains the Armour Bane (1) special rule\" \u2014 the rule is granted *by name*, not\ncopied: the consuming seam resolves ``grants`` to its entry (the one\nresolution convention, parameter substituted) and applies that rule's own\neffects under this grant's gate. So a change to the granted rule \u2014 or to how\nits quantity resolves \u2014 is tracked automatically, and a rule granted on top of\none a model already carries stacks (two Armour Bane (1) \u2192 +2 on a natural 6),\nbecause each instance is a separate effect. The grant's shared ``when`` is the\n*outer* gate; the granted rule keeps its *own* inner gate\n(Armour Bane's natural-6 To Wound), the two conjoined at evaluation without\nmerging the gate trees. There is no discriminator field: an effect carrying\n``grants`` is one, exactly as one carrying ``add`` is a modifier (each model\nforbids the others' keys)."
+        "description": "Confer a named special rule, gated like any other effect.\n\n\"gains the Armour Bane (1) special rule\" \u2014 the rule is granted *by reference*,\nnot copied: the consuming seam binds ``grants`` to its entry (X substituted,\n:func:`bind`) and applies that rule's own\neffects under this grant's gate. So a change to the granted rule \u2014 or to how\nits quantity resolves \u2014 is tracked automatically, and a rule granted on top of\none a model already carries stacks (two Armour Bane (1) \u2192 +2 on a natural 6),\nbecause each instance is a separate effect. The grant's shared ``when`` is the\n*outer* gate; the granted rule keeps its *own* inner gate\n(Armour Bane's natural-6 To Wound), the two conjoined at evaluation without\nmerging the gate trees. There is no discriminator field: an effect carrying\n``grants`` is one, exactly as one carrying ``add`` is a modifier (each model\nforbids the others' keys)."
       },
       "HTTPValidationError": {
         "properties": {
@@ -2020,6 +2071,31 @@
             "type": "string",
             "title": "Name"
           },
+          "parameter": {
+            "anyOf": [
+              {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/AmountParameter"
+                  },
+                  {
+                    "$ref": "#/components/schemas/SelectorParameter"
+                  }
+                ],
+                "discriminator": {
+                  "propertyName": "kind",
+                  "mapping": {
+                    "amount": "#/components/schemas/AmountParameter",
+                    "selector": "#/components/schemas/SelectorParameter"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parameter"
+          },
           "page": {
             "anyOf": [
               {
@@ -2165,6 +2241,53 @@
         ],
         "title": "RuleSummary",
         "description": "A rule entry as a listing shows it: what it is, and whether it reaches the maths.\n\n``factors`` says whether the entry carries effects; a text-only entry does\nnot. ``references`` counts the places printing it -- units, options, troop\ntypes, weapons, and other rules' grants, in any spelling that resolves to\nit -- so a listing sorts by what would matter most to model next."
+      },
+      "SelectorParameter": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "selector",
+            "title": "Kind"
+          },
+          "values": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SelectorValue"
+            },
+            "type": "object",
+            "minProperties": 1,
+            "title": "Values"
+          },
+          "combine": {
+            "type": "string",
+            "const": "union",
+            "title": "Combine",
+            "default": "union"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "values"
+        ],
+        "title": "SelectorParameter",
+        "description": "An X that names one of a closed set, keyed by slug: Hatred's hated enemies."
+      },
+      "SelectorValue": {
+        "properties": {
+          "printed": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Printed"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "printed"
+        ],
+        "title": "SelectorValue",
+        "description": "One value a selector X may take, and how the bracket prints it."
       },
       "ShootingGate": {
         "properties": {

@@ -109,6 +109,8 @@ def rule_to_yaml(rule: Rule, source_url: str | None = None) -> str:
         The YAML document text.
     """
     doc: dict = {"id": rule.id, "name": rule.name}
+    if rule.parameter is not None:
+        doc["parameter"] = rule.parameter.model_dump(mode="json", exclude_defaults=True)
     if rule.page is not None:
         doc["page"] = rule.page
     if rule.category is not None:

@@ -108,6 +108,7 @@ def test_show_rule_covers_every_field_the_detail_endpoint_serves() -> None:
     shown = {
         "id": rule.id in printed,
         "name": rule.name in printed,
+        "parameter": rule.parameter is None and "X: " not in printed,
         "page": f"page {rule.page}" in printed,
         "category": (rule.category or "") in printed,
         "flavour": rule.flavour is None or rule.flavour.split()[0] in printed,
@@ -117,6 +118,10 @@ def test_show_rule_covers_every_field_the_detail_endpoint_serves() -> None:
     }
     assert set(shown) == set(Rule.model_fields)
     assert [field for field, found in shown.items() if not found] == []
+
+    bane = REPO.rules["armour-bane"]
+    assert bane.parameter is not None
+    assert f"X: {bane.parameter.expected}" in commands.show_rule(REPO, "armour-bane")
 
 
 def test_the_weapon_listing_carries_the_same_fields_on_both() -> None:

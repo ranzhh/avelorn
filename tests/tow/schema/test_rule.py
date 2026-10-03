@@ -9,6 +9,7 @@ from avelorn.core.loading import load_yaml
 from avelorn.tow.data import rule_paths
 from avelorn.tow.schema.rule import (
     Add,
+    AmountParameter,
     Bounded,
     DiceQuantity,
     HitOrder,
@@ -394,30 +395,44 @@ def test_condition_must_ask_something() -> None:
         _EFFECT.validate_python({"when": {}, "add": {"to-hit": -1}})
 
 
-def test_parameter_reference_requires_a_placeholder_name() -> None:
-    """An effect may use "X" only under a name that prints one.
-
-    An unbindable placeholder is a data error at load, not a runtime
-    surprise.
-    """
-    with pytest.raises(ValidationError, match="X parameter"):
+def test_an_effect_reads_x_only_where_the_rule_declares_one() -> None:
+    """An effect may use "X" only on a rule declaring its parameter."""
+    with pytest.raises(ValidationError, match="declares no X"):
         Rule(
             id="armour-bane",
-            name="Armour Bane",
+            name="Armour Bane (X)",
             paragraphs=["…"],
             effects=[ModifierEffect(add={Quantity.ARMOUR_PIERCING: "X"})],
         )
 
 
-def test_a_bounded_parameter_reference_requires_a_placeholder_name() -> None:
+def test_a_bounded_x_is_read_all_the_same() -> None:
     """The "X" a printed bound wraps is a parameter reference all the same."""
-    with pytest.raises(ValidationError, match="X parameter"):
+    with pytest.raises(ValidationError, match="declares no X"):
         Rule(
             id="ironfist",
             name="Ironfist",
             paragraphs=["…"],
             effects=[ModifierEffect(add={Quantity.ARMOUR_VALUE: Bounded(amount="X", maximum=2)})],
         )
+
+
+def test_a_dice_x_never_binds_into_an_amount() -> None:
+    """A die rolled per attack has no place in a modifier's amount."""
+    with pytest.raises(ValidationError, match="dice X"):
+        Rule(
+            id="armour-bane",
+            name="Armour Bane (X)",
+            parameter=AmountParameter(kind="amount", dice=True),
+            paragraphs=["…"],
+            effects=[ModifierEffect(add={Quantity.ARMOUR_PIERCING: "X"})],
+        )
+
+
+def test_a_declared_parameter_prints_in_the_name() -> None:
+    """Display substitutes X into the name, so the name must print one."""
+    with pytest.raises(ValidationError, match="prints no X"):
+        Rule(id="fly", name="Fly", parameter=AmountParameter(kind="amount"), paragraphs=["…"])
 
 
 def test_reroll_effect_parses_with_causes() -> None:

@@ -44,6 +44,9 @@
   subject: Evasive
   reason: Fleeing when targeted by shooting; reactions to being shot are not modelled.
 - kind: rule-without-effects
+  subject: Extra Attacks (+1)
+  reason: Not authored yet; even authored, the Attacks count reads unit rules only, never a weapon profile's.
+- kind: rule-without-effects
   subject: Fast Cavalry
   reason: Quick Turn after marching; movement is not modelled.
 - kind: rule-without-effects
@@ -70,6 +73,9 @@
   subject: From The Ashes
   reason: Hits or rebirth when the model loses its last Wound; nothing triggers on a model's removal.
 - kind: rule-without-effects
+  subject: Hatred (Orcs & Goblins)
+  reason: Hated enemies are named by race; the foe gate has no race to match.
+- kind: rule-without-effects
   subject: Ignores Cover
   reason: Cover modifiers; terrain is not modelled.
 - kind: rule-without-effects
@@ -90,6 +96,9 @@
 - kind: rule-without-effects
   subject: Large Target
   reason: Cover and line of sight are not modelled, and no effect adds the shooting rank a foe gains against it.
+- kind: rule-without-effects
+  subject: Magic Resistance (-1)
+  reason: It modifies enemy Casting rolls; magic is not modelled.
 - kind: rule-without-effects
   subject: Motley Crew
   reason: Models armed and armoured differently in one unit; a fielded unit has one loadout.
@@ -147,21 +156,6 @@
 - kind: rule-without-effects
   subject: Warriors of the White Tower
   reason: Limits which characters may join; characters joining units are not modelled.
-
-# parameter-unbound
-
-- kind: parameter-unbound
-  subject: Extra Attacks (+1)
-  reason: "Signed parameters bind with #230 (PR 3 of DESIGN-GRAPH.md's sequence). Even bound, the Attacks count reads unit rules only, never a weapon profile's."
-  issue: 230
-- kind: parameter-unbound
-  subject: Hatred (Orcs & Goblins)
-  reason: Hated enemies are named by race; the foe gate has no race to match.
-  issue: 230
-- kind: parameter-unbound
-  subject: Magic Resistance (-1)
-  reason: "Signed parameters bind with #230 (PR 3 of DESIGN-GRAPH.md's sequence). It modifies enemy Casting rolls; magic is not modelled."
-  issue: 230
 
 # profile-row-unread: a champion fights as the rank and file; only its
 # Leadership reaches the maths, through highest-value characteristic tests.

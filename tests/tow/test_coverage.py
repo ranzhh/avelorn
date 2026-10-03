@@ -12,7 +12,7 @@ from avelorn.core.registry import Registry
 from avelorn.tow.coverage import coverage, rule_gap
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.schema.ledger import GapKind
-from avelorn.tow.schema.rule import Rule
+from avelorn.tow.schema.rule import AmountParameter, Rule
 
 REPO = TOWRepository()
 REPORT = coverage(REPO)
@@ -65,8 +65,13 @@ def test_a_parameter_that_does_not_bind_is_its_own_gap(printed: str, gap: GapKin
 TEXT_ONLY = Registry(
     [
         Rule(id="fear", name="Fear", paragraphs=["…"]),
-        Rule(id="fly", name="Fly (X)", paragraphs=["…"]),
-        Rule(id="extra-attacks", name="Extra Attacks (+X)", paragraphs=["…"]),
+        Rule(id="fly", name="Fly (X)", parameter=AmountParameter(kind="amount"), paragraphs=["…"]),
+        Rule(
+            id="extra-attacks",
+            name="Extra Attacks (+X)",
+            parameter=AmountParameter(kind="amount", dice=True),
+            paragraphs=["…"],
+        ),
     ],
     kind="rule",
 )
@@ -77,11 +82,11 @@ TEXT_ONLY = Registry(
     [
         ("Fear", GapKind.RULE_WITHOUT_EFFECTS),
         ("Fly (9)", GapKind.RULE_WITHOUT_EFFECTS),
-        ("Extra Attacks (+1)", GapKind.PARAMETER_UNBOUND),
-        ("Extra Attacks (-1)", GapKind.RULE_WITHOUT_ENTRY),
+        ("Extra Attacks (+1)", GapKind.RULE_WITHOUT_EFFECTS),
+        ("Extra Attacks (-1)", GapKind.PARAMETER_UNBOUND),
         ("Ambushers", GapKind.RULE_WITHOUT_ENTRY),
     ],
 )
 def test_an_entry_without_effects_is_its_own_gap(printed: str, gap: GapKind) -> None:
-    """A text-only entry resolves but folds nothing; a signed value finds its signed template."""
+    """A text-only entry binds but folds nothing; a sign against the template does not bind."""
     assert rule_gap(printed, TEXT_ONLY) is gap

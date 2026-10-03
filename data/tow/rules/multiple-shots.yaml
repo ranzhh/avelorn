@@ -1,6 +1,9 @@
 # Source: https://tow.whfb.app/special-rules/multiple-shots
 id: multiple-shots
 name: Multiple Shots (X)
+parameter:
+  kind: amount
+  dice: true
 page: 174
 category: Special Rules
 flavour: Some weapons fire a fusillade of shots, sacrificing accuracy for sheer volume.
