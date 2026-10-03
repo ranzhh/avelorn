@@ -7,10 +7,12 @@ transcribed from the printed tables on tow.whfb.app, each cited where it is used
 
 import math
 import random
+from collections import Counter
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from fractions import Fraction
+from functools import cache
 
 SIXTH = Fraction(1, 6)
 FACES = range(1, 7)
@@ -77,10 +79,17 @@ class ReRoll(StrEnum):
 
 
 class Order(StrEnum):
-    """The order a strike's unsaved wounds reach the unit; the rulebook prints none."""
+    """The order a strike's unsaved wounds reach the unit, an input of Remove Casualties.
+
+    removing-casualties/multiple-wound-models prints "you must remove as many whole
+    models as possible" but no order between plain, multiplied and slaying wounds.
+    ``KILLS_FIRST`` applies Killing Blows, then the rest as rolled; ``MOST_REMOVED``
+    takes whichever order removes the most models.
+    """
 
     AS_ROLLED = "as-rolled"
     KILLS_FIRST = "kills-first"
+    MOST_REMOVED = "most-removed"
 
 
 @dataclass(frozen=True)
@@ -371,6 +380,33 @@ def removed(losses: list[int | None], models: int, wounds: int) -> int:
     return count
 
 
+def most_removed(losses: list[int | None], models: int, wounds: int) -> int:
+    """The most models any order of ``losses`` removes, entries as in :func:`removed`.
+
+    Source: removing-casualties/multiple-wound-models ("you must remove as many
+    whole models as possible"). A Killing Blow fells a model whatever it carries,
+    so it goes on a fresh one; the order of the rest is searched.
+
+    Returns:
+        The models removed, at most ``models``.
+    """
+    kills = losses.count(None)
+    plain = Counter(loss for loss in losses if loss is not None)
+    return min(models, kills + _most_felled(tuple(sorted(plain.items())), wounds, wounds))
+
+
+@cache
+def _most_felled(counts: tuple[tuple[int, int], ...], remaining: int, wounds: int) -> int:
+    best = 0
+    for i, (loss, n) in enumerate(counts):
+        rest = counts[:i] + (((loss, n - 1),) if n > 1 else ()) + counts[i + 1 :]
+        if loss >= remaining:
+            best = max(best, 1 + _most_felled(rest, wounds, wounds))
+        else:
+            best = max(best, _most_felled(rest, remaining - loss, wounds))
+    return best
+
+
 def remove_casualties(
     attacks: int,
     odds: AttackOdds,
@@ -385,7 +421,8 @@ def remove_casualties(
     """Monte Carlo of ``attacks`` identical attacks against a unit, then Remove Casualties.
 
     ``damage`` is the Wounds each unsaved wound takes, as a distribution (Multiple
-    Wounds (D3) is a third on each of 1, 2, 3); None is one Wound.
+    Wounds (D3) is a third on each of 1, 2, 3); None is one Wound. Sources as
+    :func:`removed` and :class:`Order`.
 
     Returns:
         The frequency of each casualty count 0..``models``.
@@ -404,7 +441,8 @@ def remove_casualties(
                 losses.append(rng.choices(values, weights)[0])
         if order is Order.KILLS_FIRST:
             losses.sort(key=lambda loss: loss is not None)
-        counts[removed(losses, models, wounds)] += 1
+        fold = most_removed if order is Order.MOST_REMOVED else removed
+        counts[fold(losses, models, wounds)] += 1
     return {casualties: n / trials for casualties, n in counts.items()}
 
 

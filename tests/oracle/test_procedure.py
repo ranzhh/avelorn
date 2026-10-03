@@ -5,7 +5,16 @@ from dataclasses import replace
 from fractions import Fraction
 from pathlib import Path
 
-from .procedure import Attack, Order, Phase, ReRoll, one_attack, remove_casualties, removed
+from .procedure import (
+    Attack,
+    Order,
+    Phase,
+    ReRoll,
+    most_removed,
+    one_attack,
+    remove_casualties,
+    removed,
+)
 
 # S10 against T1 wounds on 2+ and nothing saves, so an attack's odds read off its hit.
 SURE_WOUND = Fraction(5, 6)
@@ -125,6 +134,18 @@ def test_a_killing_blow_takes_the_wounded_models_remaining_wounds() -> None:
     """Two Wounds on a W3 model, then a Killing Blow: that model goes, the next is fresh."""
     assert removed([1, 1, None, 1, 1], models=3, wounds=3) == 1
     assert removed([None, 1, 1, 1, 1], models=3, wounds=3) == 2
+
+
+def test_the_most_removed_order_beats_the_rolled_one() -> None:
+    """Three, then one and two, fell two W3 models; one, three, two fells only one."""
+    assert removed([1, 3, 2], models=2, wounds=3) == 1
+    assert most_removed([1, 3, 2], models=2, wounds=3) == 2
+
+
+def test_the_most_removed_order_puts_a_killing_blow_on_a_fresh_model() -> None:
+    """Two Wounds then a Killing Blow, rolled, waste the Wounds; ordered, they need not."""
+    assert removed([1, 1, None, 1], models=3, wounds=3) == 1
+    assert most_removed([1, 1, None, 1], models=3, wounds=3) == 2
 
 
 def test_the_monte_carlo_is_seeded() -> None:

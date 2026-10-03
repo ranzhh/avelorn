@@ -360,68 +360,77 @@ def test_fielded_scenarios_match(legacy: Callable[[], Probability], attack: Atta
 # test_combat.py's Killing Blow strike: ten spearmen into three W3 Ogres, saving on 5+.
 OGRE_BLOW = Attack(COMBAT, 4, 3, 3, foe_weapon_skill=4, armour_value=5, killing_blow=True)
 
+# Half the 0.014 the two orders differ by at one Ogre removed.
+OGRE_TOLERANCE = 0.007
+
 
 def _killing_blows_into_ogres() -> StrikeResult:
     killers = _fielded(_with("elven-spearmen", rule="Killing Blow"), 10, "Hand Weapon")
     return strike_unit(killers, _fielded(_ogres(), 3, "Hand Weapon"))
 
 
+def _ogre_casualties(attacks: int, order: Order) -> list[float]:
+    oracle = remove_casualties(
+        attacks,
+        one_attack(OGRE_BLOW),
+        models=3,
+        wounds=3,
+        order=order,
+        trials=trials_for(OGRE_TOLERANCE),
+        seed=1,
+    )
+    return [oracle[k] for k in range(4)]
+
+
 def test_killing_blow_casualties_match_with_kills_applied_first() -> None:
-    """Legacy's fold of plain wounds and Killing Blows into W3 models removed."""
+    """Legacy's implicit damage order is kills-first; the combat program must offer it."""
     legacy = _killing_blows_into_ogres()
-    tolerance = 0.01
-    oracle = remove_casualties(
-        legacy.attacks,
-        one_attack(OGRE_BLOW),
-        models=3,
-        wounds=3,
-        order=Order.KILLS_FIRST,
-        trials=trials_for(tolerance),
-        seed=1,
-    )
-    assert [oracle[k] for k in range(4)] == pytest.approx(
-        [float(p) for p in legacy.casualties], abs=tolerance
+    assert _ogre_casualties(legacy.attacks, Order.KILLS_FIRST) == pytest.approx(
+        [float(p) for p in legacy.casualties], abs=OGRE_TOLERANCE
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="unprinted order: legacy applies Killing Blows before plain wounds, so none lands"
-    " on a wounded model (the-shooting-phase/remove-casualties-shooting, killing-blow)",
-)
-def test_killing_blow_casualties_match_with_wounds_applied_as_rolled() -> None:
-    """Applied as rolled, a Killing Blow can land on a wounded model and waste its Wounds."""
+def test_the_damage_order_moves_killing_blow_casualties() -> None:
+    """Applied as rolled, a Killing Blow can waste a wounded Ogre's lost Wounds."""
     legacy = _killing_blows_into_ogres()
-    tolerance = 0.007  # half the 0.014 in dispute at one model removed
-    oracle = remove_casualties(
-        legacy.attacks,
-        one_attack(OGRE_BLOW),
-        models=3,
-        wounds=3,
-        order=Order.AS_ROLLED,
-        trials=trials_for(tolerance),
-        seed=1,
-    )
-    assert [oracle[k] for k in range(4)] == pytest.approx(
-        [float(p) for p in legacy.casualties], abs=tolerance
-    )
+    as_rolled = _ogre_casualties(legacy.attacks, Order.AS_ROLLED)
+    assert abs(as_rolled[1] - float(legacy.casualties[1])) > OGRE_TOLERANCE
 
 
-def test_multiple_wounds_casualties_match() -> None:
-    """Multiple Wounds (D3), rolled per unsaved wound, from six shots into two W3 models."""
-    d3 = {wounds: Fraction(1, 3) for wounds in (1, 2, 3)}
-    legacy = shoot(6, 4, 3, 3, wounds_per_model=3, targets=2, damage=Distribution(d3))
-    tolerance = 0.01
+D3 = {wounds: Fraction(1, 3) for wounds in (1, 2, 3)}
+
+# Half the 0.031 the as-rolled and most-removed orders differ by at one model removed.
+D3_TOLERANCE = 0.015
+
+
+def _d3_casualties(order: Order) -> list[float]:
     oracle = remove_casualties(
         6,
         one_attack(Attack(SHOOTING, 4, 3, 3)),
         models=2,
         wounds=3,
-        order=Order.AS_ROLLED,
-        trials=trials_for(tolerance),
+        order=order,
+        trials=trials_for(D3_TOLERANCE),
         seed=1,
-        damage=d3,
+        damage=D3,
     )
-    assert [oracle[k] for k in range(3)] == pytest.approx(
-        [float(p) for p in legacy.casualties], abs=tolerance
-    )
+    return [oracle[k] for k in range(3)]
+
+
+def _d3_volley() -> list[float]:
+    legacy = shoot(6, 4, 3, 3, wounds_per_model=3, targets=2, damage=Distribution(D3))
+    return [float(p) for p in legacy.casualties]
+
+
+def test_multiple_wounds_casualties_match_as_rolled() -> None:
+    """Multiple Wounds (D3) from six shots into two W3 models, damage applied as rolled.
+
+    Both engines read the as-rolled order, which the rulebook does not print.
+    """
+    assert _d3_casualties(Order.AS_ROLLED) == pytest.approx(_d3_volley(), abs=D3_TOLERANCE)
+
+
+def test_the_damage_order_moves_multiple_wounds_casualties() -> None:
+    """Ordered to remove the most models, the same volley fells both W3 models more often."""
+    most = _d3_casualties(Order.MOST_REMOVED)
+    assert abs(most[1] - _d3_volley()[1]) > D3_TOLERANCE
