@@ -356,22 +356,18 @@
         }
       }
     },
-    "/rules/unmodelled": {
+    "/coverage": {
       "get": {
-        "summary": "Report the printed rules the engine does not apply",
-        "description": "Report every rule the corpus prints that never reaches the maths.\n\nReturns:\n    The report, most-printed first.",
-        "operationId": "list_unmodelled_rules_unmodelled_get",
+        "summary": "Report what the corpus prints that the engine never reads",
+        "description": "Report every gap between the corpus and the engine, with the ledger's reason for each.\n\nReturns:\n    The gaps, and the ledger entries no gap needs any more.",
+        "operationId": "read_coverage_coverage_get",
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/UnmodelledRule"
-                  },
-                  "type": "array",
-                  "title": "Response List Unmodelled Rules Unmodelled Get"
+                  "$ref": "#/components/schemas/Coverage"
                 }
               }
             }
@@ -382,7 +378,7 @@
     "/rules/{slug}": {
       "get": {
         "summary": "Read one rule entry",
-        "description": "Read a rule entry in full: its text, its effects, and what it leaves out.\n\nReturns:\n    The rule entry.\n\nRaises:\n    HTTPException: 404, when no entry carries the slug. A rule the corpus\n        prints without an entry has none to read; ``/rules/unmodelled``\n        names those.",
+        "description": "Read a rule entry in full: its text, its effects, and what it leaves out.\n\nReturns:\n    The rule entry.\n\nRaises:\n    HTTPException: 404, when no entry carries the slug. A rule the corpus\n        prints without an entry has none to read; ``/coverage``\n        names those.",
         "operationId": "read_rule_rules__slug__get",
         "parameters": [
           {
@@ -422,6 +418,43 @@
   },
   "components": {
     "schemas": {
+      "Acknowledgement": {
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/GapKind"
+          },
+          "subject": {
+            "type": "string",
+            "title": "Subject"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Reason"
+          },
+          "issue": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "subject",
+          "reason"
+        ],
+        "title": "Acknowledgement",
+        "description": "One gap, known and left open, with why.\n\n``subject`` is how the gap is addressed: the printed rule name for the rule\nkinds (one entry covers every place printing it), ``<unit>/<row>`` for a\nprofile row, the weapon or armour slug for printed notes, and\n``<unit>/<option>`` for an option."
+      },
       "Armour": {
         "properties": {
           "id": {
@@ -920,6 +953,32 @@
         "title": "Comparison",
         "description": "A predicate on one numeric property of an event: exactly one comparator.\n\nThe leaf of a gate path \u2014 ``charging.distance`` is constrained by\n``{at_least: 3}``, ``{at_most: 6}`` or ``{equals: 8}``. The comparator\nvocabulary is closed and append-only, the same discipline as\n:class:`Quantity`; a new one joins when a rule needs it. Exactly one\ncomparator is set \u2014 a leaf tests one thing."
       },
+      "Coverage": {
+        "properties": {
+          "gaps": {
+            "items": {
+              "$ref": "#/components/schemas/Gap"
+            },
+            "type": "array",
+            "title": "Gaps"
+          },
+          "stale": {
+            "items": {
+              "$ref": "#/components/schemas/Acknowledgement"
+            },
+            "type": "array",
+            "title": "Stale"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "gaps",
+          "stale"
+        ],
+        "title": "Coverage",
+        "description": "The gaps found, ordered by kind then subject, and the ledger entries nothing needs."
+      },
       "Decision": {
         "type": "string",
         "enum": [
@@ -1003,6 +1062,18 @@
         ],
         "title": "DiceQuantity",
         "description": "A printed quantity decided by a dice roll: \"D6\", \"D3\", \"D3+1\".\n\nThe dice form of a rule's bracketed parameter \u2014 \"Often, this is\ndetermined by the roll of a dice\" (Stomp Attacks, Impact Hits). One\ndie plus a flat addend covers every printed instance; a wider form\n(2D6, say) joins when a rule prints one."
+      },
+      "Entry": {
+        "type": "string",
+        "enum": [
+          "unit",
+          "weapon",
+          "armour",
+          "option",
+          "rule"
+        ],
+        "title": "Entry",
+        "description": "The kind of corpus entry a gap occurs in."
       },
       "Fight": {
         "properties": {
@@ -1217,6 +1288,69 @@
         ],
         "title": "Footprint",
         "description": "The rectangle a block occupies once it forms up.\n\nThe formation it takes, and the table space that costs: ``files`` models\nacross by ``ranks`` deep, each model on a base of the datasheet's size. A\nrear rank standing short still occupies its whole rank, so the depth is the\nranks rather than the models."
+      },
+      "Gap": {
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/GapKind"
+          },
+          "subject": {
+            "type": "string",
+            "title": "Subject"
+          },
+          "sites": {
+            "items": {
+              "$ref": "#/components/schemas/Site"
+            },
+            "type": "array",
+            "title": "Sites"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "issue": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "subject",
+          "sites",
+          "reason",
+          "issue"
+        ],
+        "title": "Gap",
+        "description": "One gap, where it occurs, and the ledger's reason for it if acknowledged.\n\n``reason`` is None for an unacknowledged gap, which is what fails the gate."
+      },
+      "GapKind": {
+        "type": "string",
+        "enum": [
+          "rule-without-entry",
+          "parameter-unbound",
+          "profile-row-unread",
+          "printed-notes",
+          "inert-option"
+        ],
+        "title": "GapKind",
+        "description": "How a piece of the corpus fails to reach the maths."
       },
       "GrantEffect": {
         "properties": {
@@ -1779,7 +1913,7 @@
           "slug"
         ],
         "title": "Reference",
-        "description": "A name as an entry prints it, and the entry it resolves to.\n\n``slug`` addresses the entry and ``kind`` says which registry holds it, so a\ncaller can follow the name without knowing how one finds its file -- for a\nrule, an exact match or the \"(X)\" template a parameterised name comes from\n(\"Impact Hits (D3)\" is filed under ``impact-hits``).\n\nBoth are ``None`` together, and that says the corpus prints this name while\nnothing models it: the fact :func:`unmodelled_rules` reports over the whole\ncorpus, said here on the entry that prints it."
+        "description": "A name as an entry prints it, and the entry it resolves to.\n\n``slug`` addresses the entry and ``kind`` says which registry holds it, so a\ncaller can follow the name without knowing how one finds its file -- for a\nrule, an exact match or the \"(X)\" template a parameterised name comes from\n(\"Impact Hits (D3)\" is filed under ``impact-hits``).\n\nBoth are ``None`` together, and that says the corpus prints this name while\nnothing models it: the gap :func:`~avelorn.tow.coverage.coverage` reports\nover the whole corpus, said here on the entry that prints it."
       },
       "ReplaceEffect": {
         "properties": {
@@ -2059,6 +2193,25 @@
         "type": "object",
         "title": "ShootingGate",
         "description": "A gate on the volley the model is firing.\n\n``at_long_range`` is whether the target sits beyond half the weapon's\nmaximum range (Firing at Long Range); ``stand_and_shoot`` whether the\nvolley is a Stand & Shoot charge reaction (which Volley Fire forbids).\nThe subject is where a range band or a cover fact would join."
+      },
+      "Site": {
+        "properties": {
+          "entry": {
+            "$ref": "#/components/schemas/Entry"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "entry",
+          "id"
+        ],
+        "title": "Site",
+        "description": "Where a gap occurs: an entry, by slug (``<unit>/<option>`` for an option)."
       },
       "Stage": {
         "type": "string",
@@ -2412,37 +2565,6 @@
         ],
         "title": "UnitSummary",
         "description": "A datasheet as a listing shows it: what it costs, how it is fielded, who fields it.\n\n``armies`` is every army filing the datasheet, by slug, which a listing\ngroups by. It is plural because a slug may be filed under several -- a\nmount or a beast that more than one army takes -- so a unit belongs to as\nmany branches of a browser as field it."
-      },
-      "UnmodelledRule": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "units": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Units"
-          },
-          "weapons": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Weapons"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "name",
-          "units",
-          "weapons"
-        ],
-        "title": "UnmodelledRule",
-        "description": "A rule the corpus prints that has no entry, so the engine cannot apply it.\n\nKeyed by printed ``name``: that is how a datasheet references a rule, and\nwith no entry it is the only handle the rule has. ``units`` and ``weapons``\nname who prints it, which is what makes the report actionable -- a rule\nnothing carries is not worth modelling yet.\n\nAn entry that carried no effects would be unapplied too, but no such entry\nis allowed in ``data/`` (``test_every_rule_entry_carries_effects``): a rule\nthat cannot fold is filed by not filing it. So a missing entry is the only\nway a printed rule goes unmodelled, and this needs no reason field."
       },
       "ValidationError": {
         "properties": {

@@ -56,14 +56,14 @@ def test_rules_list_says_which_entries_reach_the_maths() -> None:
     assert all(line.split()[-2] == "yes" for line in lines[1:])
 
 
-def test_unmodelled_reports_a_name_with_no_entry_and_who_prints_it() -> None:
+def test_coverage_reports_a_name_with_no_entry_and_who_prints_it() -> None:
     """A rule the corpus prints without an entry is invisible in the registry."""
-    printed = "\n".join(commands.list_unmodelled(REPO))
-    assert "\nClose Order\n" in printed
-    assert "elven-spearmen" in printed
+    printed = commands.show_coverage(REPO)
+    close_order = next(line for line in printed if line.strip().startswith("Close Order"))
+    assert "elven-spearmen" in close_order
 
 
-def test_unmodelled_resolves_a_printed_parameter_before_judging_it() -> None:
+def test_coverage_resolves_a_printed_parameter_before_judging_it() -> None:
     """Armour Bane (1) is modelled by the entry filed under (X), so it is not reported.
 
     Three weapons print the parameterised name and no file carries it, so a
@@ -76,7 +76,7 @@ def test_unmodelled_resolves_a_printed_parameter_before_judging_it() -> None:
         for name in p.special_rules
     }
     assert "Armour Bane (1)" in printed_by
-    assert "Armour Bane" not in "\n".join(commands.list_unmodelled(REPO))
+    assert "Armour Bane" not in "\n".join(commands.show_coverage(REPO))
 
 
 def test_rules_show_prints_the_text_the_effects_and_what_is_left_out() -> None:
@@ -88,7 +88,7 @@ def test_rules_show_prints_the_text_the_effects_and_what_is_left_out() -> None:
     assert "Not covered:" in printed
 
 
-def test_rules_show_points_a_miss_at_the_unmodelled_report() -> None:
+def test_rules_show_points_a_miss_at_the_coverage_report() -> None:
     """A printed rule with no entry cannot be shown, so the miss says where it is named."""
-    with pytest.raises(LookupError, match="--unmodelled"):
+    with pytest.raises(LookupError, match="avelorn coverage"):
         commands.show_rule(REPO, "close-order")

@@ -10,6 +10,7 @@ from collections.abc import Sequence
 
 import yaml
 
+from avelorn.tow.coverage import Gap, coverage
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
@@ -28,7 +29,6 @@ from avelorn.tow.views import (
     UnitSummary,
     WeaponSummary,
     rule_summaries,
-    unmodelled_rules,
 )
 
 
@@ -254,25 +254,48 @@ def list_rules(data: TOWRepository) -> list[str]:
     return _columns(rows)
 
 
-def list_unmodelled(data: TOWRepository) -> list[str]:
-    """Report every rule the corpus prints without an entry to apply.
+def show_coverage(data: TOWRepository) -> list[str]:
+    """Report what the corpus prints that the engine never reads, grouped by kind.
 
-    The same honesty the per-action "special rule not factored" notes give,
-    totalled: what is printed, and who prints it.
+    Each gap carries the ledger's reason for leaving it open. A gap with no
+    ledger entry is listed first and loudly, since it fails the coverage gate.
 
     Returns:
         The lines to print.
     """
-    report = unmodelled_rules(data)
-    entries = len(rule_summaries(data))
-    lines = [f"{len(report)} printed rules have no entry ({entries} entries in all):"]
-    for rule in report:
-        lines.extend(["", rule.name])
-        if rule.units:
-            lines.append(f"    units:   {', '.join(rule.units)}")
-        if rule.weapons:
-            lines.append(f"    weapons: {', '.join(rule.weapons)}")
+    report = coverage(data)
+    lines: list[str] = []
+    unacknowledged = [gap for gap in report.gaps if gap.reason is None]
+    if unacknowledged:
+        lines.append(
+            f"!! {len(unacknowledged)} UNACKNOWLEDGED -- add each to data/tow/unmodelled.yaml:"
+        )
+        lines.extend(f"!!   {gap.kind}: {gap.subject}  ({_sites(gap)})" for gap in unacknowledged)
+        lines.append("")
+    if report.stale:
+        lines.append(f"!! {len(report.stale)} STALE -- delete from data/tow/unmodelled.yaml:")
+        lines.extend(f"!!   {entry.kind}: {entry.subject}" for entry in report.stale)
+        lines.append("")
+    kinds = list(dict.fromkeys(gap.kind for gap in report.gaps))
+    lines.append(
+        f"{len(report.gaps)} gaps: "
+        + ", ".join(f"{sum(g.kind is kind for g in report.gaps)} {kind}" for kind in kinds)
+    )
+    for kind in kinds:
+        lines.extend(["", f"{kind}:"])
+        for gap in (g for g in report.gaps if g.kind is kind):
+            issue = "" if gap.issue is None else f" (#{gap.issue})"
+            lines.append(f"  {gap.subject}  [{_sites(gap)}]")
+            lines.append(f"      {gap.reason or '!! UNACKNOWLEDGED'}{issue}")
     return lines
+
+
+def _sites(gap: Gap) -> str:
+    # Where a gap occurs, grouped by the kind of entry: "unit a, b; weapon c".
+    grouped: dict[str, list[str]] = {}
+    for site in gap.sites:
+        grouped.setdefault(site.entry, []).append(site.id)
+    return "; ".join(f"{entry} {', '.join(ids)}" for entry, ids in grouped.items())
 
 
 def show_rule(data: TOWRepository, slug: str) -> list[str]:
@@ -319,7 +342,7 @@ def _rule(data: TOWRepository, slug: str) -> Rule:
     if rule is None:
         raise LookupError(
             f"no rule entry {slug!r}; run `avelorn rules list` for the slugs, "
-            "or `avelorn rules list --unmodelled` for the names printed without one"
+            "or `avelorn coverage` for the names printed without one"
         )
     return rule
 

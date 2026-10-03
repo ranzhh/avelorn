@@ -6,7 +6,8 @@ flags are spelt.
 
 Commands are grouped by what they read: ``avelorn units list``, ``avelorn rules
 show <slug>``. Each group has the same two verbs, so a new noun adds a group
-rather than a pair of top-level spellings.
+rather than a pair of top-level spellings. ``avelorn coverage`` is the one
+report over the whole corpus, so it takes no verb.
 
 It reads the database and nothing else. The engine's resolutions -- a volley, a
 round of close combat, a break test, a folded question spanning two turns -- are
@@ -81,13 +82,10 @@ def _parser() -> argparse.ArgumentParser:
     rules = groups.add_parser("rules", help="the special rules").add_subparsers(
         dest="command", required=True
     )
-    listing = rules.add_parser("list", help="list every rule entry")
-    listing.add_argument(
-        "--unmodelled",
-        action="store_true",
-        help="instead report the printed rules the engine does not apply",
-    )
+    rules.add_parser("list", help="list every rule entry")
     rules.add_parser("show", help="print one rule entry").add_argument("slug")
+
+    groups.add_parser("coverage", help="report what the corpus prints that the engine never reads")
     return parser
 
 
@@ -109,6 +107,8 @@ def _dispatch(args: argparse.Namespace, data: TOWRepository) -> list[str]:
         if args.command == "list":
             return commands.list_armour(data)
         return commands.show_armour(data, args.slug)
+    if args.group == "coverage":
+        return commands.show_coverage(data)
     if args.command == "list":
-        return commands.list_unmodelled(data) if args.unmodelled else commands.list_rules(data)
+        return commands.list_rules(data)
     return commands.show_rule(data, args.slug)

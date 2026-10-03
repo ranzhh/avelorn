@@ -609,7 +609,7 @@ def test_every_rule_entry_carries_effects() -> None:
 
     An entry with no effects reports "special rule not factored" exactly as a
     rule with no file does, so the file adds nothing but the appearance of
-    having been modelled. `avelorn rules list --unmodelled` names what is
+    having been modelled. `avelorn coverage` names what is
     missing; data/ holds only what folds.
     """
     idle = sorted(rule.id for rule in TOWRepository().rules.values() if not rule.effects)

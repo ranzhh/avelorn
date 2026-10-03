@@ -17,12 +17,8 @@ projected, because a printed name does not become a slug by slugifying it --
 "Impact Hits (D3)" is filed under ``impact-hits`` -- and a caller left to derive
 it would derive it wrong more often than right.
 
-:func:`unmodelled_rules` is the third view and the odd one: not a projection of
-an entry but a report over the whole corpus, naming every rule some unit or
-weapon prints that never reaches the maths. The engine says as much one action at
-a time, in the "special rule not factored" notes; this is the same honesty
-totalled up, and it is the reason the report has to scan units and weapons rather
-than read the rule registry alone -- a rule with no entry is invisible there.
+What the corpus prints and the engine never reads is not a view of one entry
+but a report over all of them: :mod:`avelorn.tow.coverage`.
 """
 
 from collections import defaultdict
@@ -102,8 +98,8 @@ class Reference(BaseModel):
     ("Impact Hits (D3)" is filed under ``impact-hits``).
 
     Both are ``None`` together, and that says the corpus prints this name while
-    nothing models it: the fact :func:`unmodelled_rules` reports over the whole
-    corpus, said here on the entry that prints it.
+    nothing models it: the gap :func:`~avelorn.tow.coverage.coverage` reports
+    over the whole corpus, said here on the entry that prints it.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -631,27 +627,6 @@ class RuleSummary(BaseModel):
         )
 
 
-class UnmodelledRule(BaseModel):
-    """A rule the corpus prints that has no entry, so the engine cannot apply it.
-
-    Keyed by printed ``name``: that is how a datasheet references a rule, and
-    with no entry it is the only handle the rule has. ``units`` and ``weapons``
-    name who prints it, which is what makes the report actionable -- a rule
-    nothing carries is not worth modelling yet.
-
-    An entry that carried no effects would be unapplied too, but no such entry
-    is allowed in ``data/`` (``test_every_rule_entry_carries_effects``): a rule
-    that cannot fold is filed by not filing it. So a missing entry is the only
-    way a printed rule goes unmodelled, and this needs no reason field.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    name: str
-    units: tuple[str, ...]
-    weapons: tuple[str, ...]
-
-
 def rule_summaries(data: TOWRepository) -> list[RuleSummary]:
     """Every rule entry in the corpus, ordered by slug.
 
@@ -663,35 +638,6 @@ def rule_summaries(data: TOWRepository) -> list[RuleSummary]:
         RuleSummary.of(rule, len(units[rule.name]) + len(weapons[rule.name]))
         for _, rule in sorted(data.rules.items())
     ]
-
-
-def unmodelled_rules(data: TOWRepository) -> list[UnmodelledRule]:
-    """Every rule the corpus prints that never reaches the maths.
-
-    Found by scanning what units and weapons print, not by reading the rule
-    registry: a rule with no file is nowhere in the registry, which is the whole
-    point of the report.
-
-    Returns:
-        The report, ordered by how many entries print each rule, then by name.
-    """
-    units, weapons = _references(data)
-    report = []
-    for name in set(units) | set(weapons):
-        # Resolved the way fielding resolves it, so a printed parameter finds
-        # the entry filed under "(X)": Armour Bane (1) is modelled, and reporting
-        # it as missing because no file carries that exact name would be a lie.
-        if printed_rule(name, data.rules) is not None:
-            continue
-        report.append(
-            UnmodelledRule(
-                name=name,
-                units=tuple(sorted(units[name])),
-                weapons=tuple(sorted(weapons[name])),
-            )
-        )
-    report.sort(key=lambda r: (-len(r.units) - len(r.weapons), r.name))
-    return report
 
 
 def _references(data: TOWRepository) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
