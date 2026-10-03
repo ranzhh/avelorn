@@ -58,7 +58,8 @@ def test_unit_file_parses(path: Path) -> None:
 def test_highest_reads_the_unit_s_highest_value(elven_spearmen: dict) -> None:
     """A unit tests against its highest value; with none printed there is none."""
     unit = Unit.model_validate(elven_spearmen)
-    assert unit.highest(Characteristic.LEADERSHIP) == 8
+    unit.profiles[1].characteristics[Characteristic.LEADERSHIP] = 9
+    assert unit.highest(Characteristic.LEADERSHIP) == 9
     for profile in unit.profiles:
         profile.characteristics[Characteristic.LEADERSHIP] = None
     assert unit.highest(Characteristic.LEADERSHIP) is None
