@@ -272,6 +272,8 @@ type Item = Step[Any] | Block
 @dataclass(frozen=True, eq=False, kw_only=True)
 class Block(ABC):
     kind: ClassVar[str]
+    # A scoped block's locals die at its exit; its state writes survive it.
+    scoped: ClassVar[bool] = True
     name: str
     items: tuple[Item, ...]
 
@@ -279,7 +281,7 @@ class Block(ABC):
         path = f"{prefix}/{self.name}"
         self.check(path, visible)
         program.take(self, path)
-        inner = list(visible)
+        inner = list(visible) if self.scoped else visible
         for item in self.items:
             item.declare(program, path, inner)
 
@@ -290,14 +292,8 @@ class Block(ABC):
         program.blocks.append(self)
 
     def run(self, lane: "Lane") -> None:
-        outer, count = lane.joint, lane.count
-        lane.count = self.multiplier(lane)
         for item in self.items:
             item.run(lane)
-        lane.joint, lane.count = outer, count
-
-    def multiplier(self, lane: "Lane") -> Distribution[int] | None:
-        return lane.count
 
     @abstractmethod
     def detail(self, paths: Mapping[Any, str]) -> dict[str, Any]: ...
@@ -310,25 +306,12 @@ class Block(ABC):
 class Group(Block, ABC):
     kind = "group"
 
-    @abstractmethod
-    def run(self, lane: "Lane") -> None: ...
-
 
 @dataclass(frozen=True, eq=False, kw_only=True)
 class Sequence(Group):
     kind = "sequence"
+    scoped = False
     collapsed: bool = False
-
-    def declare(self, program: "Program", prefix: str, visible: list[Step[Any]]) -> None:
-        path = f"{prefix}/{self.name}"
-        self.check(path, visible)
-        program.take(self, path)
-        for item in self.items:
-            item.declare(program, path, visible)
-
-    def run(self, lane: "Lane") -> None:
-        for item in self.items:
-            item.run(lane)
 
     def detail(self, paths: Mapping[Any, str]) -> dict[str, Any]:
         return {"collapsed": self.collapsed}
@@ -336,9 +319,21 @@ class Sequence(Group):
 
 @dataclass(frozen=True, eq=False, kw_only=True)
 class Repeat(Group):
+    """Runs its items for one attack; the outer worlds resume unchanged at its exit."""
+
     kind = "repeat"
     times: Step[int]
     collapsed: bool = False
+
+    def declare(self, program: "Program", prefix: str, visible: list[Step[Any]]) -> None:
+        first = len(program.steps)
+        super().declare(program, prefix, visible)
+        for step in program.steps[first:]:
+            if step.writes is not None:
+                raise GraphError(
+                    f"{program.paths[step]} writes {step.writes.name} inside a group, "
+                    "which cannot carry state out"
+                )
 
     def check(self, path: str, visible: list[Step[Any]]) -> None:
         if self.times not in visible:
@@ -347,8 +342,7 @@ class Repeat(Group):
     def run(self, lane: "Lane") -> None:
         outer, count = lane.joint, lane.count
         lane.count = self.multiplier(lane)
-        for item in self.items:
-            item.run(lane)
+        super().run(lane)
         lane.joint, lane.count = outer, count
 
     def multiplier(self, lane: "Lane") -> Distribution[int]:
@@ -366,6 +360,7 @@ class Repeat(Group):
 @dataclass(frozen=True, eq=False, kw_only=True)
 class Slot(Block):
     kind = "slot"
+    scoped = False
 
     def detail(self, paths: Mapping[Any, str]) -> dict[str, Any]:
         return {"empty": not self.items}

@@ -317,6 +317,76 @@ def test_a_state_write_replaces_the_fact() -> None:
     assert lane.read(second, sums).mass == {7: 1}
 
 
+def _lose(models: int, hit: int) -> Distribution[int]:
+    return Distribution.pure(models - hit)
+
+
+def _pair(models: int, hit: int) -> Distribution[tuple[int, int]]:
+    return Distribution.pure((models, hit))
+
+
+def test_a_slot_keeps_its_locals_and_its_state_writes() -> None:
+    models = State[int]("models", 5)
+    hit = Measurement[int](name="hit", side=Side.THIS_MODEL, kernel=_coin)
+    remove = Consequence[int](
+        name="remove-casualties",
+        side=Side.THE_ENEMY,
+        inputs=(models, hit),
+        kernel=_lose,
+        writes=models,
+    )
+    after = Consequence[tuple[int, int]](
+        name="after", side=Side.THE_ENEMY, inputs=(models, hit), kernel=_pair
+    )
+    program = Program.build("round", _SIDES, (Slot(name="shooting", items=(hit, remove)), after))
+    (lane,) = program.evaluate()
+
+    assert lane.read(after, after.output("after", Monoid((0, 0)))).mass == {
+        (5, 0): _HALF,
+        (4, 1): _HALF,
+    }
+
+
+def test_a_lane_keeps_its_state_writes() -> None:
+    models = State[int]("models", 5)
+    reaction = Decision[str](name="declare-reaction", side=Side.THE_ENEMY, options=("hold",))
+    hit = Measurement[int](name="hit", side=Side.THIS_MODEL, kernel=_coin)
+    remove = Consequence[int](
+        name="remove-casualties",
+        side=Side.THE_ENEMY,
+        inputs=(models, hit),
+        kernel=_lose,
+        writes=models,
+    )
+    after = Consequence[int](name="after", side=Side.THE_ENEMY, inputs=(models,), kernel=_toll)
+    program = Program.build(
+        "charge",
+        _SIDES,
+        (reaction, Lanes(name="reaction", decision=reaction, items=(hit, remove)), after),
+    )
+    (lane,) = program.evaluate()
+
+    assert lane.read(after, after.output("models", Monoid(0))).mass == {5: _HALF, 4: _HALF}
+
+
+def test_a_group_cannot_write_state() -> None:
+    models = State[int]("models", 5)
+    shots = Measurement[int](name="shots", side=Side.THIS_MODEL, kernel=_three)
+    hit = Measurement[int](name="hit", side=Side.THIS_MODEL, kernel=_coin)
+    remove = Consequence[int](
+        name="remove-casualties",
+        side=Side.THE_ENEMY,
+        inputs=(models, hit),
+        kernel=_lose,
+        writes=models,
+    )
+
+    with pytest.raises(GraphError, match="remove-casualties writes models inside a group"):
+        Program.build(
+            "volley", _SIDES, (shots, Repeat(name="attack", times=shots, items=(hit, remove)))
+        )
+
+
 def test_two_steps_cannot_share_a_path() -> None:
     first = Measurement[int](name="shots", side=Side.THIS_MODEL, kernel=_three)
     second = Measurement[int](name="shots", side=Side.THIS_MODEL, kernel=_three)
