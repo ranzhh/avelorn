@@ -22,6 +22,7 @@ repos:
       - id: mixed-line-ending # replaces or checks mixed line ending
       - id: name-tests-test # verifies that test files are named correctly
         args: [--pytest-test-first] # repo convention is pytest-style test_*.py
+        exclude: ^tests/oracle/procedure\.py$ # the oracle is test infrastructure, not a test
       - id: trailing-whitespace # trims trailing whitespace
 
   # ruff and ty run from the project venv, so the versions come from uv.lock —
