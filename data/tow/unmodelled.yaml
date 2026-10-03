@@ -117,6 +117,9 @@
   reason: Formations are not modelled; every unit fights as a ranked block.
   issue: 28
 - kind: rule-without-effects
+  subject: poisoned-attacks
+  reason: Not authored yet; no effect raises the To Wound roll on a natural 6 To Hit.
+- kind: rule-without-effects
   subject: quick-shot
   reason: Not authored yet for the Moving and Shooting -1; the Stand & Shoot distance limit it waives is not enforced.
 - kind: rule-without-effects
@@ -308,20 +311,4 @@
 - kind: inert-option
   subject: maneaters/A standard bearer may have the Look-out Gnoblar special rule
   reason: Imported as prose, adding no rule; Look Out, Sir! is not modelled.
-  issue: 33
-- kind: inert-option
-  subject: maneaters/Immune to Psychology
-  reason: 'Imported as prose, adding no rule; Immune to Psychology has no effects (psychology is not modelled). The "0-2 of the following" cap was dropped.'
-  issue: 33
-- kind: inert-option
-  subject: maneaters/Poisoned Attacks
-  reason: 'Imported as prose, adding no rule; there is no Poisoned Attacks entry to add. The "0-2 of the following" cap was dropped.'
-  issue: 33
-- kind: inert-option
-  subject: maneaters/Stubborn
-  reason: 'Imported as prose; fixable in the datasheet as kind special_rule, the Stubborn entry has effects. The "0-2 of the following" cap was dropped.'
-  issue: 33
-- kind: inert-option
-  subject: maneaters/Vanguard
-  reason: 'Imported as prose, adding no rule; Vanguard has no effects (deployment is not modelled). The "0-2 of the following" cap was dropped.'
   issue: 33

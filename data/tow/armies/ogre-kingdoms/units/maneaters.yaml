@@ -85,18 +85,22 @@ options:
     points_budget: 50
     limit: 0-1 unit per 1000 points
   - name: Immune to Psychology
-    kind: other
+    kind: special_rule
     scope: unit
     points: 0
+    adds_rules: [immune-to-psychology]
   - name: Poisoned Attacks
-    kind: other
+    kind: special_rule
     scope: unit
     points: 0
+    adds_rules: [poisoned-attacks]
   - name: Stubborn
-    kind: other
+    kind: special_rule
     scope: unit
     points: 0
+    adds_rules: [stubborn]
   - name: Vanguard
-    kind: other
+    kind: special_rule
     scope: unit
     points: 0
+    adds_rules: [vanguard]
