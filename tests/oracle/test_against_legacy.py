@@ -54,7 +54,6 @@ def _with(slug: str, *, rule: str | None = None, equipment: str | None = None) -
 
 
 def _ogres() -> Unit:
-    # test_combat.py's doctored target: spearmen as W3 Monstrous Infantry.
     spearmen = REPO.units["elven-spearmen"]
     ogres = spearmen.model_copy(
         update={"id": "ogres", "name": "Ogres", "troop_type": "Monstrous Infantry"}, deep=True
@@ -159,7 +158,6 @@ def test_every_plain_dice_combination_matches() -> None:
     assert [dispute for dispute in disputes if dispute[1] != dispute[2]] == []
 
 
-# Legacy fields each side from the data; the oracle reads the printed datasheets.
 FIELDED: list[tuple[str, Callable[[], Probability], Attack]] = [
     (
         "archers-v-spearmen",
@@ -189,7 +187,6 @@ FIELDED: list[tuple[str, Callable[[], Probability], Attack]] = [
         Attack(SHOOTING, 4, 3, 4, armour_value=3, armour_bane=1, ward=6, save_re_rolls=ONES),
     ),
     (
-        # Lion Cloak betters heavy armour's 5+ to 4+ against a mundane shot.
         "archers-v-white-lions",
         lambda: (
             shoot_unit(
@@ -199,7 +196,6 @@ FIELDED: list[tuple[str, Callable[[], Probability], Attack]] = [
         Attack(SHOOTING, 4, 3, 3, armour_value=4, armour_bane=1),
     ),
     (
-        # Magical, so no Lion Cloak; the bow's and Arrows of Isha's Armour Bane (1), AP -1.
         "sisters-v-white-lions",
         lambda: (
             shoot_unit(
@@ -211,7 +207,6 @@ FIELDED: list[tuple[str, Callable[[], Probability], Attack]] = [
         Attack(SHOOTING, 5, 3, 3, armour_value=5, armour_piercing=-1, armour_bane=2),
     ),
     (
-        # Against 3+ the second Armour Bane counts; a magical attack gets past the runes.
         "sisters-v-ironbreakers",
         lambda: (
             shoot_unit(
@@ -232,7 +227,6 @@ FIELDED: list[tuple[str, Callable[[], Probability], Attack]] = [
         ),
     ),
     (
-        # Enemy Fire (Skirmishers): -1 To Hit; light armour 6+.
         "archers-v-shadow-warriors",
         lambda: (
             shoot_unit(
@@ -251,7 +245,6 @@ FIELDED: list[tuple[str, Callable[[], Probability], Attack]] = [
         Attack(COMBAT, 4, 3, 3, foe_weapon_skill=4, armour_value=5),
     ),
     (
-        # Parry: a hand weapon and shield better the 5+ to 4+.
         "spearmen-v-parrying-spearmen",
         lambda: (
             strike_unit(
@@ -281,7 +274,6 @@ FIELDED: list[tuple[str, Callable[[], Probability], Attack]] = [
         Attack(COMBAT, 4, 3, 4, foe_weapon_skill=5, armour_value=3, ward=6, save_re_rolls=ONES),
     ),
     (
-        # Gromril Weapons: AP -1 on the hand weapon.
         "ironbreakers-v-spearmen",
         lambda: (
             strike_unit(
@@ -292,7 +284,6 @@ FIELDED: list[tuple[str, Callable[[], Probability], Attack]] = [
         Attack(COMBAT, 5, 4, 3, foe_weapon_skill=4, armour_value=5, armour_piercing=-1),
     ),
     (
-        # Daith's Reaper: S+1, AP -1, successful saves re-rolled; Dwarf heavy armour 5+.
         "daiths-reaper-v-dwarf-warriors",
         lambda: (
             strike_unit(
@@ -332,7 +323,6 @@ FIELDED: list[tuple[str, Callable[[], Probability], Attack]] = [
         Attack(COMBAT, 4, 3, 3, foe_weapon_skill=4, armour_value=5, cleaving_blow=True),
     ),
     (
-        # Monstrous Infantry is off Cleaving Blow's list and has no Parry: plain, saving on 5+.
         "cleaving-blow-v-ogres",
         lambda: (
             strike_unit(
@@ -359,10 +349,8 @@ def test_fielded_scenarios_match(legacy: Callable[[], Probability], attack: Atta
     assert legacy() == one_attack(attack).unsaved
 
 
-# test_combat.py's Killing Blow strike: ten spearmen into three W3 Ogres, saving on 5+.
 OGRE_BLOW = Attack(COMBAT, 4, 3, 3, foe_weapon_skill=4, armour_value=5, killing_blow=True)
 
-# Half the 0.014 the two orders differ by at one Ogre removed.
 OGRE_TOLERANCE = 0.007
 
 
@@ -401,7 +389,6 @@ def test_the_damage_order_moves_killing_blow_casualties() -> None:
 
 D3 = {wounds: Fraction(1, 3) for wounds in (1, 2, 3)}
 
-# Half the 0.031 the as-rolled and most-removed orders differ by at one model removed.
 D3_TOLERANCE = 0.015
 
 

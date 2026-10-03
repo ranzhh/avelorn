@@ -17,16 +17,12 @@ from functools import cache
 SIXTH = Fraction(1, 6)
 FACES = range(1, 7)
 
-# the-shooting-phase/roll-to-hit-shooting: Ballistic Skill -> D6 roll To Hit.
 SHOOTING_TO_HIT = {1: 6, 2: 5, 3: 4, 4: 3, 5: 2}
 
-# the-shooting-phase/bs-of-6-or-higher: 2+, then a failed roll is re-rolled at this.
 HIGH_BS_RE_ROLL = {6: 6, 7: 5, 8: 4, 9: 3, 10: 2}
 
-# the-shooting-phase/7-to-hit: the D6 roll needed -> a natural 6 followed by this.
 SEVEN_PLUS = {7: 4, 8: 5, 9: 6}
 
-# the-combat-phase/roll-to-hit-combat, To Hit Chart: attacker's WS row, target's WS column.
 COMBAT_TO_HIT = (
     (4, 4, 5, 5, 5, 5, 5, 5, 5, 5),
     (3, 4, 4, 4, 5, 5, 5, 5, 5, 5),
@@ -40,8 +36,6 @@ COMBAT_TO_HIT = (
     (2, 2, 2, 2, 3, 3, 3, 3, 3, 4),
 )
 
-# the-shooting-phase/roll-to-wound-shooting, To Wound Chart (the combat page prints the
-# same): Strength row, Toughness column, None for the printed "-".
 TO_WOUND = (
     (4, 5, 6, 6, 6, 6, None, None, None, None),
     (3, 4, 5, 6, 6, 6, 6, None, None, None),
@@ -55,11 +49,9 @@ TO_WOUND = (
     (2, 2, 2, 2, 2, 2, 2, 2, 3, 4),
 )
 
-# the-shooting-phase/determining-armour-value: no armour counts as 7+, improved at most to 2+.
 NO_ARMOUR = 7
 BEST_ARMOUR = 2
 
-# One roll enumerated: (mass, natural face, success). Face 0 is a roll not taken.
 type Throw = list[tuple[Fraction, int, bool]]
 
 NOT_ROLLED: Throw = [(Fraction(1), 0, False)]

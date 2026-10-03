@@ -21,7 +21,6 @@ from .procedure import (
 ORACLE = Path(__file__).parent
 TESTS = ORACLE.parent
 
-# S10 against T1 wounds on 2+ and nothing saves, so an attack's odds read off its hit.
 SURE_WOUND = Fraction(5, 6)
 
 
@@ -119,7 +118,7 @@ def test_a_killing_blow_skips_the_armour_save_but_not_the_ward() -> None:
     )
     odds = one_attack(attack)
     ward_fails = Fraction(4, 6)
-    armour_fails = Fraction(1, 6) * Fraction(1, 6)  # only a natural 1, re-rolled into another
+    armour_fails = Fraction(1, 6) * Fraction(1, 6)
     assert odds.kill == Fraction(1, 2) * Fraction(1, 6) * ward_fails
     assert odds.wound == Fraction(1, 2) * Fraction(2, 6) * armour_fails * ward_fails
 
