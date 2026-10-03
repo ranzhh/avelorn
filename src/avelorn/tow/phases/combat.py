@@ -898,8 +898,10 @@ class FightResult:
     ``b_initiative`` are the effective Initiatives that ordering compared —
     reported so a caller prints the value the math used, as the shooting
     result reports its effective To Hit target. ``a_rank_bonus`` and
-    ``b_rank_bonus`` are each side's combat-result Rank Bonus, which
-    :func:`combat_result` adds to that side's score. ``a_unit_strength`` and
+    ``b_rank_bonus`` are the Rank Bonus each side's formation claimed as the
+    round began; the score counts it from the survivors instead, once every
+    model has fought (the-combat-phase/calculate-combat-result), so a side
+    that lost ranks scores fewer (see :attr:`scoring_margin`). ``a_unit_strength`` and
     ``b_unit_strength`` are the Unit Strengths the round compared (reported,
     and the basis of an outnumbering bonus). ``a_combat_result_bonus`` and
     ``b_combat_result_bonus`` are the combat-result points each side accrued
@@ -925,6 +927,10 @@ class FightResult:
     # fight(); empty on a fixture-built result, which then scores off the melee
     # joint alone (see scoring_wounds).
     wound_margin: Mapping[int, Probability] = field(default_factory=dict)
+    # The signed distribution of (A's minus B's) wounds plus Rank Bonus, each
+    # side's Rank Bonus counted from its survivors; populated by fight(), empty
+    # on a fixture-built result (see scoring_margin).
+    score_margin: Mapping[int, Probability] = field(default_factory=dict)
 
     @property
     def a_casualties(self) -> list[Probability]:
@@ -936,6 +942,24 @@ class FightResult:
         """Marginal distribution of models B lost in the melee (index k = P(k removed))."""
         columns = len(self.losses[0]) if self.losses else 0
         return [sum(row[k] for row in self.losses) for k in range(columns)]
+
+    @property
+    def scoring_margin(self) -> Mapping[int, Probability]:
+        """The signed distribution of (A's minus B's) wounds plus Rank Bonus.
+
+        A side's Rank Bonus depends on the ranks it still has when the round is
+        scored, which the wounds just inflicted decide, so the two are read off
+        one joint: :func:`fight` populates ``score_margin`` with it. A
+        FightResult built without it (a scoring fixture) shifts
+        :attr:`scoring_wounds` by the starting Rank Bonuses instead.
+
+        Returns:
+            The pmf of the lead before rule-granted points (A-positive).
+        """
+        if self.score_margin:
+            return self.score_margin
+        shift = self.a_rank_bonus - self.b_rank_bonus
+        return {diff + shift: mass for diff, mass in self.scoring_wounds.items()}
 
     @property
     def scoring_wounds(self) -> Mapping[int, Probability]:
@@ -1416,6 +1440,16 @@ def fight(
     wound_margin = outcomes.map(
         lambda o: (o.a_inflicted + o.pre_b) - (o.b_inflicted + o.pre_a)
     ).mass
+    a_ranks = [replace(a, models=n).rank_bonus for n in range(a.models + 1)]
+    b_ranks = [replace(b, models=n).rank_bonus for n in range(b.models + 1)]
+    score_margin = outcomes.map(
+        lambda o: (
+            (o.a_inflicted + o.pre_b)
+            - (o.b_inflicted + o.pre_a)
+            + a_ranks[a.models - o.pre_a - o.a_lost]
+            - b_ranks[b.models - o.pre_b - o.b_lost]
+        )
+    ).mass
 
     first_striker = None if a_first is None else (a if a_first else b)
     # A rule factored into the striking order, the fighting-rank depth, the
@@ -1541,6 +1575,7 @@ def fight(
         a_combat_result_bonus=a_combat_result.value + _arc_bonus(a),
         b_combat_result_bonus=b_combat_result.value + _arc_bonus(b),
         wound_margin=wound_margin,
+        score_margin=score_margin,
     )
 
 
@@ -1746,32 +1781,29 @@ class CombatResult:
 def combat_result(result: FightResult) -> CombatResult:
     """Score a fought round by the Wounds inflicted and name the winner.
 
-    Composes on a :class:`FightResult`'s :attr:`~FightResult.scoring_wounds`:
+    Composes on a :class:`FightResult`'s :attr:`~FightResult.scoring_margin`:
     A's score is the Wounds it inflicted — this round's melee plus any
-    from a Stand & Shoot charge reaction this turn — plus A's Rank Bonus and
-    rule-granted combat-result points, B's the reverse. The Rank Bonus and
-    points are fixed for the round, so they shift every lead by the same
-    constant. Because the two sides are correlated (under Initiative order, and
-    through a volley that both thins a side and scores for its foe), the
-    win/draw/win split and signed margin come from the joint wound distribution,
-    not from differencing marginals.
+    from a Stand & Shoot charge reaction this turn — plus the Rank Bonus its
+    survivors claim and rule-granted combat-result points, B's the reverse.
+    The points are fixed for the round, so they shift every lead by the same
+    constant; the Rank Bonus moves with the casualties. Because the two sides
+    are correlated (under Initiative order, and through a volley that both
+    thins a side and scores for its foe), the win/draw/win split and signed
+    margin come from the joint distribution, not from differencing marginals.
 
     Returns:
         The exact win/draw/loss probabilities and signed margin distribution.
     """
     margin: Mapping[int, Probability] = {}
     p_a_wins = p_draw = p_b_wins = 0
-    # A's fixed edge over B: Rank Bonus plus the rule-granted combat-result
-    # points (Massed Infantry, ...), each a signed per-side constant that
-    # shifts every lead alike. The wound difference (melee + Stand & Shoot)
-    # carries the rest.
-    static_delta = (result.a_rank_bonus - result.b_rank_bonus) + (
-        result.a_combat_result_bonus - result.b_combat_result_bonus
-    )
-    for wound_diff, mass in result.scoring_wounds.items():
+    # A's fixed edge over B: the rule-granted combat-result points (Massed
+    # Infantry, ...), a signed per-side constant that shifts every lead alike.
+    # The scoring margin (wounds and surviving ranks) carries the rest.
+    static_delta = result.a_combat_result_bonus - result.b_combat_result_bonus
+    for scored, mass in result.scoring_margin.items():
         if mass == 0:
             continue
-        lead = wound_diff + static_delta
+        lead = scored + static_delta
         margin[lead] = margin.get(lead, 0) + mass
         if lead > 0:
             p_a_wins += mass

@@ -586,6 +586,26 @@ def test_combat_result_adds_the_rank_bonus_to_the_score() -> None:
     assert ranked.p_a_wins == pytest.approx(1.0)
 
 
+def test_the_rank_bonus_is_counted_from_the_survivors() -> None:
+    """A rank broken by this round's casualties claims no Rank Bonus.
+
+    Ten spearmen five wide claim +1 as the round begins, but any loss leaves a
+    rear rank of four, too few to count. So the bonus adds to the score exactly
+    when they lose nobody. The foe is one rank of ten: no bonus, equal Unit
+    Strength.
+    """
+    spearmen = REPO.units["elven-spearmen"]
+    fought = fight(
+        _fielded(spearmen, 10, frontage=5).wielding("Thrusting Spear"),
+        _fielded(spearmen, 10, frontage=10).wielding("Thrusting Spear"),
+    )
+    scored = sum(lead * mass for lead, mass in combat_result(fought).margin.items())
+    wounds = sum(diff * mass for diff, mass in fought.scoring_wounds.items())
+    assert fought.a_rank_bonus == 1
+    assert scored - wounds == pytest.approx(fought.a_casualties[0])
+    assert fought.a_casualties[0] < 1
+
+
 def test_combat_result_simultaneous_is_symmetric() -> None:
     """Equal Initiative: the win split is symmetric between the two sides."""
     spearmen = REPO.units["elven-spearmen"]
