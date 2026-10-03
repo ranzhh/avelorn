@@ -45,8 +45,6 @@ class State[T: Hashable]:
 
 @dataclass(frozen=True, eq=False)
 class Tally[T: Hashable]:
-    """What a step outside reads of groups: each group's attacks, projected and summed."""
-
     name: str
     counts: Mapping["Repeat", "Projection[T]"]
 
@@ -76,8 +74,6 @@ class World:
 
 @dataclass(frozen=True, eq=False)
 class Stack:
-    """One outer world's one-attack table and the number of attacks it is taken for."""
-
     table: Distribution[World]
     count: int
 
@@ -361,7 +357,7 @@ class Sequence(Group):
 
 @dataclass(frozen=True, eq=False, kw_only=True)
 class Repeat(Group):
-    """Runs its items for one attack, once per outer world, and stacks them on read."""
+    """Runs its items for one attack; the outer worlds resume at its exit, cut to what is live."""
 
     kind = "repeat"
     times: Step[int]
