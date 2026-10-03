@@ -1,14 +1,14 @@
 """Volley program."""
 
-from collections.abc import Hashable
+from collections.abc import Hashable, Mapping
 from itertools import product
 
 import pytest
 
-from avelorn.core.distribution import Distribution
+from avelorn.core.distribution import Distribution, Monoid, Probability
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.kernels import Standing
+from avelorn.tow.kernels import Standing, save_probability
 from avelorn.tow.phases.shooting import make_panic_tests, shoot
 from avelorn.tow.programs import VOLLEY, Evaluated, load_program
 from avelorn.tow.schema.stage import Side
@@ -77,6 +77,15 @@ def _volley(
     return evaluated
 
 
+def _landed(shots: int, p: Probability) -> Mapping[int, Probability]:
+    once = Distribution({landed: mass for landed, mass in ((1, p), (0, 1 - p)) if mass})
+    return once.repeat(shots, Monoid(0)).mass
+
+
+def _read(evaluated: Evaluated, path: str, reading: str) -> Mapping[Hashable, Probability]:
+    return {value: mass for value, mass in evaluated.at(path).read(reading).mass.items() if mass}
+
+
 def _casualties(evaluated: Evaluated, models: int) -> Distribution[int]:
     return evaluated.at("volley/remove-casualties").read("models").map(lambda left: models - left)
 
@@ -111,6 +120,14 @@ def _assert_matches_legacy(
         battle_strength=models,
     )
 
+    hit_and_wounded = legacy.p_hit * legacy.p_wound
+    assert _read(evaluated, "volley/attack/roll-to-hit", "hits") == _landed(shots, legacy.p_hit)
+    assert _read(evaluated, "volley/attack/roll-to-wound", "wounds") == _landed(
+        shots, hit_and_wounded
+    )
+    assert _read(evaluated, "volley/attack/make-armour-saves", "saves") == _landed(
+        shots, hit_and_wounded * save_probability(legacy.save_target)
+    )
     unsaved = evaluated.at("volley/remove-casualties").read("unsaved")
     assert unsaved.mass == Distribution.from_counts(legacy.distribution).mass
     assert _casualties(evaluated, models).mass == Distribution.from_counts(legacy.casualties).mass
