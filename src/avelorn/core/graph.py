@@ -575,9 +575,9 @@ class Program:
                 raise GraphError(f"{path} tallies {group.name}, which is not in scope")
         if tally in self.seeds:
             return
-        order = [self.blocks.index(group) for group in groups]
-        if order != sorted(order):
-            raise GraphError(f"{tally.name} lists its groups out of program order")
+        blocks = {self.paths[group].rsplit("/", 1)[0] for group in groups}
+        if len(blocks) != 1:
+            raise GraphError(f"{tally.name} sums groups from {', '.join(sorted(blocks))}")
         aggregations = {projection.aggregation for projection in tally.counts.values()}
         if len(aggregations) != 1:
             raise GraphError(f"{tally.name} sums its groups with different aggregations")
@@ -588,7 +588,7 @@ class Program:
                 if isinstance(source, Step) and source not in self.inside[group]:
                     raise GraphError(f"{tally.name} counts {source.name}, outside {group.name}")
             self.tallies[group] = tally
-        self.seeds[tally] = groups[0]
+        self.seeds[tally] = min(groups, key=self.blocks.index)
 
     def attach(self, rule: RuleNode) -> None:
         for landing in rule.landings:

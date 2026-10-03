@@ -26,6 +26,7 @@ from avelorn.core.graph import (
     Side,
     Slot,
     State,
+    Step,
     Tally,
     Verdict,
     World,
@@ -696,7 +697,7 @@ def test_a_tally_sums_every_group_it_counts() -> None:
     mounts = Repeat(name="mounts", times=once, items=(mount,))
     hits = Tally[int](
         "hits",
-        {riders: rider.output("hits", Monoid(0)), mounts: mount.output("hits", Monoid(0))},
+        {mounts: mount.output("hits", Monoid(0)), riders: rider.output("hits", Monoid(0))},
     )
     remove = Consequence[int](
         name="remove-casualties",
@@ -733,6 +734,80 @@ def test_a_tally_of_a_group_out_of_scope_is_refused() -> None:
             _SIDES,
             (reaction, once, Lanes(name="reaction", decision=reaction, items=(attack,)), remove),
         )
+
+
+type _Counts = dict[Repeat, Projection[Any]]
+
+
+def _no_group(attack: Repeat, hit: Step[int], other: Repeat, miss: Step[int]) -> _Counts:
+    return {}
+
+
+def _groups_in_two_slots(
+    attack: Repeat, hit: Step[int], other: Repeat, miss: Step[int]
+) -> _Counts:
+    return {attack: hit.output("hits", Monoid(0)), other: miss.output("hits", Monoid(0))}
+
+
+def _mixed_aggregations(attack: Repeat, hit: Step[int], other: Repeat, miss: Step[int]) -> _Counts:
+    return {attack: hit.output("hits", Monoid(0)), other: miss.output("hits", Monoid(0, max))}
+
+
+def _a_projection_outside_its_group(
+    attack: Repeat, hit: Step[int], other: Repeat, miss: Step[int]
+) -> _Counts:
+    return {other: hit.output("hits", Monoid(0))}
+
+
+@pytest.mark.parametrize(
+    ("counts", "same_slot", "refusal"),
+    [
+        (_no_group, True, "hits counts no group"),
+        (_groups_in_two_slots, False, "hits sums groups from fight/i4, fight/i5"),
+        (_mixed_aggregations, True, "hits sums its groups with different aggregations"),
+        (_a_projection_outside_its_group, True, "hits counts hit, outside other"),
+    ],
+    ids=["no-group", "groups-in-two-slots", "mixed-aggregations", "projection-outside-group"],
+)
+def test_a_tally_that_cannot_be_summed_is_refused(
+    counts: Callable[[Repeat, Step[int], Repeat, Step[int]], _Counts],
+    same_slot: bool,
+    refusal: str,
+) -> None:
+    once = Measurement[int](name="once", side=Side.THIS_MODEL, kernel=_one)
+    hit = Measurement[int](name="hit", side=Side.THIS_MODEL, kernel=_coin)
+    miss = Measurement[int](name="miss", side=Side.THIS_MODEL, kernel=_coin)
+    attack = Repeat(name="attack", times=once, items=(hit,))
+    other = Repeat(name="other", times=once, items=(miss,))
+    hits = Tally[int]("hits", counts(attack, hit, other, miss))
+    remove = Consequence[int](
+        name="remove-casualties", side=Side.THE_ENEMY, inputs=(hits,), kernel=_toll
+    )
+    slots = (
+        (Slot(name="i5", items=(attack, other, remove)),)
+        if same_slot
+        else (Slot(name="i5", items=(attack,)), Slot(name="i4", items=(other, remove)))
+    )
+
+    with pytest.raises(GraphError, match=re.escape(refusal)):
+        Program.build("fight", _SIDES, (once, *slots))
+
+
+def test_a_group_feeds_only_one_tally() -> None:
+    once = Measurement[int](name="once", side=Side.THIS_MODEL, kernel=_one)
+    hit = Measurement[int](name="hit", side=Side.THIS_MODEL, kernel=_coin)
+    attack = Repeat(name="attack", times=once, items=(hit,))
+    hits = Tally[int]("hits", {attack: hit.output("hits", Monoid(0))})
+    wounds = Tally[int]("wounds", {attack: hit.output("wounds", Monoid(0))})
+    remove = Consequence[int](
+        name="remove-casualties", side=Side.THE_ENEMY, inputs=(hits,), kernel=_toll
+    )
+    result = Consequence[int](
+        name="combat-result", side=Side.THE_ENEMY, inputs=(wounds,), kernel=_toll
+    )
+
+    with pytest.raises(GraphError, match="attack is tallied by hits already"):
+        Program.build("fight", _SIDES, (once, attack, remove, result))
 
 
 def test_a_repeat_inside_a_repeat_is_refused() -> None:
