@@ -1067,6 +1067,7 @@
         "type": "string",
         "enum": [
           "unit",
+          "troop-type",
           "weapon",
           "armour",
           "option",
@@ -2162,7 +2163,7 @@
           "references"
         ],
         "title": "RuleSummary",
-        "description": "A rule entry as a listing shows it: what it is, and whether it reaches the maths.\n\n``factors`` is the honest bit. An entry carries effects or it does not, and\none that does not is text the engine holds and never applies -- Killing Blow\nis the standing example, its \"no armour save allowed\" having no word in the\neffect vocabulary. ``references`` counts the units and weapons printing it,\nso a listing sorts by what would matter most to model next."
+        "description": "A rule entry as a listing shows it: what it is, and whether it reaches the maths.\n\n``factors`` says whether the entry carries effects; every filed entry does\n(``test_every_rule_entry_carries_effects``). ``references`` counts the\nplaces printing it -- units, options, troop types, weapons, and other\nrules' grants, in any spelling that resolves to it -- so a listing sorts by\nwhat would matter most to model next."
       },
       "ShootingGate": {
         "properties": {
