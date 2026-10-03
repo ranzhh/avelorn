@@ -124,8 +124,10 @@ template ("Multiple Shots (X)", "Extra Attacks (+X)"); keep that name and
 declare its X as `parameter:` -- `{kind: amount, dice: true}` where a dice roll
 may stand for it, `min`/`max` where the text bounds it, or
 `{kind: selector, values: {<key>: {printed: <text>}}}` (Hatred). Importing a
-unit writes a text-only stub for a rule no entry answers to; declare the stub's
-parameter before re-importing when it prints one.
+unit writes a text-only stub for a rule no entry answers to, after the import
+succeeds and never over an existing file; a stub whose name prints an X declares
+`{kind: printed}`, which keeps the bracket's text as X. Replace it with an
+`amount` or `selector` parameter before authoring effects that read X.
 
 **Acknowledge every gap you leave open** in `data/tow/unmodelled.yaml`:
 `kind`, `subject`, a `reason`, and the `issue` where one covers it. The reason
