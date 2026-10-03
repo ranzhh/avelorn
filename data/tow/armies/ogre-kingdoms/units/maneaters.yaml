@@ -22,40 +22,42 @@ special_rules:
   - ogre-charge
 options:
   - name: Two Hand Weapons/Additional Hand Weapon
-    kind: other
-    scope: unit
+    kind: equipment
+    scope: model
     points: 3
     per_model: true
-    limit: 'Any model in the unit may take one of the following:'
+    adds_equipment: [Two Hand Weapons/Additional Hand Weapon]
   - name: Ironfist
-    kind: other
-    scope: unit
+    kind: equipment
+    scope: model
     points: 4
     per_model: true
-    limit: 'Any model in the unit may take one of the following:'
+    adds_equipment: [Ironfist]
   - name: Great Weapon
-    kind: other
-    scope: unit
+    kind: equipment
+    scope: model
     points: 4
     per_model: true
-    limit: 'Any model in the unit may take one of the following:'
+    adds_equipment: [Great Weapon]
   - name: Ogre Pistol
-    kind: other
-    scope: unit
+    kind: equipment
+    scope: model
     points: 6
     per_model: true
-    limit: 'Any model in the unit may take one of the following:'
+    adds_equipment: [Ogre Pistol]
   - name: Brace of Ogre Pistols
-    kind: other
-    scope: unit
+    kind: equipment
+    scope: model
     points: 12
     per_model: true
-    limit: 'Any model in the unit may take one of the following:'
-  - name: Any model in the unit may replace Light Armour with Heavy Armour
-    kind: other
-    scope: unit
+    adds_equipment: [Brace of Ogre Pistols]
+  - name: Heavy Armour
+    kind: equipment
+    scope: model
     points: 3
     per_model: true
+    adds_equipment: [Heavy Armour]
+    removes_equipment: [Light Armour]
   - name: Maneater Captain
     kind: champion
     scope: unit

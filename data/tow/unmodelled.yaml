@@ -310,28 +310,8 @@
   reason: Imported as prose, adding no rule; Look Out, Sir! is not modelled.
   issue: 33
 - kind: inert-option
-  subject: maneaters/Any model in the unit may replace Light Armour with Heavy Armour
-  reason: Imported as prose; fixable in the datasheet as an equipment swap, the Heavy Armour entry exists.
-  issue: 33
-- kind: inert-option
-  subject: maneaters/Brace of Ogre Pistols
-  reason: Imported as prose; fixable in the datasheet as kind equipment, the Brace of Ogre Pistols entry exists.
-  issue: 33
-- kind: inert-option
-  subject: maneaters/Great Weapon
-  reason: Imported as prose; fixable in the datasheet as kind equipment, the Great Weapon entry exists.
-  issue: 33
-- kind: inert-option
   subject: maneaters/Immune to Psychology
   reason: 'Imported as prose, adding no rule; Immune to Psychology has no effects (psychology is not modelled). The "0-2 of the following" cap was dropped.'
-  issue: 33
-- kind: inert-option
-  subject: maneaters/Ironfist
-  reason: Imported as prose; fixable in the datasheet as kind equipment, the Ironfist entry exists.
-  issue: 33
-- kind: inert-option
-  subject: maneaters/Ogre Pistol
-  reason: Imported as prose, adding no weapon; there is no Ogre Pistol weapon entry to add.
   issue: 33
 - kind: inert-option
   subject: maneaters/Poisoned Attacks
@@ -340,10 +320,6 @@
 - kind: inert-option
   subject: maneaters/Stubborn
   reason: 'Imported as prose; fixable in the datasheet as kind special_rule, the Stubborn entry has effects. The "0-2 of the following" cap was dropped.'
-  issue: 33
-- kind: inert-option
-  subject: maneaters/Two Hand Weapons/Additional Hand Weapon
-  reason: Imported as prose, adding no weapon; there is no Additional Hand Weapon weapon entry to add.
   issue: 33
 - kind: inert-option
   subject: maneaters/Vanguard
