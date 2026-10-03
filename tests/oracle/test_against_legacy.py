@@ -131,6 +131,9 @@ def _legacy_strike(attack: Attack) -> Probability:
             Attack(COMBAT, 4, 10, 1, foe_weapon_skill=4, hit_modifier=-3),
             id="strike-hit-penalty-past-the-chart",
         ),
+        pytest.param(
+            Attack(COMBAT, 6, 6, 2, foe_weapon_skill=2), id="strike-caps-casualties-at-target-size"
+        ),
     ],
 )
 def test_plain_dice_scenarios_match(attack: Attack) -> None:
