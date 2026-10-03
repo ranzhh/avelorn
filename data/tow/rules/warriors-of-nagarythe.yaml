@@ -1,0 +1,10 @@
+# Source: https://tow.whfb.app/special-rules/warriors-of-nagarythe
+id: warriors-of-nagarythe
+name: Warriors of Nagarythe
+page: 166
+category: Special Rules
+flavour: There is no respite for the warriors of Nagarythe, only a ceaseless vigil against the approach of their traitorous
+  kin. This eternal watchfulness casts them as outsiders amongst their own kind, and many High Elves mistrust them, feeling
+  ill at ease with their stony hearts and ruthless ways.
+paragraphs:
+  - A unit with this special rule may only be joined by a character with the Shadow Stalker Elven Honour.

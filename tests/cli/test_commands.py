@@ -37,11 +37,11 @@ def test_show_prints_what_the_datasheet_offers() -> None:
 
 
 def test_show_marks_the_rules_the_engine_does_not_apply() -> None:
-    """A printed rule with no entry is starred, and the star is explained once."""
+    """A printed rule with no effects is starred, and the star is explained once."""
     printed = "\n".join(commands.show_unit(REPO, "dwarf-warriors"))
     assert "Close Order *" in printed
     assert "Shieldwall\n" in printed
-    assert printed.count("* no entry") == 1
+    assert printed.count("* no entry, no effects, or an unbound parameter") == 1
 
 
 def test_show_refuses_an_unknown_slug_and_says_where_to_look() -> None:
@@ -56,8 +56,7 @@ def test_rules_list_says_which_entries_reach_the_maths() -> None:
     assert len(lines) == len(REPO.rules) + 1
     stubborn = next(line for line in lines if line.startswith("stubborn"))
     assert stubborn.split()[-2:] == ["yes", "4"]  # effects; three units and an option print it
-    # Every entry folds, because one that did not would not be filed at all.
-    assert all(line.split()[-2] == "yes" for line in lines[1:])
+    assert any(line.split()[-2] == "no" for line in lines[1:])
 
 
 def test_coverage_leads_with_what_the_ledger_does_not_match(tmp_path: Path) -> None:
@@ -89,6 +88,6 @@ def test_rules_show_prints_the_text_the_effects_and_what_is_left_out() -> None:
 
 
 def test_rules_show_points_a_miss_at_the_coverage_report() -> None:
-    """A printed rule with no entry cannot be shown, so the miss says where it is named."""
+    """A slug with no entry cannot be shown, so the miss says where printed names are listed."""
     with pytest.raises(LookupError, match="avelorn coverage"):
-        commands.show_rule(REPO, "close-order")
+        commands.show_rule(REPO, "unprinted-rule")

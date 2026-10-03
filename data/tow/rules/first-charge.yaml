@@ -1,0 +1,10 @@
+# Source: https://tow.whfb.app/special-rules/first-charge
+id: first-charge
+name: First Charge
+page: 169
+category: Special Rules
+flavour: The thundering charge of heavily armed and armoured warriors, freshly arrived upon the battlefield and eager for
+  the fray, is devastating to the cowering foe.
+paragraphs:
+  - If this unit's first charge of the game is successful (i.e., if the unit makes contact with the charge target), the charge
+    target becomes Disrupted until the end of the Combat phase of that turn.

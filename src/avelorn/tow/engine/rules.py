@@ -273,6 +273,28 @@ def printed_rule(printed: str, rules: Registry[Rule]) -> Rule | None:
     return None
 
 
+def filed_rule(printed: str, rules: Registry[Rule]) -> Rule | None:
+    """Find the entry a rule reference is filed under, binding nothing.
+
+    A slug or an exact name, else the "(X)" template, else for a signed value
+    ("Extra Attacks (+1)") the signed template ("Extra Attacks (+X)"). For
+    presentation and coverage; the engine resolves with :func:`printed_rule`.
+
+    Returns:
+        The entry as filed, or None if the corpus holds none.
+    """
+    if printed in rules:
+        return rules[printed]
+    placeholder, value = split_parameter(printed)
+    names = [printed, placeholder]
+    if value is not None and value[0] in "+-":
+        names.append(placeholder.removesuffix(PARAMETER_SUFFIX) + f" ({value[0]}X)")
+    for name in names:
+        with suppress(UnknownNameError):
+            return rules.by_name(name)
+    return None
+
+
 def split_parameter(printed: str) -> tuple[str, str | None]:
     """Split a printed rule name into its "(X)" entry's name and the bracketed value.
 

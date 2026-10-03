@@ -1,0 +1,10 @@
+# Source: https://tow.whfb.app/special-rules/move-through-cover
+id: move-through-cover
+name: Move Through Cover
+page: 174
+category: Special Rules
+flavour: A well-trained or naturally skilled warrior can traverse unhindered through the densest terrain.
+paragraphs:
+  - Models with this special rule do not suffer any modifiers to their Movement characteristic for moving through difficult
+    or dangerous terrain. In addition, a model with this special rule may re-roll any rolls of 1 when making Dangerous Terrain
+    tests.

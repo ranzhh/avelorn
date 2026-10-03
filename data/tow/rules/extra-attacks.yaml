@@ -1,0 +1,10 @@
+# Source: https://tow.whfb.app/special-rules/extra-attacks
+id: extra-attacks
+name: Extra Attacks (+X)
+page: 168
+category: Special Rules
+flavour: Through fury, extra limbs, or being armed to the teeth, this warrior can strike more blows.
+paragraphs:
+  - A model with this special rule has a modifier to its Attacks characteristic, as shown in brackets after the name of this
+    special rule (shown here as '+X'). If this modifier is determined by the roll of a dice, roll when the model's combat
+    is chosen during any Choose & Fight Combat sub-phase.

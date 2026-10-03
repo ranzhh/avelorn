@@ -1,0 +1,8 @@
+# Source: https://tow.whfb.app/special-rules/ignores-cover
+id: ignores-cover
+name: Ignores Cover
+page: 171
+category: Special Rules
+flavour: Even dense cover offers no safe haven from a skilled marksman wielding a wellcrafted weapon.
+paragraphs:
+  - If a model making a shooting attack has this special rule, it ignores any To Hit modifiers caused by partial or full cover.

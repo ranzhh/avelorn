@@ -1,0 +1,9 @@
+# Source: https://tow.whfb.app/special-rules/venerable
+id: venerable
+name: Venerable
+page: 20
+category: Special Rules
+flavour: Longbeards tend to look down their beards at younger Dwarfs. In their turn, younger Dwarfs pay dutiful attention
+  to the words and deeds of their elders, hoping to emulate their courage.
+paragraphs:
+  - Unless this unit is fleeing, friendly units within 6" of it can re-roll any failed Panic test.

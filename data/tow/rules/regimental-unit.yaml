@@ -1,0 +1,8 @@
+# Source: https://tow.whfb.app/special-rules/regimental-unit
+id: regimental-unit
+name: Regimental Unit
+page: 176
+category: Special Rules
+flavour: Sometimes, large units are supported in battle by smaller detachments.
+paragraphs:
+  - A unit with this special rule can be accompanied by detachment.

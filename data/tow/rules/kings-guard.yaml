@@ -1,0 +1,10 @@
+# Source: https://tow.whfb.app/special-rules/kings-guard
+id: kings-guard
+name: King's Guard
+page: 163
+category: Special Rules
+flavour: Since the time of Caledor the First, the fierce warriors of Chrace have been the closest bodyguards of Elven kings
+  and princes.
+paragraphs:
+  - Any model in a unit of White Lions of Chrace that has been joined by your army's General can issue and accept challenges
+    in the same manner as a character. Should your General leave the unit for any reason, the unit loses this ability.

@@ -40,6 +40,15 @@ def test_a_weapon_resolves_its_rules_per_profile(client: TestClient) -> None:
     assert printed == [{"name": "Armour Bane (1)", "kind": "rule", "slug": "armour-bane"}]
 
 
+def test_a_signed_rule_links_to_its_signed_template(client: TestClient) -> None:
+    """Extra Attacks (+1) is filed under Extra Attacks (+X), though its sign binds nothing yet."""
+    body = client.get("/weapons/brace-of-drakefire-pistols").json()
+    combat = next(profile for profile in body["profiles"] if profile["name"] == "Combat")
+    assert {"name": "Extra Attacks (+1)", "kind": "rule", "slug": "extra-attacks"} in combat[
+        "special_rules"
+    ]
+
+
 def test_a_slug_only_rule_reference_is_served_with_its_catalogued_name(client: TestClient) -> None:
     """The corpus stores a rule id while the API resolves its display name."""
     body = client.get("/weapons/thrusting-spear").json()

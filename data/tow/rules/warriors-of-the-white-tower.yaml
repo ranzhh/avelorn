@@ -1,0 +1,10 @@
+# Source: https://tow.whfb.app/special-rules/warriors-of-the-white-tower
+id: warriors-of-the-white-tower
+name: Warriors of the White Tower
+page: 164
+category: Special Rules
+flavour: The swordmasters of the White Tower fight with a precision and unity unattainable by lesser warriors. To join their
+  ranks, one must have studied their art under the Blademasters of Hoeth.
+paragraphs:
+  - A unit with this special rule may only be joined by a High Elf Mage, or by a character with either the Warden of Saphery
+    or Loremaster Elven Honour.

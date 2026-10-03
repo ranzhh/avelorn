@@ -1,0 +1,9 @@
+# Source: https://tow.whfb.app/troop-types-in-detail/steady-in-the-ranks
+id: steady-in-the-ranks
+name: Steady in the Ranks
+page: 190
+category: Troop Types in Detail
+paragraphs:
+  - Due to their solid stature, heavy armour and often elite nature, heavy infantry are rarely concerned by inferior numbers.
+    To represent this, a unit of heavy infantry arrayed in either Close Order or Open Order formation does not become Disrupted
+    when engaged in its flank or rear unless the enemy unit has a Unit Strength of ten or more.
