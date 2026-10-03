@@ -96,9 +96,28 @@ def parse_unit(entry: Node, references: RuleReferences) -> ImportResult:
         # "Detachment Special Rules" section).
         equipment=_rule_list(slug, "equipment", fields, warnings),
         special_rules=_special_rules(slug, fields, refer, warnings),
-        options=_parse_options(slug, fields.get("options"), profiles, refer, warnings),
+        options=_parse_options(
+            slug, fields.get("options"), profiles, _as_displayed(fields, refer), warnings
+        ),
     )
     return ImportResult(unit=unit, warnings=warnings)
+
+
+def _as_displayed(fields: Node, refer: Refer) -> Refer:
+    """Resolve an option's rule names, each aliased by how the special rules display it.
+
+    An options line prints the site's entry name ("Open Order Formation"); the
+    special-rules list displays the name the corpus files it under ("Open Order").
+
+    Returns:
+        A resolver for the names an options line prints.
+    """
+    doc = fields.get("specialRules")
+    links = richtext.linked_rules(doc) if doc is not None else []
+    displayed = {name: display for display, name in links if display}
+    return lambda printed, *aliases: refer(
+        printed, *aliases, *([displayed[printed]] if printed in displayed else [])
+    )
 
 
 def _require[T](fields: Node, slug: str, key: str, kind: type[T]) -> T:

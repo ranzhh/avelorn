@@ -12,6 +12,7 @@ from avelorn.tow.importers.whfb_app.parse import (
     UnsupportedUnit,
     WhfbParseError,
     _append_option,
+    _as_displayed,
     _parse_base_size,
     _parse_group,
     _parse_option_line,
@@ -385,6 +386,31 @@ def test_rule_add_line() -> None:
         adds_rules=[RuleRef(rule="shieldwall")],
     )
     assert warnings == []
+
+
+def test_an_option_names_a_rule_as_the_special_rules_display_it() -> None:
+    """Ship's Company's options print "Open Order Formation"; its rules display "Open Order"."""
+    link = {
+        "nodeType": "entry-hyperlink",
+        "data": {
+            "target": {
+                "sys": {"contentType": {"sys": {"id": "rule"}}},
+                "fields": {"name": "Open Order Formation"},
+            }
+        },
+        "content": [{"nodeType": "text", "value": "Open Order"}],
+    }
+    warnings: list[str] = []
+    option = _parse_option_line(
+        "ships-company",
+        _line("Replace the Open Order Formation special rule with Skirmish Formation (Free)"),
+        OptionGroup(),
+        set(),
+        _as_displayed({"specialRules": {"content": [link]}}, REFER),
+        warnings,
+    )
+    assert option.removes_rules == [RuleRef(rule="open-order")]
+    assert option.adds_rules == [RuleRef(rule="skirmish-formation")]
 
 
 def test_rule_swap_line_charges_per_model() -> None:
