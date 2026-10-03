@@ -95,16 +95,15 @@ class Loaded:
             ProgramError: an input is missing, unknown or of the wrong type.
         """
         missing = sorted(set(self.inputs) - set(knowns))
+        if missing:
+            raise ProgramError(f"{self.program.name} needs {', '.join(missing)}")
         unknown = sorted(set(knowns) - set(self.inputs))
-        if missing or unknown:
-            raise ProgramError(
-                f"{self.program.name} needs {missing or 'nothing more'} "
-                f"and takes no {unknown or 'other input'}"
-            )
+        if unknown:
+            raise ProgramError(f"{self.program.name} takes no input {', '.join(unknown)}")
         for name, value in knowns.items():
             expected = self.inputs[name].type
             if not isinstance(value, expected):
-                raise ProgramError(f"{name} is a {expected.__name__}, not {value!r}")
+                raise ProgramError(f"{name} expects a {expected.__name__}; got {value!r}")
         given = {self.inputs[name].state: value for name, value in knowns.items()}
         return tuple(
             Evaluated(self, lane, MappingProxyType(dict(knowns)))
@@ -226,7 +225,7 @@ class _Builder:
             kind = stated.type
         else:
             if entry.known in self.facts:
-                raise self.error(here, f"{entry.known} is a state fact, not a known")
+                raise self.error(here, f"{entry.known} is listed in {STATE.name}")
             kind = entry.type
         self.inputs[name] = Input(self.state(name), TYPES[kind])
 

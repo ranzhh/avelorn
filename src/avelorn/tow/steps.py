@@ -182,10 +182,14 @@ class Spec:
         Raises:
             ValueError: the spec is inconsistent.
         """
-        if (self.kind is Kind.ROLL) != (self.target is not None):
-            raise ValueError(f"{self.name}: a roll, and only a roll, shows a target")
-        if (SUMMED in self.reads) != (self.counts is not None):
-            raise ValueError(f"{self.name}: a step reads a tally exactly when it counts groups")
+        if self.kind is Kind.ROLL and self.target is None:
+            raise ValueError(f"{self.name}: a roll needs a target")
+        if self.kind is not Kind.ROLL and self.target is not None:
+            raise ValueError(f"{self.name}: a {self.kind} shows no target")
+        if SUMMED in self.reads and self.counts is None:
+            raise ValueError(f"{self.name}: reads a tally it does not count")
+        if SUMMED not in self.reads and self.counts is not None:
+            raise ValueError(f"{self.name}: counts a tally it does not read")
 
     @property
     def key(self) -> tuple[StepSequence, str]:

@@ -114,5 +114,5 @@ def test_a_bad_entry_fails_the_load_at_its_path(edit: Edit, message: str, tmp_pa
 
 
 def test_evaluating_without_every_input_is_refused() -> None:
-    with pytest.raises(ProgramError, match=r"volley needs \['attacker/fielded'"):
+    with pytest.raises(ProgramError, match="volley needs attacker/fielded, attacker/standing"):
         load_program(VOLLEY).evaluate({"distance": 12})
