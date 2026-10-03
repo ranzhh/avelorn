@@ -28,19 +28,23 @@ special_rules:
 options:
   - name: High Sister
     kind: champion
+    scope: unit
     profile: High Sister
     points: 7
   - name: High Sister magic items
     kind: other
+    scope: model
     points_budget: 50
   - name: Ambushers
     kind: special_rule
+    scope: unit
     points: 1
     per_model: true
     adds_rules: [ambushers]
     limit: '0-1 unit in your army may:'
   - name: Stubborn
     kind: special_rule
+    scope: unit
     points: 1
     per_model: true
     adds_rules: [stubborn]

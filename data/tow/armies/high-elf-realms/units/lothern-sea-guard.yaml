@@ -25,24 +25,30 @@ special_rules:
 options:
   - name: Shield
     kind: equipment
+    scope: unit
     points: 1
     per_model: true
     adds_equipment: [Shield]
   - name: Sea Master
     kind: champion
+    scope: unit
     profile: Sea Master
     points: 7
   - name: Standard Bearer
     kind: standard_bearer
+    scope: unit
     points: 5
   - name: Musician
     kind: musician
+    scope: unit
     points: 5
   - name: Sea Master magic items
     kind: other
+    scope: model
     points_budget: 25
   - name: Veteran
     kind: special_rule
+    scope: unit
     points: 1
     per_model: true
     adds_rules: [veteran]
@@ -50,5 +56,6 @@ options:
     limit: 0-1 unit per 1000 points
   - name: Magic standard
     kind: magic_standard
+    scope: unit
     points_budget: 50
     limit: 0-1 unit per 1000 points

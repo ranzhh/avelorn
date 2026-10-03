@@ -26,22 +26,28 @@ special_rules:
 options:
   - name: Keeper of the Flame
     kind: champion
+    scope: unit
     profile: Keeper of the Flame
     points: 7
   - name: Standard Bearer
     kind: standard_bearer
+    scope: unit
     points: 7
   - name: Musician
     kind: musician
+    scope: unit
     points: 7
   - name: Drilled
     kind: special_rule
+    scope: unit
     points: 1
     per_model: true
     adds_rules: [drilled]
   - name: Magic standard
     kind: magic_standard
+    scope: unit
     points_budget: 100
   - name: Keeper of the Flame magic items
     kind: other
+    scope: model
     points_budget: 25

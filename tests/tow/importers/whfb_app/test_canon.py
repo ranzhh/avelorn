@@ -45,6 +45,7 @@ def test_canonical_unit_rewrites_the_references_and_reports_each_fix() -> None:
                 {
                     "name": "Shortbows",
                     "kind": "equipment",
+                    "scope": "unit",
                     "points": 1,
                     "per_model": True,
                     "adds_equipment": ["Shortbows"],

@@ -12,7 +12,7 @@ from avelorn.tow.importers.whfb_app.yamlout import (
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import Rule
-from avelorn.tow.schema.unit import OptionKind, UnitOption
+from avelorn.tow.schema.unit import OptionKind, OptionScope, UnitOption
 from avelorn.tow.schema.weapon import Weapon
 
 REPO = TOWRepository()
@@ -28,6 +28,7 @@ def test_option_row_writes_every_field_of_the_schema() -> None:
     flat = UnitOption(
         name="Cinderblast Bombs",
         kind=OptionKind.EQUIPMENT,
+        scope=OptionScope.MODEL,
         applies_to="Ironbeard",
         points=15,
         per_model=True,
@@ -37,9 +38,18 @@ def test_option_row_writes_every_field_of_the_schema() -> None:
         removes_equipment=["Shield"],
         limit="0-1 unit per 1000 points",
     )
-    budget = UnitOption(name="Magic standard", kind=OptionKind.MAGIC_STANDARD, points_budget=50)
+    budget = UnitOption(
+        name="Magic standard",
+        kind=OptionKind.MAGIC_STANDARD,
+        scope=OptionScope.UNIT,
+        points_budget=50,
+    )
     champion = UnitOption(
-        name="Ironbeard", kind=OptionKind.CHAMPION, profile="Ironbeard", points=7
+        name="Ironbeard",
+        kind=OptionKind.CHAMPION,
+        scope=OptionScope.UNIT,
+        profile="Ironbeard",
+        points=7,
     )
 
     written = set(_option_row(flat)) | set(_option_row(budget)) | set(_option_row(champion))

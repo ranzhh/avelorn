@@ -23,32 +23,39 @@ special_rules:
 options:
   - name: Great Weapon
     kind: equipment
+    scope: unit
     points: 1
     per_model: true
     adds_equipment: [Great Weapon]
   - name: Shield
     kind: equipment
+    scope: unit
     points: 1
     per_model: true
     adds_equipment: [Shield]
   - name: Veteran
     kind: champion
+    scope: unit
     profile: Veteran
     points: 5
   - name: Standard Bearer
     kind: standard_bearer
+    scope: unit
     points: 5
   - name: Musician
     kind: musician
+    scope: unit
     points: 5
   - name: Drilled
     kind: special_rule
+    scope: unit
     points: 1
     per_model: true
     adds_rules: [drilled]
     limit: 0-1 unit per 1000 points
   - name: Veteran
     kind: special_rule
+    scope: unit
     points: 1
     per_model: true
     adds_rules: [veteran]

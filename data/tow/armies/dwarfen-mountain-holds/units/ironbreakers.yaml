@@ -29,33 +29,40 @@ special_rules:
 options:
   - name: Ironbeard
     kind: champion
+    scope: unit
     profile: Ironbeard
     points: 7
   - name: Standard Bearer
     kind: standard_bearer
+    scope: unit
     points: 7
   - name: Musician
     kind: musician
+    scope: unit
     points: 7
   - name: Brace of Drakefire Pistols
     kind: equipment
+    scope: model
     applies_to: Ironbeard
     points: 10
     adds_equipment: [Brace of Drakefire Pistols]
     removes_equipment: [Shield]
   - name: Drakegun
     kind: equipment
+    scope: model
     applies_to: Ironbeard
     points: 10
     adds_equipment: [Drakegun]
     removes_equipment: [Shield]
   - name: Cinderblast Bombs
     kind: equipment
+    scope: model
     applies_to: Ironbeard
     points: 15
     adds_equipment: [Cinderblast Bombs]
   - name: Drilled
     kind: special_rule
+    scope: unit
     points: 1
     per_model: true
     adds_rules: [drilled]

@@ -1748,6 +1748,9 @@
             "$ref": "#/components/schemas/OptionKind",
             "default": "other"
           },
+          "scope": {
+            "$ref": "#/components/schemas/OptionScope"
+          },
           "profile": {
             "anyOf": [
               {
@@ -1843,6 +1846,7 @@
         "type": "object",
         "required": [
           "name",
+          "scope",
           "adds_rules",
           "removes_rules"
         ],
@@ -1862,6 +1866,15 @@
         ],
         "title": "OptionKind",
         "description": "Coarse category of a unit option."
+      },
+      "OptionScope": {
+        "type": "string",
+        "enum": [
+          "unit",
+          "model"
+        ],
+        "title": "OptionScope",
+        "description": "Who takes an option: the whole unit, or models of it."
       },
       "Panic": {
         "properties": {

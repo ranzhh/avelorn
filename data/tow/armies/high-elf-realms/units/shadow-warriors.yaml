@@ -28,25 +28,30 @@ special_rules:
 options:
   - name: Shadow-walker
     kind: champion
+    scope: unit
     profile: Shadow-walker
     points: 6
   - name: Shadow-walker magic items
     kind: other
+    scope: model
     points_budget: 25
   - name: Ambushers
     kind: special_rule
+    scope: unit
     points: 1
     per_model: true
     adds_rules: [ambushers]
     limit: '0-1 unit in your army may:'
   - name: Chariot Runners
     kind: special_rule
+    scope: unit
     points: 1
     per_model: true
     adds_rules: [chariot-runners]
     limit: '0-1 unit in your army may:'
   - name: Feigned Flight
     kind: special_rule
+    scope: unit
     points: 1
     per_model: true
     adds_rules: [feigned-flight]

@@ -34,14 +34,18 @@ special_rules:
 options:
   - name: Drakemaster
     kind: champion
+    scope: unit
     profile: Drakemaster
     points: 7
   - name: Standard Bearer
     kind: standard_bearer
+    scope: unit
     points: 7
   - name: Musician
     kind: musician
+    scope: unit
     points: 7
   - name: Drakemaster magic items
     kind: other
+    scope: model
     points_budget: 50

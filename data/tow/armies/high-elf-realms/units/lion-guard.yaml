@@ -26,17 +26,22 @@ special_rules:
 options:
   - name: Lion Guard Captain
     kind: champion
+    scope: unit
     profile: Lion Guard Captain
     points: 7
   - name: Standard Bearer
     kind: standard_bearer
+    scope: unit
     points: 7
   - name: Musician
     kind: musician
+    scope: unit
     points: 7
   - name: Magic standard
     kind: magic_standard
+    scope: unit
     points_budget: 50
   - name: Lion Guard Captain magic items
     kind: other
+    scope: model
     points_budget: 50

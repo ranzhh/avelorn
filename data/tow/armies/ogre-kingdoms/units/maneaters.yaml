@@ -23,62 +23,78 @@ special_rules:
 options:
   - name: Two Hand Weapons/Additional Hand Weapon
     kind: other
+    scope: unit
     points: 3
     per_model: true
     limit: 'Any model in the unit may take one of the following:'
   - name: Ironfist
     kind: other
+    scope: unit
     points: 4
     per_model: true
     limit: 'Any model in the unit may take one of the following:'
   - name: Great Weapon
     kind: other
+    scope: unit
     points: 4
     per_model: true
     limit: 'Any model in the unit may take one of the following:'
   - name: Ogre Pistol
     kind: other
+    scope: unit
     points: 6
     per_model: true
     limit: 'Any model in the unit may take one of the following:'
   - name: Brace of Ogre Pistols
     kind: other
+    scope: unit
     points: 12
     per_model: true
     limit: 'Any model in the unit may take one of the following:'
   - name: Any model in the unit may replace Light Armour with Heavy Armour
     kind: other
+    scope: unit
     points: 3
     per_model: true
   - name: Maneater Captain
     kind: champion
+    scope: unit
     profile: Maneater Captain
     points: 7
   - name: Standard Bearer
     kind: standard_bearer
+    scope: unit
     points: 7
   - name: Bellower (musician)
     kind: musician
+    scope: unit
     points: 7
   - name: Maneater Captain magic items
     kind: other
+    scope: model
     points_budget: 50
   - name: A standard bearer may have the Look-out Gnoblar special rule
     kind: other
+    scope: unit
     points: 5
   - name: Magic standard
     kind: magic_standard
+    scope: unit
     points_budget: 50
     limit: 0-1 unit per 1000 points
   - name: Immune to Psychology
     kind: other
+    scope: unit
     points: 0
   - name: Poisoned Attacks
     kind: other
+    scope: unit
     points: 0
   - name: Stubborn
     kind: other
+    scope: unit
     points: 0
   - name: Vanguard
     kind: other
+    scope: unit
     points: 0

@@ -172,6 +172,13 @@ class OptionKind(StrEnum):
     OTHER = "other"
 
 
+class OptionScope(StrEnum):
+    """Who takes an option: the whole unit, or models of it."""
+
+    UNIT = "unit"
+    MODEL = "model"
+
+
 class UnitOption(BaseModel):
     """A purchasable upgrade.
 
@@ -179,6 +186,7 @@ class UnitOption(BaseModel):
     model when `per_model` is set) or a `points_budget` to spend up to
     (e.g. magic standards).
 
+    `scope` says who takes the option, as the printed line's subject does.
     A champion option names its profile row in `profile`.
     """
 
@@ -186,6 +194,7 @@ class UnitOption(BaseModel):
 
     name: str
     kind: OptionKind = OptionKind.OTHER
+    scope: OptionScope
     profile: str | None = None
     # The model the option attaches to, named as its profile row prints it
     # ("An Ironbeard may take Cinderblast Bombs" -> "Ironbeard"). None is
@@ -216,6 +225,12 @@ class UnitOption(BaseModel):
     def _champion_names_its_row(self) -> Self:
         if (self.kind is OptionKind.CHAMPION) != (self.profile is not None):
             raise ValueError(f"{self.name}: a champion option, and only one, names its profile")
+        return self
+
+    @model_validator(mode="after")
+    def _named_model_takes_model_scope(self) -> Self:
+        if self.applies_to is not None and self.scope is not OptionScope.MODEL:
+            raise ValueError(f"{self.name}: an option for {self.applies_to} has model scope")
         return self
 
 

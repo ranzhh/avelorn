@@ -19,6 +19,7 @@ from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.unit import (
     BaseSize,
     OptionKind,
+    OptionScope,
     Profile,
     ProfileRole,
     TroopType,
@@ -329,11 +330,14 @@ class OptionGroup:
         verb: The verb the header carries on its children's behalf, for a
             header that states the action once ("The entire unit may take
             any of the following:") and leaves each child a bare name.
+        scope: Who takes the options: the unit, or models of it ("Any
+            model in the unit may ...").
     """
 
     limit: str | None = None
     applies_to: str | None = None
     verb: str | None = None
+    scope: OptionScope = OptionScope.UNIT
 
 
 def _parse_options(
@@ -397,7 +401,7 @@ def _parse_subject(subject: str, printed: set[str]) -> OptionGroup | None:
     if m := _SUBJECT_COUNT_RE.fullmatch(subject):
         return OptionGroup(limit=f"{m.group(1)} unit")
     if (m := _SUBJECT_MODEL_RE.fullmatch(subject)) and m.group(1) in printed:
-        return OptionGroup(applies_to=m.group(1))
+        return OptionGroup(applies_to=m.group(1), scope=OptionScope.MODEL)
     return None
 
 
@@ -466,6 +470,7 @@ def _parse_option_line(
         return UnitOption(
             name=f"{_capitalized(m.group(1))} magic items",
             kind=OptionKind.OTHER,
+            scope=OptionScope.MODEL,
             points_budget=_int(m.group(2)),
             limit=group.limit,
         )
@@ -482,6 +487,7 @@ def _parse_option_line(
         scope = OptionGroup(
             limit=stated.limit or group.limit,
             applies_to=stated.applies_to or group.applies_to,
+            scope=stated.scope,
         )
 
     option = _matched_option(
@@ -508,6 +514,7 @@ def _parse_option_line(
     return UnitOption(
         name=text,
         kind=OptionKind.OTHER,
+        scope=scope.scope,
         applies_to=scope.applies_to,
         points=points,
         per_model=per_model,
@@ -549,6 +556,7 @@ def _matched_option(
         return UnitOption(
             name="Magic standard",
             kind=OptionKind.MAGIC_STANDARD,
+            scope=scope.scope,
             points_budget=_int(m.group(1)),
             applies_to=scope.applies_to,
             limit=scope.limit,
@@ -559,6 +567,7 @@ def _matched_option(
         return UnitOption(
             name=m.group(2),
             kind=OptionKind.SPECIAL_RULE,
+            scope=scope.scope,
             points=points,
             per_model=per_model,
             adds_rules=[refer(m.group(2))],
@@ -570,6 +579,7 @@ def _matched_option(
         return UnitOption(
             name=m.group(1),
             kind=OptionKind.SPECIAL_RULE,
+            scope=scope.scope,
             points=points,
             per_model=per_model,
             adds_rules=[refer(m.group(1))],
@@ -580,6 +590,7 @@ def _matched_option(
         return UnitOption(
             name=m.group(1),
             kind=OptionKind.EQUIPMENT,
+            scope=scope.scope,
             points=points,
             per_model=per_model,
             adds_equipment=_equipment_names(m.group(1), linked),
@@ -594,6 +605,7 @@ def _matched_option(
         return UnitOption(
             name=gained,
             kind=OptionKind.EQUIPMENT,
+            scope=scope.scope,
             points=points,
             per_model=per_model,
             adds_equipment=_equipment_names(gained, linked),
@@ -634,6 +646,7 @@ def _upgrade_option(
     return UnitOption(
         name=_capitalized(name),
         kind=kind,
+        scope=scope.scope,
         profile=name if kind is OptionKind.CHAMPION else None,
         applies_to=scope.applies_to,
         points=points,

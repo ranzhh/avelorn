@@ -25,41 +25,50 @@ special_rules:
 options:
   - name: Shortbow
     kind: equipment
+    scope: unit
     points: 2
     per_model: true
     adds_equipment: [Shortbow]
   - name: Shortbows
     kind: equipment
+    scope: unit
     points: 1
     per_model: true
     adds_equipment: [Shortbow]
     removes_equipment: [Cavalry Spear]
   - name: Harbinger
     kind: champion
+    scope: unit
     profile: Harbinger
     points: 8
   - name: Standard Bearer
     kind: standard_bearer
+    scope: unit
     points: 6
   - name: Musician
     kind: musician
+    scope: unit
     points: 6
   - name: Harbinger magic items
     kind: other
+    scope: model
     points_budget: 25
   - name: Scouts
     kind: special_rule
+    scope: unit
     points: 2
     per_model: true
     adds_rules: [scouts]
     limit: 0-1 unit per 1000 points
   - name: Skirmish Formation
     kind: special_rule
+    scope: unit
     points: 1
     per_model: true
     adds_rules: [skirmish-formation]
     limit: 0-1 unit per 1000 points
   - name: Magic standard
     kind: magic_standard
+    scope: unit
     points_budget: 25
     limit: 0-1 unit per 1000 points

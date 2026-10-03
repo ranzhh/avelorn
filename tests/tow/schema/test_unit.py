@@ -91,6 +91,7 @@ def test_option_attaches_to_a_printed_model(elven_spearmen: dict) -> None:
     option = {
         "name": "Shield",
         "kind": "equipment",
+        "scope": "model",
         "applies_to": "Sentinel",
         "points": 2,
     }
@@ -103,6 +104,7 @@ def test_option_attached_to_an_absent_model_rejected(elven_spearmen: dict) -> No
     option = {
         "name": "Shield",
         "kind": "equipment",
+        "scope": "model",
         "applies_to": "Sea Master",
         "points": 2,
     }
@@ -206,23 +208,29 @@ def _champion_naming_no_row(unit: dict) -> None:
     del unit["options"][0]["profile"]
 
 
+def _unit_scope_for_a_named_model(unit: dict) -> None:
+    unit["options"][3].update(applies_to="Sentinel", scope="unit")
+
+
 @pytest.mark.parametrize(
     ("edit", "refusal"),
     [
         (_without_the_champion_option, "champion rows no option names: \\['Sentinel'\\]"),
         (_champion_naming_the_rank_and_file, "name no champion row"),
         (_champion_naming_no_row, "names its profile"),
+        (_unit_scope_for_a_named_model, "has model scope"),
     ],
     ids=[
         "champion-row-unnamed",
         "champion-names-rank-and-file",
         "champion-names-no-row",
+        "named-model-unit-scope",
     ],
 )
 def test_parts_are_checked_at_load(
     elven_spearmen: dict, edit: Callable[[dict], None], refusal: str
 ) -> None:
-    """Rows and options must agree on which row is the champion."""
+    """Rows and options must agree on which row is the champion and who takes what."""
     edit(elven_spearmen)
     with pytest.raises(ValidationError, match=refusal):
         Unit.model_validate(elven_spearmen)

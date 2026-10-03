@@ -24,38 +24,46 @@ special_rules:
 options:
   - name: Warbow
     kind: equipment
+    scope: unit
     points: 1
     per_model: true
     adds_equipment: [Warbow]
   - name: Heavy Armour
     kind: equipment
+    scope: unit
     points: 1
     per_model: true
     adds_equipment: [Heavy Armour]
     removes_equipment: [Light Armour]
   - name: Chracian Captain
     kind: champion
+    scope: unit
     profile: Chracian Captain
     points: 7
   - name: Standard Bearer
     kind: standard_bearer
+    scope: unit
     points: 7
   - name: Musician
     kind: musician
+    scope: unit
     points: 7
   - name: Lion Cloak
     kind: special_rule
+    scope: unit
     points: 1
     per_model: true
     adds_rules: [lion-cloak]
   - name: Scouts
     kind: special_rule
+    scope: unit
     points: 0
     adds_rules: [scouts]
     removes_rules: [vanguard]
     limit: 0-1 unit
   - name: Ambushers
     kind: special_rule
+    scope: unit
     points: 1
     per_model: true
     adds_rules: [ambushers]

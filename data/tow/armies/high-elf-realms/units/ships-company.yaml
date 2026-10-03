@@ -25,36 +25,44 @@ special_rules:
 options:
   - name: Thrusting Spear and Shield
     kind: equipment
+    scope: unit
     points: 0
     adds_equipment: [Thrusting Spear, Shield]
     removes_equipment: [Warbow]
   - name: Midshipman
     kind: champion
+    scope: unit
     profile: Midshipman
     points: 5
   - name: Bosun
     kind: champion
+    scope: unit
     profile: Bosun
     points: 5
   - name: Standard Bearer
     kind: standard_bearer
+    scope: unit
     points: 5
   - name: Musician
     kind: musician
+    scope: unit
     points: 5
   - name: Light Armour
     kind: equipment
+    scope: unit
     points: 1
     per_model: true
     adds_equipment: [Light Armour]
   - name: Skirmish Formation
     kind: special_rule
+    scope: unit
     points: 0
     adds_rules: [skirmish-formation]
     removes_rules: [open-order]
     limit: 0-1 unit per 1000 points
   - name: Veteran
     kind: special_rule
+    scope: unit
     points: 1
     per_model: true
     adds_rules: [veteran]
