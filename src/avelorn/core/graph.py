@@ -37,25 +37,38 @@ def _shown(value: object) -> int | str:
     return value if isinstance(value, int) else str(value)
 
 
+@dataclass(frozen=True, eq=False)
+class State[T: Hashable]:
+    """A fact about the table that no block owns, such as the models a unit has left."""
+
+    name: str
+    initial: T
+
+
+# A step's own output is a local, keyed by the step.
+type Key = Step[Any] | State[Any]
+
+
 @dataclass(frozen=True)
-class Trace:
-    """Partial execution trace so far."""
+class World:
+    """One way things could have gone: the values of the state and of the locals."""
 
-    outputs: tuple[tuple["Step[Any]", Any], ...] = ()
+    values: tuple[tuple[Key, Any], ...] = ()
 
-    def of[Out: Hashable](self, step: "Step[Out]") -> Out:
-        for declared, value in self.outputs:
-            if declared is step:
+    def of[T: Hashable](self, key: "Step[T] | State[T]") -> T:
+        for held, value in self.values:
+            if held is key:
                 return value
-        raise GraphError(f"{step.name} has not run in this trace")
+        raise GraphError(f"{key.name} is not held in this world")
 
-    def then[Out: Hashable](self, step: "Step[Out]", value: Out) -> "Trace":
-        return Trace((*self.outputs, (step, value)))
+    def holding(self, key: Key, value: Hashable) -> "World":
+        kept = tuple(pair for pair in self.values if pair[0] is not key)
+        return World((*kept, (key, value)))
 
 
 @dataclass
 class Edge:
-    joint: Distribution[Trace]
+    joint: Distribution[World]
     count: Distribution[int] | None
     stacked: dict["Projection[Any]", Distribution[Any]] = field(default_factory=dict)
 
@@ -78,12 +91,12 @@ class Edge:
 @dataclass(frozen=True, eq=False)
 class Projection[T: Hashable]:
     label: str
-    reads: tuple["Step[Any]", ...]
+    reads: tuple[Key, ...]
     # Takes the values of `reads`, positionally.
     project: Callable[..., T]
     aggregation: Monoid[T]
 
-    def of(self, world: Trace) -> T:
+    def of(self, world: World) -> T:
         return self.project(*(world.of(source) for source in self.reads))
 
     def view(self, edge: Edge) -> dict[str, Any]:
@@ -96,7 +109,7 @@ class Projection[T: Hashable]:
 class Scalar[T]:
     label: str
     value: T
-    reads: ClassVar[tuple["Step[Any]", ...]] = ()
+    reads: ClassVar[tuple[Key, ...]] = ()
 
     def view(self, edge: Edge) -> dict[str, Any]:
         return {"label": self.label, "value": _shown(self.value)}
@@ -119,13 +132,19 @@ class Step[Out: Hashable](ABC):
     kind: ClassVar[str]
     name: str
     side: Side
-    # Inputs are outputs of earlier in-scope steps, passed positionally to the kernel.
-    inputs: tuple["Step[Any]", ...] = ()
+    # Inputs are earlier in-scope locals and state facts, passed positionally to the kernel.
+    inputs: tuple[Key, ...] = ()
     kernel: Kernel[Out] | None = None
     readings: list[Reading] = field(default_factory=list)
+    # A step that writes a state fact replaces it and declares no local.
+    writes: State[Out] | None = None
+
+    @property
+    def key(self) -> Key:
+        return self if self.writes is None else self.writes
 
     @abstractmethod
-    def outcomes(self, world: Trace, lane: "Lane") -> Distribution[Out]: ...
+    def outcomes(self, world: World, lane: "Lane") -> Distribution[Out]: ...
 
     def output(self, label: str, aggregation: Monoid[Out]) -> Projection[Out]:
         def project(value: Out) -> Out:
@@ -139,13 +158,13 @@ class Step[Out: Hashable](ABC):
     def shown(self) -> tuple[Reading, ...]:
         return tuple(self.readings)
 
-    def arguments(self, world: Trace) -> tuple[Any, ...]:
-        return tuple(world.of(step) for step in self.inputs)
+    def arguments(self, world: World) -> tuple[Any, ...]:
+        return tuple(world.of(source) for source in self.inputs)
 
     def declare(self, program: "Program", prefix: str, visible: list["Step[Any]"]) -> None:
         path = f"{prefix}/{self.name}"
         for source in self.inputs:
-            if source not in visible:
+            if isinstance(source, Step) and source not in visible:
                 raise GraphError(f"{path} inputs {source.name}, which is not in scope")
         if self.kernel is not None:
             try:
@@ -155,19 +174,23 @@ class Step[Out: Hashable](ABC):
                     f"{path} kernel cannot accept {len(self.inputs)} positional inputs"
                 ) from error
         program.take(self, path)
-        visible.append(self)
-        for reading in self.shown():
-            for source in reading.reads:
-                if source not in visible:
-                    raise GraphError(f"{path} shows {source.name}, which is not in scope")
+        if self.writes is None:
+            visible.append(self)
+        reads = tuple(key for reading in self.shown() for key in reading.reads)
+        for source in reads:
+            if isinstance(source, Step) and source not in visible:
+                raise GraphError(f"{path} shows {source.name}, which is not in scope")
+        for key in (*self.inputs, *reads, self.key):
+            if isinstance(key, State):
+                program.hold(key)
 
     def collect(self, program: "Program") -> None:
         program.steps.append(self)
 
     def run(self, lane: "Lane") -> None:
-        def advance(world: Trace) -> Distribution[Trace]:
-            def attach(value: Out) -> Trace:
-                return world.then(self, value)
+        def advance(world: World) -> Distribution[World]:
+            def attach(value: Out) -> World:
+                return world.holding(self.key, value)
 
             return self.outcomes(world, lane).map(attach)
 
@@ -194,7 +217,7 @@ class Measurement[Out: Hashable](Step[Out]):
     kind = "measurement"
     kernel: Kernel[Out]
 
-    def outcomes(self, world: Trace, lane: "Lane") -> Distribution[Out]:
+    def outcomes(self, world: World, lane: "Lane") -> Distribution[Out]:
         return self.kernel(*self.arguments(world))
 
 
@@ -203,7 +226,7 @@ class Consequence[Out: Hashable](Step[Out]):
     kind = "consequence"
     kernel: Kernel[Out]
 
-    def outcomes(self, world: Trace, lane: "Lane") -> Distribution[Out]:
+    def outcomes(self, world: World, lane: "Lane") -> Distribution[Out]:
         return self.kernel(*self.arguments(world))
 
 
@@ -214,7 +237,7 @@ class Roll[Out: Hashable](Step[Out]):
     target: Reading
     modifiers: tuple[Modifier, ...] = ()
 
-    def outcomes(self, world: Trace, lane: "Lane") -> Distribution[Out]:
+    def outcomes(self, world: World, lane: "Lane") -> Distribution[Out]:
         return self.kernel(*self.arguments(world))
 
     def shown(self) -> tuple[Reading, ...]:
@@ -232,7 +255,7 @@ class Decision[Out: Hashable](Step[Out]):
     kind = "decision"
     options: tuple[Out, ...]
 
-    def outcomes(self, world: Trace, lane: "Lane") -> Distribution[Out]:
+    def outcomes(self, world: World, lane: "Lane") -> Distribution[Out]:
         return Distribution.pure(lane.choices[self])
 
     def collect(self, program: "Program") -> None:
@@ -329,7 +352,7 @@ class Repeat(Group):
         lane.joint, lane.count = outer, count
 
     def multiplier(self, lane: "Lane") -> Distribution[int]:
-        def counted(world: Trace) -> int:
+        def counted(world: World) -> int:
             return world.of(self.times)
 
         mine = lane.joint.map(counted)
@@ -396,6 +419,7 @@ class Program:
     blocks: list[Block] = field(default_factory=list)
     decisions: list[Decision[Any]] = field(default_factory=list)
     rules: list[RuleNode] = field(default_factory=list)
+    states: list[State[Any]] = field(default_factory=list)
 
     @classmethod
     def build(cls, name: str, sides: Mapping[Side, str], items: tuple[Item, ...]) -> "Program":
@@ -410,6 +434,15 @@ class Program:
             raise GraphError(f"{path} is declared twice")
         self.paths[item] = path
         item.collect(self)
+
+    def hold(self, state: State[Any]) -> None:
+        if state in self.states:
+            return
+        path = f"{self.name}/state/{state.name}"
+        if path in self.paths.values():
+            raise GraphError(f"{path} is declared twice")
+        self.paths[state] = path
+        self.states.append(state)
 
     def attach(self, rule: RuleNode) -> None:
         for landing in rule.landings:
@@ -435,7 +468,8 @@ class Program:
         )
 
     def _lane(self, choices: Mapping[Decision[Any], Any]) -> "Lane":
-        lane = Lane(program=self, choices=choices, joint=Distribution.pure(Trace()))
+        start = World(tuple((state, state.initial) for state in self.states))
+        lane = Lane(program=self, choices=choices, joint=Distribution.pure(start))
         for item in self.items:
             item.run(lane)
         return lane
@@ -445,7 +479,7 @@ class Program:
 class Lane:
     program: Program
     choices: Mapping[Decision[Any], Any]
-    joint: Distribution[Trace]
+    joint: Distribution[World]
     count: Distribution[int] | None = None
     edges: dict[Step[Any], Edge] = field(default_factory=dict)
 

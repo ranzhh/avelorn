@@ -25,6 +25,7 @@ from avelorn.core.graph import (
     Sequence,
     Side,
     Slot,
+    State,
     Verdict,
 )
 
@@ -287,6 +288,33 @@ def test_a_kernel_must_accept_its_inputs(kernel: Callable[..., Distribution[int]
 
     with pytest.raises(GraphError, match="kernel cannot accept 1 positional inputs"):
         Program.build("arity", _SIDES, (source, dependent))
+
+
+def _add_three(total: int) -> Distribution[int]:
+    return Distribution.pure(total + 3)
+
+
+def _add_four(total: int) -> Distribution[int]:
+    return Distribution.pure(total + 4)
+
+
+def _same(value: int) -> int:
+    return value
+
+
+def test_a_state_write_replaces_the_fact() -> None:
+    total = State[int]("total", 0)
+    first = Consequence[int](
+        name="add-three", side=Side.THIS_MODEL, inputs=(total,), kernel=_add_three, writes=total
+    )
+    second = Consequence[int](
+        name="add-four", side=Side.THIS_MODEL, inputs=(total,), kernel=_add_four, writes=total
+    )
+    sums = Projection("total", (total,), _same, Monoid(0))
+    second.show(sums)
+    (lane,) = Program.build("tally", _SIDES, (first, second)).evaluate()
+
+    assert lane.read(second, sums).mass == {7: 1}
 
 
 def test_two_steps_cannot_share_a_path() -> None:
