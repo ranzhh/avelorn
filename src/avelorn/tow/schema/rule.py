@@ -1433,10 +1433,19 @@ class Rule(BaseModel):
 
         Returns:
             The name, with X substituted into its bracket.
+
+        Raises:
+            ValueError: X is missing, extra, or not what the rule declares.
         """
-        template = _TEMPLATE.match(self.name)
-        if self.parameter is None or x is None or template is None:
+        if self.parameter is None:
+            if x is not None:
+                raise ValueError(f"X {x!r} given, but {self.id} declares no X")
             return self.name
+        if x is None:
+            raise ValueError(f"X missing; {self.id} expects {self.parameter.expected}")
+        template = _TEMPLATE.match(self.name)
+        if template is None:
+            raise ValueError(f"{self.name!r} prints no X to show {x!r} in")
         printed = self.parameter.printed(x)
         return f"{template['base']} ({template['before']}{printed}{template['after']})"
 
@@ -1482,12 +1491,9 @@ class Rule(BaseModel):
         Raises:
             ValueError: X is missing, extra, or not what the rule declares.
         """
-        if self.parameter is None:
-            if x is not None:
-                raise ValueError(f"X {x!r} given, but {self.id} declares no X")
+        name = self.display(x)
+        if self.parameter is None or x is None:
             return self
-        if x is None:
-            raise ValueError(f"X missing; {self.id} expects {self.parameter.expected}")
         value = self.parameter.value(x)
         if isinstance(value, DiceQuantity) and any(map(_reads_parameter_as_amount, self.effects)):
             raise ValueError(
@@ -1499,7 +1505,7 @@ class Rule(BaseModel):
             if isinstance(value, str)
             else [_substituted(effect, value) for effect in self.effects]
         )
-        return self.model_copy(update={"name": self.display(x), "effects": effects})
+        return self.model_copy(update={"name": name, "effects": effects})
 
 
 def bind(reference: RuleRef, rules: Mapping[str, Rule]) -> Rule:

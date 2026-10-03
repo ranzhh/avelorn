@@ -475,6 +475,31 @@ def test_a_dice_x_never_binds_into_an_amount() -> None:
         rule.bound("D3")
 
 
+@pytest.mark.parametrize(
+    ("rule", "x", "refusal"),
+    [
+        (
+            Rule(
+                id="armour-bane",
+                name="Armour Bane (X)",
+                parameter=AmountParameter(kind="amount"),
+                paragraphs=["…"],
+            ),
+            None,
+            "X missing; armour-bane expects an amount",
+        ),
+        (Rule(id="stubborn", name="Stubborn", paragraphs=["…"]), 1, "X 1 given"),
+    ],
+    ids=["x-missing", "x-extra"],
+)
+def test_a_name_displays_only_with_the_x_its_rule_declares(
+    rule: Rule, x: int | None, refusal: str
+) -> None:
+    """Neither the bare template nor a stray bracket is ever shown as a rule's name."""
+    with pytest.raises(ValueError, match=refusal):
+        rule.display(x)
+
+
 def test_a_declared_parameter_prints_in_the_name() -> None:
     """Display substitutes X into the name, so the name must print one."""
     with pytest.raises(ValidationError, match="prints no X"):
