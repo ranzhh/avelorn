@@ -13,6 +13,7 @@ from typing import assert_never
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.unit_strength import UnitStrength, UnitStrengthMarker
 
 
@@ -27,10 +28,9 @@ class TroopTypeProfile(BaseModel):
     troop-type table prints it — a fixed count, or "As Starting Wounds"
     for the troop types whose strength scales with the model.
     ``special_rules`` are the rules the troop type confers on every
-    unit of it (Regular Infantry's Press of Battle, say), as printed
-    display-name strings — the type's own rules, held apart from the
-    datasheet's ``special_rules`` because their owner is the troop type,
-    not the unit.
+    unit of it (Regular Infantry's Press of Battle, say), as references —
+    the type's own rules, held apart from the datasheet's
+    ``special_rules`` because their owner is the troop type, not the unit.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -40,7 +40,7 @@ class TroopTypeProfile(BaseModel):
     unit_strength: UnitStrength
     models_per_rank: int | None = Field(default=None, ge=1)
     max_rank_bonus: int = Field(default=0, ge=0)
-    special_rules: tuple[str, ...] = ()
+    special_rules: tuple[RuleRef, ...] = ()
 
     def unit_strength_per_model(self, wounds: int | None) -> int:
         """This troop type's Unit Strength for one model of ``wounds`` Wounds.

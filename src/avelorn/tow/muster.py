@@ -12,12 +12,13 @@ from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.unit import Unit, UnitOption
 
 
-def _fold(
-    base: list[str], options: list[UnitOption], adds_attr: str, removes_attr: str
-) -> list[str]:
+def _fold[T](
+    base: list[T], options: list[UnitOption], adds_attr: str, removes_attr: str
+) -> list[T]:
     """Apply each option's removes then adds to a base list, preserving order.
 
     Removes precede adds within an option, so an option can replace a name;
@@ -133,7 +134,7 @@ class Complement(BaseModel):
         return _fold(self.unit.equipment, self._chosen, "adds_equipment", "removes_equipment")
 
     @property
-    def special_rules(self) -> list[str]:
+    def special_rules(self) -> list[RuleRef]:
         """The datasheet special rules after the chosen options' adds and removes.
 
         Returns:

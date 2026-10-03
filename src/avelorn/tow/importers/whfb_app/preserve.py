@@ -29,7 +29,7 @@ from .parse import WhfbParseError
 # Per kind, the fields no page states. Everything else the importer owns
 # and may overwrite. An armour page states all of its own.
 HAND_AUTHORED: dict[type[BaseModel], frozenset[str]] = {
-    Rule: frozenset({"effects", "notes"}),
+    Rule: frozenset({"effects", "notes", "parameter"}),
     Weapon: frozenset({"weapon_type"}),
     Armour: frozenset(),
 }

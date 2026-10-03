@@ -31,9 +31,10 @@ Run everything with `uv run` from your own root, never another checkout's.
 ## Survey before you touch anything
 
 Run `uv run avelorn coverage` first and read it. It is every gap between the
-corpus and the engine -- printed rules with no entry or no effects, parameters
-that do not bind, profile rows nothing reads, printed notes, options that change
-nothing -- each with the ledger's reason it stays open. That is what the engine
+corpus and the engine -- rules with no effects, profile rows nothing reads,
+printed notes, options that change nothing -- each with the ledger's reason it
+stays open. A reference to no rule, or an X its rule does not declare, fails the
+load instead. That is what the engine
 leaves out; a rule the unit prints that is not listed there already reaches the
 maths.
 
@@ -43,16 +44,19 @@ pass rather than four:
 ```python
 from avelorn.tow.importers.whfb_app.client import WhfbAppClient
 from avelorn.tow.importers.whfb_app.parse import parse_unit
+from avelorn.tow.importers.whfb_app.references import RuleReferences
 from avelorn.tow.data import TOWRepository
 
 repo = TOWRepository()
-res = parse_unit(WhfbAppClient().unit_entry("<slug>"))
+res = parse_unit(WhfbAppClient().unit_entry("<slug>"), RuleReferences(repo.rules.values()))
 ```
 
 `res.unit` gives the equipment, the special rules and the options;
 `res.warnings` gives what the importer dropped or could not read. Compare the
-equipment against `repo.weapons` / `repo.armoury` by **name**, and the rules
-against `repo.rules`. The client needs `ATTRIBUTION_EMAIL` in the environment.
+equipment against `repo.weapons` / `repo.armoury` by **name**. Rules arrive as
+references: a printed name no entry answers to raises `WhfbParseError` naming
+the rule to import, and so does a bracket that does not read as its rule's X.
+The client needs `ATTRIBUTION_EMAIL` in the environment.
 
 `parse_unit` raising is the answer, not a failure to work around:
 `UnsupportedUnit` for a troop type the schema lacks (#10 for Character), and a
@@ -112,11 +116,18 @@ earns its place it is a line or three (`parry.yaml`, `killing-blow.yaml`).
 
 **If it cannot fold, import the entry text-only**
 (`uv run python scripts/import_whfb_app.py rule <slug>`), with no `effects:` and
-no `notes:`. Every printed rule gets an entry, so references can become slugs
-(#230). A text-only entry reports `special rule not factored` exactly as a
-missing one did, and coverage lists it as `rule-without-effects`. The site files
-a bracketed rule under its template ("Multiple Shots (X)", "Extra Attacks
-(+X)"); keep that name.
+no `notes:`. Every referenced rule needs an entry: a reference is the slug, or
+`{rule: <slug>, X: <value>}` where the rule prints an X. A text-only entry
+reports `special rule not factored`, and coverage lists it as
+`rule-without-effects` under its slug. The site files a bracketed rule under its
+template ("Multiple Shots (X)", "Extra Attacks (+X)"); keep that name and
+declare its X as `parameter:` -- `{kind: amount, dice: true}` where a dice roll
+may stand for it, `min`/`max` where the text bounds it, or
+`{kind: selector, values: {<key>: {printed: <text>}}}` (Hatred). Importing a
+unit writes a text-only stub for a rule no entry answers to, after the import
+succeeds and never over an existing file; a stub whose name prints an X declares
+`{kind: printed}`, which keeps the bracket's text as X. Replace it with an
+`amount` or `selector` parameter before authoring effects that read X.
 
 **Acknowledge every gap you leave open** in `data/tow/unmodelled.yaml`:
 `kind`, `subject`, a `reason`, and the `issue` where one covers it. The reason

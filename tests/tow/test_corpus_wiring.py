@@ -18,16 +18,16 @@ from avelorn.tow.data import TOWRepository
 from avelorn.tow.game import TOWGame
 from avelorn.tow.phases.combat import CombatResult, break_test, strike_unit
 from avelorn.tow.phases.shooting import shoot_unit
+from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.unit import Unit
 
 REPO = TOWRepository()
 GAME = TOWGame.load_data()
 
 
-def _without(unit: Unit, rule: str) -> Unit:
-    # The same datasheet with one printed rule struck out, so a comparison
-    # isolates that rule and nothing else about the unit.
-    assert rule in unit.special_rules, f"{unit.name} does not print {rule}"
+def _without(unit: Unit, slug: str) -> Unit:
+    rule = RuleRef(rule=slug)
+    assert rule in unit.special_rules, f"{unit.name} does not print {slug}"
     return unit.model_copy(update={"special_rules": [r for r in unit.special_rules if r != rule]})
 
 
@@ -46,7 +46,7 @@ def test_blizzard_aura_makes_a_foe_of_the_frostheart_strike_last() -> None:
         chilled = combat.fight(swordmasters, GAME.field(frostheart, 1).wielding("Wicked Claws"))
         bare = combat.fight(
             swordmasters,
-            GAME.field(_without(frostheart, "Blizzard Aura"), 1).wielding("Wicked Claws"),
+            GAME.field(_without(frostheart, "blizzard-aura"), 1).wielding("Wicked Claws"),
         )
 
     assert chilled.a_initiative.value == 1
@@ -66,7 +66,7 @@ def test_enfeebling_cold_costs_a_foe_of_the_merwyrm_a_point_of_strength() -> Non
 
     chilled = strike_unit(lions, GAME.field(merwyrm, 1).wielding("Lashing Talons"))
     bare = strike_unit(
-        lions, GAME.field(_without(merwyrm, "Enfeebling Cold"), 1).wielding("Lashing Talons")
+        lions, GAME.field(_without(merwyrm, "enfeebling-cold"), 1).wielding("Lashing Talons")
     )
 
     assert (bare.wound_target, chilled.wound_target) == (4, 5)
@@ -90,7 +90,7 @@ def test_terror_costs_the_loser_a_point_of_break_leadership() -> None:
     ).b
     bare = break_test(
         lost_by_two,
-        GAME.field(_without(merwyrm, "Terror"), 1).wielding("Lashing Talons"),
+        GAME.field(_without(merwyrm, "terror"), 1).wielding("Lashing Talons"),
         swordmasters,
     ).b
 
@@ -105,7 +105,7 @@ def test_abyssal_cloak_deepens_the_merwyrms_long_range_penalty() -> None:
     rather than reported unfactored.
     """
     merwyrm = REPO.units["merwyrm"]
-    bare_sheet = _without(merwyrm, "Abyssal Cloak")
+    bare_sheet = _without(merwyrm, "abyssal-cloak")
     archers = GAME.field(REPO.units["elven-archers"], 5).wielding("Longbow")
 
     far = shoot_unit(archers, GAME.field(merwyrm, 1), distance=20)

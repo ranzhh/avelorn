@@ -41,7 +41,7 @@ def test_a_weapon_resolves_its_rules_per_profile(client: TestClient) -> None:
 
 
 def test_a_signed_rule_links_to_its_signed_template(client: TestClient) -> None:
-    """Extra Attacks (+1) is filed under Extra Attacks (+X), though its sign binds nothing yet."""
+    """Extra Attacks (+1) is filed under Extra Attacks (+X), its sign the template's."""
     body = client.get("/weapons/brace-of-drakefire-pistols").json()
     combat = next(profile for profile in body["profiles"] if profile["name"] == "Combat")
     assert {"name": "Extra Attacks (+1)", "kind": "rule", "slug": "extra-attacks"} in combat[

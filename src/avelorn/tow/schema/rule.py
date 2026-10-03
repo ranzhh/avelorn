@@ -41,15 +41,33 @@ from pydantic import (
 )
 
 from avelorn.tow.schema.psychology import Outcome, PanicCause
+from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.stage import Dice, Stage
 from avelorn.tow.schema.unit import Characteristic, TroopType
 from avelorn.tow.schema.weapon import WeaponType
 
-# The printed convention for a parameterised rule: the name is filed
-# under an "(X)" placeholder ("Armour Bane (X)"), and effects reference
-# the parameter as the literal "X" ("the amount shown in brackets after
-# the name of this special rule").
-PARAMETER_SUFFIX = " (X)"
+_TEMPLATE = re.compile(r"^(?P<base>.+) \((?P<before>[^()X]*)X(?P<after>[^()X]*)\)$")
+_BRACKETED = re.compile(r"^(?P<base>.+) \((?P<inner>[^()]+)\)$")
+
+
+def printed_base(printed: str) -> str:
+    """A printed rule name less its bracket: "Armour Bane (1)" is "Armour Bane".
+
+    Returns:
+        The name before the bracket, or the whole name when it prints none.
+    """
+    bracket = _BRACKETED.match(printed)
+    return printed if bracket is None else bracket["base"]
+
+
+def prints_x(name: str) -> bool:
+    """Whether a rule's name prints an X in its bracket: "Regeneration (X+)" does.
+
+    Returns:
+        True when the name is a display template for an X.
+    """
+    return _TEMPLATE.match(name) is not None
+
 
 _DICE_QUANTITY = re.compile(r"^D(?P<sides>[36])(?:\+(?P<plus>\d+))?$")
 
@@ -80,6 +98,171 @@ class DiceQuantity(BaseModel):
             return None
         sides: Literal[3, 6] = 3 if match.group("sides") == "3" else 6
         return cls(sides=sides, plus=int(match.group("plus") or 0))
+
+
+class AmountParameter(BaseModel):
+    """An X that is a number, or a dice roll where ``dice`` allows one.
+
+    ``min`` and ``max`` bound a number. Two sources of one rule sum their X
+    (``combine``).
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    kind: Literal["amount"]
+    dice: bool = False
+    min: int | None = Field(default=None, ge=0)
+    max: int | None = Field(default=None, ge=0)
+    combine: Literal["sum"] = "sum"
+
+    @property
+    def expected(self) -> str:
+        """What an X must be, in words, for an error message."""
+        bounds = "".join(
+            (
+                f" from {self.min}" if self.min is not None else "",
+                f" to {self.max}" if self.max is not None else "",
+            )
+        )
+        dice = " or a dice roll (D3, D6, D3+1)" if self.dice else ""
+        return f"an amount: a whole number{bounds}{dice}"
+
+    def value(self, x: int | str) -> "int | DiceQuantity":
+        """The amount an X stands for.
+
+        Returns:
+            The number, or the dice quantity.
+
+        Raises:
+            ValueError: X is not what this parameter declares.
+        """
+        if isinstance(x, int):
+            if (self.min is not None and x < self.min) or (self.max is not None and x > self.max):
+                raise ValueError(f"X {x!r} is not {self.expected}")
+            return x
+        dice = DiceQuantity.parse(x) if self.dice else None
+        if dice is None:
+            raise ValueError(f"X {x!r} is not {self.expected}")
+        return dice
+
+    def parse(self, printed: str) -> int | str:
+        """Read an X off the text a bracket prints.
+
+        Returns:
+            The X a reference carries.
+        """
+        x: int | str = int(printed) if printed.isdigit() else printed
+        self.value(x)
+        return x
+
+    def printed(self, x: int | str) -> str:
+        return str(x)
+
+    @model_validator(mode="after")
+    def _bounds_in_order(self) -> "AmountParameter":
+        if self.min is not None and self.max is not None and self.min > self.max:
+            raise ValueError(f"min {self.min} is above max {self.max}")
+        return self
+
+
+class SelectorValue(BaseModel):
+    """One value a selector X may take, and how the bracket prints it."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    printed: str = Field(min_length=1)
+
+
+class SelectorParameter(BaseModel):
+    """An X that names one of a closed set, keyed by slug: Hatred's hated enemies."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    kind: Literal["selector"]
+    values: Annotated[dict[str, SelectorValue], Field(min_length=1)]
+    combine: Literal["union"] = "union"
+
+    @property
+    def expected(self) -> str:
+        """What an X must be, in words, for an error message."""
+        return f"a selector: one of {', '.join(sorted(self.values))}"
+
+    def value(self, x: int | str) -> str:
+        """The selector value an X names.
+
+        Returns:
+            The value's key.
+
+        Raises:
+            ValueError: X names no declared value.
+        """
+        if not isinstance(x, str) or x not in self.values:
+            raise ValueError(f"X {x!r} is not {self.expected}")
+        return x
+
+    def parse(self, printed: str) -> str:
+        """The key of the value a bracket prints.
+
+        Returns:
+            The X a reference carries.
+
+        Raises:
+            ValueError: no declared value prints as ``printed``.
+        """
+        for key, value in self.values.items():
+            if value.printed == printed:
+                return key
+        raise ValueError(f"{printed!r} is not {self.expected}")
+
+    def printed(self, x: int | str) -> str:
+        """The text a bracket prints for an X.
+
+        Returns:
+            The value as printed.
+        """
+        return self.values[self.value(x)].printed
+
+
+class PrintedParameter(BaseModel):
+    """An X kept as the text its bracket prints: a text-only stub's, read by no effect."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    kind: Literal["printed"]
+
+    @property
+    def expected(self) -> str:
+        """What an X must be, in words, for an error message."""
+        return "the text its bracket prints"
+
+    def value(self, x: int | str) -> str:
+        """The text an X stands for.
+
+        Returns:
+            The X, as text.
+
+        Raises:
+            ValueError: X is empty.
+        """
+        if x == "":
+            raise ValueError(f"X {x!r} is not {self.expected}")
+        return str(x)
+
+    def parse(self, printed: str) -> int | str:
+        """Read an X off the text a bracket prints.
+
+        Returns:
+            The X a reference carries: a number where the text is one.
+        """
+        return int(printed) if printed.isdigit() else printed
+
+    def printed(self, x: int | str) -> str:
+        return self.value(x)
+
+
+Parameter = Annotated[
+    AmountParameter | SelectorParameter | PrintedParameter, Field(discriminator="kind")
+]
 
 
 class Seam(StrEnum):
@@ -821,9 +1004,9 @@ class RerollEffect(GatedEffect):
 class GrantEffect(GatedEffect):
     """Confer a named special rule, gated like any other effect.
 
-    "gains the Armour Bane (1) special rule" — the rule is granted *by name*, not
-    copied: the consuming seam resolves ``grants`` to its entry (the one
-    resolution convention, parameter substituted) and applies that rule's own
+    "gains the Armour Bane (1) special rule" — the rule is granted *by reference*,
+    not copied: the consuming seam binds ``grants`` to its entry (X substituted,
+    :func:`bind`) and applies that rule's own
     effects under this grant's gate. So a change to the granted rule — or to how
     its quantity resolves — is tracked automatically, and a rule granted on top of
     one a model already carries stacks (two Armour Bane (1) → +2 on a natural 6),
@@ -835,7 +1018,7 @@ class GrantEffect(GatedEffect):
     forbids the others' keys).
     """
 
-    grants: str  # the printed name of the rule conferred, e.g. "Armour Bane (1)"
+    grants: RuleRef
 
 
 def _as_outcome(value: object) -> "Outcome":
@@ -1167,6 +1350,7 @@ class Rule(BaseModel):
 
     id: str  # stable slug, e.g. "armour-bane"
     name: str  # printed name, e.g. "Armour Bane (X)"
+    parameter: Parameter | None = None
     page: int | None = None  # rulebook page reference
     category: str | None = None  # site rule category, e.g. "Special Rules"
     flavour: str | None = None  # italic flavour line, if any
@@ -1212,17 +1396,153 @@ class Rule(BaseModel):
         return data
 
     @model_validator(mode="after")
-    def _parameter_requires_placeholder_name(self) -> "Rule":
-        # An effect may reference the bracketed parameter ("X") only if
-        # the printed name declares one ("Armour Bane (X)") — checked at
-        # load, so an unbindable placeholder is a data error, not a
-        # runtime surprise. Introspects the effect's fields, so a new
-        # X-bearing kind participates automatically.
-        if not self.name.endswith(PARAMETER_SUFFIX):
-            for effect in self.effects:
-                if references_parameter(effect):
-                    raise ValueError(
-                        f"an effect of {self.name!r} references the X parameter, "
-                        f"but the name does not end in {PARAMETER_SUFFIX!r}"
-                    )
+    def _a_parameter_prints_in_the_name(self) -> "Rule":
+        if self.parameter is not None and not prints_x(self.name):
+            raise ValueError(
+                f"{self.name!r} declares a parameter, but its name prints no X to show it in"
+            )
+        if self.parameter is None and prints_x(self.name):
+            raise ValueError(f"{self.name!r} prints an X, but the rule declares no parameter")
         return self
+
+    @model_validator(mode="after")
+    def _effects_read_a_declared_parameter(self) -> "Rule":
+        readers = [effect for effect in self.effects if references_parameter(effect)]
+        if not readers:
+            return self
+        if self.parameter is None:
+            raise ValueError(f"an effect of {self.name!r} reads X, but the rule declares no X")
+        if self.parameter.kind != "amount":
+            raise ValueError(
+                f"{self.name!r} declares a {self.parameter.kind} X, which no effect can read"
+            )
+        return self
+
+    def display(self, x: int | str | None) -> str:
+        """The rule's name as a reference with this X prints it.
+
+        Returns:
+            The name, with X substituted into its bracket.
+
+        Raises:
+            ValueError: X is missing, extra, or not what the rule declares.
+        """
+        if self.parameter is None:
+            if x is not None:
+                raise ValueError(f"X {x!r} given, but {self.id} declares no X")
+            return self.name
+        if x is None:
+            raise ValueError(f"X missing; {self.id} expects {self.parameter.expected}")
+        template = _TEMPLATE.match(self.name)
+        if template is None:
+            raise ValueError(f"{self.name!r} prints no X to show {x!r} in")
+        printed = self.parameter.printed(x)
+        return f"{template['base']} ({template['before']}{printed}{template['after']})"
+
+    @property
+    def base(self) -> str:
+        """The name less the bracket its X prints in, or the whole name."""
+        template = _TEMPLATE.match(self.name)
+        return self.name if template is None else template["base"]
+
+    def read(self, printed: str) -> RuleRef:
+        """The reference a printed name makes to this rule.
+
+        Returns:
+            The slug, with the X the bracket prints when the rule declares one.
+
+        Raises:
+            ValueError: the bracket is missing, extra, signed against the name,
+                or not the X the rule declares.
+        """
+        if printed == self.name and self.parameter is None:
+            return RuleRef(rule=self.id)
+        template = _TEMPLATE.match(self.name)
+        if self.parameter is None or template is None:
+            raise ValueError(f"{printed!r} prints an X, but {self.id} declares none")
+        bracket = _BRACKETED.match(printed)
+        if bracket is None:
+            expected = self.parameter.expected
+            raise ValueError(f"{printed!r} prints no X; {self.id} expects {expected}")
+        before, after, inner = template["before"], template["after"], bracket["inner"]
+        signed = inner.startswith(before) and inner.endswith(after)
+        if not signed or len(inner) <= len(before) + len(after):
+            raise ValueError(f"{printed!r} does not print X as {self.name!r} does")
+        x = self.parameter.parse(inner[len(before) : len(inner) - len(after)])
+        return RuleRef(rule=self.id, X=x)
+
+    def bound(self, x: int | str | None) -> "Rule":
+        """The rule as a reference with this X carries it.
+
+        Returns:
+            The entry itself when it declares no parameter; otherwise a copy
+            named as printed, an amount X substituted into its effects.
+
+        Raises:
+            ValueError: X is missing, extra, or not what the rule declares.
+        """
+        name = self.display(x)
+        if self.parameter is None or x is None:
+            return self
+        value = self.parameter.value(x)
+        if isinstance(value, DiceQuantity) and any(map(_reads_parameter_as_amount, self.effects)):
+            raise ValueError(
+                f"X {x!r} is a dice roll, which binds only into a count (hits, multiplies), "
+                f"never into an amount an effect of {self.id} adds"
+            )
+        effects = (
+            self.effects
+            if isinstance(value, str)
+            else [_substituted(effect, value) for effect in self.effects]
+        )
+        return self.model_copy(update={"name": name, "effects": effects})
+
+
+def bind(reference: RuleRef, rules: Mapping[str, Rule]) -> Rule:
+    """The rule a reference names, bound to its X.
+
+    Returns:
+        The bound rule (:meth:`Rule.bound`).
+
+    Raises:
+        ValueError: no entry carries the slug, or the X does not bind.
+    """
+    rule = rules.get(reference.rule)
+    if rule is None:
+        raise ValueError(f"no rule entry {reference.rule!r}")
+    return rule.bound(reference.x)
+
+
+def _reads_parameter_as_amount(effect: RuleEffect) -> bool:
+    return any(
+        isinstance(value, Mapping) and any(_is_parameter(amount) for amount in value.values())
+        for value in (getattr(effect, name) for name in type(effect).model_fields)
+    )
+
+
+def _substituted(effect: RuleEffect, value: int | DiceQuantity) -> RuleEffect:
+    placeholders: dict[str, object] = {}
+    for name in type(effect).model_fields:
+        current = getattr(effect, name)
+        if current == "X":
+            placeholders[name] = value
+        elif isinstance(current, Mapping):
+            amounts = {key: _bound_amount(amount, value) for key, amount in current.items()}
+            if amounts != dict(current):
+                placeholders[name] = amounts
+    if not placeholders:
+        return effect
+    fields = type(effect).model_fields
+    substituted = {
+        **effect.model_dump(by_alias=True),
+        **{fields[name].alias or name: amount for name, amount in placeholders.items()},
+    }
+    return type(effect).model_validate(substituted)
+
+
+def _bound_amount(amount: object, value: int | DiceQuantity) -> object:
+    if amount == "X":
+        return value
+    if isinstance(amount, Bounded) and amount.amount == "X":
+        return amount.model_copy(update={"amount": value})
+    return amount

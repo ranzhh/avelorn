@@ -21,6 +21,7 @@ from avelorn.tow.phases.combat import (
     strike_unit,
 )
 from avelorn.tow.schema.phase import Phase
+from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import Bounded, ModifierEffect, Quantity, Rule, WeaponGate, When
 from avelorn.tow.schema.unit import Characteristic, ProfileRole, Unit
 from avelorn.tow.schema.weapon import Weapon
@@ -173,7 +174,11 @@ def test_strike_unit_ithilmar_weapons_re_rolls_to_hit_ones() -> None:
     """
     sisters = REPO.units["sisters-of-avelorn"]
     without = sisters.model_copy(
-        update={"special_rules": [r for r in sisters.special_rules if r != "Ithilmar Weapons"]}
+        update={
+            "special_rules": [
+                r for r in sisters.special_rules if r != RuleRef(rule="ithilmar-weapons")
+            ]
+        }
     )
     target = _fielded(REPO.units["elven-spearmen"], 10)
 
@@ -245,7 +250,8 @@ def test_slugged_fight_in_extra_rank_lapses_for_three_ranks_on_the_charge() -> N
     charging = standing.charging(Charge(3, ChargeArc.FRONT))
 
     assert (
-        standing.loadout.weapon_rules["fight-in-extra-rank"] is REPO.rules["fight-in-extra-rank"]
+        standing.loadout.bound[RuleRef(rule="fight-in-extra-rank")]
+        is REPO.rules["fight-in-extra-rank"]
     )
     assert strike_unit(standing, _fielded(spearmen, 40)).attacks == 15
     assert strike_unit(charging, _fielded(spearmen, 40)).attacks == 5
@@ -737,9 +743,11 @@ def _reflexive(unit: Unit) -> Contingent:
             )
         ],
     )
-    doctored = unit.model_copy(update={"special_rules": ["Doctored Reflexes"]})
+    doctored = unit.model_copy(update={"special_rules": [RuleRef(rule=rule.id)]})
     spear = REPO.weapons["thrusting-spear"]
-    return Contingent(doctored, 1, Loadout((spear,), (), (rule,), ()), frontage=1)
+    return Contingent(
+        doctored, 1, Loadout.carrying((spear,), (), (rule,), rules=REPO.rules), frontage=1
+    )
 
 
 def test_fight_first_round_initiative_rule_flips_the_order() -> None:
@@ -794,12 +802,11 @@ def _carrying(*rule_ids: str) -> Contingent:
     # Strike First / Strike Last shape, rules the Initiative read consumes.
     rules = tuple(REPO.rules[rid] for rid in rule_ids)
     unit = REPO.units["elven-spearmen"].model_copy(
-        update={"special_rules": [r.name for r in rules]}
+        update={"special_rules": [RuleRef(rule=r.id) for r in rules]}
     )
     spear = REPO.weapons["thrusting-spear"]
-    return Contingent(unit, 1, Loadout((spear,), (), rules, ()), frontage=1).wielding(
-        "Thrusting Spear"
-    )
+    loadout = Loadout.carrying((spear,), (), rules, rules=REPO.rules)
+    return Contingent(unit, 1, loadout, frontage=1).wielding("Thrusting Spear")
 
 
 def _plain_spearman() -> Contingent:
@@ -875,7 +882,7 @@ def _strike_last_weapon() -> Weapon:
     spear = REPO.weapons["thrusting-spear"]
     combat = spear.combat_profile
     assert combat is not None  # the thrusting spear is a Combat weapon
-    profile = combat.model_copy(update={"special_rules": ["Strike Last"]})
+    profile = combat.model_copy(update={"special_rules": [RuleRef(rule="strike-last")]})
     return spear.model_copy(
         update={
             "id": "doctored-blade",
@@ -892,10 +899,9 @@ def _wielding_strike_last(*unit_rule_ids: str) -> Contingent:
     # Last resolves through the loadout's weapon-rule index.
     rules = tuple(REPO.rules[rid] for rid in unit_rule_ids)
     unit = REPO.units["elven-spearmen"].model_copy(
-        update={"special_rules": [r.name for r in rules]}
+        update={"special_rules": [RuleRef(rule=r.id) for r in rules]}
     )
-    weapon_rules = {"Strike Last": REPO.rules["strike-last"]}
-    loadout = Loadout((_strike_last_weapon(),), (), rules, (), weapon_rules)
+    loadout = Loadout.carrying((_strike_last_weapon(),), (), rules, rules=REPO.rules)
     return Contingent(unit, 1, loadout, frontage=1).wielding("Doctored Blade")
 
 
@@ -967,7 +973,7 @@ def test_fight_furious_charge_is_factored_not_noted() -> None:
 # --- Stomp Attacks / Impact Hits: automatic-hit batches outside the Initiative order ---
 
 
-def _one_spearman(*special_rules: str) -> Contingent:
+def _one_spearman(*special_rules: RuleRef) -> Contingent:
     # A single spearman fielded with exactly the given printed rules — the
     # end-to-end path (field resolves a parameterised name against its (X)
     # entry) with everything else stripped, so the goldens stay hand-sized.
@@ -989,7 +995,7 @@ def test_fight_stomp_attacks_land_last_golden() -> None:
     "after all other attacks" is what the figure verifies. The stomps never
     fly back, so the stomper's own losses stay at the bare 1/8.
     """
-    result = fight(_one_spearman("Stomp Attacks (2)"), _one_spearman())
+    result = fight(_one_spearman(RuleRef(rule="stomp-attacks", X=2)), _one_spearman())
     assert result.b_casualties[1] == Fraction(471, 1024)
     assert result.a_casualties[1] == Fraction(1, 8)
     assert not any("not factored: Stomp Attacks" in note for note in result.notes)
@@ -1010,7 +1016,9 @@ def test_fight_impact_hits_d6_land_before_every_blow_golden() -> None:
     P(charger removed) = (3367/8192)(7/8)(1/8) = 23569/524288 — the impact
     batch preceding the foe's Initiative step is what that factor verifies.
     """
-    charger = _one_spearman("Impact Hits (D6)").charging(Charge(6, ChargeArc.FRONT))
+    charger = _one_spearman(RuleRef(rule="impact-hits", X="D6")).charging(
+        Charge(6, ChargeArc.FRONT)
+    )
     result = fight(charger, _one_spearman(), first_round=True)
     assert result.b_casualties[1] == Fraction(41967, 65536)
     assert result.a_casualties[1] == Fraction(23569, 524288)
@@ -1026,23 +1034,27 @@ def test_fight_impact_hits_are_inert_without_the_printed_charge() -> None:
     """
     foe = _one_spearman()
     stripped = fight(_one_spearman(), foe)
-    standing = fight(_one_spearman("Impact Hits (D6)"), foe)
+    standing = fight(_one_spearman(RuleRef(rule="impact-hits", X="D6")), foe)
     assert standing.losses == stripped.losses
     assert not any("not factored: Impact Hits" in note for note in standing.notes)
 
     short_move = Charge(2, ChargeArc.FRONT)
-    short = fight(_one_spearman("Impact Hits (D6)").charging(short_move), foe, first_round=True)
+    short = fight(
+        _one_spearman(RuleRef(rule="impact-hits", X="D6")).charging(short_move),
+        foe,
+        first_round=True,
+    )
     stripped_short = fight(_one_spearman().charging(short_move), foe, first_round=True)
     assert short.losses == stripped_short.losses
 
 
-def _sword_stomper(*extra_rules: str) -> Contingent:
+def _sword_stomper(*extra_rules: RuleRef) -> Contingent:
     # One armourless spearman with Stomp Attacks (2), swinging the Sword of
     # Hoeth — a magical S+2 blade, so the weapon leg and the weaponless
     # stomps carry different marks.
     unit = REPO.units["elven-spearmen"].model_copy(
         update={
-            "special_rules": ["Stomp Attacks (2)", *extra_rules],
+            "special_rules": [RuleRef(rule="stomp-attacks", X=2), *extra_rules],
             "equipment": ["Sword of Hoeth"],
         }
     )
@@ -1064,9 +1076,10 @@ def _magic_warded_footman() -> Contingent:
             )
         ],
     )
-    unit = _foot_unit(initiative=4).model_copy(update={"special_rules": [rule.name]})
+    unit = _foot_unit(initiative=4).model_copy(update={"special_rules": [RuleRef(rule=rule.id)]})
     hand_weapon = REPO.weapons["hand-weapon"]
-    contingent = Contingent(unit, 1, Loadout((hand_weapon,), (), (rule,), ()), frontage=1)
+    loadout = Loadout.carrying((hand_weapon,), (), (rule,), rules=REPO.rules)
+    contingent = Contingent(unit, 1, loadout, frontage=1)
     return contingent.wielding("Hand Weapon")
 
 
@@ -1097,7 +1110,7 @@ def test_fight_unit_printed_magical_attacks_reaches_the_stomps() -> None:
     ward now stands against the stomps too, each felling at (1/2)(1/2) = 1/4 —
     P(foe removed) = 5/24 + (19/24)(3/4)(1 - (3/4)^2) = 719/1536.
     """
-    result = fight(_sword_stomper("Magical Attacks"), _magic_warded_footman())
+    result = fight(_sword_stomper(RuleRef(rule="magical-attacks")), _magic_warded_footman())
     assert result.b_casualties[1] == Fraction(719, 1536)
 
 
@@ -1110,7 +1123,7 @@ def test_fight_refuses_automatic_hits_on_a_split_profile_of_differing_strength()
     the rank and file's row would be silently wrong, so the fight raises.
     """
     stomping = _cavalry_unit(rider_i=5, mount_i=3).model_copy(
-        update={"special_rules": ["Stomp Attacks (2)"]}
+        update={"special_rules": [RuleRef(rule="stomp-attacks", X=2)]}
     )
     differing = stomping.model_copy(
         update={
@@ -1341,7 +1354,7 @@ def test_effective_weapon_skill_gains_one_in_the_first_round() -> None:
 def _only_martial_prowess(unit: Unit) -> Unit:
     # The unit stripped to Martial Prowess alone, so equal Initiative keeps the
     # blows simultaneous and uncoupled — the WS change is the only asymmetry.
-    return unit.model_copy(update={"special_rules": ["Martial Prowess"]})
+    return unit.model_copy(update={"special_rules": [RuleRef(rule="martial-prowess")]})
 
 
 def test_fight_first_round_martial_prowess_sharpens_both_sides() -> None:
@@ -1463,10 +1476,11 @@ def _piercing_swordsman(models: int = 1) -> Contingent:
         ],
     )
     unit = REPO.units["elven-spearmen"].model_copy(
-        update={"special_rules": [rule.name], "equipment": ["Hand Weapon"]}
+        update={"special_rules": [RuleRef(rule=rule.id)], "equipment": ["Hand Weapon"]}
     )
     hand_weapon = REPO.weapons["hand-weapon"]
-    contingent = Contingent(unit, models, Loadout((hand_weapon,), (), (rule,), ()), frontage=1)
+    loadout = Loadout.carrying((hand_weapon,), (), (rule,), rules=REPO.rules)
+    contingent = Contingent(unit, models, loadout, frontage=1)
     return contingent.wielding("Hand Weapon")
 
 
@@ -1512,7 +1526,11 @@ def test_strike_unit_gromril_armour_re_rolls_the_dwarfs_own_save_natural_ones() 
     """
     spearmen, ironbreakers = REPO.units["elven-spearmen"], REPO.units["ironbreakers"]
     stripped = ironbreakers.model_copy(
-        update={"special_rules": [r for r in ironbreakers.special_rules if r != "Gromril Armour"]}
+        update={
+            "special_rules": [
+                r for r in ironbreakers.special_rules if r != RuleRef(rule="gromril-armour")
+            ]
+        }
     )
     attacker = _fielded(spearmen, 5).wielding("Thrusting Spear")
 
@@ -1534,7 +1552,11 @@ def test_strike_unit_gromril_armour_never_re_rolls_the_enemys_save() -> None:
     """
     spearmen, ironbreakers = REPO.units["elven-spearmen"], REPO.units["ironbreakers"]
     stripped = ironbreakers.model_copy(
-        update={"special_rules": [r for r in ironbreakers.special_rules if r != "Gromril Armour"]}
+        update={
+            "special_rules": [
+                r for r in ironbreakers.special_rules if r != RuleRef(rule="gromril-armour")
+            ]
+        }
     )
     target = _fielded(spearmen, 10).wielding("Thrusting Spear")
 
@@ -1615,7 +1637,9 @@ def test_strike_unit_rolls_the_targets_rule_granted_ward_after_its_armour() -> N
     stripped_unit = REPO.units["ironbreakers"].model_copy(
         update={
             "special_rules": [
-                r for r in REPO.units["ironbreakers"].special_rules if r != "Runes of Protection"
+                r
+                for r in REPO.units["ironbreakers"].special_rules
+                if r != RuleRef(rule="runes-of-protection")
             ]
         }
     )
@@ -1812,7 +1836,7 @@ def test_a_unit_whose_own_rule_marks_its_attacks_magical_denies_the_ward() -> No
     """
     spearmen = REPO.units["elven-spearmen"]
     marked = spearmen.model_copy(
-        update={"special_rules": [*spearmen.special_rules, "Magical Attacks"]}
+        update={"special_rules": [*spearmen.special_rules, RuleRef(rule="magical-attacks")]}
     )
     breakers = Contingent.deploy("ironbreakers", 10, data=REPO).wielding("Hand Weapon")
 
@@ -1891,7 +1915,7 @@ def test_a_barred_piece_is_withdrawn_whole_not_compensated() -> None:
     assert struck.save_target == 6  # the whole piece withdrawn, not one point of it
 
 
-def _with_rule(unit: Unit, rule: str) -> Unit:
+def _with_rule(unit: Unit, rule: RuleRef) -> Unit:
     return unit.model_copy(update={"special_rules": [*unit.special_rules, rule]})
 
 
@@ -1908,7 +1932,9 @@ def test_killing_blow_denies_the_save_and_slays_on_a_natural_six_to_wound() -> N
     rule honoured, never noted as unfactored.
     """
     spearmen = REPO.units["elven-spearmen"]
-    killers = _fielded(_with_rule(spearmen, "Killing Blow"), 10).wielding("Hand Weapon")
+    killers = _fielded(_with_rule(spearmen, RuleRef(rule="killing-blow")), 10).wielding(
+        "Hand Weapon"
+    )
     plain = _fielded(spearmen, 10).wielding("Hand Weapon")
     target = _fielded(spearmen, 10).wielding("Thrusting Spear")
 
@@ -1942,16 +1968,17 @@ def test_a_killing_blow_still_rolls_the_targets_ward() -> None:
     Against the Phoenix Guard, Witness to Destiny's 6+ ward scales every
     branch — the Killing Blow ones included — by exactly 5/6.
     """
-    killers = _fielded(_with_rule(REPO.units["elven-spearmen"], "Killing Blow"), 10).wielding(
-        "Hand Weapon"
-    )
+    killers = _fielded(
+        _with_rule(REPO.units["elven-spearmen"], RuleRef(rule="killing-blow")), 10
+    ).wielding("Hand Weapon")
     guard = Contingent.deploy("phoenix-guard", 10, data=REPO).wielding("Ceremonial Halberd")
     unwarded_unit = REPO.units["phoenix-guard"].model_copy(
         update={
             "special_rules": [
                 r
                 for r in REPO.units["phoenix-guard"].special_rules
-                if r not in ("Witness to Destiny", "Blessings of Asuryan")
+                if r
+                not in (RuleRef(rule="witness-to-destiny"), RuleRef(rule="blessings-of-asuryan"))
             ]
         }
     )
@@ -1971,7 +1998,9 @@ def test_cleaving_blow_denies_without_slaying_and_reads_its_own_list() -> None:
     with no ``slays``, a 3-Wound model pools its wounds as ever.
     """
     spearmen = REPO.units["elven-spearmen"]
-    cleavers = _fielded(_with_rule(spearmen, "Cleaving Blow"), 10).wielding("Hand Weapon")
+    cleavers = _fielded(_with_rule(spearmen, RuleRef(rule="cleaving-blow")), 10).wielding(
+        "Hand Weapon"
+    )
     target = _fielded(spearmen, 10).wielding("Thrusting Spear")
     assert strike_unit(cleavers, target).p_unsaved == pytest.approx(7 / 36)
 
@@ -1994,7 +2023,12 @@ def _mw_repo() -> TOWRepository:
         name="Serrated Blade",
         profiles=[
             WeaponProfile.model_validate(
-                {"R": "Combat", "S": "S", "AP": "-", "special_rules": ["Multiple Wounds (2)"]}
+                {
+                    "R": "Combat",
+                    "S": "S",
+                    "AP": "-",
+                    "special_rules": [RuleRef(rule="multiple-wounds", X=2)],
+                }
             )
         ],
     )

@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from avelorn.core.loading import load_yaml
 from avelorn.tow.data import DATA_DIR, TOWRepository
 from avelorn.tow.schema.armour import Armour
+from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.unit import Unit
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile, WeaponStrength, WeaponType
 
@@ -122,7 +123,7 @@ def test_strength_printed_round_trips(printed: int | str, spelled: str) -> None:
 def test_profile_parses_printed_row() -> None:
     """A profile row reads like the rulebook chart, dashes included."""
     profile = WeaponProfile.model_validate(
-        {"R": "Combat", "S": "S+2", "AP": "-", "special_rules": ["Armour Bane (1)"]}
+        {"R": "Combat", "S": "S+2", "AP": "-", "special_rules": [RuleRef(rule="armour-bane", X=1)]}
     )
     assert profile.range == "Combat"
     assert profile.armour_piercing == 0

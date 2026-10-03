@@ -24,13 +24,13 @@ from avelorn.tow.engine.rules import (
     effective_characteristic,
     effective_fighting_ranks,
     effective_supporting_ranks,
-    printed_rule,
 )
 from avelorn.tow.muster import Complement
 from avelorn.tow.schema.armour import Armour
-from avelorn.tow.schema.rule import GrantEffect, Rule
+from avelorn.tow.schema.reference import RuleRef
+from avelorn.tow.schema.rule import GrantEffect, Rule, bind
 from avelorn.tow.schema.unit import Characteristic, Unit
-from avelorn.tow.schema.weapon import Weapon
+from avelorn.tow.schema.weapon import Weapon, WeaponProfile
 
 
 @dataclass(frozen=True)
@@ -39,35 +39,65 @@ class Loadout:
 
     Built at :meth:`Contingent.field` — the muster boundary is where a
     printed name stops being a string. The armour is what save resolution
-    will read; the weapons are what a per-action choice will pick from;
-    ``rules`` are the unit's special rules that resolve against the rule
-    data — each the rule exactly as printed, parameters substituted, by
-    the engine's one resolution convention
-    (:func:`~avelorn.tow.engine.rules.printed_rule`).
+    will read; the weapons are what a per-action choice will pick from.
+    ``own`` are the datasheet's special rules and ``conferred`` the troop
+    type's, each bound to its X (:func:`~avelorn.tow.schema.rule.bind`).
+    ``bound`` holds the rules the weapons' profiles print and the rules any
+    of these grant, bound, by reference: a weapon profile and a grant
+    effect look their rules up there.
 
-    The two halves miss differently, by design. Equipment coverage is
-    complete, so an unresolvable equipment name fails the deploy. A rule
-    name with no entry rides along printed, in :attr:`unresolved_rules`;
-    a weapon-rule name absent from :attr:`weapon_rules` compiles to
-    unfactored. The "not factored" notes come from the printed names no
-    compiled effect claims, so a missing entry and a text-only one report
-    alike.
+    Equipment coverage is complete, so an unresolvable equipment name fails
+    the deploy, and so does a rule reference that does not bind.
     """
 
     weapons: tuple[Weapon, ...]
     armour: tuple[Armour, ...]
-    rules: tuple[Rule, ...]
-    unresolved_rules: tuple[str, ...]
-    # Every rule name printed on a carried weapon's profiles that has an
-    # entry, resolved as printed — the per-action compile looks names up
-    # here instead of in a registry. Names without entries are simply
-    # absent and compile to unfactored, as ever.
-    weapon_rules: Mapping[str, Rule] = field(default_factory=dict)
-    # Every rule a resolved rule *grants* (Arrows of Isha grants Armour Bane
-    # (1)), resolved as printed by name — the lookup a GrantEffect expands
-    # through at compile time. A granted name without an entry is simply
-    # absent, so the granting rule compiles to unfactored, as ever.
-    granted_rules: Mapping[str, Rule] = field(default_factory=dict)
+    own: tuple[Rule, ...]
+    conferred: tuple[Rule, ...] = ()
+    bound: Mapping[RuleRef, Rule] = field(default_factory=dict)
+
+    @classmethod
+    def carrying(
+        cls,
+        weapons: Sequence[Weapon],
+        armour: Sequence[Armour],
+        own: Sequence[Rule],
+        conferred: Sequence[Rule] = (),
+        *,
+        rules: Mapping[str, Rule],
+    ) -> "Loadout":
+        """A loadout whose weapons' rules and grants are bound against ``rules``.
+
+        Returns:
+            The loadout, its ``bound`` index filled.
+        """
+        printed = {
+            ref: bind(ref, rules)
+            for weapon in weapons
+            for profile in weapon.profiles
+            for ref in profile.special_rules
+        }
+        granted = {
+            effect.grants: bind(effect.grants, rules)
+            for rule in (*own, *conferred, *printed.values())
+            for effect in rule.effects
+            if isinstance(effect, GrantEffect)
+        }
+        bound = {**printed, **granted}
+        return cls(tuple(weapons), tuple(armour), tuple(own), tuple(conferred), bound)
+
+    @property
+    def rules(self) -> tuple[Rule, ...]:
+        """The unit's own rules, then those its troop type confers."""
+        return (*self.own, *self.conferred)
+
+    def profile_rules(self, profile: WeaponProfile) -> list[Rule]:
+        """The bound rules a weapon profile prints.
+
+        Returns:
+            One rule per reference on the profile, in printed order.
+        """
+        return [self.bound[ref] for ref in profile.special_rules]
 
     def weapon(self, name: str) -> Weapon:
         """The carried weapon with the given printed name.
@@ -528,8 +558,8 @@ class Contingent:
     def in_hand_rules(self) -> list[Rule]:
         """The resolved rules on the weapon in hand's Combat profile.
 
-        The entries for the wielded weapon's printed rule names, from the
-        loadout's weapon-rule index — the rules that ride with the weapon a
+        The wielded weapon's Combat-profile references, bound in the
+        loadout (:meth:`Loadout.profile_rules`) — the rules that ride with the weapon a
         contingent chose to swing (a great weapon's Strike Last, a thrusting
         spear's Fight in Extra Rank). Empty when nothing is in hand or the
         weapon has no Combat profile. Read wherever a weapon-in-hand rule
@@ -543,8 +573,7 @@ class Contingent:
         profile = weapon.combat_profile if weapon is not None else None
         if profile is None:
             return []
-        index = self.loadout.weapon_rules
-        return [index[name] for name in profile.special_rules if name in index]
+        return self.loadout.profile_rules(profile)
 
     def effective_attacks(self) -> EffectiveValue:
         """The Attacks each fighting-rank model makes, rule modifiers included.
@@ -800,8 +829,8 @@ class Contingent:
         Names resolve against ``data`` — the process-wide
         :func:`~avelorn.tow.data.default_repository` when omitted; inject it to
         field against alternate or doctored data. Equipment coverage is complete,
-        so a name matching no weapon or armour entry is an error; a special rule
-        without an entry rides along printed (:class:`Loadout`).
+        so a name matching no weapon or armour entry is an error, as is a rule
+        reference that does not bind (:class:`Loadout`).
 
         Args:
             source: A mustered Complement, or a bare datasheet to field.
@@ -816,8 +845,8 @@ class Contingent:
 
         Raises:
             ValueError: a bare datasheet is given without ``models``, a piece of
-                equipment matches no weapon or armour entry, or the datasheet's
-                troop-type profile is unresolved.
+                equipment matches no weapon or armour entry, a rule reference does
+                not bind, or the datasheet's troop-type profile is unresolved.
         """
         repository = data if data is not None else default_repository()
         if isinstance(source, Complement):
@@ -851,49 +880,15 @@ def _resolve_loadout(
     armoury: Registry[Armour],
     rules: Registry[Rule],
 ) -> tuple[Loadout, list[str]]:
-    # The muster-boundary resolution both constructors share: equipment
-    # partitions into weapons and armour, special rules resolve where
-    # entries exist and ride along printed where they do not. Unknown
-    # equipment comes back for the constructor to refuse — coverage is
-    # complete, so a miss is a typo in the list.
     wielded, rest = weapons.resolve(unit.equipment)
     worn, unknown = armoury.resolve(rest)
-    resolved: list[Rule] = []
-    unresolved: list[str] = []
-    # The unit's own printed rules, then the rules its troop type confers
     troop_type = unit.troop_type_profile
     conferred = troop_type.special_rules if troop_type is not None else ()
-    for printed in (*unit.special_rules, *conferred):
-        entry = printed_rule(printed, rules)
-        if entry is None:
-            unresolved.append(printed)
-        else:
-            resolved.append(entry)
-    weapon_rules: dict[str, Rule] = {}
-    for weapon in wielded:
-        for profile in weapon.profiles:
-            for printed in profile.special_rules:
-                if printed not in weapon_rules and (entry := printed_rule(printed, rules)):
-                    weapon_rules[printed] = entry
-    # Rules a resolved rule grants (Arrows of Isha -> Armour Bane (1)): resolved
-    # by name, once, so a grant effect can expand through the loadout at compile
-    # time without threading the registry. A name without an entry is left out,
-    # so the granting rule compiles to unfactored, as any unmodelled rule does.
-    granted_rules: dict[str, Rule] = {}
-    for rule in resolved:
-        for effect in rule.effects:
-            if (
-                isinstance(effect, GrantEffect)
-                and effect.grants not in granted_rules
-                and (entry := printed_rule(effect.grants, rules))
-            ):
-                granted_rules[effect.grants] = entry
-    loadout = Loadout(
-        tuple(wielded),
-        tuple(worn),
-        tuple(resolved),
-        tuple(unresolved),
-        weapon_rules,
-        granted_rules,
+    loadout = Loadout.carrying(
+        wielded,
+        worn,
+        [bind(ref, rules) for ref in unit.special_rules],
+        [bind(ref, rules) for ref in conferred],
+        rules=rules,
     )
     return loadout, unknown

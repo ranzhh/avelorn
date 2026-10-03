@@ -1,6 +1,9 @@
 # Source: https://tow.whfb.app/special-rules/armour-bane
 id: armour-bane
 name: Armour Bane (X)
+parameter:
+  kind: amount
+  min: 1
 page: 166
 category: Special Rules
 flavour: Some weapons are particularly well-suited to piercing armour, though they often require great skill.

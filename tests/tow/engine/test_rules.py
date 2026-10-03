@@ -34,12 +34,13 @@ from avelorn.tow.engine.rules import (
     effective_supporting_ranks,
     effective_ward_target,
     effective_wound_multiplier,
-    printed_rule,
 )
 from avelorn.tow.phases.shooting import shoot_unit
 from avelorn.tow.schema.phase import Phase
+from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import (
     Add,
+    AmountParameter,
     ArmourGate,
     AttackKind,
     AttackMarkEffect,
@@ -56,6 +57,7 @@ from avelorn.tow.schema.rule import (
     RuleEffect,
     When,
     WoundMultiplierEffect,
+    bind,
 )
 from avelorn.tow.schema.stage import Side, Stage
 from avelorn.tow.schema.unit import Characteristic, TroopType, Unit
@@ -75,31 +77,22 @@ def _fielded(unit: Unit, models: int, *, moved: bool = False) -> Contingent:
     return base.after(Movement.march()) if moved else base
 
 
-def _one_rule(effect: RuleEffect) -> dict[str, Rule]:
-    # One doctored rule, resolved as printed, to compile a single effect
-    # shape the data/ files do not exercise yet.
-    rule = Rule(id="doctored", name="Doctored", paragraphs=["…"], effects=[effect])
-    return {rule.name: rule}
+def _one_rule(effect: RuleEffect) -> list[Rule]:
+    return [Rule(id="doctored", name="Doctored", paragraphs=["…"], effects=[effect])]
 
 
-def test_printed_rule_exact_name_is_the_entry_itself() -> None:
-    """A printed name matching an entry name returns that entry, unchanged."""
-    assert printed_rule("Stubborn", REPO.rules) is REPO.rules["stubborn"]
+def test_a_reference_without_x_binds_the_entry_itself() -> None:
+    """A slug alone binds its entry, unchanged."""
+    assert bind(RuleRef(rule="stubborn"), REPO.rules) is REPO.rules["stubborn"]
 
 
-def test_rule_slug_resolves_the_catalogued_entry() -> None:
-    """A corpus slug addresses its rule item without carrying display text."""
-    assert printed_rule("fight-in-extra-rank", REPO.rules) is REPO.rules["fight-in-extra-rank"]
-
-
-def test_printed_rule_substitutes_the_parameter() -> None:
-    """A bracketed number matches the (X) entry, returned as printed.
+def test_binding_substitutes_the_parameter() -> None:
+    """A reference's X binds the entry, named as printed.
 
     The copy carries the printed name and the parameter substituted into
     its effects — the rule as the unit prints it, not as it is filed.
     """
-    rule = printed_rule("Armour Bane (1)", REPO.rules)
-    assert rule is not None
+    rule = bind(RuleRef(rule="armour-bane", X=1), REPO.rules)
     assert rule.id == "armour-bane"
     assert rule.name == "Armour Bane (1)"
     effect = rule.effects[0]
@@ -111,7 +104,7 @@ def test_printed_rule_substitutes_the_parameter() -> None:
     assert filed.add == {"armour-piercing": "X"}
 
 
-def test_printed_rule_substitutes_under_a_printed_bound() -> None:
+def test_binding_substitutes_under_a_printed_bound() -> None:
     """A bracketed parameter binds inside a bounded amount, where "X" sits a level down.
 
     No printed rule prints both a parameter and a bound today, but the
@@ -121,29 +114,25 @@ def test_printed_rule_substitutes_under_a_printed_bound() -> None:
     entry = Rule(
         id="doctored",
         name="Doctored (X)",
+        parameter=AmountParameter(kind="amount"),
         paragraphs=["…"],
         effects=[ModifierEffect.model_validate({"add": {"S": {"amount": "X", "minimum": 1}}})],
     )
     rules: Registry[Rule] = Registry([entry], kind="rule")
 
-    bound = printed_rule("Doctored (2)", rules)
-    assert bound is not None
+    bound = bind(RuleRef(rule="doctored", X=2), rules)
     effect = bound.effects[0]
     assert isinstance(effect, ModifierEffect)
     assert effect.added(Characteristic.STRENGTH) == Add(2, None, 1)
 
-    # A dice parameter cannot be an operation's amount, bound or bare: it
-    # stays unbound, and the seam reports the rule unfactored.
-    dice = printed_rule("Doctored (D3)", rules)
-    assert dice is not None
-    diced = dice.effects[0]
-    assert isinstance(diced, ModifierEffect)
-    assert diced.added(Characteristic.STRENGTH).amount == "X"
+    with pytest.raises(ValueError, match="is not an amount"):
+        bind(RuleRef(rule="doctored", X="D3"), rules)
 
 
-def test_printed_rule_unknown_name() -> None:
-    """A name matching nothing resolves to None."""
-    assert printed_rule("Unprinted Rule", REPO.rules) is None
+def test_a_reference_to_no_rule_fails_loudly() -> None:
+    """A slug no entry carries is an error, never a quiet miss."""
+    with pytest.raises(ValueError, match="no rule entry 'unprinted-rule'"):
+        bind(RuleRef(rule="unprinted-rule"), REPO.rules)
 
 
 def test_compile_armour_bane_from_data_reproduces_the_golden() -> None:
@@ -153,8 +142,10 @@ def test_compile_armour_bane_from_data_reproduces_the_golden() -> None:
     to 6+, so p = 2/3 * (2/6 * 2/3 + 1/6 * 5/6) = 13/54 — previously
     proven by a hand-written test double, now driven by the rule file.
     """
-    index = _fielded(REPO.units["elven-archers"], 1).loadout.weapon_rules
-    compiled = compile_rules(["Armour Bane (1)"], index)
+    longbow = REPO.weapons["longbow"].profiles[0]
+    in_use = _fielded(REPO.units["elven-archers"], 1).loadout.profile_rules(longbow)
+    index = {rule.name: rule for rule in in_use}
+    compiled = compile_rules([index["Armour Bane (1)"]])
     assert compiled.factored == ("Armour Bane (1)",)
     transforms = compiled.modifiers
     profile = AttackProfile.shooting(
@@ -166,7 +157,7 @@ def test_compile_armour_bane_from_data_reproduces_the_golden() -> None:
 def test_compile_effectless_rule_stays_unfactored() -> None:
     """A resolved rule with no effects is recognised but not factored, as a missing one is."""
     effectless = Rule(id="effectless", name="Effectless", paragraphs=["Says nothing."])
-    compiled = compile_rules(["Effectless"], {effectless.name: effectless})
+    compiled = compile_rules([effectless])
     assert compiled.modifiers == ()
     assert compiled.unfactored == ("Effectless",)
 
@@ -179,15 +170,15 @@ def test_compile_rank_quantity_stays_unfactored_in_the_dice_walk() -> None:
     way a characteristic change is.
     """
     rules = _one_rule(ModifierEffect(add={Quantity.FIGHTING_RANKS: 1}))
-    compiled = compile_rules(["Doctored"], rules)
+    compiled = compile_rules(rules)
     assert compiled.modifiers == ()
     assert compiled.unfactored == ("Doctored",)
 
 
 def test_compile_parameter_placeholder_without_value_stays_unfactored() -> None:
-    """The X placeholder needs a bracketed number in the printed name."""
+    """The entry as filed, its X unbound, has no amount to compile."""
     rule = REPO.rules["armour-bane"]
-    compiled = compile_rules(["Armour Bane (X)"], REPO.rules)
+    compiled = compile_rules([rule])
     assert rule.effects and compiled.modifiers == ()
     assert compiled.unfactored == ("Armour Bane (X)",)
 
@@ -200,7 +191,7 @@ def test_unconditional_armour_piercing_modifier_factors() -> None:
     save 5+ worsened to 6+ on every attack, p = 2/3 * 1/2 * 5/6 = 5/18.
     """
     rules = _one_rule(ModifierEffect(add={Quantity.ARMOUR_PIERCING: 1}))
-    compiled = compile_rules(["Doctored"], rules)
+    compiled = compile_rules(rules)
     assert compiled.factored == ("Doctored",)
     transforms = compiled.modifiers
     profile = AttackProfile.shooting(
@@ -218,7 +209,7 @@ def test_trigger_at_or_after_the_landing_stage_stays_unfactored() -> None:
     effect = ModifierEffect(
         when=When(natural=NaturalRoll(face=6, roll=Stage.ROLL_TO_WOUND)), add={Quantity.TO_HIT: 1}
     )
-    compiled = compile_rules(["Doctored"], _one_rule(effect))
+    compiled = compile_rules(_one_rule(effect))
     assert compiled.modifiers == ()
     assert compiled.unfactored == ("Doctored",)
 
@@ -402,7 +393,7 @@ def test_compile_grant_confers_the_named_rule_and_stacks() -> None:
     sisters = _fielded(REPO.units["sisters-of-avelorn"], 5).wielding("Bow of Avelorn")
     bow = GateContext(wielding=WeaponFacts(type=WeaponType.BOW))
     index = {rule.name: rule for rule in sisters.loadout.rules}
-    compiled = compile_rules(["Arrows of Isha"], index, bow, grants=sisters.loadout.granted_rules)
+    compiled = compile_rules([index["Arrows of Isha"]], bow, grants=sisters.loadout.bound)
     assert compiled.factored == ("Arrows of Isha",)
     save_moves = [
         (m.move, m.trigger) for m in compiled.modifiers if m.lands_on is Stage.MAKE_ARMOUR_SAVES
@@ -422,24 +413,19 @@ def test_compile_grant_unfactored_when_the_bow_gate_is_unknown() -> None:
     sisters = _fielded(REPO.units["sisters-of-avelorn"], 5).wielding("Bow of Avelorn")
     index = {rule.name: rule for rule in sisters.loadout.rules}
     compiled = compile_rules(
-        ["Arrows of Isha"], index, GateContext(), grants=sisters.loadout.granted_rules
+        [index["Arrows of Isha"]], GateContext(), grants=sisters.loadout.bound
     )
     assert compiled.unfactored == ("Arrows of Isha",)
     assert compiled.modifiers == ()
 
 
-def test_compile_grant_unfactored_when_the_granted_rule_is_unresolvable() -> None:
-    """A grant whose named rule has no entry cannot be expanded — unfactored.
-
-    All-or-nothing: the flat clause would compile, but the unresolvable grant
-    takes the whole rule down, reported rather than half-applied.
-    """
+def test_compile_grant_without_its_bound_rule_is_a_caller_error() -> None:
+    """Every grant binds at load, so a compile missing one was handed the wrong index."""
     sisters = _fielded(REPO.units["sisters-of-avelorn"], 5).wielding("Bow of Avelorn")
     bow = GateContext(wielding=WeaponFacts(type=WeaponType.BOW))
     index = {rule.name: rule for rule in sisters.loadout.rules}
-    compiled = compile_rules(["Arrows of Isha"], index, bow, grants={})
-    assert compiled.unfactored == ("Arrows of Isha",)
-    assert compiled.modifiers == ()
+    with pytest.raises(ValueError, match="armour-bane, X: 1} is granted, but compiled without"):
+        compile_rules([index["Arrows of Isha"]], bow, grants={})
 
 
 def test_scalar_fact_is_tri_state() -> None:
@@ -513,9 +499,8 @@ def test_armour_bane_two_leaves_no_save_at_all() -> None:
     number. Hit 3+, wound 4+, save 5+:
     p = 2/3 * (2/6 * 4/6 + 1/6 * 1) = 7/27.
     """
-    bane = printed_rule("Armour Bane (2)", REPO.rules)
-    assert bane is not None
-    compiled = compile_rules(["Armour Bane (2)"], {bane.name: bane})
+    bane = bind(RuleRef(rule="armour-bane", X=2), REPO.rules)
+    compiled = compile_rules([bane])
     assert compiled.factored == ("Armour Bane (2)",)
     transforms = compiled.modifiers
     profile = AttackProfile.shooting(
@@ -538,7 +523,13 @@ def _initiative_rule(
     if when is not None:
         payload["when"] = when
     effect = ModifierEffect.model_validate(payload)
-    return Rule(id="doctored", name="Doctored (X)", paragraphs=["…"], effects=[effect])
+    return Rule(
+        id="doctored",
+        name="Doctored (X)",
+        parameter=AmountParameter(kind="amount"),
+        paragraphs=["…"],
+        effects=[effect],
+    )
 
 
 def test_effective_characteristic_applies_a_modifier() -> None:
@@ -780,7 +771,7 @@ def test_set_is_unfactored_at_the_walk() -> None:
     cannot reach here — the schema rejects it at load.)
     """
     effect = ModifierEffect(set={Characteristic.INITIATIVE: 10})
-    compiled = compile_rules(["Doctored"], _one_rule(effect))
+    compiled = compile_rules(_one_rule(effect))
     assert compiled.modifiers == ()
     assert compiled.unfactored == ("Doctored",)
 
@@ -968,7 +959,7 @@ def test_effective_armour_value_speaks_for_an_unarmoured_defenders_rules() -> No
     assert honoured.value == 0  # the caller's "no save"
     assert honoured.factored == ("Parry",)
 
-    ungated = _one_rule(ModifierEffect(add={Quantity.ARMOUR_VALUE: 1}))["Doctored"]
+    ungated = _one_rule(ModifierEffect(add={Quantity.ARMOUR_VALUE: 1}))[0]
     would_apply = effective_armour_value(None, [ungated], bare)
     assert would_apply.value == 0
     assert would_apply.unfactored == ("Doctored",)
@@ -1092,16 +1083,15 @@ def test_enemy_fire_compiles_off_the_target_against_the_shooters_roll() -> None:
     unfactored (the compile at the other seat has it).
     """
     rule = REPO.rules["enemy-fire-skirmishers"]
-    index = {rule.name: rule}
     shot_at = GateContext(target_of=AttackFacts(kind=AttackKind.SHOOTING))
 
-    compiled = compile_rules([rule.name], index, shot_at, seat=Side.TARGET)
+    compiled = compile_rules([rule], shot_at, seat=Side.TARGET)
     assert compiled.factored == (rule.name,)
     assert [(m.lands_on, m.move, m.trigger) for m in compiled.modifiers] == [
         (Stage.ROLL_TO_HIT, 1, None)
     ]
 
-    as_attacker = compile_rules([rule.name], index, GateContext(), seat=Side.ATTACKER)
+    as_attacker = compile_rules([rule], GateContext(), seat=Side.ATTACKER)
     assert as_attacker.inapplicable == (rule.name,)
     assert as_attacker.factored == () and as_attacker.unfactored == ()
     assert as_attacker.modifiers == ()
@@ -1116,14 +1106,13 @@ def test_compile_seat_mismatch_is_settled_before_the_gate() -> None:
     ahead of the gate, so a one-sided caller's report never turns on gate luck.
     """
     rule = REPO.rules["enemy-fire-skirmishers"]
-    index = {rule.name: rule}
     contexts = {
         "unknown": GateContext(),
         "not a target": GateContext(target_of=None),
         "a target": GateContext(target_of=AttackFacts(kind=AttackKind.SHOOTING)),
     }
     for described, context in contexts.items():
-        compiled = compile_rules([rule.name], index, context, seat=Side.ATTACKER)
+        compiled = compile_rules([rule], context, seat=Side.ATTACKER)
         assert compiled.inapplicable == (rule.name,), described
 
 
@@ -1137,7 +1126,6 @@ def test_compile_another_seams_quantity_is_unfactored_whatever_the_gate_answers(
     happened to settle the gate False.
     """
     rule = REPO.rules["elven-reflexes"]
-    index = {rule.name: rule}
     contexts = {
         "first round": GateContext(combat=CombatFacts(first_round=True)),
         "a later round": GateContext(combat=CombatFacts(first_round=False)),
@@ -1146,7 +1134,7 @@ def test_compile_another_seams_quantity_is_unfactored_whatever_the_gate_answers(
     }
     for described, context in contexts.items():
         for seat in Side:
-            compiled = compile_rules([rule.name], index, context, seat=seat)
+            compiled = compile_rules([rule], context, seat=seat)
             assert compiled.unfactored == (rule.name,), f"{described}, {seat}"
             assert compiled.modifiers == ()
 
@@ -1242,19 +1230,16 @@ def test_attack_marks_read_the_profile_in_use_and_the_unit_rules_alike() -> None
     mark carries it onto any weapon it swings. The consumed names come back
     per source, so each claims its own namespace's note.
     """
-    magical = REPO.rules["magical-attacks"]
-    weapon_rules = {"Magical Attacks": magical}
-
-    by_weapon = attack_marks(["Magical Attacks"], weapon_rules, [])
+    by_weapon = attack_marks([REPO.rules["magical-attacks"]], [])
     assert by_weapon.magical and not by_weapon.flaming
     assert by_weapon.weapon_factored == ("Magical Attacks",)
     assert by_weapon.unit_factored == ()
 
-    by_unit = attack_marks([], {}, [REPO.rules["flaming-attacks"]])
+    by_unit = attack_marks([], [REPO.rules["flaming-attacks"]])
     assert by_unit.flaming and not by_unit.magical
     assert by_unit.unit_factored == ("Flaming Attacks",)
 
-    unmarked = attack_marks([], {}, [REPO.rules["stubborn"]])
+    unmarked = attack_marks([], [REPO.rules["stubborn"]])
     assert not unmarked.magical and not unmarked.flaming
 
 
@@ -1266,7 +1251,7 @@ def test_a_gated_attack_mark_is_left_unconsumed() -> None:
         paragraphs=["…"],
         effects=[AttackMarkEffect(attack=AttackMarks(magical=True), when=When(combat=True))],
     )
-    marks = attack_marks([], {}, [gated])
+    marks = attack_marks([], [gated])
     assert not marks.magical
     assert marks.unit_factored == ()
 
@@ -1321,26 +1306,26 @@ def test_killing_blow_compiles_by_seat_gate_and_foe() -> None:
     honoured with none; a foe never met leaves it unfactored; and from the
     target's seat it is the other side's business — inapplicable.
     """
-    index = {"Killing Blow": REPO.rules["killing-blow"]}
+    killing_blow = [REPO.rules["killing-blow"]]
 
     infantry = GateContext(
         combat=CombatFacts(), foe=FoeFacts(troop_type=TroopType.REGULAR_INFANTRY)
     )
-    compiled = compile_rules(["Killing Blow"], index, infantry)
+    compiled = compile_rules(killing_blow, infantry)
     assert compiled.factored == ("Killing Blow",)
     assert len(compiled.transforms) == 1
 
     monster = GateContext(
         combat=CombatFacts(), foe=FoeFacts(troop_type=TroopType.MONSTROUS_CREATURE)
     )
-    honoured = compile_rules(["Killing Blow"], index, monster)
+    honoured = compile_rules(killing_blow, monster)
     assert honoured.factored == ("Killing Blow",)
     assert honoured.transforms == ()
 
-    unknown_foe = compile_rules(["Killing Blow"], index, GateContext(combat=CombatFacts()))
+    unknown_foe = compile_rules(killing_blow, GateContext(combat=CombatFacts()))
     assert unknown_foe.unfactored == ("Killing Blow",)
 
-    other_seat = compile_rules(["Killing Blow"], index, infantry, seat=Side.TARGET)
+    other_seat = compile_rules(killing_blow, infantry, seat=Side.TARGET)
     assert other_seat.inapplicable == ("Killing Blow",)
 
 
@@ -1365,21 +1350,20 @@ def test_deflect_shots_wards_only_a_non_magical_shooting_attack() -> None:
 # --- automatic hits: Stomp Attacks / Impact Hits, from the real entries ---
 
 
-def test_printed_rule_substitutes_a_dice_parameter() -> None:
+def test_binding_substitutes_a_dice_parameter() -> None:
     """A bracketed dice quantity binds the (X) entry's parameter as dice.
 
     "Impact Hits (D6)" resolves against "Impact Hits (X)" with the count a
     :class:`DiceQuantity`, not a number — the seam folds it as its exact
     distribution. "Stomp Attacks (D3+1)" carries the flat addend.
     """
-    rule = printed_rule("Impact Hits (D6)", REPO.rules)
-    assert rule is not None and rule.name == "Impact Hits (D6)"
+    rule = bind(RuleRef(rule="impact-hits", X="D6"), REPO.rules)
+    assert rule.name == "Impact Hits (D6)"
     effect = rule.effects[0]
     assert isinstance(effect, HitsEffect)
     assert effect.hits == DiceQuantity(sides=6)
 
-    stomp = printed_rule("Stomp Attacks (D3+1)", REPO.rules)
-    assert stomp is not None
+    stomp = bind(RuleRef(rule="stomp-attacks", X="D3+1"), REPO.rules)
     flat = stomp.effects[0]
     assert isinstance(flat, HitsEffect)
     assert flat.hits == DiceQuantity(sides=3, plus=1)
@@ -1387,8 +1371,7 @@ def test_printed_rule_substitutes_a_dice_parameter() -> None:
 
 def test_effective_automatic_hits_fixed_count_is_certain() -> None:
     """Stomp Attacks (2) in combat: exactly two hits per model, no dice."""
-    rule = printed_rule("Stomp Attacks (2)", REPO.rules)
-    assert rule is not None
+    rule = bind(RuleRef(rule="stomp-attacks", X=2), REPO.rules)
     fold = effective_automatic_hits([rule], HitOrder.LAST, GateContext(combat=CombatFacts()))
     assert fold.factored == ("Stomp Attacks (2)",)
     assert fold.per_model.mass == {2: 1}
@@ -1401,8 +1384,7 @@ def test_effective_automatic_hits_folds_the_dice_exactly() -> None:
     factored, no hits — and the read at the other order leaves the rule to
     its own order's read, in neither name list.
     """
-    rule = printed_rule("Impact Hits (D6)", REPO.rules)
-    assert rule is not None
+    rule = bind(RuleRef(rule="impact-hits", X="D6"), REPO.rules)
     charging = GateContext(movement=MovementFacts(moved=True, charge=ChargeEvent(distance=6)))
     fold = effective_automatic_hits([rule], HitOrder.FIRST, charging)
     assert fold.factored == ("Impact Hits (D6)",)
@@ -1427,28 +1409,21 @@ def test_effective_automatic_hits_unbound_parameter_is_unfactored() -> None:
     assert fold.per_model.mass == {0: 1}
 
 
-def test_printed_rule_substitutes_a_dice_multiplier() -> None:
-    """A dice parameter binds the multiplier; a numeric-only amount stays unbound."""
-    rule = printed_rule("Multiple Wounds (D3)", REPO.rules)
-    assert rule is not None
+def test_binding_substitutes_a_dice_multiplier() -> None:
+    """A dice parameter binds the multiplier; a rule taking only a number refuses a roll."""
+    rule = bind(RuleRef(rule="multiple-wounds", X="D3"), REPO.rules)
     assert rule.name == "Multiple Wounds (D3)"
     effect = rule.effects[0]
     assert isinstance(effect, WoundMultiplierEffect)
     assert effect.multiplies == DiceQuantity(sides=3)
-    # A die has no place in a modifier's numeric amount: the "X" stays
-    # unbound and the rule rides along unfactored, never misread.
-    bane = printed_rule("Armour Bane (D3)", REPO.rules)
-    assert bane is not None
-    effect = bane.effects[0]
-    assert isinstance(effect, ModifierEffect)
-    assert effect.add is not None and "X" in effect.add.values()
+    with pytest.raises(ValueError, match="is not an amount"):
+        bind(RuleRef(rule="armour-bane", X="D3"), REPO.rules)
 
 
 def test_effective_wound_multiplier_reads_the_printed_value() -> None:
     """The casualty seam's fold: a constant is certain, a D3 uniform, a bare X unfactored."""
-    two = printed_rule("Multiple Wounds (2)", REPO.rules)
-    d3 = printed_rule("Multiple Wounds (D3)", REPO.rules)
-    assert two is not None and d3 is not None
+    two = bind(RuleRef(rule="multiple-wounds", X=2), REPO.rules)
+    d3 = bind(RuleRef(rule="multiple-wounds", X="D3"), REPO.rules)
 
     constant = effective_wound_multiplier([two])
     assert constant.wounds == Distribution.pure(2)

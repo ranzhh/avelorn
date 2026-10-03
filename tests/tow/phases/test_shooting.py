@@ -10,6 +10,7 @@ from avelorn.tow.data import TOWRepository
 from avelorn.tow.engine.attack import AttackProfile, Outcome, RollState, Transform
 from avelorn.tow.muster import Complement
 from avelorn.tow.phases.shooting import _engagement_conditions, shoot, shoot_unit
+from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import RerollEffect, RollResult, Rule
 from avelorn.tow.schema.stage import Stage
 from avelorn.tow.schema.unit import Characteristic, Unit
@@ -425,7 +426,9 @@ def test_shoot_unit_skirmishers_impose_minus_one_to_hit_on_the_shooter() -> None
     """
     archers, shadows = REPO.units["elven-archers"], REPO.units["shadow-warriors"]
     formed = shadows.model_copy(
-        update={"special_rules": [r for r in shadows.special_rules if r != "Skirmishers"]}
+        update={
+            "special_rules": [r for r in shadows.special_rules if r != RuleRef(rule="skirmishers")]
+        }
     )
     shooter = _fielded(archers, 5).wielding("Longbow")
 
@@ -434,9 +437,6 @@ def test_shoot_unit_skirmishers_impose_minus_one_to_hit_on_the_shooter() -> None
     assert skirmishing.hit_target == formed_up.hit_target + 1
     assert not any("not factored: Skirmishers" in note for note in skirmishing.notes)
     assert any("Skirmish formation is not modelled" in note for note in skirmishing.notes)
-    # The granted rule's own caveat surfaces too: Enemy Fire (Skirmishers)
-    # lives only in granted_rules, and its Unit Strength scope is authored
-    # there, not on the granting rule.
     assert any("Unit Strength 1" in note for note in skirmishing.notes)
 
 
@@ -473,7 +473,11 @@ def test_shoot_unit_gromril_armour_re_rolls_the_targets_save_against_arrows() ->
     """
     archers, ironbreakers = REPO.units["elven-archers"], REPO.units["ironbreakers"]
     stripped = ironbreakers.model_copy(
-        update={"special_rules": [r for r in ironbreakers.special_rules if r != "Gromril Armour"]}
+        update={
+            "special_rules": [
+                r for r in ironbreakers.special_rules if r != RuleRef(rule="gromril-armour")
+            ]
+        }
     )
     shooter = _fielded(archers, 5).wielding("Longbow")
 
@@ -502,11 +506,6 @@ def test_shoot_unit_notes_the_defenders_rules_no_volley_could_use() -> None:
 
 
 def _with_a_magic_bow(archers: Contingent) -> Contingent:
-    # No printed magic bow grants a re-roll, so doctor the longbow with a rule
-    # in Daith's Reaper's shape — "enemy models must re-roll any successful
-    # Armour Save rolls" — printed on its missile profile and filed in the
-    # loadout's weapon rules under that name, exactly as fielding a real magic
-    # missile weapon would file it.
     rule = Rule(
         id="doctored-bow",
         name="Doctored Bow",
@@ -520,14 +519,16 @@ def _with_a_magic_bow(archers: Contingent) -> Contingent:
     doctored = longbow.model_copy(
         update={
             "profiles": [
-                printed.model_copy(update={"special_rules": [*printed.special_rules, rule.name]})
+                printed.model_copy(
+                    update={"special_rules": [*printed.special_rules, RuleRef(rule=rule.id)]}
+                )
             ]
         }
     )
     loadout = replace(
         archers.loadout,
         weapons=(doctored, *(w for w in archers.loadout.weapons if w.name != longbow.name)),
-        weapon_rules={**archers.loadout.weapon_rules, rule.name: rule},
+        bound={**archers.loadout.bound, RuleRef(rule=rule.id): rule},
     )
     return replace(archers, loadout=loadout).wielding("Longbow")
 
@@ -570,7 +571,9 @@ def test_shoot_unit_grants_the_defenders_ward_against_a_mundane_volley() -> None
     stripped_unit = REPO.units["ironbreakers"].model_copy(
         update={
             "special_rules": [
-                r for r in REPO.units["ironbreakers"].special_rules if r != "Runes of Protection"
+                r
+                for r in REPO.units["ironbreakers"].special_rules
+                if r != RuleRef(rule="runes-of-protection")
             ]
         }
     )
@@ -658,7 +661,9 @@ def test_shoot_unit_leaves_a_two_handed_wielders_shield_counting() -> None:
 def test_a_blow_never_fires_in_a_volley() -> None:
     """Killing Blow reads "an attack made in combat": a volley leaves it honoured inert."""
     archers = REPO.units["elven-archers"]
-    marked = archers.model_copy(update={"special_rules": [*archers.special_rules, "Killing Blow"]})
+    marked = archers.model_copy(
+        update={"special_rules": [*archers.special_rules, RuleRef(rule="killing-blow")]}
+    )
     target = _fielded(REPO.units["elven-spearmen"], 10)
 
     blow = shoot_unit(_fielded(marked, 5).wielding("Longbow"), target, distance=10)
@@ -684,7 +689,12 @@ def test_multiple_wounds_d3_shoots_as_a_distribution_not_an_expectation() -> Non
         name="Maw Bow",
         profiles=[
             WeaponProfile.model_validate(
-                {"R": 30, "S": 3, "AP": "-", "special_rules": ["Multiple Wounds (D3)"]}
+                {
+                    "R": 30,
+                    "S": 3,
+                    "AP": "-",
+                    "special_rules": [RuleRef(rule="multiple-wounds", X="D3")],
+                }
             )
         ],
     )

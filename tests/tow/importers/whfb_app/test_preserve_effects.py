@@ -12,13 +12,18 @@ from avelorn.tow.importers.whfb_app.parse import WhfbParseError
 from avelorn.tow.importers.whfb_app.preserve import HAND_AUTHORED, with_hand_authored
 from avelorn.tow.importers.whfb_app.yamlout import rule_to_yaml, weapon_to_yaml
 from avelorn.tow.schema.armour import Armour
-from avelorn.tow.schema.rule import Rule
+from avelorn.tow.schema.rule import PrintedParameter, Rule
 from avelorn.tow.schema.weapon import Weapon
 
 RULE_FILES = rule_paths()
 REPO = TOWRepository()
 
-_REIMPORTED = Rule(id="armour-bane", name="Armour Bane (X)", paragraphs=["Fresh text."])
+_REIMPORTED = Rule(
+    id="armour-bane",
+    name="Armour Bane (X)",
+    parameter=PrintedParameter(kind="printed"),
+    paragraphs=["Fresh text."],
+)
 
 
 def _existing(tmp_path: Path, source: str) -> Path:
@@ -38,6 +43,7 @@ def test_effects_survive_a_reimport(tmp_path: Path) -> None:
     path = _existing(tmp_path, rule_to_yaml(existing))
     merged, warnings = with_hand_authored(_REIMPORTED, path)
     assert merged.effects == existing.effects
+    assert merged.parameter == existing.parameter
     assert merged.paragraphs == ["Fresh text."]
     assert any("re-verify" in w for w in warnings)
 

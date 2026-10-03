@@ -16,13 +16,13 @@ equipment:
   - Chracian Great Blade
   - Heavy Armour
 special_rules:
-  - Champions of Chrace
-  - Close Order
-  - Elven Reflexes
-  - Furious Charge
-  - Lion Cloak
-  - Stubborn
-  - Veteran
+  - champions-of-chrace
+  - close-order
+  - elven-reflexes
+  - furious-charge
+  - lion-cloak
+  - stubborn
+  - veteran
 options:
   - name: Lion Guard Captain
     kind: champion

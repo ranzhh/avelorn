@@ -1,6 +1,10 @@
 # Source: https://tow.whfb.app/special-rules/extra-attacks
 id: extra-attacks
 name: Extra Attacks (+X)
+parameter:
+  kind: amount
+  dice: true
+  min: 1
 page: 168
 category: Special Rules
 flavour: Through fury, extra limbs, or being armed to the teeth, this warrior can strike more blows.
