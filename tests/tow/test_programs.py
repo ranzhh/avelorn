@@ -49,6 +49,18 @@ def _known_without_a_type(volley: dict[str, Any]) -> None:
     volley["inputs"].append({"known": "cover"})
 
 
+def _input_twice(volley: dict[str, Any]) -> None:
+    volley["inputs"].append({"known": "distance", "type": "int"})
+
+
+def _known_named_as_a_fact(volley: dict[str, Any]) -> None:
+    volley["inputs"].append({"known": "moved", "of": "attacker", "type": "bool"})
+
+
+def _tally_on_a_step_that_counts_none(volley: dict[str, Any]) -> None:
+    volley["items"][0]["tallies"] = ["attack"]
+
+
 @pytest.mark.parametrize(
     ("edit", "message"),
     [
@@ -99,6 +111,21 @@ def _known_without_a_type(volley: dict[str, Any]) -> None:
             "inputs.9.KnownInput.type\n  Field required",
             id="known-without-a-type",
         ),
+        pytest.param(
+            _input_twice,
+            "volley.yaml: inputs[9]: distance is an input twice",
+            id="input-twice",
+        ),
+        pytest.param(
+            _known_named_as_a_fact,
+            "volley.yaml: inputs[9]: moved is listed in state.yaml",
+            id="known-named-as-a-fact",
+        ),
+        pytest.param(
+            _tally_on_a_step_that_counts_none,
+            "volley.yaml: items[0]: check-range sums no group",
+            id="tally-on-a-step-that-counts-none",
+        ),
     ],
 )
 def test_a_bad_entry_fails_the_load_at_its_path(edit: Edit, message: str, tmp_path: Path) -> None:
@@ -116,3 +143,4 @@ def test_a_bad_entry_fails_the_load_at_its_path(edit: Edit, message: str, tmp_pa
 def test_evaluating_without_every_input_is_refused() -> None:
     with pytest.raises(ProgramError, match="volley needs attacker/fielded, attacker/standing"):
         load_program(VOLLEY).evaluate({"distance": 12})
+
