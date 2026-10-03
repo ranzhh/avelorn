@@ -8,12 +8,14 @@ from avelorn.core.distribution import Distribution
 from avelorn.tow.kernels import (
     Confirm,
     Die,
+    Standing,
     armour_save_target,
     d6,
     hit_probability,
     leadership_test,
     melee_hit_probability,
     melee_hit_target,
+    remove_casualties,
     save_probability,
     shooting_hit_target,
     wound_probability,
@@ -219,3 +221,18 @@ def test_zero_or_dash_fails_automatically() -> None:
     """A Leadership of 0 or "-" automatically fails the test."""
     assert leadership_test(0) == Fraction(0)
     assert leadership_test(None) == Fraction(0)
+
+
+@pytest.mark.parametrize(
+    ("standing", "wounds", "after"),
+    [
+        pytest.param(Standing(2, 1), 1, Standing(1, 0), id="the-damaged-model-falls-first"),
+        pytest.param(Standing(2, 1), 4, Standing(0, 0), id="the-last-model-keeps-no-damage"),
+        pytest.param(Standing(3, 1), 2, Standing(2, 1), id="a-wound-carries-to-the-next-model"),
+    ],
+)
+def test_remove_casualties_carries_wounds_across_models(
+    standing: Standing, wounds: int, after: Standing
+) -> None:
+    """Wounds carry across Two-Wound models."""
+    assert remove_casualties(standing, wounds, 2) == after
