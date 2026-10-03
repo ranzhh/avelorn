@@ -62,7 +62,6 @@ def test_a_parameter_that_does_not_bind_is_its_own_gap(printed: str, gap: GapKin
     assert rule_gap(printed, REPO.rules) is gap
 
 
-# Text-only entries, built here so a test never pins a real rule as unmodelled.
 TEXT_ONLY = Registry(
     [
         Rule(id="fear", name="Fear", paragraphs=["…"]),

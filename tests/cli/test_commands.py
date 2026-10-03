@@ -56,7 +56,7 @@ def test_rules_list_says_which_entries_reach_the_maths() -> None:
     assert len(lines) == len(REPO.rules) + 1
     stubborn = next(line for line in lines if line.startswith("stubborn"))
     assert stubborn.split()[-2:] == ["yes", "4"]  # effects; three units and an option print it
-    assert any(line.split()[-2] == "no" for line in lines[1:])  # a text-only entry
+    assert any(line.split()[-2] == "no" for line in lines[1:])
 
 
 def test_coverage_leads_with_what_the_ledger_does_not_match(tmp_path: Path) -> None:
