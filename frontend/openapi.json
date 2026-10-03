@@ -1738,6 +1738,106 @@
         "title": "NaturalRoll",
         "description": "A natural face shown by one of the attack sequence's dice.\n\nThe *event* half of the trigger vocabulary \u2014 \"rolls a natural 6\nwhen making a roll To Wound\". Where ``when`` gates on engagement\nstate, known once before any die is cast (and possibly unknown),\nan event is decided branch by branch during resolution and is never\nunknown. ``roll`` must name a stage that rolls one die per attack \u2014\nthe stage's own :attr:`~avelorn.tow.schema.stage.Stage.dice` row,\nchecked at data load."
       },
+      "OptionDetail": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/OptionKind",
+            "default": "other"
+          },
+          "applies_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applies To"
+          },
+          "points": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Points"
+          },
+          "per_model": {
+            "type": "boolean",
+            "title": "Per Model",
+            "default": false
+          },
+          "points_budget": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Points Budget"
+          },
+          "adds_rules": {
+            "items": {
+              "$ref": "#/components/schemas/Reference"
+            },
+            "type": "array",
+            "title": "Adds Rules"
+          },
+          "removes_rules": {
+            "items": {
+              "$ref": "#/components/schemas/Reference"
+            },
+            "type": "array",
+            "title": "Removes Rules"
+          },
+          "adds_equipment": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Adds Equipment"
+          },
+          "removes_equipment": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Removes Equipment"
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "adds_rules",
+          "removes_rules"
+        ],
+        "title": "OptionDetail",
+        "description": "One option, the rules it adds and removes resolved."
+      },
       "OptionKind": {
         "type": "string",
         "enum": [
@@ -2522,7 +2622,7 @@
           },
           "options": {
             "items": {
-              "$ref": "#/components/schemas/UnitOption"
+              "$ref": "#/components/schemas/OptionDetail"
             },
             "type": "array",
             "title": "Options"
@@ -2538,108 +2638,11 @@
           "troop_type",
           "profiles",
           "equipment",
-          "special_rules"
+          "special_rules",
+          "options"
         ],
         "title": "UnitDetail",
-        "description": "A datasheet as reading one shows it: the entry, every printed name resolved.\n\nEverything :class:`~avelorn.tow.schema.unit.Unit` prints, except that its\nequipment and its special rules arrive as :class:`Reference`. Resolving on\nthe way out is what keeps a caller from re-deriving it: a printed name does\nnot become a slug by slugifying it, nor a reference a name by reading it."
-      },
-      "UnitOption": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "kind": {
-            "$ref": "#/components/schemas/OptionKind",
-            "default": "other"
-          },
-          "applies_to": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Applies To"
-          },
-          "points": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Points"
-          },
-          "per_model": {
-            "type": "boolean",
-            "title": "Per Model",
-            "default": false
-          },
-          "points_budget": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 1.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Points Budget"
-          },
-          "adds_rules": {
-            "items": {
-              "$ref": "#/components/schemas/RuleRef"
-            },
-            "type": "array",
-            "title": "Adds Rules"
-          },
-          "removes_rules": {
-            "items": {
-              "$ref": "#/components/schemas/RuleRef"
-            },
-            "type": "array",
-            "title": "Removes Rules"
-          },
-          "adds_equipment": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Adds Equipment"
-          },
-          "removes_equipment": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Removes Equipment"
-          },
-          "limit": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Limit"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "name"
-        ],
-        "title": "UnitOption",
-        "description": "A purchasable upgrade.\n\nExactly one cost shape applies: a flat `points` cost (per unit, or per\nmodel when `per_model` is set) or a `points_budget` to spend up to\n(e.g. magic standards)."
+        "description": "A datasheet as reading one shows it: the entry, every printed name resolved.\n\nEverything :class:`~avelorn.tow.schema.unit.Unit` prints, except that its\nequipment, its special rules and its options' rules arrive as\n:class:`Reference`. Resolving on the way out is what keeps a caller from\nre-deriving it: a printed name does not become a slug by slugifying it, nor\na reference a name by reading it."
       },
       "UnitSize": {
         "properties": {

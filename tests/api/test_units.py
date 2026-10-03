@@ -91,6 +91,18 @@ def test_a_parameterised_rule_resolves_to_the_template_it_is_filed_under(
     assert client.get("/rules/impact-hits").json()["name"] == "Impact Hits (X)"
 
 
+def test_an_option_names_the_rules_it_swaps_as_the_datasheet_prints_them(
+    client: TestClient,
+) -> None:
+    """Ship's Company may trade Open Order for Skirmish Formation."""
+    body = client.get("/units/ships-company").json()
+    swap = next(o for o in body["options"] if o["name"] == "Skirmish Formation")
+    assert swap["adds_rules"] == [
+        {"name": "Skirmish Formation", "kind": "rule", "slug": "skirmish-formation"}
+    ]
+    assert swap["removes_rules"] == [{"name": "Open Order", "kind": "rule", "slug": "open-order"}]
+
+
 def test_a_datasheet_carries_its_resolved_troop_type(client: TestClient) -> None:
     """The repository attaches how a unit ranks up, and the response keeps it."""
     body = client.get("/units/elven-spearmen").json()

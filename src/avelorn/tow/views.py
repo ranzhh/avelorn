@@ -11,7 +11,7 @@ unit's profiles and options at once makes a listing grow with the corpus rather
 than with its length. Reading one entry answers everything else. A rule's view is
 the schema type itself (:class:`~avelorn.tow.schema.rule.Rule`) -- nothing to
 project, so projecting it would only create something to drift. A datasheet's is
-:class:`UnitDetail`, the schema type but for two fields: its equipment and its
+:class:`UnitDetail`, the schema type but for its references: its equipment and its
 rule references arrive resolved, each carrying the name it prints and the entry
 it addresses. A rule's name is the rule's own, X substituted -- ``{rule:
 impact-hits, X: D3}`` prints "Impact Hits (D3)" -- so a caller never renders it.
@@ -37,7 +37,7 @@ from avelorn.tow.phases.shooting import PanicResult, ShootingResult
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import Rule
-from avelorn.tow.schema.unit import TroopType, Unit, UnitSize
+from avelorn.tow.schema.unit import TroopType, Unit, UnitOption, UnitSize
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile, WeaponType
 
 
@@ -136,17 +136,26 @@ class Reference(BaseModel):
         return cls(name=printed, kind=None, slug=None)
 
 
+class OptionDetail(UnitOption):
+    """One option, the rules it adds and removes resolved."""
+
+    adds_rules: list[Reference]
+    removes_rules: list[Reference]
+
+
 class UnitDetail(Unit):
     """A datasheet as reading one shows it: the entry, every printed name resolved.
 
     Everything :class:`~avelorn.tow.schema.unit.Unit` prints, except that its
-    equipment and its special rules arrive as :class:`Reference`. Resolving on
-    the way out is what keeps a caller from re-deriving it: a printed name does
-    not become a slug by slugifying it, nor a reference a name by reading it.
+    equipment, its special rules and its options' rules arrive as
+    :class:`Reference`. Resolving on the way out is what keeps a caller from
+    re-deriving it: a printed name does not become a slug by slugifying it, nor
+    a reference a name by reading it.
     """
 
     equipment: list[Reference]
     special_rules: list[Reference]
+    options: list[OptionDetail]
 
     @classmethod
     def of(cls, unit: Unit, data: TOWRepository) -> "UnitDetail":
@@ -163,6 +172,18 @@ class UnitDetail(Unit):
                     for name in unit.equipment
                 ],
                 "special_rules": [Reference.rule(ref, data.rules) for ref in unit.special_rules],
+                "options": [
+                    {
+                        **option.model_dump(),
+                        "adds_rules": [
+                            Reference.rule(ref, data.rules) for ref in option.adds_rules
+                        ],
+                        "removes_rules": [
+                            Reference.rule(ref, data.rules) for ref in option.removes_rules
+                        ],
+                    }
+                    for option in unit.options
+                ],
             }
         )
 
