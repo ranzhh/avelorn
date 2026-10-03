@@ -338,16 +338,11 @@
 				{#each node.options as option}
 					<div class="field"><span>{option}</span></div>
 				{/each}
-				<h2>taken</h2>
-				{#each node.taken as taken}
-					<div class="field">
-						<span>{taken.option} <span class="meta">{taken.by}</span></span>
-						<span class="num">{percent(taken.p)}</span>
-					</div>
-				{/each}
 			{/if}
 			<h2>edge out</h2>
-			{#if node.edge.readings.length}
+			{#if !node.ran}
+				<span class="meta">not run in this lane</span>
+			{:else if node.edge.readings.length}
 				<div class="readings">
 					<Readings readings={node.edge.readings} width={STRIP} />
 				</div>

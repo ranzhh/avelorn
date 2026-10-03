@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Hashable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
-from functools import partial
+from functools import cached_property, partial
 from inspect import signature
 from types import MappingProxyType
 from typing import Any, ClassVar
@@ -48,6 +48,18 @@ def _shown(value: object) -> int | str:
     return value if isinstance(value, int) else str(value)
 
 
+def _itself[T](value: T) -> T:
+    return value
+
+
+def _accepts(function: Callable[..., Any], count: int) -> bool:
+    try:
+        signature(function).bind(*(None for _ in range(count)))
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
 @dataclass(frozen=True, eq=False)
 class State[T: Hashable]:
     """A fact about the table that no block owns, such as the models a unit has left."""
@@ -61,7 +73,12 @@ class Tally[T: Hashable]:
     counts: Mapping["Repeat", "Projection[T]"]
 
 
-type Key = Step[Any] | State[Any] | Tally[Any]
+@dataclass(frozen=True, eq=False)
+class Mark[T: Hashable]:
+    name: str
+
+
+type Key = Step[Any] | State[Any] | Tally[Any] | Mark[Any]
 
 
 @dataclass(frozen=True)
@@ -70,7 +87,7 @@ class World:
 
     values: frozenset[tuple[Key, Any]] = frozenset()
 
-    def of[T: Hashable](self, key: "Step[T] | State[T] | Tally[T]") -> T:
+    def of[T: Hashable](self, key: "Step[T] | State[T] | Tally[T] | Mark[T]") -> T:
         for held, value in self.values:
             if held is key:
                 return value
@@ -82,6 +99,15 @@ class World:
 
     def keeping(self, keys: frozenset[Key]) -> "World":
         return World(frozenset(pair for pair in self.values if pair[0] in keys))
+
+
+@dataclass(frozen=True)
+class Settled:
+    world: World
+    applied: frozenset[str] = frozenset()
+
+    def verdict(self, rule: str) -> Verdict:
+        return Verdict.APPLIED if rule in self.applied else Verdict.HONOURED
 
 
 @dataclass(frozen=True, eq=False)
@@ -142,8 +168,8 @@ class Projection[T: Hashable]:
     def of(self, world: World) -> T:
         return self.project(*(world.of(source) for source in self.reads))
 
-    def view(self, edge: Edge) -> dict[str, Any]:
-        read = edge.read(self)
+    def view(self, edge: Edge | None) -> dict[str, Any]:
+        read = Distribution[T]({}) if edge is None else edge.read(self)
         outcomes = [{"value": _shown(value), "p": float(p)} for value, p in read.mass.items()]
         return {"label": self.label, "outcomes": outcomes}
 
@@ -154,7 +180,7 @@ class Scalar[T]:
     value: T
     reads: ClassVar[tuple[Key, ...]] = ()
 
-    def view(self, edge: Edge) -> dict[str, Any]:
+    def view(self, edge: Edge | None) -> dict[str, Any]:
         return {"label": self.label, "value": _shown(self.value)}
 
 
@@ -185,18 +211,21 @@ class Step[Out: Hashable](ABC):
         return self if self.writes is None else self.writes
 
     @abstractmethod
-    def outcomes(self, world: World, lane: "Lane") -> Distribution[Out]: ...
+    def settled(self, world: World, lane: "Lane") -> Distribution[Settled]: ...
+
+    def entered(self, world: World, value: Out) -> Settled:
+        return Settled(world.holding(self.key, value))
 
     def output(self, label: str, aggregation: Monoid[Out]) -> Projection[Out]:
-        def project(value: Out) -> Out:
-            return value
-
-        return Projection(label, (self.key,), project, aggregation)
+        return Projection(label, (self.key,), _itself, aggregation)
 
     def show(self, reading: Reading) -> None:
         self.readings.append(reading)
 
     def shown(self) -> tuple[Reading, ...]:
+        return tuple(self.readings)
+
+    def drawn(self) -> tuple[Reading, ...]:
         return tuple(self.readings)
 
     def reads(self) -> frozenset[Key]:
@@ -205,33 +234,25 @@ class Step[Out: Hashable](ABC):
     def arguments(self, world: World) -> tuple[Any, ...]:
         return tuple(world.of(source) for source in self.inputs)
 
-    def needs(self) -> tuple[Key, ...]:
+    def needs(self, program: "Program") -> tuple[Key, ...]:
         return self.inputs
 
     def declare(self, program: "Program", prefix: str, visible: list["Item"]) -> None:
         path = f"{prefix}/{self.name}"
-        for source in self.needs():
+        for source in self.inputs:
             if isinstance(source, Step) and source not in visible:
                 raise GraphError(f"{path} inputs {source.name}, which is not in scope")
-        if self.kernel is not None:
-            try:
-                signature(self.kernel).bind(*(None for _ in self.inputs))
-            except (TypeError, ValueError) as error:
-                raise GraphError(
-                    f"{path} kernel cannot accept {len(self.inputs)} positional inputs"
-                ) from error
+        if self.kernel is not None and not _accepts(self.kernel, len(self.inputs)):
+            raise GraphError(f"{path} kernel cannot accept {len(self.inputs)} positional inputs")
         program.take(self, path)
+        program.visible[self] = tuple(visible)
         if self.writes is None:
             visible.append(self)
         reads = self.reads()
         for source in reads:
             if isinstance(source, Step) and source not in visible:
                 raise GraphError(f"{path} shows {source.name}, which is not in scope")
-        for key in (*self.needs(), *reads, self.key):
-            if isinstance(key, State):
-                program.hold(key)
-            if isinstance(key, Tally):
-                program.count(key, path, visible)
+        program.reach(path, (*self.inputs, *reads, self.key), visible)
 
     def collect(self, program: "Program") -> None:
         program.steps.append(self)
@@ -239,38 +260,45 @@ class Step[Out: Hashable](ABC):
 
     def liveness(self, after: frozenset[Key], program: "Program") -> frozenset[Key]:
         program.live[self] = after
-        return ((after | self.reads()) - {self.key}) | set(self.needs())
+        return ((after | self.reads()) - {self.key}) | set(self.needs(program))
 
     def run(self, lane: "Lane") -> None:
+        def settled(world: World) -> Distribution[Settled]:
+            return self.settled(world, lane)
+
+        self.conclude(lane, lane.joint.bind(settled))
+
+    def conclude(self, lane: "Lane", settled: Distribution[Settled]) -> None:
+        for rule in dict.fromkeys(each.rule for each in lane.program.amending(self)):
+            lane.judged[self, rule] = settled.map(partial(Settled.verdict, rule=rule))
         after = lane.program.live[self]
         held = after | self.reads()
 
-        def advance(world: World) -> Distribution[World]:
-            def attach(value: Out) -> World:
-                return world.holding(self.key, value).keeping(held)
-
-            return self.outcomes(world, lane).map(attach)
+        def kept(each: Settled) -> World:
+            return each.world.keeping(held)
 
         def onward(world: World) -> World:
             return world.keeping(after)
 
-        edge = lane.joint.bind(advance)
+        edge = settled.map(kept)
         lane.edges[self] = Edge.single(edge)
         lane.joint = edge if held <= after else edge.map(onward)
 
-    def detail(self, lane: "Lane") -> dict[str, Any]:
+    def detail(self, lane: "Lane", edge: Edge | None) -> dict[str, Any]:
         return {}
 
     def view(self, paths: Mapping[Any, str], lane: "Lane") -> dict[str, Any]:
-        edge = lane.edges[self]
+        edge = lane.edges.get(self)
+        needs = dict.fromkeys(self.needs(lane.program))
         return {
             "path": paths[self],
             "step": self.name,
             "kind": self.kind,
             "side": self.side.value,
-            "inputs": [paths[source] for source in self.inputs if isinstance(source, Step)],
-            "edge": {"readings": [reading.view(edge) for reading in self.readings]},
-            **self.detail(lane),
+            "inputs": [paths[source] for source in needs if isinstance(source, Step)],
+            "ran": edge is not None,
+            "edge": {"readings": [reading.view(edge) for reading in self.drawn()]},
+            **self.detail(lane, edge),
         }
 
 
@@ -279,8 +307,8 @@ class Measurement[Out: Hashable](Step[Out]):
     kind = "measurement"
     kernel: Kernel[Out]
 
-    def outcomes(self, world: World, lane: "Lane") -> Distribution[Out]:
-        return self.kernel(*self.arguments(world))
+    def settled(self, world: World, lane: "Lane") -> Distribution[Settled]:
+        return self.kernel(*self.arguments(world)).map(partial(self.entered, world))
 
 
 @dataclass(frozen=True, eq=False, kw_only=True)
@@ -288,8 +316,8 @@ class Consequence[Out: Hashable](Step[Out]):
     kind = "consequence"
     kernel: Kernel[Out]
 
-    def outcomes(self, world: World, lane: "Lane") -> Distribution[Out]:
-        return self.kernel(*self.arguments(world))
+    def settled(self, world: World, lane: "Lane") -> Distribution[Settled]:
+        return self.kernel(*self.arguments(world)).map(partial(self.entered, world))
 
 
 @dataclass(frozen=True, eq=False, kw_only=True)
@@ -297,50 +325,58 @@ class Roll[Out: Hashable](Step[Out]):
     kind = "roll"
     kernel: Kernel[Out]
     target: Reading
-    modifiers: tuple[Modifier, ...] = ()
 
-    def outcomes(self, world: World, lane: "Lane") -> Distribution[Out]:
-        return self.kernel(*self.arguments(world))
+    def settled(self, world: World, lane: "Lane") -> Distribution[Settled]:
+        return self.kernel(*self.arguments(world)).map(partial(self.entered, world))
 
     def shown(self) -> tuple[Reading, ...]:
         return (*self.readings, self.target)
 
-    def detail(self, lane: "Lane") -> dict[str, Any]:
+    def detail(self, lane: "Lane", edge: Edge | None) -> dict[str, Any]:
         return {
-            "target": self.target.view(lane.edges[self]),
-            "modifiers": [modifier.view() for modifier in self.modifiers],
+            "target": self.target.view(edge),
+            "modifiers": [modifier.view() for modifier in lane.program.modifiers.get(self, ())],
         }
 
 
 @dataclass(frozen=True, eq=False, kw_only=True)
 class Contribution[O: Hashable]:
-    """A rule's allow, forbid or force of options, worked out from one world."""
-
-    rule: str
     operation: Operation
     options: Callable[..., frozenset[O]]
     inputs: tuple[Key, ...] = ()
 
-    def names(self, world: World) -> frozenset[O]:
-        return frozenset(self.options(*(world.of(source) for source in self.inputs)))
+    def names(self, printed: frozenset[O], world: World) -> frozenset[O]:
+        return self.options(printed, *(world.of(source) for source in self.inputs))
+
+
+@dataclass(frozen=True)
+class Amendment:
+    rule: str
+    contribution: Contribution[Any]
 
 
 @dataclass(frozen=True, eq=False, kw_only=True)
 class Amended[O: Hashable, Out: Hashable](Step[Out], ABC):
-    contributions: tuple[Contribution[O], ...] = ()
-
-    def needs(self) -> tuple[Key, ...]:
-        return (*self.inputs, *(key for each in self.contributions for key in each.inputs))
+    def needs(self, program: "Program") -> tuple[Key, ...]:
+        amendments = program.amending(self)
+        return (*self.inputs, *(key for each in amendments for key in each.contribution.inputs))
 
     def check(self, path: str, named: frozenset[O]) -> None:
         return None
 
-    def amend(self, printed: frozenset[O], world: World, path: str) -> frozenset[O]:
-        allowed, forbidden, forced = set(printed), set[O](), set[O]()
-        for contribution in self.contributions:
-            named = contribution.names(world)
+    def settle(
+        self, printed: frozenset[O], world: World, lane: "Lane"
+    ) -> tuple[frozenset[O], frozenset[str]]:
+        path = lane.program.paths[self]
+        allowed, forbidden, forced, applied = set(printed), set[O](), set[O](), set[str]()
+        for each in lane.program.amending(self):
+            if lane.declined(each.rule):
+                continue
+            named = each.contribution.names(printed, world)
             self.check(path, named)
-            match contribution.operation:
+            if named:
+                applied.add(each.rule)
+            match each.contribution.operation:
                 case Operation.ALLOW:
                     allowed |= named
                 case Operation.FORBID:
@@ -349,33 +385,18 @@ class Amended[O: Hashable, Out: Hashable](Step[Out], ABC):
                     forced |= named
         allowed -= forbidden
         narrowed = allowed & forced
-        return frozenset(narrowed or allowed)
-
-    def verdict(self, rule: str, world: World) -> Verdict:
-        applied = any(each.names(world) for each in self.contributions if each.rule == rule)
-        return Verdict.APPLIED if applied else Verdict.HONOURED
-
-    def judge(self, lane: "Lane") -> None:
-        for rule in dict.fromkeys(each.rule for each in self.contributions):
-            lane.judged[self, rule] = lane.joint.map(partial(self.verdict, rule))
-
-    def run(self, lane: "Lane") -> None:
-        self.judge(lane)
-        super().run(lane)
+        return frozenset(narrowed or allowed), frozenset(applied)
 
 
 @dataclass(frozen=True, eq=False, kw_only=True)
 class Eligibility[O: Hashable](Amended[O, frozenset[O]]):
-    """Measures who or what may act, as a set the rules attached to it can edit."""
-
     kind = "measurement"
     kernel: Kernel[frozenset[O]]
 
-    def outcomes(self, world: World, lane: "Lane") -> Distribution[frozenset[O]]:
-        path = lane.program.paths[self]
-
-        def amended(printed: frozenset[O]) -> frozenset[O]:
-            return self.amend(printed, world, path)
+    def settled(self, world: World, lane: "Lane") -> Distribution[Settled]:
+        def amended(printed: frozenset[O]) -> Settled:
+            allowed, applied = self.settle(printed, world, lane)
+            return Settled(world.holding(self.key, allowed), applied)
 
         return self.kernel(*self.arguments(world)).map(amended)
 
@@ -384,6 +405,9 @@ class Eligibility[O: Hashable](Amended[O, frozenset[O]]):
 class Taken[O: Hashable]:
     option: O
     by: By
+
+    def __str__(self) -> str:
+        return f"{self.option} ({self.by})"
 
 
 class _Fork(Exception):
@@ -395,19 +419,39 @@ class _Fork(Exception):
 
 @dataclass(frozen=True, eq=False, kw_only=True)
 class Decision[Out: Hashable](Amended[Out, Out]):
-    """A player's choice among printed options, each with the items only its takers run."""
-
     kind = "decision"
     options: Mapping[Out, tuple["Item", ...]]
     otherwise: Out
-    closed: Out | None = None
+    closed: frozenset[Out] = frozenset()
+
+    @cached_property
+    def how(self) -> Mark[Taken[Out]]:
+        return Mark(self.name)
+
+    @cached_property
+    def taken(self) -> Projection[Taken[Out]]:
+        return Projection(
+            "taken", (self.how,), _itself, Monoid(Taken(self.otherwise, By.OTHERWISE))
+        )
+
+    @property
+    def printed(self) -> frozenset[Out]:
+        return frozenset(self.options) - self.closed
+
+    def shown(self) -> tuple[Reading, ...]:
+        return (*self.readings, self.taken)
+
+    def drawn(self) -> tuple[Reading, ...]:
+        return self.shown()
 
     def declare(self, program: "Program", prefix: str, visible: list["Item"]) -> None:
-        super().declare(program, prefix, visible)
-        path = program.paths[self]
-        for printed in (self.otherwise, self.closed):
-            if printed is not None and printed not in self.options:
+        path = f"{prefix}/{self.name}"
+        if self.writes is not None:
+            raise GraphError(f"{path} writes {self.writes.name}, but a decision holds its option")
+        for printed in (self.otherwise, *self.closed):
+            if printed not in self.options:
                 raise GraphError(f"{path} names {printed!r}, which is not one of its options")
+        super().declare(program, prefix, visible)
         bodies: dict[Any, Body] = {}
         for option, items in self.options.items():
             body = Body(name=str(option), items=items, decision=self, option=option)
@@ -424,63 +468,56 @@ class Decision[Out: Hashable](Amended[Out, Out]):
         if stray:
             raise GraphError(f"{path} is offered {sorted(map(str, stray))}, not among its options")
 
-    def allowed(self, world: World, path: str) -> frozenset[Out]:
-        printed = frozenset(option for option in self.options if option != self.closed)
-        return self.amend(printed, world, path)
-
-    def resolve(self, world: World, lane: "Lane") -> Taken[Out]:
-        allowed = self.allowed(world, lane.program.paths[self])
+    def take(self, allowed: frozenset[Out], lane: "Lane") -> Taken[Out]:
         if self in lane.choices and lane.choices[self] in allowed:
             return Taken(lane.choices[self], By.CHOSEN)
         if len(allowed) == 1:
             return Taken(next(iter(allowed)), By.ONLY)
         return Taken(self.otherwise, By.OTHERWISE)
 
+    def settled(self, world: World, lane: "Lane") -> Distribution[Settled]:
+        allowed, applied = self.settle(self.printed, world, lane)
+        taken = self.take(allowed, lane)
+        entered = world.holding(self, taken.option).holding(self.how, taken)
+        return Distribution.pure(Settled(entered, applied))
+
     def choose(self, lane: "Lane") -> None:
         if self in lane.given:
             lane.choices[self] = lane.given[self]
             return
-        path = lane.program.paths[self]
         open_options: set[Out] = set()
         for world in lane.joint.mass:
-            allowed = self.allowed(world, path)
+            allowed, _ = self.settle(self.printed, world, lane)
             if len(allowed) > 1:
                 open_options |= allowed
         if open_options:
             raise _Fork(self, tuple(option for option in self.options if option in open_options))
-
-    def outcomes(self, world: World, lane: "Lane") -> Distribution[Out]:
-        return Distribution.pure(self.resolve(world, lane).option)
 
     def liveness(self, after: frozenset[Key], program: "Program") -> frozenset[Key]:
         program.exits[self] = after
         entries = frozenset[Key]()
         for body in program.bodies[self].values():
             entries |= body.liveness(after, program)
-        return super().liveness(entries | {self.key}, program)
+        return super().liveness(entries | {self.key}, program) - {self.how}
 
     def run(self, lane: "Lane") -> None:
         self.choose(lane)
-
-        def taken(world: World) -> Taken[Out]:
-            return self.resolve(world, lane)
+        super().run(lane)
 
         def option(world: World) -> Out:
             return world.of(self)
 
-        lane.taken[self] = lane.joint.map(taken)
-        super().run(lane)
-        resolved = lane.joint
-        weights = resolved.map(option)
-        ran = {
-            each: self.branch(lane, body, resolved, weights.mass.get(each, 0))
-            for each, body in lane.program.bodies[self].items()
-        }
-        after = lane.program.exits[self]
-
         def onward(world: World) -> World:
             return world.keeping(after)
 
+        resolved = lane.joint
+        weights = resolved.map(option)
+        bodies = lane.program.bodies[self]
+        ran = {
+            each: self.branch(lane, bodies[each], resolved, weight)
+            for each, weight in weights.mass.items()
+        }
+        after = lane.program.exits[self]
         lane.joint = weights.bind(ran.__getitem__).map(onward)
 
     def branch(
@@ -492,7 +529,7 @@ class Decision[Out: Hashable](Amended[Out, Out]):
             return world.keeping(entry)
 
         within = {
-            world: p if weight == 1 else p / weight
+            world: p / weight
             for world, p in resolved.mass.items()
             if world.of(self) == body.option
         }
@@ -500,31 +537,16 @@ class Decision[Out: Hashable](Amended[Out, Out]):
         body.run(lane)
         return lane.joint
 
-    def detail(self, lane: "Lane") -> dict[str, Any]:
-        return {
-            "options": [str(option) for option in self.options],
-            "taken": [
-                {"option": str(taken.option), "by": taken.by.value, "p": float(p)}
-                for taken, p in lane.taken[self].mass.items()
-            ],
-        }
+    def detail(self, lane: "Lane", edge: Edge | None) -> dict[str, Any]:
+        return {"options": [str(option) for option in self.options]}
 
 
 @dataclass(frozen=True, eq=False, kw_only=True)
 class May(Decision[bool]):
-    """Whether a side takes a rule it may decline, chosen once per evaluation."""
-
     options: Mapping[bool, tuple["Item", ...]] = field(
         default_factory=lambda: MappingProxyType({True: (), False: ()})
     )
     otherwise: bool = False
-
-    def declare(self, program: "Program", prefix: str, visible: list["Item"]) -> None:
-        if prefix != program.name:
-            raise GraphError(
-                f"{prefix}/{self.name} is chosen once per evaluation, atop {program.name}"
-            )
-        super().declare(program, prefix, visible)
 
 
 type Item = Step[Any] | Block
@@ -712,17 +734,19 @@ class Body(Block):
 @dataclass(frozen=True)
 class Landing:
     at: Step[Any]
+    contributions: tuple[Contribution[Any], ...] = ()
+    moves: tuple[int, ...] = ()
 
     def view(self, paths: Mapping[Any, str], rule: str, lane: "Lane") -> dict[str, Any]:
-        read = lane.verdicts(rule, self.at).mass
-        return {
-            "at": paths[self.at],
-            "verdicts": [
+        verdicts = []
+        if self.at in lane.edges:
+            read = lane.verdicts(rule, self.at).mass
+            verdicts = [
                 {"verdict": verdict.value, "p": float(read[verdict])}
                 for verdict in Verdict
                 if verdict in read
-            ],
-        }
+            ]
+        return {"at": paths[self.at], "verdicts": verdicts}
 
 
 @dataclass(frozen=True)
@@ -731,6 +755,7 @@ class RuleNode:
     name: str
     bearer: Bearer
     landings: tuple[Landing, ...] = ()
+    may: bool = False
 
     def view(self, paths: Mapping[Any, str], lane: "Lane") -> dict[str, Any]:
         return {
@@ -751,8 +776,12 @@ class Program:
     blocks: list[Block] = field(default_factory=list)
     decisions: list[Decision[Any]] = field(default_factory=list)
     rules: list[RuleNode] = field(default_factory=list)
+    toggles: dict[str, May] = field(default_factory=dict)
+    amendments: dict[Step[Any], list[Amendment]] = field(default_factory=dict)
+    modifiers: dict[Step[Any], list[Modifier]] = field(default_factory=dict)
     states: list[State[Any]] = field(default_factory=list)
     readings: dict[Step[Any], tuple[Reading, ...]] = field(default_factory=dict)
+    visible: dict[Step[Any], tuple[Item, ...]] = field(default_factory=dict)
     live: dict[Item, frozenset[Key]] = field(default_factory=dict)
     inside: dict[Repeat, frozenset[Step[Any]]] = field(default_factory=dict)
     entries: dict[Block, frozenset[Key]] = field(default_factory=dict)
@@ -768,11 +797,16 @@ class Program:
         visible: list[Item] = []
         for item in items:
             item.declare(program, name, visible)
-        needed: frozenset[Key] = frozenset()
-        for item in reversed(items):
-            needed = item.liveness(needed, program)
-        program.entry = needed
+        program.settle_liveness()
         return program
+
+    def settle_liveness(self) -> None:
+        needed: frozenset[Key] = frozenset()
+        for item in reversed(self.items):
+            needed = item.liveness(needed, self)
+        for toggle in reversed(self.toggles.values()):
+            needed = toggle.liveness(needed, self)
+        self.entry = needed
 
     def take(self, item: Item, path: str) -> None:
         if path in self.paths.values():
@@ -788,6 +822,13 @@ class Program:
             raise GraphError(f"{path} is declared twice")
         self.paths[state] = path
         self.states.append(state)
+
+    def reach(self, path: str, keys: tuple[Key, ...], visible: list[Item]) -> None:
+        for key in keys:
+            if isinstance(key, State):
+                self.hold(key)
+            if isinstance(key, Tally):
+                self.count(key, path, visible)
 
     def count(self, tally: Tally[Any], path: str, visible: list[Item]) -> None:
         groups = list(tally.counts)
@@ -813,11 +854,50 @@ class Program:
             self.tallies[group] = tally
         self.seeds[tally] = min(groups, key=self.blocks.index)
 
+    def amending(self, step: Step[Any]) -> tuple[Amendment, ...]:
+        return tuple(self.amendments.get(step, ()))
+
     def attach(self, rule: RuleNode) -> None:
+        if any(attached.rule == rule.rule for attached in self.rules):
+            raise GraphError(f"{rule.rule} is attached to {self.name} twice")
+        if rule.may and rule.bearer is Bearer.CORE:
+            raise GraphError(f"{rule.rule} is a core rule, which no player may decline")
         for landing in rule.landings:
-            if landing.at not in self.paths:
-                raise GraphError(f"{rule.rule} lands on {landing.at.name}, which is not declared")
+            self.check_landing(rule.rule, landing)
+        if rule.may:
+            toggle = May(name=rule.rule, side=Side(rule.bearer.value))
+            toggle.declare(self, f"{self.name}/may", [])
+            self.toggles[rule.rule] = toggle
+        for landing in rule.landings:
+            path = self.paths[landing.at]
+            for contribution in landing.contributions:
+                self.reach(path, contribution.inputs, list(self.visible[landing.at]))
+                self.amendments.setdefault(landing.at, []).append(
+                    Amendment(rule.rule, contribution)
+                )
+            for move in landing.moves:
+                self.modifiers.setdefault(landing.at, []).append(Modifier(rule.rule, move))
         self.rules.append(rule)
+        self.settle_liveness()
+
+    def check_landing(self, rule: str, landing: Landing) -> None:
+        at = landing.at
+        if at not in self.paths:
+            raise GraphError(f"{rule} lands on {at.name}, which is not declared")
+        path = self.paths[at]
+        if landing.contributions and not isinstance(at, Amended):
+            raise GraphError(f"{rule} amends {path}, which settles no options")
+        if landing.moves and not isinstance(at, Roll):
+            raise GraphError(f"{rule} moves {path}, which rolls nothing")
+        for contribution in landing.contributions:
+            if isinstance(at, Eligibility) and contribution.operation is Operation.FORCE:
+                raise GraphError(f"{rule} forces {path}, which only allow and forbid edit")
+            count = len(contribution.inputs)
+            if not _accepts(contribution.options, 1 + count):
+                raise GraphError(f"{rule} at {path} cannot accept the options and {count} inputs")
+            for source in contribution.inputs:
+                if isinstance(source, Step) and source not in self.visible[at]:
+                    raise GraphError(f"{rule} at {path} reads {source.name}, not in scope")
 
     def evaluate(
         self,
@@ -846,6 +926,8 @@ class Program:
     def _grow(self, given: Mapping[Decision[Any], Any], start: World) -> tuple["Lane", ...]:
         lane = Lane(program=self, given=given, joint=Distribution.pure(start))
         try:
+            for toggle in self.toggles.values():
+                toggle.run(lane)
             for item in self.items:
                 item.run(lane)
         except _Fork as fork:
@@ -864,15 +946,26 @@ class Lane:
     joint: Distribution[World]
     choices: dict[Decision[Any], Any] = field(default_factory=dict)
     edges: dict[Step[Any], Edge] = field(default_factory=dict)
-    taken: dict[Decision[Any], Distribution[Taken[Any]]] = field(default_factory=dict)
     judged: dict[tuple[Step[Any], str], Distribution[Verdict]] = field(default_factory=dict)
 
+    def declined(self, rule: str) -> bool:
+        toggle = self.program.toggles.get(rule)
+        return toggle is not None and not self.choices[toggle]
+
     def verdicts(self, rule: str, at: Step[Any]) -> Distribution[Verdict]:
-        return self.judged.get((at, rule), Distribution({}))
+        if at not in self.edges:
+            raise GraphError(f"{self.program.paths[at]} did not run in this lane")
+        if any(each.rule == rule for each in self.program.amending(at)):
+            return self.judged[at, rule]
+        if any(each.rule == rule for each in self.program.modifiers.get(at, ())):
+            return Distribution.pure(Verdict.HONOURED if self.declined(rule) else Verdict.APPLIED)
+        return Distribution.pure(Verdict.HELD)
 
     def read[T: Hashable](self, step: Step[Any], projection: Projection[T]) -> Distribution[T]:
         if projection not in self.program.readings[step]:
             raise GraphError(f"{projection.label} is not a reading of {step.name}")
+        if step not in self.edges:
+            raise GraphError(f"{self.program.paths[step]} did not run in this lane")
         return self.edges[step].read(projection)
 
     def to_view(self) -> dict[str, Any]:
