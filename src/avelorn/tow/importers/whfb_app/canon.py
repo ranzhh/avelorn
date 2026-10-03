@@ -10,17 +10,17 @@ site's spelling enters the corpus: an import rewrites every reference
 that matches an existing entry up to case or a trailing plural "s" to
 the entry's own name, and reports each fix.
 
-A reference matching nothing is written as parsed — its entry may simply
-not be imported yet — and the corpus-consistency test fails loudly the
-moment both sides exist and still disagree, naming the re-import that
-heals it. The rules' parameterised convention passes through untouched:
-"Armour Bane (1)" is no case or plural of "Armour Bane (X)".
+An equipment reference matching nothing is written as parsed — its entry
+may simply not be imported yet — and the corpus-consistency test fails
+loudly the moment both sides exist and still disagree, naming the
+re-import that heals it. Rule references are slugs, resolved as they are
+parsed (:mod:`~avelorn.tow.importers.whfb_app.references`), which uses
+:func:`canonical` for the same looseness.
 """
 
 from collections.abc import Iterable
 
 from avelorn.tow.schema.unit import Unit
-from avelorn.tow.schema.weapon import Weapon
 
 
 def canonical(reference: str, names: Iterable[str]) -> str | None:
@@ -43,25 +43,22 @@ def canonical(reference: str, names: Iterable[str]) -> str | None:
     return found if found is not None and found != reference else None
 
 
-def canonical_unit(
-    unit: Unit, *, equipment: Iterable[str], rules: Iterable[str]
-) -> tuple[Unit, list[str]]:
-    """This datasheet with its references spelt as the corpus files them.
+def canonical_unit(unit: Unit, *, equipment: Iterable[str]) -> tuple[Unit, list[str]]:
+    """This datasheet with its equipment references spelt as the corpus files them.
 
-    Equipment references (the base list and each option's adds and
-    removes) canonicalise against the weapon and armour names; rule
-    references (the special rules and each option's) against the rule
-    entry names. Option display names stay as printed — they are labels,
-    not references.
+    The base list and each option's adds and removes canonicalise against the
+    weapon and armour names. Option display names stay as printed -- they are
+    labels, not references. Rule references resolve as they are parsed
+    (:mod:`~avelorn.tow.importers.whfb_app.references`).
 
     Returns:
         The rewritten datasheet and one report line per fix, empty when
         every reference was already canonical.
     """
-    equipment_names, rule_names = list(equipment), list(rules)
+    names = list(equipment)
     fixes: list[str] = []
 
-    def fixed(references: list[str], names: list[str]) -> list[str]:
+    def fixed(references: list[str]) -> list[str]:
         rewritten = []
         for reference in references:
             found = canonical(reference, names)
@@ -73,42 +70,11 @@ def canonical_unit(
     options = [
         option.model_copy(
             update={
-                "adds_equipment": fixed(option.adds_equipment, equipment_names),
-                "removes_equipment": fixed(option.removes_equipment, equipment_names),
-                "adds_rules": fixed(option.adds_rules, rule_names),
-                "removes_rules": fixed(option.removes_rules, rule_names),
+                "adds_equipment": fixed(option.adds_equipment),
+                "removes_equipment": fixed(option.removes_equipment),
             }
         )
         for option in unit.options
     ]
-    rewritten = unit.model_copy(
-        update={
-            "equipment": fixed(unit.equipment, equipment_names),
-            "special_rules": fixed(unit.special_rules, rule_names),
-            "options": options,
-        }
-    )
+    rewritten = unit.model_copy(update={"equipment": fixed(unit.equipment), "options": options})
     return rewritten, fixes
-
-
-def canonical_weapon(weapon: Weapon, *, rules: Iterable[str]) -> tuple[Weapon, list[str]]:
-    """This weapon with its profiles' rule references spelt as filed.
-
-    Weapon-profile rules are free text upstream, the loosest references
-    the site prints — the Ceremonial Halberd's casing lives here.
-
-    Returns:
-        The rewritten weapon and one report line per fix.
-    """
-    rule_names = list(rules)
-    fixes: list[str] = []
-    profiles = []
-    for profile in weapon.profiles:
-        rewritten = []
-        for reference in profile.special_rules:
-            found = canonical(reference, rule_names)
-            if found is not None:
-                fixes.append(f"reference {reference!r} canonicalised to {found!r}")
-            rewritten.append(found if found is not None else reference)
-        profiles.append(profile.model_copy(update={"special_rules": rewritten}))
-    return weapon.model_copy(update={"profiles": profiles}), fixes

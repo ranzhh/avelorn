@@ -1,8 +1,7 @@
 """Import-time canonicalisation: references rewritten to the corpus's spelling."""
 
-from avelorn.tow.importers.whfb_app.canon import canonical, canonical_unit, canonical_weapon
+from avelorn.tow.importers.whfb_app.canon import canonical, canonical_unit
 from avelorn.tow.schema.unit import Unit
-from avelorn.tow.schema.weapon import Weapon
 
 NAMES = ["Shortbow", "Fight In Extra Rank", "Cinderblast Bombs", "Armour Bane (X)"]
 
@@ -53,24 +52,8 @@ def test_canonical_unit_rewrites_the_references_and_reports_each_fix() -> None:
             ],
         }
     )
-    fixed, fixes = canonical_unit(
-        unit, equipment=["Shortbow", "Cavalry Spear", "Hand Weapon"], rules=[]
-    )
+    fixed, fixes = canonical_unit(unit, equipment=["Shortbow", "Cavalry Spear", "Hand Weapon"])
     assert fixed.options[0].adds_equipment == ["Shortbow"]
     assert fixed.options[0].removes_equipment == ["Cavalry Spear"]
     assert fixed.options[0].name == "Shortbows"  # a label, not a reference
     assert fixes == ["reference 'Shortbows' canonicalised to 'Shortbow'"]
-
-
-def test_canonical_weapon_rewrites_a_profile_rules_casing() -> None:
-    """The halberd's shape: a profile rule printed in another case than its entry."""
-    weapon = Weapon.model_validate(
-        {
-            "id": "halberd",
-            "name": "Halberd",
-            "profiles": [{"R": "Combat", "S": "S+1", "special_rules": ["Fight in Extra Rank"]}],
-        }
-    )
-    fixed, fixes = canonical_weapon(weapon, rules=["Fight In Extra Rank"])
-    assert fixed.profiles[0].special_rules == ["Fight In Extra Rank"]
-    assert fixes == ["reference 'Fight in Extra Rank' canonicalised to 'Fight In Extra Rank'"]

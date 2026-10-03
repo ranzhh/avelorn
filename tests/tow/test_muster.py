@@ -5,6 +5,7 @@ from pydantic import ValidationError
 
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.muster import Complement
+from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.unit import OptionKind, Unit, UnitOption
 
 REPO = TOWRepository()
@@ -34,14 +35,14 @@ def test_complement_per_model_option_costs_once_per_model(spearmen_unit: Unit) -
     # Veteran: +1 pt/model, adds "Veteran", removes "Valour of Ages".
     mustered = Complement(unit=spearmen_unit, size=10, options=["Veteran"])
     assert mustered.points == 10 * spearmen_unit.points + 10 * 1
-    assert "Veteran" in mustered.special_rules
-    assert "Valour of Ages" not in mustered.special_rules
+    assert RuleRef(rule="veteran") in mustered.special_rules
+    assert RuleRef(rule="valour-of-ages") not in mustered.special_rules
 
 
 def test_complement_option_adds_rule(spearmen_unit: Unit) -> None:
     """An option's adds_rules appears in the effective special rules."""
     mustered = Complement(unit=spearmen_unit, size=10, options=["Shieldwall"])
-    assert "Shieldwall" in mustered.special_rules
+    assert RuleRef(rule="shieldwall") in mustered.special_rules
     # Untaken options leave the datasheet loadout untouched.
     assert Complement(unit=spearmen_unit, size=10).special_rules == spearmen_unit.special_rules
 
@@ -70,12 +71,12 @@ def test_complement_rejects_an_option_that_removes_an_absent_rule(spearmen_unit:
         name="Stale swap",
         kind=OptionKind.SPECIAL_RULE,
         points=0,
-        removes_rules=["Absent Rule"],
+        removes_rules=[RuleRef(rule="absent-rule")],
     )
     unit = spearmen_unit.model_copy(update={"options": [*spearmen_unit.options, stale]})
     mustered = Complement(unit=unit, size=10, options=["Stale swap"])
 
-    with pytest.raises(ValueError, match="Stale swap removes absent Absent Rule"):
+    with pytest.raises(ValueError, match="Stale swap removes absent absent-rule"):
         _ = mustered.special_rules
 
 
@@ -108,7 +109,7 @@ def test_complement_model_scoped_option_rejected(spearmen_with_a_sentinel_option
 def test_complement_unit_wide_options_unaffected(spearmen_with_a_sentinel_option: Unit) -> None:
     """The refusal is about the one option, not the datasheet that offers it."""
     mustered = Complement(unit=spearmen_with_a_sentinel_option, size=10, options=["Shieldwall"])
-    assert "Shieldwall" in mustered.special_rules
+    assert RuleRef(rule="shieldwall") in mustered.special_rules
     assert "Ithilmar Blade" not in mustered.equipment
 
 

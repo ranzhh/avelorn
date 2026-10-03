@@ -17,10 +17,10 @@ equipment:
   - Briny Breath
   - Heavy Armour
 special_rules:
-  - Abyssal Cloak
-  - Close Order
-  - Enfeebling Cold
-  - Impact Hits (D3)
-  - Large Target
-  - Stomp Attacks (D3+1)
-  - Terror
+  - abyssal-cloak
+  - close-order
+  - enfeebling-cold
+  - { rule: impact-hits, X: D3 }
+  - large-target
+  - { rule: stomp-attacks, X: D3+1 }
+  - terror

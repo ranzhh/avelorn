@@ -13,7 +13,8 @@ import yaml
 from avelorn.tow.coverage import Gap, coverage, rule_gap
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.schema.armour import Armour
-from avelorn.tow.schema.rule import Rule
+from avelorn.tow.schema.reference import RuleRef
+from avelorn.tow.schema.rule import GrantEffect, Rule, RuleEffect
 from avelorn.tow.schema.unit import (
     BaseSize,
     Characteristic,
@@ -145,10 +146,10 @@ def show_weapon(data: TOWRepository, slug: str) -> list[str]:
     lines.extend(_columns(rows))
     # Kept in printed order, deduplicated: a weapon with two profiles may print
     # the same rule on both.
-    printed: dict[str, Reference] = {}
+    printed: dict[RuleRef, Reference] = {}
     for profile in weapon.profiles:
-        for name in profile.special_rules:
-            printed.setdefault(name, Reference.rule(name, data.rules))
+        for ref in profile.special_rules:
+            printed.setdefault(ref, Reference.rule(ref, data.rules))
     lines.extend(_listing("Special rules", [_named(ref, data) for ref in printed.values()]))
     if any(_unapplied(ref, data) for ref in printed.values()):
         lines.append(_UNAPPLIED)
@@ -230,7 +231,7 @@ def _strength(strength: WeaponStrength) -> str:
     return f"S{strength.modifier:+d}" if strength.modifier else "S"
 
 
-_UNAPPLIED = "  * no entry, no effects, or an unbound parameter: the engine never applies it"
+_UNAPPLIED = "  * no entry or no effects: the engine never applies it"
 
 
 def _named(reference: Reference, data: TOWRepository) -> str:
@@ -240,7 +241,7 @@ def _named(reference: Reference, data: TOWRepository) -> str:
 def _unapplied(reference: Reference, data: TOWRepository) -> bool:
     if reference.slug is None:
         return True
-    return reference.kind is Kind.RULE and rule_gap(reference.name, data.rules) is not None
+    return reference.kind is Kind.RULE and rule_gap(data.rules[reference.slug]) is not None
 
 
 def list_rules(data: TOWRepository) -> list[str]:
@@ -322,14 +323,15 @@ def show_rule(data: TOWRepository, slug: str) -> list[str]:
     rule = _rule(data, slug)
     page = "" if rule.page is None else f", page {rule.page}"
     lines = [f"{rule.name}  ({rule.id})", f"{rule.category or 'uncategorised'}{page}"]
+    if rule.parameter is not None:
+        lines.append(f"X: {rule.parameter.expected}")
     if rule.flavour:
         lines.extend(["", *(f"  {line}" for line in _wrapped(rule.flavour))])
     for paragraph in rule.paragraphs:
         lines.extend(["", *_wrapped(paragraph)])
     if rule.effects:
         dumped = yaml.safe_dump(
-            [effect.model_dump(mode="json", exclude_none=True) for effect in rule.effects],
-            sort_keys=False,
+            [_effect_as_printed(effect, data) for effect in rule.effects], sort_keys=False
         )
         lines.extend(["", "Effects:", *(f"  {line}" for line in dumped.rstrip().splitlines())])
     else:
@@ -339,6 +341,13 @@ def show_rule(data: TOWRepository, slug: str) -> list[str]:
     return lines
 
 
+def _effect_as_printed(effect: RuleEffect, data: TOWRepository) -> dict[str, object]:
+    printed = effect.model_dump(mode="json", exclude_none=True)
+    if isinstance(effect, GrantEffect):
+        printed["grants"] = data.rules[effect.grants.rule].display(effect.grants.x)
+    return printed
+
+
 def _rule(data: TOWRepository, slug: str) -> Rule:
     """Address a rule entry by slug.
 
@@ -346,15 +355,11 @@ def _rule(data: TOWRepository, slug: str) -> Rule:
         The rule entry.
 
     Raises:
-        LookupError: no entry carries the slug. A rule the corpus prints without
-            an entry is real but unreadable here, so the miss says where to look.
+        LookupError: no entry carries the slug.
     """
     rule = data.rules.get(slug)
     if rule is None:
-        raise LookupError(
-            f"no rule entry {slug!r}; run `avelorn rules list` for the slugs, "
-            "or `avelorn coverage` for the names printed without one"
-        )
+        raise LookupError(f"no rule entry {slug!r}; run `avelorn rules list` for the slugs")
     return rule
 
 

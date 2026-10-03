@@ -16,6 +16,7 @@ from avelorn.tow.data import TOWRepository
 from avelorn.tow.kernels import melee_hit_target, shooting_hit_target, wound_target
 from avelorn.tow.phases.combat import StrikeResult, strike, strike_unit
 from avelorn.tow.phases.shooting import shoot, shoot_unit
+from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.unit import Characteristic, Unit
 
 from .procedure import (
@@ -47,7 +48,7 @@ def _with(slug: str, *, rule: str | None = None, equipment: str | None = None) -
     unit = REPO.units[slug]
     return unit.model_copy(
         update={
-            "special_rules": [*unit.special_rules, *([rule] if rule else [])],
+            "special_rules": [*unit.special_rules, *([RuleRef(rule=rule)] if rule else [])],
             "equipment": [*unit.equipment, *([equipment] if equipment else [])],
         }
     )
@@ -306,7 +307,7 @@ FIELDED: list[tuple[str, Callable[[], Probability], Attack]] = [
         "killing-blow-v-spearmen",
         lambda: (
             strike_unit(
-                _fielded(_with("elven-spearmen", rule="Killing Blow"), 10, "Hand Weapon"),
+                _fielded(_with("elven-spearmen", rule="killing-blow"), 10, "Hand Weapon"),
                 _fielded("elven-spearmen", 10, "Thrusting Spear"),
             ).p_unsaved
         ),
@@ -316,7 +317,7 @@ FIELDED: list[tuple[str, Callable[[], Probability], Attack]] = [
         "cleaving-blow-v-spearmen",
         lambda: (
             strike_unit(
-                _fielded(_with("elven-spearmen", rule="Cleaving Blow"), 10, "Hand Weapon"),
+                _fielded(_with("elven-spearmen", rule="cleaving-blow"), 10, "Hand Weapon"),
                 _fielded("elven-spearmen", 10, "Thrusting Spear"),
             ).p_unsaved
         ),
@@ -326,7 +327,7 @@ FIELDED: list[tuple[str, Callable[[], Probability], Attack]] = [
         "cleaving-blow-v-ogres",
         lambda: (
             strike_unit(
-                _fielded(_with("elven-spearmen", rule="Cleaving Blow"), 10, "Hand Weapon"),
+                _fielded(_with("elven-spearmen", rule="cleaving-blow"), 10, "Hand Weapon"),
                 _fielded(_ogres(), 3, "Hand Weapon"),
             ).p_unsaved
         ),
@@ -355,7 +356,7 @@ OGRE_TOLERANCE = 0.007
 
 
 def _killing_blows_into_ogres() -> StrikeResult:
-    killers = _fielded(_with("elven-spearmen", rule="Killing Blow"), 10, "Hand Weapon")
+    killers = _fielded(_with("elven-spearmen", rule="killing-blow"), 10, "Hand Weapon")
     return strike_unit(killers, _fielded(_ogres(), 3, "Hand Weapon"))
 
 

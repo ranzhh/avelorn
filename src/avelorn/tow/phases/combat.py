@@ -402,17 +402,17 @@ def _engage(
     # weapon and unit rules compiled under its own conditions, and the
     # target's armour, ward, re-rolls and enemy-subject maluses folded under
     # its — the same two resolutions a volley makes.
+    in_use = striker.loadout.profile_rules(profile)
     offence = Offence.resolve(
-        profile,
-        weapon_rules=striker.loadout.weapon_rules,
+        in_use,
         rules=striker.loadout.rules,
-        grants=striker.loadout.granted_rules,
+        grants=striker.loadout.bound,
         conditions=conditions,
     )
     defence = Defence.resolve(
         armour=target.loadout.armour,
         rules=target.loadout.rules,
-        grants=target.loadout.granted_rules,
+        grants=target.loadout.bound,
         incoming=target_conditions,
         weapon_rules_in_use=target.in_hand_rules(),
     )
@@ -434,7 +434,7 @@ def _engage(
             *offence.weapon_rerolls.factored,
         }
     )
-    phase_compiled = compile_rules(sorted(phase_rules), phase_rules, conditions)
+    phase_compiled = compile_rules([phase_rules[name] for name in sorted(phase_rules)], conditions)
     modifiers.extend(phase_compiled.modifiers)
     notes.extend(
         f"core rule not factored: {name}"
@@ -486,11 +486,6 @@ def _engage(
     # casualty fold, never on the dice, so the multiplier is read here from
     # the profile in use's resolved entries. Whether a fold can honour it —
     # and so claim it — is decided where batches pool (_pooled_damage).
-    in_use = [
-        striker.loadout.weapon_rules[name]
-        for name in profile.special_rules
-        if name in striker.loadout.weapon_rules
-    ]
     multiplier = effective_wound_multiplier(in_use, conditions)
     logger.debug(
         "%s (WS %d, A %d) vs %s (WS %d, T %d): per-attack unsaved p=%.3f",
@@ -655,7 +650,7 @@ def _automatic_engage(
     # hits *are* is the unit rules' say alone: a magical sword in the
     # striker's hand does not make its stomps magical, while a datasheet
     # printing Magical Attacks marks every attack it makes, these included.
-    marks = attack_marks([], {}, striker.loadout.rules)
+    marks = attack_marks([], striker.loadout.rules)
     incoming = (
         replace(
             target_conditions,
@@ -671,7 +666,7 @@ def _automatic_engage(
     defence = Defence.resolve(
         armour=target.loadout.armour,
         rules=target.loadout.rules,
-        grants=target.loadout.granted_rules,
+        grants=target.loadout.bound,
         incoming=incoming,
         weapon_rules_in_use=target.in_hand_rules(),
     )
@@ -715,7 +710,7 @@ def strike_unit(
     the fold to models. Casualties cap at the target's
     fielded ``models``. The target's save folds from its resolved loadout,
     and the weapon's rules compile into the dice walk from the striker's
-    resolved loadout (``striker.loadout.weapon_rules``). Unit special rules
+    resolved loadout (``striker.loadout.profile_rules``). Unit special rules
     are not factored into the math yet — every one is listed in the result's
     notes. The whole front rank is taken to be in base contact (an equally
     wide foe); a foe of a different frontage, and the supporting attacks the
@@ -748,8 +743,7 @@ def strike_unit(
     # the profile in use's and the unit's own (attack_marks); the same read
     # the striker's seat makes for claiming, so the fact and the note agree.
     marks = attack_marks(
-        in_hand.special_rules if in_hand is not None else [],
-        striker.loadout.weapon_rules,
+        striker.loadout.profile_rules(in_hand) if in_hand is not None else [],
         striker.loadout.rules,
     )
     striker_conditions = GateContext(
@@ -996,17 +990,15 @@ def _unit_rule_notes(side: Contingent, claimed: Collection[str] = ()) -> list[st
     # troop type confers (Press of Battle, ...) by the troop type.
     unit = side.unit
     troop_type = unit.troop_type_profile
-    owned = [(printed, unit.name) for printed in unit.special_rules]
+    owned = [(rule.name, unit.name) for rule in side.loadout.own]
     if troop_type is not None:
-        owned += [(printed, troop_type.name) for printed in troop_type.special_rules]
+        owned += [(rule.name, troop_type.name) for rule in side.loadout.conferred]
     unfactored = [
         f"special rule not factored: {printed} ({owner})"
         for printed, owner in owned
         if printed not in claimed
     ]
-    return unfactored + factored_notes(
-        side.loadout.rules, claimed, unit.name, side.loadout.granted_rules
-    )
+    return unfactored + factored_notes(side.loadout.rules, claimed, unit.name, side.loadout.bound)
 
 
 def _worn_in_combat(side: Contingent) -> "tuple[ArmourFacts, ...]":
@@ -1046,8 +1038,7 @@ def _combat_conditions(first_round: bool | None, side: Contingent, foe: Continge
     foe_weapon = foe.weapon
     foe_profile = foe_weapon.combat_profile if foe_weapon is not None else None
     foe_marks = attack_marks(
-        foe_profile.special_rules if foe_profile is not None else [],
-        foe.loadout.weapon_rules,
+        foe.loadout.profile_rules(foe_profile) if foe_profile is not None else [],
         foe.loadout.rules,
     )
     return GateContext(
@@ -1930,7 +1921,7 @@ def break_test(result: CombatResult, a: Contingent, b: Contingent) -> BreakResul
             for side, claimed in ((a, a_claimed), (b, b_claimed))
             for name in claimed
             for note in factored_notes(
-                side.loadout.rules, {name}, side.unit.name, side.loadout.granted_rules
+                side.loadout.rules, {name}, side.unit.name, side.loadout.bound
             )
         )
     )

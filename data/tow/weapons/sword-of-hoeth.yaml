@@ -2,4 +2,4 @@
 id: sword-of-hoeth
 name: Sword of Hoeth
 profiles:
-  - { R: Combat, S: S+2, AP: -2, special_rules: [Magical Attacks, Requires Two Hands] }
+  - { R: Combat, S: S+2, AP: -2, special_rules: [magical-attacks, requires-two-hands] }

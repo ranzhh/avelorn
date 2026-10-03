@@ -10,6 +10,6 @@ paragraphs:
 # The -1 To Hit is conferred by a grant, so "Enemy Fire (Skirmishers)" keeps
 # its effects on its own entry. Same shape as skirmishers.yaml.
 effects:
-  - grants: Enemy Fire (Skirmishers)
+  - grants: enemy-fire-skirmishers
 notes: only the formation's Enemy Fire rule is modelled; the loose group's
   movement, its lack of ranks and files, and its use of terrain are not.

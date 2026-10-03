@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from pydantic import ValidationError
 
@@ -18,8 +19,11 @@ from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile
 
 from . import richtext
-from .parse import WhfbParseError
+from .parse import Refer, WhfbParseError
 from .richtext import Node
+
+if TYPE_CHECKING:
+    from .references import RuleReferences
 
 _PROFILE_NAME_SUFFIX = " (Profile)"
 _RANGE_INCHES_RE = re.compile(r'(\d+)\s*"')
@@ -43,8 +47,8 @@ class ArmourImport:
     warnings: list[str]
 
 
-def parse_weapon(entry: Node) -> WeaponImport:
-    """Parse a Weapons of War page entry into a Weapon.
+def parse_weapon(entry: Node, references: RuleReferences) -> WeaponImport:
+    """Parse a Weapons of War page entry into a Weapon, its rule names resolved.
 
     Returns:
         The weapon and the warnings raised while mapping it.
@@ -61,7 +65,8 @@ def parse_weapon(entry: Node) -> WeaponImport:
     for block in _body_blocks(fields):
         profile_fields = _embedded_profile_fields(block)
         if profile_fields is not None:
-            profiles.append(_parse_profile(slug, name, profile_fields))
+            refer = references.at(f"weapon {slug}")
+            profiles.append(_parse_profile(slug, name, profile_fields, refer))
             continue
         text = " ".join(richtext.text_of(block).split())
         if text.startswith("Notes:"):
@@ -143,7 +148,7 @@ def _embedded_profile_fields(block: Node) -> Node | None:
     return target.get("fields", {})
 
 
-def _parse_profile(slug: str, weapon_name: str, fields: Node) -> WeaponProfile:
+def _parse_profile(slug: str, weapon_name: str, fields: Node, refer: Refer) -> WeaponProfile:
     try:
         return WeaponProfile.model_validate(
             {
@@ -151,7 +156,9 @@ def _parse_profile(slug: str, weapon_name: str, fields: Node) -> WeaponProfile:
                 "R": _parse_range(slug, fields.get("range")),
                 "S": fields.get("strength"),
                 "AP": fields.get("armourPiercing", "-"),
-                "special_rules": _special_rules(fields.get("specialRules")),
+                "special_rules": [
+                    refer(name) for name in _special_rules(fields.get("specialRules"))
+                ],
             }
         )
     except ValidationError as err:

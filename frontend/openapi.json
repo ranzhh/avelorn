@@ -453,7 +453,58 @@
           "reason"
         ],
         "title": "Acknowledgement",
-        "description": "One gap, known and left open, with why.\n\n``subject`` is how the gap is addressed: the printed rule name for the rule\nkinds (one entry covers every place printing it), ``<unit>/<row>`` for a\nprofile row, the weapon or armour slug for printed notes, and\n``<unit>/<option>`` for an option."
+        "description": "One gap, known and left open, with why.\n\n``subject`` is how the gap is addressed: the rule's slug for a rule without\neffects (one entry covers every place referencing it), ``<unit>/<row>`` for a\nprofile row, the weapon or armour slug for printed notes, and\n``<unit>/<option>`` for an option."
+      },
+      "AmountParameter": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "amount",
+            "title": "Kind"
+          },
+          "dice": {
+            "type": "boolean",
+            "title": "Dice",
+            "default": false
+          },
+          "min": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min"
+          },
+          "max": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max"
+          },
+          "combine": {
+            "type": "string",
+            "const": "sum",
+            "title": "Combine",
+            "default": "sum"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "title": "AmountParameter",
+        "description": "An X that is a number, or a dice roll where ``dice`` allows one.\n\n``min`` and ``max`` bound a number. Two sources of one rule sum their X\n(``combine``)."
       },
       "Armour": {
         "properties": {
@@ -1344,9 +1395,7 @@
       "GapKind": {
         "type": "string",
         "enum": [
-          "rule-without-entry",
           "rule-without-effects",
-          "parameter-unbound",
           "profile-row-unread",
           "printed-notes",
           "inert-option"
@@ -1367,8 +1416,7 @@
             ]
           },
           "grants": {
-            "type": "string",
-            "title": "Grants"
+            "$ref": "#/components/schemas/RuleRef"
           }
         },
         "additionalProperties": false,
@@ -1377,7 +1425,7 @@
           "grants"
         ],
         "title": "GrantEffect",
-        "description": "Confer a named special rule, gated like any other effect.\n\n\"gains the Armour Bane (1) special rule\" \u2014 the rule is granted *by name*, not\ncopied: the consuming seam resolves ``grants`` to its entry (the one\nresolution convention, parameter substituted) and applies that rule's own\neffects under this grant's gate. So a change to the granted rule \u2014 or to how\nits quantity resolves \u2014 is tracked automatically, and a rule granted on top of\none a model already carries stacks (two Armour Bane (1) \u2192 +2 on a natural 6),\nbecause each instance is a separate effect. The grant's shared ``when`` is the\n*outer* gate; the granted rule keeps its *own* inner gate\n(Armour Bane's natural-6 To Wound), the two conjoined at evaluation without\nmerging the gate trees. There is no discriminator field: an effect carrying\n``grants`` is one, exactly as one carrying ``add`` is a modifier (each model\nforbids the others' keys)."
+        "description": "Confer a named special rule, gated like any other effect.\n\n\"gains the Armour Bane (1) special rule\" \u2014 the rule is granted *by reference*,\nnot copied: the consuming seam binds ``grants`` to its entry (X substituted,\n:func:`bind`) and applies that rule's own\neffects under this grant's gate. So a change to the granted rule \u2014 or to how\nits quantity resolves \u2014 is tracked automatically, and a rule granted on top of\none a model already carries stacks (two Armour Bane (1) \u2192 +2 on a natural 6),\nbecause each instance is a separate effect. The grant's shared ``when`` is the\n*outer* gate; the granted rule keeps its *own* inner gate\n(Armour Bane's natural-6 To Wound), the two conjoined at evaluation without\nmerging the gate trees. There is no discriminator field: an effect carrying\n``grants`` is one, exactly as one carrying ``add`` is a modifier (each model\nforbids the others' keys)."
       },
       "HTTPValidationError": {
         "properties": {
@@ -1690,6 +1738,106 @@
         "title": "NaturalRoll",
         "description": "A natural face shown by one of the attack sequence's dice.\n\nThe *event* half of the trigger vocabulary \u2014 \"rolls a natural 6\nwhen making a roll To Wound\". Where ``when`` gates on engagement\nstate, known once before any die is cast (and possibly unknown),\nan event is decided branch by branch during resolution and is never\nunknown. ``roll`` must name a stage that rolls one die per attack \u2014\nthe stage's own :attr:`~avelorn.tow.schema.stage.Stage.dice` row,\nchecked at data load."
       },
+      "OptionDetail": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/OptionKind",
+            "default": "other"
+          },
+          "applies_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applies To"
+          },
+          "points": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Points"
+          },
+          "per_model": {
+            "type": "boolean",
+            "title": "Per Model",
+            "default": false
+          },
+          "points_budget": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Points Budget"
+          },
+          "adds_rules": {
+            "items": {
+              "$ref": "#/components/schemas/Reference"
+            },
+            "type": "array",
+            "title": "Adds Rules"
+          },
+          "removes_rules": {
+            "items": {
+              "$ref": "#/components/schemas/Reference"
+            },
+            "type": "array",
+            "title": "Removes Rules"
+          },
+          "adds_equipment": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Adds Equipment"
+          },
+          "removes_equipment": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Removes Equipment"
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "adds_rules",
+          "removes_rules"
+        ],
+        "title": "OptionDetail",
+        "description": "One option, the rules it adds and removes resolved."
+      },
       "OptionKind": {
         "type": "string",
         "enum": [
@@ -1761,6 +1909,22 @@
         ],
         "title": "PanicCause",
         "description": "Why a panic test was forced, named as the sections are printed."
+      },
+      "PrintedParameter": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "printed",
+            "title": "Kind"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "title": "PrintedParameter",
+        "description": "An X kept as the text its bracket prints: a text-only stub's, read by no effect."
       },
       "Profile": {
         "properties": {
@@ -1853,7 +2017,7 @@
           "special_rules"
         ],
         "title": "ProfileDetail",
-        "description": "One weapon profile, its printed rule names resolved."
+        "description": "One weapon profile, its rule references resolved."
       },
       "ProfileRole": {
         "type": "string",
@@ -1915,7 +2079,7 @@
           "slug"
         ],
         "title": "Reference",
-        "description": "A name as an entry prints it, and the entry it resolves to.\n\n``slug`` addresses the entry and ``kind`` says which registry holds it, so a\ncaller can follow the name without knowing how one finds its file -- for a\nrule, the entry :func:`~avelorn.tow.engine.rules.filed_rule` finds, the\n\"(X)\" or \"(+X)\" template for a parameterised name (\"Impact Hits (D3)\" is\nfiled under ``impact-hits``).\n\nBoth are ``None`` together, and that says the corpus prints this name with\nno entry behind it: the gap :func:`~avelorn.tow.coverage.coverage` reports\nover the whole corpus, said here on the entry that prints it."
+        "description": "A name as an entry prints it, and the entry it resolves to.\n\n``slug`` addresses the entry and ``kind`` says which registry holds it, so a\ncaller can follow the name without knowing how one finds its file. A rule's\nname is the rule's display name with the reference's X substituted.\n\nBoth are ``None`` together only for equipment the corpus prints with no\nentry behind it; a rule reference always binds, or the corpus fails to load."
       },
       "ReplaceEffect": {
         "properties": {
@@ -2019,6 +2183,35 @@
           "name": {
             "type": "string",
             "title": "Name"
+          },
+          "parameter": {
+            "anyOf": [
+              {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/AmountParameter"
+                  },
+                  {
+                    "$ref": "#/components/schemas/SelectorParameter"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PrintedParameter"
+                  }
+                ],
+                "discriminator": {
+                  "propertyName": "kind",
+                  "mapping": {
+                    "amount": "#/components/schemas/AmountParameter",
+                    "printed": "#/components/schemas/PrintedParameter",
+                    "selector": "#/components/schemas/SelectorParameter"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parameter"
           },
           "page": {
             "anyOf": [
@@ -2124,6 +2317,26 @@
         "title": "Rule",
         "description": "A rules-page entry (special rule or core rule), text verbatim."
       },
+      "RuleRef": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "type": "object"
+          }
+        ]
+      },
       "RuleSummary": {
         "properties": {
           "id": {
@@ -2164,7 +2377,54 @@
           "references"
         ],
         "title": "RuleSummary",
-        "description": "A rule entry as a listing shows it: what it is, and whether it reaches the maths.\n\n``factors`` says whether the entry carries effects; a text-only entry does\nnot. ``references`` counts the places printing it -- units, options, troop\ntypes, weapons, and other rules' grants, in any spelling that resolves to\nit -- so a listing sorts by what would matter most to model next."
+        "description": "A rule entry as a listing shows it: what it is, and whether it reaches the maths.\n\n``factors`` says whether the entry carries effects; a text-only entry does\nnot. ``references`` counts the places referencing it -- units, options, troop\ntypes, weapons, and other rules' grants, whatever their X -- so a listing\nsorts by what would matter most to model next."
+      },
+      "SelectorParameter": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "selector",
+            "title": "Kind"
+          },
+          "values": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SelectorValue"
+            },
+            "type": "object",
+            "minProperties": 1,
+            "title": "Values"
+          },
+          "combine": {
+            "type": "string",
+            "const": "union",
+            "title": "Combine",
+            "default": "union"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "values"
+        ],
+        "title": "SelectorParameter",
+        "description": "An X that names one of a closed set, keyed by slug: Hatred's hated enemies."
+      },
+      "SelectorValue": {
+        "properties": {
+          "printed": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Printed"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "printed"
+        ],
+        "title": "SelectorValue",
+        "description": "One value a selector X may take, and how the bracket prints it."
       },
       "ShootingGate": {
         "properties": {
@@ -2280,7 +2540,7 @@
           },
           "special_rules": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/RuleRef"
             },
             "type": "array",
             "title": "Special Rules",
@@ -2295,7 +2555,7 @@
           "unit_strength"
         ],
         "title": "TroopTypeProfile",
-        "description": "A troop type's rank-and-file data, and how it ranks up.\n\n``models_per_rank`` is how many models a rank must hold to count\ntoward the Rank Bonus, or None for a troop type that does not rank up\n(Swarm, Heavy Chariot, the monsters and war machines that fight as\nsingle models); ``max_rank_bonus`` is the most extra ranks it may\nclaim. ``unit_strength`` is each model's Unit Strength as the\ntroop-type table prints it \u2014 a fixed count, or \"As Starting Wounds\"\nfor the troop types whose strength scales with the model.\n``special_rules`` are the rules the troop type confers on every\nunit of it (Regular Infantry's Press of Battle, say), as printed\ndisplay-name strings \u2014 the type's own rules, held apart from the\ndatasheet's ``special_rules`` because their owner is the troop type,\nnot the unit."
+        "description": "A troop type's rank-and-file data, and how it ranks up.\n\n``models_per_rank`` is how many models a rank must hold to count\ntoward the Rank Bonus, or None for a troop type that does not rank up\n(Swarm, Heavy Chariot, the monsters and war machines that fight as\nsingle models); ``max_rank_bonus`` is the most extra ranks it may\nclaim. ``unit_strength`` is each model's Unit Strength as the\ntroop-type table prints it \u2014 a fixed count, or \"As Starting Wounds\"\nfor the troop types whose strength scales with the model.\n``special_rules`` are the rules the troop type confers on every\nunit of it (Regular Infantry's Press of Battle, say), as references \u2014\nthe type's own rules, held apart from the datasheet's\n``special_rules`` because their owner is the troop type, not the unit."
       },
       "UnitDetail": {
         "properties": {
@@ -2362,7 +2622,7 @@
           },
           "options": {
             "items": {
-              "$ref": "#/components/schemas/UnitOption"
+              "$ref": "#/components/schemas/OptionDetail"
             },
             "type": "array",
             "title": "Options"
@@ -2378,108 +2638,11 @@
           "troop_type",
           "profiles",
           "equipment",
-          "special_rules"
+          "special_rules",
+          "options"
         ],
         "title": "UnitDetail",
-        "description": "A datasheet as reading one shows it: the entry, every printed name resolved.\n\nEverything :class:`~avelorn.tow.schema.unit.Unit` prints, except that its\nequipment and its special rules arrive as :class:`Reference` rather than as\nbare strings. Resolving on the way out is what keeps a caller from\nre-deriving it: a printed name does not become a slug by slugifying it."
-      },
-      "UnitOption": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "kind": {
-            "$ref": "#/components/schemas/OptionKind",
-            "default": "other"
-          },
-          "applies_to": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Applies To"
-          },
-          "points": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Points"
-          },
-          "per_model": {
-            "type": "boolean",
-            "title": "Per Model",
-            "default": false
-          },
-          "points_budget": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 1.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Points Budget"
-          },
-          "adds_rules": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Adds Rules"
-          },
-          "removes_rules": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Removes Rules"
-          },
-          "adds_equipment": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Adds Equipment"
-          },
-          "removes_equipment": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Removes Equipment"
-          },
-          "limit": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Limit"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "name"
-        ],
-        "title": "UnitOption",
-        "description": "A purchasable upgrade.\n\nExactly one cost shape applies: a flat `points` cost (per unit, or per\nmodel when `per_model` is set) or a `points_budget` to spend up to\n(e.g. magic standards)."
+        "description": "A datasheet as reading one shows it: the entry, every printed name resolved.\n\nEverything :class:`~avelorn.tow.schema.unit.Unit` prints, except that its\nequipment, its special rules and its options' rules arrive as\n:class:`Reference`. Resolving on the way out is what keeps a caller from\nre-deriving it: a printed name does not become a slug by slugifying it, nor\na reference a name by reading it."
       },
       "UnitSize": {
         "properties": {

@@ -10,6 +10,7 @@ from avelorn.tow.importers.whfb_app.yamlout import (
     weapon_to_yaml,
 )
 from avelorn.tow.schema.armour import Armour
+from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.unit import OptionKind, UnitOption
 from avelorn.tow.schema.weapon import Weapon
@@ -30,8 +31,8 @@ def test_option_row_writes_every_field_of_the_schema() -> None:
         applies_to="Ironbeard",
         points=15,
         per_model=True,
-        adds_rules=["Drilled"],
-        removes_rules=["Valour of Ages"],
+        adds_rules=[RuleRef(rule="drilled")],
+        removes_rules=[RuleRef(rule="valour-of-ages")],
         adds_equipment=["Cinderblast Bombs"],
         removes_equipment=["Shield"],
         limit="0-1 unit per 1000 points",
@@ -59,11 +60,11 @@ def test_weapon_writer_emits_every_schema_field() -> None:
 
 
 def test_rule_writer_emits_every_schema_field() -> None:
-    """Likewise for a rule: effects and notes are hand-authored and easy to lose."""
-    rule = REPO.rules["strike-first"].model_copy(
-        update={"notes": "What the engine does with it.", "flavour": "Quicksilver.", "page": 177}
+    """Likewise for a rule: its parameter, effects and notes are hand-authored."""
+    rule = REPO.rules["armour-bane"].model_copy(
+        update={"notes": "What the engine does with it.", "flavour": "Piercing.", "page": 166}
     )
-    assert rule.effects and rule.notes and rule.category  # the premise
+    assert rule.parameter and rule.effects and rule.notes and rule.category
     assert _written(rule_to_yaml(rule)) == set(Rule.model_fields)
 
 

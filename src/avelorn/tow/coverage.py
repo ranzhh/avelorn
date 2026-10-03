@@ -6,8 +6,8 @@ against ``data/tow/unmodelled.yaml``: a gap with no entry is unacknowledged, an
 entry with no gap is stale. The CLI, the API and the gate test all read this
 one report.
 
-The scan reads the corpus, not the rule registry, since a rule with no entry is
-invisible there.
+The scan reads the corpus, not the rule registry, since a rule nothing
+references is no gap.
 """
 
 from collections import defaultdict
@@ -16,11 +16,10 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict
 
-from avelorn.core.registry import Registry
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.engine.rules import filed_rule, printed_rule
 from avelorn.tow.schema.ledger import Acknowledgement, GapKind
-from avelorn.tow.schema.rule import GrantEffect, Rule, references_parameter
+from avelorn.tow.schema.reference import RuleRef
+from avelorn.tow.schema.rule import GrantEffect, Rule
 from avelorn.tow.schema.unit import OptionKind, UnitOption
 
 
@@ -103,53 +102,44 @@ def coverage(data: TOWRepository) -> Coverage:
     return Coverage(gaps=gaps, stale=sorted(stale, key=lambda e: _order(e.kind, e.subject)))
 
 
-def printed_rules(data: TOWRepository) -> Iterator[tuple[str, Site]]:
+def rule_references(data: TOWRepository) -> Iterator[tuple[RuleRef, Site]]:
     """Every rule reference the corpus prints, with where it is printed.
 
     A unit's own rules, the rules its options add, a troop type's rules, a
     weapon profile's rules, and the rules another rule grants.
 
     Yields:
-        The rule name as printed, and the entry printing it.
+        The reference, and the entry printing it.
     """
     for slug, unit in sorted(data.units.items()):
-        for name in unit.special_rules:
-            yield name, Site(entry=Entry.UNIT, id=slug)
+        for reference in unit.special_rules:
+            yield reference, Site(entry=Entry.UNIT, id=slug)
         for option in unit.options:
-            for name in option.adds_rules:
-                yield name, Site(entry=Entry.OPTION, id=f"{slug}/{option.name}")
+            for reference in option.adds_rules:
+                yield reference, Site(entry=Entry.OPTION, id=f"{slug}/{option.name}")
     for slug, troop_type in sorted(data.troop_types.items()):
-        for name in troop_type.special_rules:
-            yield name, Site(entry=Entry.TROOP_TYPE, id=slug)
+        for reference in troop_type.special_rules:
+            yield reference, Site(entry=Entry.TROOP_TYPE, id=slug)
     for slug, weapon in sorted(data.weapons.items()):
         for profile in weapon.profiles:
-            for name in profile.special_rules:
-                yield name, Site(entry=Entry.WEAPON, id=slug)
+            for reference in profile.special_rules:
+                yield reference, Site(entry=Entry.WEAPON, id=slug)
     for slug, rule in sorted(data.rules.items()):
         for effect in rule.effects:
             if isinstance(effect, GrantEffect):
                 yield effect.grants, Site(entry=Entry.RULE, id=slug)
 
 
-def rule_gap(name: str, rules: Registry[Rule]) -> GapKind | None:
-    """How a printed rule reference fails to reach the maths, if it does.
+def rule_gap(rule: Rule) -> GapKind | None:
+    """How a referenced rule fails to reach the maths, if it does.
 
-    A signed value ("Extra Attacks (+1)") is filed under its signed template
-    ("Extra Attacks (+X)") or the plain "(X)" one, and binds to neither yet.
+    A reference that names no rule or does not bind its X fails the load, so
+    what is left is a rule the engine holds as text only.
 
     Returns:
-        The gap kind, or None when the reference resolves to effects with
-        every parameter bound.
+        The gap kind, or None when the rule carries effects.
     """
-    rule = printed_rule(name, rules)
-    if rule is not None:
-        if not rule.effects:
-            return GapKind.RULE_WITHOUT_EFFECTS
-        unbound = any(references_parameter(effect) for effect in rule.effects)
-        return GapKind.PARAMETER_UNBOUND if unbound else None
-    if filed_rule(name, rules) is not None:
-        return GapKind.PARAMETER_UNBOUND
-    return GapKind.RULE_WITHOUT_ENTRY
+    return None if rule.effects else GapKind.RULE_WITHOUT_EFFECTS
 
 
 def _order(kind: GapKind, subject: str) -> tuple[int, str]:
@@ -162,9 +152,9 @@ def _scan(data: TOWRepository) -> Iterator[tuple[GapKind, str, Site]]:
     Yields:
         The gap's kind, its ledger subject, and the entry it occurs in.
     """
-    for name, site in printed_rules(data):
-        if (kind := rule_gap(name, data.rules)) is not None:
-            yield kind, name, site
+    for reference, site in rule_references(data):
+        if (kind := rule_gap(data.rules[reference.rule])) is not None:
+            yield kind, reference.rule, site
     for slug, unit in sorted(data.units.items()):
         for row in unit.unread_rows:
             yield GapKind.PROFILE_ROW_UNREAD, f"{slug}/{row.name}", Site(entry=Entry.UNIT, id=slug)

@@ -19,18 +19,18 @@ equipment:
   - Shield
   - Barding
 special_rules:
-  - Close Order
-  - Counter Charge
-  - Dragon Armour
-  - Drilled
-  - Elven Reflexes
-  - First Charge
-  - Impetuous
-  - Ithilmar Barding
-  - Ithilmar Weapons
-  - Sons of Caledor
-  - Swiftstride
-  - Valour of Ages
+  - close-order
+  - counter-charge
+  - dragon-armour
+  - drilled
+  - elven-reflexes
+  - first-charge
+  - impetuous
+  - ithilmar-barding
+  - ithilmar-weapons
+  - sons-of-caledor
+  - swiftstride
+  - valour-of-ages
 options:
   - name: Drakemaster
     kind: champion
