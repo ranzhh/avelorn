@@ -573,6 +573,36 @@ def test_six_casualty_removals_keep_one_world_per_standing() -> None:
     assert lane.read(last, left).mass[22] == Fraction(1, 6**6)
 
 
+def _band() -> Distribution[str]:
+    return Distribution({"close": _HALF, "long": _HALF})
+
+
+def _two() -> Distribution[int]:
+    return Distribution.pure(2)
+
+
+def _hits_only_close(band: str) -> Distribution[int]:
+    return Distribution.pure(1 if band == "close" else 0)
+
+
+def test_a_group_stacks_its_attacks_per_outer_world() -> None:
+    band = Measurement[str](name="range", side=Side.THIS_MODEL, kernel=_band)
+    shots = Measurement[int](name="shots", side=Side.THIS_MODEL, kernel=_two)
+    hit = Roll[int](
+        name="roll-to-hit",
+        side=Side.THIS_MODEL,
+        inputs=(band,),
+        kernel=_hits_only_close,
+        target=Scalar("to hit", 4),
+    )
+    hits = hit.output("hits", Monoid(0))
+    hit.show(hits)
+    attack = Repeat(name="attack", times=shots, items=(hit,))
+    (lane,) = Program.build("volley", _SIDES, (band, shots, attack)).evaluate()
+
+    assert lane.read(hit, hits).mass == {0: _HALF, 2: _HALF}
+
+
 def test_a_repeat_inside_a_repeat_is_refused() -> None:
     once = Measurement[int](name="once", side=Side.THIS_MODEL, kernel=_one)
     hit = Measurement[int](name="hit", side=Side.THIS_MODEL, kernel=_coin)

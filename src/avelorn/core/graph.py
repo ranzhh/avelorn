@@ -66,26 +66,42 @@ class World:
         return World(frozenset(pair for pair in self.values if pair[0] in keys))
 
 
+@dataclass(frozen=True, eq=False)
+class Stack:
+    """One outer world's one-attack table and the number of attacks it is taken for."""
+
+    table: Distribution[World]
+    count: int
+
+
+def _table(stack: Stack) -> Distribution[World]:
+    return stack.table
+
+
 @dataclass
 class Edge:
-    joint: Distribution[World]
-    count: Distribution[int] | None
+    stacks: Distribution[Stack]
     stacked: dict["Projection[Any]", Distribution[Any]] = field(default_factory=dict)
+
+    @classmethod
+    def single(cls, joint: Distribution[World]) -> "Edge":
+        return cls(Distribution.pure(Stack(joint, 1)))
+
+    @property
+    def joint(self) -> Distribution[World]:
+        return self.stacks.bind(_table)
 
     def read[T: Hashable](self, projection: "Projection[T]") -> Distribution[T]:
         held = self.stacked.get(projection)
         if held is not None:
             return held
-        classes = self.joint.map(projection.of)
-        count = self.count
-        if count is not None:
 
-            def copies(times: int) -> Distribution[T]:
-                return classes.repeat(times, projection.aggregation)
+        def taken(stack: Stack) -> Distribution[T]:
+            return stack.table.map(projection.of).repeat(stack.count, projection.aggregation)
 
-            classes = count.bind(copies)
-        self.stacked[projection] = classes
-        return classes
+        read = self.stacks.bind(taken)
+        self.stacked[projection] = read
+        return read
 
 
 @dataclass(frozen=True, eq=False)
@@ -161,7 +177,7 @@ class Step[Out: Hashable](ABC):
     def arguments(self, world: World) -> tuple[Any, ...]:
         return tuple(world.of(source) for source in self.inputs)
 
-    def declare(self, program: "Program", prefix: str, visible: list["Step[Any]"]) -> None:
+    def declare(self, program: "Program", prefix: str, visible: list["Item"]) -> None:
         path = f"{prefix}/{self.name}"
         for source in self.inputs:
             if isinstance(source, Step) and source not in visible:
@@ -188,10 +204,8 @@ class Step[Out: Hashable](ABC):
         program.steps.append(self)
         program.readings[self] = self.shown()
 
-    def liveness(
-        self, after: frozenset[Key], live: dict["Item", frozenset[Key]]
-    ) -> frozenset[Key]:
-        live[self] = after
+    def liveness(self, after: frozenset[Key], program: "Program") -> frozenset[Key]:
+        program.live[self] = after
         return ((after | self.reads()) - {self.key}) | set(self.inputs)
 
     def run(self, lane: "Lane") -> None:
@@ -208,7 +222,7 @@ class Step[Out: Hashable](ABC):
             return world.keeping(after)
 
         edge = lane.joint.bind(advance)
-        lane.edges[self] = Edge(edge, lane.count)
+        lane.edges[self] = Edge.single(edge)
         lane.joint = edge if held <= after else edge.map(onward)
 
     def detail(self, edge: Edge) -> dict[str, Any]:
@@ -290,7 +304,7 @@ class Block(ABC):
     name: str
     items: tuple[Item, ...]
 
-    def declare(self, program: "Program", prefix: str, visible: list[Step[Any]]) -> None:
+    def declare(self, program: "Program", prefix: str, visible: list[Item]) -> None:
         path = f"{prefix}/{self.name}"
         self.check(path, visible)
         program.take(self, path)
@@ -298,17 +312,15 @@ class Block(ABC):
         for item in self.items:
             item.declare(program, path, inner)
 
-    def check(self, path: str, visible: list[Step[Any]]) -> None:
+    def check(self, path: str, visible: list[Item]) -> None:
         return None
 
     def collect(self, program: "Program") -> None:
         program.blocks.append(self)
 
-    def liveness(
-        self, after: frozenset[Key], live: dict["Item", frozenset[Key]]
-    ) -> frozenset[Key]:
+    def liveness(self, after: frozenset[Key], program: "Program") -> frozenset[Key]:
         for item in reversed(self.items):
-            after = item.liveness(after, live)
+            after = item.liveness(after, program)
         return after
 
     def run(self, lane: "Lane") -> None:
@@ -339,53 +351,67 @@ class Sequence(Group):
 
 @dataclass(frozen=True, eq=False, kw_only=True)
 class Repeat(Group):
-    """Runs its items for one attack; the outer worlds resume at its exit, cut to what is live."""
+    """Runs its items for one attack, once per outer world, and stacks them on read."""
 
     kind = "repeat"
     times: Step[int]
     collapsed: bool = False
 
-    def declare(self, program: "Program", prefix: str, visible: list[Step[Any]]) -> None:
+    def declare(self, program: "Program", prefix: str, visible: list[Item]) -> None:
         first_step, first_block = len(program.steps), len(program.blocks)
         super().declare(program, prefix, visible)
         path = program.paths[self]
         for block in program.blocks[first_block + 1 :]:
             if isinstance(block, Repeat):
                 raise GraphError(f"{program.paths[block]} repeats inside {path}")
-        for step in program.steps[first_step:]:
+        inside = program.steps[first_step:]
+        for step in inside:
             if step.writes is not None:
                 raise GraphError(
                     f"{program.paths[step]} writes {step.writes.name} inside a repeat, "
                     "which cannot carry state out"
                 )
+        program.inside[self] = frozenset(inside)
+        visible.append(self)
 
-    def check(self, path: str, visible: list[Step[Any]]) -> None:
+    def check(self, path: str, visible: list[Item]) -> None:
         if self.times not in visible:
             raise GraphError(f"{path} runs {self.times.name} times, which is not in scope")
 
-    def liveness(
-        self, after: frozenset[Key], live: dict["Item", frozenset[Key]]
-    ) -> frozenset[Key]:
-        live[self] = after
-        inside = super().liveness(frozenset(), live)
-        return after | inside | {self.times}
+    def liveness(self, after: frozenset[Key], program: "Program") -> frozenset[Key]:
+        program.live[self] = after
+        inside = super().liveness(frozenset(), program) | {self.times}
+        program.entries[self] = inside
+        return after | inside
 
     def run(self, lane: "Lane") -> None:
-        outer, count = lane.joint, lane.count
-        lane.count = self.counted(lane)
-        super().run(lane)
-        kept = lane.program.live[self]
+        program = lane.program
+        entry = program.entries[self]
+
+        def opened(world: World) -> World:
+            return world.keeping(entry)
+
+        starts = lane.joint.map(opened)
+        ran: dict[World, Lane] = {}
+        for start in starts.mass:
+            inner = Lane(program=program, choices=lane.choices, joint=Distribution.pure(start))
+            super().run(inner)
+            ran[start] = inner
+        for step in program.inside[self]:
+            lane.edges[step] = Edge(
+                Distribution(
+                    {
+                        Stack(ran[start].edges[step].joint, start.of(self.times)): p
+                        for start, p in starts.mass.items()
+                    }
+                )
+            )
+        after = program.live[self]
 
         def resumed(world: World) -> World:
-            return world.keeping(kept)
+            return world.keeping(after)
 
-        lane.joint, lane.count = outer.map(resumed), count
-
-    def counted(self, lane: "Lane") -> Distribution[int]:
-        def times(world: World) -> int:
-            return world.of(self.times)
-
-        return lane.joint.map(times)
+        lane.joint = lane.joint.map(resumed)
 
     def detail(self, paths: Mapping[Any, str]) -> dict[str, Any]:
         return {"times": paths[self.times], "collapsed": self.collapsed}
@@ -405,7 +431,7 @@ class Lanes(Block):
     kind = "lanes"
     decision: Decision[Any]
 
-    def check(self, path: str, visible: list[Step[Any]]) -> None:
+    def check(self, path: str, visible: list[Item]) -> None:
         if self.decision not in visible:
             raise GraphError(f"{path} splits on {self.decision.name}, which is not in scope")
 
@@ -451,17 +477,19 @@ class Program:
     states: list[State[Any]] = field(default_factory=list)
     readings: dict[Step[Any], tuple[Reading, ...]] = field(default_factory=dict)
     live: dict[Item, frozenset[Key]] = field(default_factory=dict)
+    inside: dict[Repeat, frozenset[Step[Any]]] = field(default_factory=dict)
+    entries: dict[Repeat, frozenset[Key]] = field(default_factory=dict)
     entry: frozenset[Key] = frozenset()
 
     @classmethod
     def build(cls, name: str, sides: Mapping[Side, str], items: tuple[Item, ...]) -> "Program":
         program = cls(name=name, sides=sides, items=items)
-        visible: list[Step[Any]] = []
+        visible: list[Item] = []
         for item in items:
             item.declare(program, name, visible)
         needed: frozenset[Key] = frozenset()
         for item in reversed(items):
-            needed = item.liveness(needed, program.live)
+            needed = item.liveness(needed, program)
         program.entry = needed
         return program
 
@@ -529,7 +557,6 @@ class Lane:
     program: Program
     choices: Mapping[Decision[Any], Any]
     joint: Distribution[World]
-    count: Distribution[int] | None = None
     edges: dict[Step[Any], Edge] = field(default_factory=dict)
 
     def read[T: Hashable](self, step: Step[Any], projection: Projection[T]) -> Distribution[T]:
