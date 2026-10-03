@@ -513,6 +513,7 @@ def _parse_option_line(
             name=f"{_capitalized(m.group(1))} magic items",
             kind=OptionKind.OTHER,
             scope=OptionScope.MODEL,
+            applies_to=m.group(1) if m.group(1) in printed else None,
             points_budget=_int(m.group(2)),
             limit=group.limit,
         )

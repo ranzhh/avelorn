@@ -48,4 +48,5 @@ options:
   - name: Drakemaster magic items
     kind: other
     scope: model
+    applies_to: Drakemaster
     points_budget: 50

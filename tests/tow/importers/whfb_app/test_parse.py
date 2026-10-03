@@ -596,11 +596,15 @@ def test_magic_standard_line_is_a_budget() -> None:
 
 def test_magic_items_line_names_the_bearer() -> None:
     """A character's magic-item allowance keeps who it belongs to."""
-    option, warnings = _option("A High Helm may purchase magic items up to a total of 25 points")
+    option, warnings = _option(
+        "A High Helm may purchase magic items up to a total of 25 points",
+        printed={"Silver Helm", "High Helm"},
+    )
     assert option == UnitOption(
         name="High Helm magic items",
         kind=OptionKind.OTHER,
         scope=OptionScope.MODEL,
+        applies_to="High Helm",
         points_budget=25,
     )
     assert warnings == []
