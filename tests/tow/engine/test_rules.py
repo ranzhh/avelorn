@@ -77,11 +77,8 @@ def _fielded(unit: Unit, models: int, *, moved: bool = False) -> Contingent:
     return base.after(Movement.march()) if moved else base
 
 
-def _one_rule(effect: RuleEffect) -> dict[str, Rule]:
-    # One doctored rule, resolved as printed, to compile a single effect
-    # shape the data/ files do not exercise yet.
-    rule = Rule(id="doctored", name="Doctored", paragraphs=["…"], effects=[effect])
-    return {rule.name: rule}
+def _one_rule(effect: RuleEffect) -> list[Rule]:
+    return [Rule(id="doctored", name="Doctored", paragraphs=["…"], effects=[effect])]
 
 
 def test_a_reference_without_x_binds_the_entry_itself() -> None:
@@ -148,7 +145,7 @@ def test_compile_armour_bane_from_data_reproduces_the_golden() -> None:
     longbow = REPO.weapons["longbow"].profiles[0]
     in_use = _fielded(REPO.units["elven-archers"], 1).loadout.profile_rules(longbow)
     index = {rule.name: rule for rule in in_use}
-    compiled = compile_rules(["Armour Bane (1)"], index)
+    compiled = compile_rules([index["Armour Bane (1)"]])
     assert compiled.factored == ("Armour Bane (1)",)
     transforms = compiled.modifiers
     profile = AttackProfile.shooting(
@@ -160,7 +157,7 @@ def test_compile_armour_bane_from_data_reproduces_the_golden() -> None:
 def test_compile_effectless_rule_stays_unfactored() -> None:
     """A resolved rule with no effects is recognised but not factored, as a missing one is."""
     effectless = Rule(id="effectless", name="Effectless", paragraphs=["Says nothing."])
-    compiled = compile_rules(["Effectless"], {effectless.name: effectless})
+    compiled = compile_rules([effectless])
     assert compiled.modifiers == ()
     assert compiled.unfactored == ("Effectless",)
 
@@ -173,7 +170,7 @@ def test_compile_rank_quantity_stays_unfactored_in_the_dice_walk() -> None:
     way a characteristic change is.
     """
     rules = _one_rule(ModifierEffect(add={Quantity.FIGHTING_RANKS: 1}))
-    compiled = compile_rules(["Doctored"], rules)
+    compiled = compile_rules(rules)
     assert compiled.modifiers == ()
     assert compiled.unfactored == ("Doctored",)
 
@@ -181,7 +178,7 @@ def test_compile_rank_quantity_stays_unfactored_in_the_dice_walk() -> None:
 def test_compile_parameter_placeholder_without_value_stays_unfactored() -> None:
     """The X placeholder needs a bracketed number in the printed name."""
     rule = REPO.rules["armour-bane"]
-    compiled = compile_rules(["Armour Bane (X)"], REPO.rules)
+    compiled = compile_rules([rule])
     assert rule.effects and compiled.modifiers == ()
     assert compiled.unfactored == ("Armour Bane (X)",)
 
@@ -194,7 +191,7 @@ def test_unconditional_armour_piercing_modifier_factors() -> None:
     save 5+ worsened to 6+ on every attack, p = 2/3 * 1/2 * 5/6 = 5/18.
     """
     rules = _one_rule(ModifierEffect(add={Quantity.ARMOUR_PIERCING: 1}))
-    compiled = compile_rules(["Doctored"], rules)
+    compiled = compile_rules(rules)
     assert compiled.factored == ("Doctored",)
     transforms = compiled.modifiers
     profile = AttackProfile.shooting(
@@ -212,7 +209,7 @@ def test_trigger_at_or_after_the_landing_stage_stays_unfactored() -> None:
     effect = ModifierEffect(
         when=When(natural=NaturalRoll(face=6, roll=Stage.ROLL_TO_WOUND)), add={Quantity.TO_HIT: 1}
     )
-    compiled = compile_rules(["Doctored"], _one_rule(effect))
+    compiled = compile_rules(_one_rule(effect))
     assert compiled.modifiers == ()
     assert compiled.unfactored == ("Doctored",)
 
@@ -396,7 +393,7 @@ def test_compile_grant_confers_the_named_rule_and_stacks() -> None:
     sisters = _fielded(REPO.units["sisters-of-avelorn"], 5).wielding("Bow of Avelorn")
     bow = GateContext(wielding=WeaponFacts(type=WeaponType.BOW))
     index = {rule.name: rule for rule in sisters.loadout.rules}
-    compiled = compile_rules(["Arrows of Isha"], index, bow, grants=sisters.loadout.bound)
+    compiled = compile_rules([index["Arrows of Isha"]], bow, grants=sisters.loadout.bound)
     assert compiled.factored == ("Arrows of Isha",)
     save_moves = [
         (m.move, m.trigger) for m in compiled.modifiers if m.lands_on is Stage.MAKE_ARMOUR_SAVES
@@ -416,7 +413,7 @@ def test_compile_grant_unfactored_when_the_bow_gate_is_unknown() -> None:
     sisters = _fielded(REPO.units["sisters-of-avelorn"], 5).wielding("Bow of Avelorn")
     index = {rule.name: rule for rule in sisters.loadout.rules}
     compiled = compile_rules(
-        ["Arrows of Isha"], index, GateContext(), grants=sisters.loadout.bound
+        [index["Arrows of Isha"]], GateContext(), grants=sisters.loadout.bound
     )
     assert compiled.unfactored == ("Arrows of Isha",)
     assert compiled.modifiers == ()
@@ -428,7 +425,7 @@ def test_compile_grant_without_its_bound_rule_is_a_caller_error() -> None:
     bow = GateContext(wielding=WeaponFacts(type=WeaponType.BOW))
     index = {rule.name: rule for rule in sisters.loadout.rules}
     with pytest.raises(ValueError, match="armour-bane, X: 1} is granted, but compiled without"):
-        compile_rules(["Arrows of Isha"], index, bow, grants={})
+        compile_rules([index["Arrows of Isha"]], bow, grants={})
 
 
 def test_scalar_fact_is_tri_state() -> None:
@@ -503,7 +500,7 @@ def test_armour_bane_two_leaves_no_save_at_all() -> None:
     p = 2/3 * (2/6 * 4/6 + 1/6 * 1) = 7/27.
     """
     bane = bind(RuleRef(rule="armour-bane", X=2), REPO.rules)
-    compiled = compile_rules(["Armour Bane (2)"], {bane.name: bane})
+    compiled = compile_rules([bane])
     assert compiled.factored == ("Armour Bane (2)",)
     transforms = compiled.modifiers
     profile = AttackProfile.shooting(
@@ -774,7 +771,7 @@ def test_set_is_unfactored_at_the_walk() -> None:
     cannot reach here — the schema rejects it at load.)
     """
     effect = ModifierEffect(set={Characteristic.INITIATIVE: 10})
-    compiled = compile_rules(["Doctored"], _one_rule(effect))
+    compiled = compile_rules(_one_rule(effect))
     assert compiled.modifiers == ()
     assert compiled.unfactored == ("Doctored",)
 
@@ -962,7 +959,7 @@ def test_effective_armour_value_speaks_for_an_unarmoured_defenders_rules() -> No
     assert honoured.value == 0  # the caller's "no save"
     assert honoured.factored == ("Parry",)
 
-    ungated = _one_rule(ModifierEffect(add={Quantity.ARMOUR_VALUE: 1}))["Doctored"]
+    ungated = _one_rule(ModifierEffect(add={Quantity.ARMOUR_VALUE: 1}))[0]
     would_apply = effective_armour_value(None, [ungated], bare)
     assert would_apply.value == 0
     assert would_apply.unfactored == ("Doctored",)
@@ -1086,16 +1083,15 @@ def test_enemy_fire_compiles_off_the_target_against_the_shooters_roll() -> None:
     unfactored (the compile at the other seat has it).
     """
     rule = REPO.rules["enemy-fire-skirmishers"]
-    index = {rule.name: rule}
     shot_at = GateContext(target_of=AttackFacts(kind=AttackKind.SHOOTING))
 
-    compiled = compile_rules([rule.name], index, shot_at, seat=Side.TARGET)
+    compiled = compile_rules([rule], shot_at, seat=Side.TARGET)
     assert compiled.factored == (rule.name,)
     assert [(m.lands_on, m.move, m.trigger) for m in compiled.modifiers] == [
         (Stage.ROLL_TO_HIT, 1, None)
     ]
 
-    as_attacker = compile_rules([rule.name], index, GateContext(), seat=Side.ATTACKER)
+    as_attacker = compile_rules([rule], GateContext(), seat=Side.ATTACKER)
     assert as_attacker.inapplicable == (rule.name,)
     assert as_attacker.factored == () and as_attacker.unfactored == ()
     assert as_attacker.modifiers == ()
@@ -1110,14 +1106,13 @@ def test_compile_seat_mismatch_is_settled_before_the_gate() -> None:
     ahead of the gate, so a one-sided caller's report never turns on gate luck.
     """
     rule = REPO.rules["enemy-fire-skirmishers"]
-    index = {rule.name: rule}
     contexts = {
         "unknown": GateContext(),
         "not a target": GateContext(target_of=None),
         "a target": GateContext(target_of=AttackFacts(kind=AttackKind.SHOOTING)),
     }
     for described, context in contexts.items():
-        compiled = compile_rules([rule.name], index, context, seat=Side.ATTACKER)
+        compiled = compile_rules([rule], context, seat=Side.ATTACKER)
         assert compiled.inapplicable == (rule.name,), described
 
 
@@ -1131,7 +1126,6 @@ def test_compile_another_seams_quantity_is_unfactored_whatever_the_gate_answers(
     happened to settle the gate False.
     """
     rule = REPO.rules["elven-reflexes"]
-    index = {rule.name: rule}
     contexts = {
         "first round": GateContext(combat=CombatFacts(first_round=True)),
         "a later round": GateContext(combat=CombatFacts(first_round=False)),
@@ -1140,7 +1134,7 @@ def test_compile_another_seams_quantity_is_unfactored_whatever_the_gate_answers(
     }
     for described, context in contexts.items():
         for seat in Side:
-            compiled = compile_rules([rule.name], index, context, seat=seat)
+            compiled = compile_rules([rule], context, seat=seat)
             assert compiled.unfactored == (rule.name,), f"{described}, {seat}"
             assert compiled.modifiers == ()
 
@@ -1312,26 +1306,26 @@ def test_killing_blow_compiles_by_seat_gate_and_foe() -> None:
     honoured with none; a foe never met leaves it unfactored; and from the
     target's seat it is the other side's business — inapplicable.
     """
-    index = {"Killing Blow": REPO.rules["killing-blow"]}
+    killing_blow = [REPO.rules["killing-blow"]]
 
     infantry = GateContext(
         combat=CombatFacts(), foe=FoeFacts(troop_type=TroopType.REGULAR_INFANTRY)
     )
-    compiled = compile_rules(["Killing Blow"], index, infantry)
+    compiled = compile_rules(killing_blow, infantry)
     assert compiled.factored == ("Killing Blow",)
     assert len(compiled.transforms) == 1
 
     monster = GateContext(
         combat=CombatFacts(), foe=FoeFacts(troop_type=TroopType.MONSTROUS_CREATURE)
     )
-    honoured = compile_rules(["Killing Blow"], index, monster)
+    honoured = compile_rules(killing_blow, monster)
     assert honoured.factored == ("Killing Blow",)
     assert honoured.transforms == ()
 
-    unknown_foe = compile_rules(["Killing Blow"], index, GateContext(combat=CombatFacts()))
+    unknown_foe = compile_rules(killing_blow, GateContext(combat=CombatFacts()))
     assert unknown_foe.unfactored == ("Killing Blow",)
 
-    other_seat = compile_rules(["Killing Blow"], index, infantry, seat=Side.TARGET)
+    other_seat = compile_rules(killing_blow, infantry, seat=Side.TARGET)
     assert other_seat.inapplicable == ("Killing Blow",)
 
 

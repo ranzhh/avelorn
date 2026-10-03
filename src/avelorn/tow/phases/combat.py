@@ -434,7 +434,7 @@ def _engage(
             *offence.weapon_rerolls.factored,
         }
     )
-    phase_compiled = compile_rules(sorted(phase_rules), phase_rules, conditions)
+    phase_compiled = compile_rules([phase_rules[name] for name in sorted(phase_rules)], conditions)
     modifiers.extend(phase_compiled.modifiers)
     notes.extend(
         f"core rule not factored: {name}"

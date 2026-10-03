@@ -284,18 +284,16 @@ class CompiledRules:
 
 
 def compile_rules(
-    printed_rules: Sequence[str],
-    resolved: Mapping[str, Rule],
+    rules: Sequence[Rule],
     conditions: "GateContext | None" = None,
     *,
     seat: Side = Side.ATTACKER,
     grants: "Mapping[RuleRef, Rule] | None" = None,
 ) -> CompiledRules:
-    """Compile printed rule names into modifier records.
+    """Compile bound rules into modifier records.
 
-    ``resolved`` maps display names to their bound rules — a loadout's
-    rules by name, or a phase's rules in force; a name absent from it is
-    not modelled. ``conditions`` is the
+    ``rules`` are bound rules — a loadout's, or a phase's rules in force,
+    reported by their names. ``conditions`` is the
     evaluated :class:`GateContext` (or None for all-unknown). ``seat`` is
     the side of the attack the rules' bearer occupies in the walk being
     compiled — the attacker's rules compile at ``ATTACKER``, the target's
@@ -315,22 +313,18 @@ def compile_rules(
     whether the facts happen to answer its condition False or not.
 
     Returns:
-        The modifier records and each printed name's disposition — factored,
+        The modifier records and each rule's disposition by name — factored,
         inapplicable, or unfactored (see :class:`CompiledRules`).
     """
     context = _as_context(conditions)
     modifiers: list[Modifier] = []
     transforms: list[Transform] = []
     buckets: dict[_Disposition, list[str]] = {disposition: [] for disposition in _Disposition}
-    for printed in printed_rules:
-        rule = resolved.get(printed)
-        if rule is None:
-            buckets[_Disposition.UNFACTORED].append(printed)
-            continue
+    for rule in rules:
         disposition, compiled = _compile(rule, context, grants, seat)
-        buckets[disposition].append(printed)
+        buckets[disposition].append(rule.name)
         if compiled:
-            logger.debug("rule factored: %s -> %d record(s)", printed, len(compiled))
+            logger.debug("rule factored: %s -> %d record(s)", rule.name, len(compiled))
         for record in compiled:
             if isinstance(record, Modifier):
                 modifiers.append(record)

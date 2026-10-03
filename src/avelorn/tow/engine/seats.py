@@ -84,11 +84,9 @@ class Offence:
             The seat, compiled under the attacker's ``conditions``.
         """
         weapon_index = {rule.name: rule for rule in in_use}
-        weapon_compiled = compile_rules(
-            list(weapon_index), weapon_index, conditions, grants=grants
-        )
+        weapon_compiled = compile_rules(list(weapon_index.values()), conditions, grants=grants)
         index = {rule.name: rule for rule in rules}
-        unit_compiled = compile_rules(list(index), index, conditions, grants=grants)
+        unit_compiled = compile_rules(list(index.values()), conditions, grants=grants)
         marks = attack_marks(in_use, rules)
         return cls(
             modifiers=(*weapon_compiled.modifiers, *unit_compiled.modifiers),
@@ -165,7 +163,7 @@ class Defence:
         weapon_ward = effective_ward_target(weapon_rules_in_use, incoming)
         granted = [t for t in (unit_ward.target, weapon_ward.target) if t is not None]
         index = {rule.name: rule for rule in rules}
-        compiled = compile_rules(list(index), index, incoming, seat=Side.TARGET, grants=grants)
+        compiled = compile_rules(list(index.values()), incoming, seat=Side.TARGET, grants=grants)
         return cls(
             armour_value=None if printed is None else weapon_fold.value,
             armour=EffectiveValue(weapon_fold.value, unit_fold.factored, unit_fold.unfactored),
