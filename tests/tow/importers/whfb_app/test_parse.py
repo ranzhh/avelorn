@@ -378,6 +378,23 @@ def test_any_model_in_the_unit_swaps_its_armour() -> None:
     assert warnings == []
 
 
+def test_bare_rule_under_a_special_rules_header_adds_that_rule() -> None:
+    """The Maneaters' free rules are named bare under a capped header."""
+    group, warnings = _group("Any unit may have 0-2 of the following special rules:")
+    assert group == OptionGroup(verb="have", rules=True)
+    assert any("capped at 0-2" in w for w in warnings)
+
+    option, warnings = _option("Poisoned Attacks (Free)", group, rules=["Poisoned Attacks"])
+    assert option == UnitOption(
+        name="Poisoned Attacks",
+        kind=OptionKind.SPECIAL_RULE,
+        scope=OptionScope.UNIT,
+        points=0,
+        adds_rules=[RuleRef(rule="poisoned-attacks")],
+    )
+    assert warnings == []
+
+
 def test_line_states_its_own_availability_limit() -> None:
     """A restriction written into the line reads the same as in a header."""
     option, warnings = _option(

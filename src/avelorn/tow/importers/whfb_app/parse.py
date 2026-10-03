@@ -319,7 +319,8 @@ _CROSS_REF_RE = re.compile(r"\s*\(see\s+[^)]+\)", re.I)
 # the verb its children omit: "The entire unit may take any of the following:".
 _HEADER_RE = re.compile(
     r"^(?P<subject>.+?)\s+may"
-    r"(?:\s+(?P<verb>.+?)(?:\s+(?P<quantifier>any|one)\s+of the following)?)?:?$",
+    r"(?:\s+(?P<verb>.+?)(?:\s+(?P<quantifier>any|one|\d+-\d+)\s+of the following"
+    r"(?:\s+(?P<rules>special rules))?)?)?:?$",
     re.I,
 )
 _LINE_SUBJECT_RE = re.compile(r"^(?P<subject>.+?)\s+may\s+(?P<body>.+)$", re.I)
@@ -360,12 +361,15 @@ class OptionGroup:
             any of the following:") and leaves each child a bare name.
         scope: Who takes the options: the unit, or models of it ("Any
             model in the unit may ...").
+        rules: The children are special rules named bare ("Any unit may
+            have 0-2 of the following special rules:").
     """
 
     limit: str | None = None
     applies_to: str | None = None
     verb: str | None = None
     scope: OptionScope = OptionScope.UNIT
+    rules: bool = False
 
 
 def _parse_options(
@@ -446,12 +450,18 @@ def _parse_group(slug: str, header: str, printed: set[str], warnings: list[str])
     if (m := _HEADER_RE.fullmatch(header)) and (
         group := _parse_subject(m.group("subject"), printed)
     ) is not None:
-        if (m.group("quantifier") or "").lower() == "one":
+        quantifier = (m.group("quantifier") or "").lower()
+        if quantifier == "one":
             warnings.append(
                 f"{slug}: options under {header!r} are mutually exclusive; "
                 "exclusivity not recorded"
             )
+        elif quantifier[:1].isdigit():
+            warnings.append(
+                f"{slug}: options under {header!r} are capped at {quantifier}; cap not recorded"
+            )
         group.verb = m.group("verb")
+        group.rules = m.group("rules") is not None
         return group
     # Unrecognised restriction: keep it verbatim rather than dropping it.
     warnings.append(f"{slug}: unrecognised option group header {header!r}; kept as limit")
@@ -528,7 +538,7 @@ def _parse_option_line(
         # a bare name: "take" + "Great Weapon".
         option = _matched_option(
             slug,
-            f"{group.verb} {body}",
+            f"{group.verb} the {body} special rule" if group.rules else f"{group.verb} {body}",
             points,
             per_model,
             scope,
