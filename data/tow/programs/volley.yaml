@@ -10,8 +10,8 @@ inputs:
   - {fact: moved, of: attacker}
   - {fact: standing, of: attacker}
   - {fact: standing, of: target}
-  - {fact: models-at-start-of-phase, of: target}
-  - {fact: battle-strength, of: target}
+  - {known: models-at-start-of-phase, of: target, type: int}
+  - {known: battle-strength, of: target, type: int}
 items:
   - {step: check-range, readings: [band]}
   - {step: how-many-shots, readings: [shots]}
