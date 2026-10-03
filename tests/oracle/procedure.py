@@ -8,7 +8,7 @@ transcribed from the printed tables on tow.whfb.app, each cited where it is used
 import math
 import random
 from collections import Counter
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from fractions import Fraction
@@ -56,6 +56,8 @@ type Throw = list[tuple[Fraction, int, bool]]
 
 NOT_ROLLED: Throw = [(Fraction(1), 0, False)]
 
+AUTOMATIC: Throw = [(Fraction(1), 0, True)]
+
 
 class Phase(StrEnum):
     SHOOTING = "shooting"
@@ -93,6 +95,7 @@ class Attack:
     penalty is negative. ``armour_piercing`` is printed negative (AP -1),
     ``armour_bane`` is Armour Bane's X. ``killing_blow`` and ``cleaving_blow``
     are set only when the target's troop type is one the rule names.
+    ``automatic_hit`` skips the roll To Hit, as Impact Hits and Stomp Attacks do.
     """
 
     phase: Phase
@@ -111,6 +114,7 @@ class Attack:
     poisoned: bool = False
     hit_re_rolls: frozenset[ReRoll] = frozenset()
     save_re_rolls: frozenset[ReRoll] = frozenset()
+    automatic_hit: bool = False
 
     def __post_init__(self) -> None:
         if (self.phase is Phase.COMBAT) != (self.foe_weapon_skill is not None):
@@ -321,7 +325,10 @@ def one_attack(attack: Attack) -> AttackOdds:
     Returns:
         The probability of each unsaved class.
     """
-    hits, needed = (_shooting_hit if attack.phase is Phase.SHOOTING else _combat_hit)(attack)
+    if attack.automatic_hit:
+        hits, needed = AUTOMATIC, 0
+    else:
+        hits, needed = (_shooting_hit if attack.phase is Phase.SHOOTING else _combat_hit)(attack)
     wound = kill = Fraction(0)
     for p_hit, hit_face, hit in hits:
         if not hit:
@@ -448,3 +455,119 @@ def trials_for(tolerance: float, *, z: float = 4.0) -> int:
         The number of trials.
     """
     return math.ceil((z / (2 * tolerance)) ** 2)
+
+
+def casualties(
+    attacks: Sequence[AttackOdds],
+    *,
+    models: int,
+    wounds: int,
+    damage: Mapping[int, Fraction] | None = None,
+) -> dict[int, Fraction]:
+    """The exact casualty distribution of ``attacks`` applied as rolled, one after another.
+
+    Each attack has its own odds; ``damage`` is as in :func:`remove_casualties`.
+    Wounds land as :func:`removed` lands them: on one model until it is removed,
+    the excess lost. Only :attr:`Order.AS_ROLLED` is enumerated; mixing Killing
+    Blows with plain wounds on multi-Wound models needs :func:`remove_casualties`.
+
+    Returns:
+        The probability of each casualty count reached, zeros left out.
+    """
+    damage = damage or {1: Fraction(1)}
+    states: dict[tuple[int, int], Fraction] = {(0, wounds): Fraction(1)}
+    for odds in attacks:
+        rolled: dict[tuple[int, int], Fraction] = {}
+        for (count, remaining), p in states.items():
+            if count == models:
+                outcomes = [((count, remaining), Fraction(1))]
+            else:
+                outcomes = [
+                    ((count, remaining), 1 - odds.unsaved),
+                    ((count + 1, wounds), odds.kill),
+                ]
+                for loss, q in damage.items():
+                    felled = loss >= remaining
+                    state = (count + 1, wounds) if felled else (count, remaining - loss)
+                    outcomes.append((state, odds.wound * q))
+            for state, q in outcomes:
+                rolled[state] = rolled.get(state, Fraction(0)) + p * q
+        states = rolled
+    result: dict[int, Fraction] = {}
+    for (count, _), p in states.items():
+        if p:
+            result[count] = result.get(count, Fraction(0)) + p
+    return result
+
+
+def exchange(
+    first: AttackOdds, back: AttackOdds, *, models: int
+) -> dict[tuple[int, int], Fraction]:
+    """Two single ranks of ``models`` one-Wound, one-Attack models trade blows in turn.
+
+    Source: the-combat-phase/who-strikes-first: the faster side strikes, and only
+    the slower side's survivors strike back.
+
+    Returns:
+        The chance of each pair (slower side's casualties, faster side's casualties).
+    """
+    joint: dict[tuple[int, int], Fraction] = {}
+    for felled, p in casualties([first] * models, models=models, wounds=1).items():
+        for lost, q in casualties([back] * (models - felled), models=models, wounds=1).items():
+            joint[felled, lost] = joint.get((felled, lost), Fraction(0)) + p * q
+    return joint
+
+
+def _two_dice() -> list[tuple[int, int]]:
+    return [(first, second) for first in FACES for second in FACES]
+
+
+def leadership_test(leadership: int, *, re_roll_failed: bool = False) -> Fraction:
+    """The chance a Leadership test passes, a failed test re-rolled once if granted.
+
+    Source: model-profiles/leadership-tests: 2D6 equal to or less than Leadership
+    passes, a natural 2 always passes and a natural 12 always fails;
+    general-principles/re-rolls.
+
+    Returns:
+        The probability of a pass.
+    """
+    passes = sum(
+        1
+        for first, second in _two_dice()
+        if first + second == 2 or (first + second != 12 and first + second <= leadership)
+    )
+    p = Fraction(passes, 36)
+    return p + (1 - p) * p if re_roll_failed else p
+
+
+@dataclass(frozen=True)
+class BreakOdds:
+    """The chance of each Break test result for a unit that lost its combat."""
+
+    gives_ground: Fraction
+    falls_back: Fraction
+    breaks: Fraction
+
+
+def break_test(leadership: int, lost_by: int) -> BreakOdds:
+    """The Break test of a unit that lost its combat by ``lost_by``.
+
+    Source: the-combat-phase/break-test: 2D6 plus the difference in combat result
+    scores; a natural roll over Leadership Breaks, a modified roll over it Falls
+    Back in Good Order, and a modified roll within it or a natural double 1 Gives
+    Ground.
+
+    Returns:
+        The probability of each result.
+    """
+    gives = falls = breaks = 0
+    for first, second in _two_dice():
+        natural = first + second
+        if natural + lost_by <= leadership or (first, second) == (1, 1):
+            gives += 1
+        elif natural <= leadership:
+            falls += 1
+        else:
+            breaks += 1
+    return BreakOdds(Fraction(gives, 36), Fraction(falls, 36), Fraction(breaks, 36))

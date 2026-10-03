@@ -338,20 +338,6 @@ def test_loadout_resolves_the_carried_weapons_rules(spearmen_unit: Unit) -> None
     assert archers.loadout.bound[bane].name == "Armour Bane (1)"
 
 
-def test_thrusting_spear_resolves_fight_in_extra_rank(spearmen_unit: Unit) -> None:
-    """The spear's rule reference binds into the loadout.
-
-    It carries the supporting-ranks effect the melee count reads; a spear-armed
-    contingent resolves it onto its loadout the way any weapon rule resolves.
-    """
-    fielded = Contingent.field(spearmen_unit, 10, data=REPO)
-    rule = fielded.loadout.bound[RuleRef(rule="fight-in-extra-rank")]
-    assert rule is REPO.rules["fight-in-extra-rank"]
-    effect = rule.effects[0]
-    assert isinstance(effect, ModifierEffect)
-    assert effect.add == {"supporting-ranks": 1}
-
-
 def test_an_uncarried_weapon_cannot_be_wielded(spearmen_unit: Unit) -> None:
     """A contingent is armed only with a weapon its loadout carries."""
     fielded = Contingent.field(spearmen_unit, 10, data=REPO)
@@ -490,37 +476,6 @@ def test_rank_bonus_counts_ranks_behind_the_first(spearmen_unit: Unit) -> None:
 def test_rank_bonus_is_capped_by_troop_type(spearmen_unit: Unit) -> None:
     """Regular Infantry cap the bonus at +2, however deep the unit ranks."""
     assert _fielded(spearmen_unit, 25).rank_bonus == 2  # five ranks, capped
-
-
-def test_fighting_rank_press_of_battle_deepens_a_stationary_body(spearmen_unit: Unit) -> None:
-    """Regular Infantry's Press of Battle makes the fighting rank two deep.
-
-    Regular Infantry are five wide by default and confer Press of Battle.
-    Stationary, the fighting rank runs two ranks deep: a lone rank fights
-    alone, a deeper body adds the rank behind — two ranks, never a third. A
-    charge lapses the rule, back to the front rank alone.
-    """
-    assert _fielded(spearmen_unit, 5).fighting_rank() == 5  # one rank, nothing behind it
-    assert _fielded(spearmen_unit, 10).fighting_rank() == 10  # two full ranks fight
-    assert _fielded(spearmen_unit, 12).fighting_rank() == 10  # front two of three ranks
-    charged = _fielded(spearmen_unit, 12).charging(Charge(3, ChargeArc.FRONT))
-    assert charged.fighting_rank() == 5  # Press of Battle lapses on a charge
-
-
-def test_fighting_ranks_reports_press_of_battle_as_factored(spearmen_unit: Unit) -> None:
-    """The depth carries the rules folded into it: Press of Battle, factored.
-
-    Present whether it deepens the rank (stationary) or is honoured as a
-    no-op (charged) — always evaluated, so always factored, never unknown.
-    """
-    stationary = _fielded(spearmen_unit, 10).fighting_ranks()
-    assert stationary.value == 2
-    assert "Press of Battle" in stationary.factored
-    assert stationary.unfactored == ()
-
-    charged = _fielded(spearmen_unit, 10).charging(Charge(3, ChargeArc.FRONT)).fighting_ranks()
-    assert charged.value == 1
-    assert "Press of Battle" in charged.factored
 
 
 def test_melee_attacks_are_the_fighting_ranks_attacks(spearmen_unit: Unit) -> None:

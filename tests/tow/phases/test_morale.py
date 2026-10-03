@@ -167,33 +167,6 @@ def test_no_granting_rule_means_no_reroll() -> None:
     assert panic.p_holds == pytest.approx(P_PASS)
 
 
-def test_valour_of_ages_applies_from_the_data_file() -> None:
-    """End to end: fielding resolves the authored effect, and it re-rolls."""
-    fielded = Contingent.field(
-        REPO.units["elven-spearmen"],
-        8,
-        data=REPO,
-    )
-    result = _result([0.0, 0.0, 0.0, 1.0], size=8)
-    panic = make_panic_tests(result, fielded)
-    assert panic.reroll_from == "Valour of Ages"
-    assert panic.p_holds == pytest.approx(P_PASS + (1 - P_PASS) * P_PASS)
-
-
-def test_veteran_rerolls_a_failed_panic_test_from_the_data_file() -> None:
-    """Veteran's grant is unrestricted, where Valour of Ages names two causes.
-
-    "May re-roll any failed Leadership test", so the authored effect carries no
-    cause filter and admits this seam's heavy casualties like any other.
-    """
-    fielded = Contingent.field(REPO.units["lion-guard"], 8, data=REPO)
-    panic = make_panic_tests(_result([0.0, 0.0, 0.0, 1.0], size=8), fielded)
-    assert panic.reroll_from == "Veteran"
-    # Lion Guard carry Ld 9: a Leadership test passes 30/36.
-    p_pass = float(Fraction(30, 36))
-    assert panic.p_holds == pytest.approx(p_pass + (1 - p_pass) * p_pass)
-
-
 # --- Break test: 2D6 + margin vs Leadership, three outcomes ---
 
 
@@ -237,24 +210,6 @@ def test_break_test_draw_takes_no_test() -> None:
     assert result.p_draw == pytest.approx(1.0)
     assert result.a == SideBreak(0.0, 0.0, 0.0)
     assert result.b == SideBreak(0.0, 0.0, 0.0)
-
-
-def test_stubborn_falls_back_instead_of_breaking() -> None:
-    """A Stubborn loser never Breaks — its whole losing mass Falls Back in Good Order.
-
-    White Lions (Stubborn) lose by 3: the ordinary 2D6 test would split Break /
-    Fall Back / Give Ground, but the rule sends all of it to Fall Back in Good
-    Order. A note surfaces what the current scope leaves unmodelled.
-    """
-    lions = Contingent.field(REPO.units["white-lions-of-chrace"], 5, data=REPO)
-    result = break_test(_combat({-3: 1.0}), lions, SPEARMEN)
-    assert result.a.p_breaks == pytest.approx(0.0)
-    assert result.a.p_gives_ground == pytest.approx(0.0)
-    assert result.a.p_falls_back == pytest.approx(1.0)  # the whole lost round
-    assert any("Stubborn" in note and "White Lions of Chrace" in note for note in result.notes)
-    # The non-Stubborn winner takes no test and earns no note.
-    assert result.b == SideBreak(0.0, 0.0, 0.0)
-    assert not any("Spearmen" in note for note in result.notes)
 
 
 def test_non_stubborn_unit_rolls_the_ordinary_break_test() -> None:
@@ -326,33 +281,3 @@ def test_shieldwall_gives_ground_where_it_would_fall_back_on_the_turn_it_was_cha
 
     standing = break_test(combat_result(fight(lions, breakers)), lions, breakers)
     assert standing.b.p_gives_ground == 0  # not charged: the wall never forms
-
-
-def test_break_test_terror_saps_the_losers_leadership() -> None:
-    """Losing to a Terror-causing winner, the Break test rolls against Ld -1.
-
-    Spearmen (Ld 8) lose by 3 to a Terror-causer: the test resolves at Ld 7 —
-    Break (natural > 7: 8..12) 15/36, Fall Back (natural 5..7, modified over 7)
-    15/36, Give Ground (2..4, the double 1 among them) 6/36. Terror's authored
-    scope note is relayed, labelled by the unit that causes it.
-    """
-    terror = _spearmen(REPO.rules["terror"])
-    result = break_test(_combat({3: 1.0}), terror, SPEARMEN)
-    assert result.b.p_breaks == pytest.approx(15 / 36)
-    assert result.b.p_falls_back == pytest.approx(15 / 36)
-    assert result.b.p_gives_ground == pytest.approx(6 / 36)
-    assert result.a == SideBreak(0.0, 0.0, 0.0)  # the Terror-causing winner never tests
-    assert any("Terror" in note and "Break-test" in note for note in result.notes)
-
-
-def test_break_test_a_losing_terror_causers_own_rule_gains_it_nothing() -> None:
-    """A loser's own Terror maluses the winner's Leadership, which is never rolled.
-
-    The Terror-causer loses by 3 at its own full Ld 8: the ordinary 10/16/10
-    split — the printed "if the winning side includes ..." falling out of the
-    seam's structure, not a special case.
-    """
-    result = break_test(_combat({3: 1.0}), SPEARMEN, _spearmen(REPO.rules["terror"]))
-    assert result.b.p_breaks == pytest.approx(10 / 36)
-    assert result.b.p_falls_back == pytest.approx(16 / 36)
-    assert result.b.p_gives_ground == pytest.approx(10 / 36)

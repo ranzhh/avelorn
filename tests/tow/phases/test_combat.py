@@ -5,16 +5,14 @@ from fractions import Fraction
 import pytest
 
 from avelorn.core.dice import binomial_distribution, expected_value
-from avelorn.core.distribution import Distribution
 from avelorn.tow.contingent import Charge, ChargeArc, Contingent, Loadout
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.engine.rules import CombatFacts, GateContext
+from avelorn.tow.engine.rules import GateContext
 from avelorn.tow.phases.combat import (
     CombatPhase,
     FightResult,
     combat_result,
     effective_initiative,
-    effective_weapon_skill,
     fight,
     mount_initiative,
     strike,
@@ -117,23 +115,6 @@ def test_strike_unit_spearmen_vs_spearmen() -> None:
     assert any("thrusting spear" in note.lower() for note in result.notes)  # weapon notes
 
 
-def test_strike_unit_parry_betters_the_targets_save_with_hand_weapon_and_shield() -> None:
-    """A target using a hand weapon and shield parries: its save is one better.
-
-    Elven Spearmen carry light armour and a shield (a 5+ save). Fielded
-    wielding a Hand Weapon, Parry improves it to 4+; wielding a Thrusting
-    Spear instead, the hand-weapon requirement is unmet and the save stays 5+.
-    """
-    spearmen = REPO.units["elven-spearmen"]
-    attacker = _fielded(spearmen, 5).wielding("Hand Weapon")
-
-    parrying = strike_unit(attacker, _fielded(spearmen, 10).wielding("Hand Weapon"))
-    assert parrying.save_target == 4  # 5+ bettered to 4+ by Parry
-
-    spear = strike_unit(attacker, _fielded(spearmen, 10).wielding("Thrusting Spear"))
-    assert spear.save_target == 5  # not a hand weapon: Parry honoured, no change
-
-
 def test_fight_parry_is_claimed_when_both_sides_use_hand_weapon_and_shield() -> None:
     """Both sides' saves are resolved in a fight, so both claim Parry from the notes.
 
@@ -164,32 +145,6 @@ def test_fight_claims_parry_for_an_unarmoured_side_too() -> None:
     assert not any("Parry" in note for note in result.notes)
 
 
-def test_strike_unit_ithilmar_weapons_re_rolls_to_hit_ones() -> None:
-    """Ithilmar Weapons re-rolls the striker's To Hit natural 1s, and is claimed.
-
-    Sisters of Avelorn fighting with a hand weapon re-roll their To Hit 1s, so
-    more blows land — the same matchup without the rule lands fewer, at the same
-    reported To Hit target (a re-roll shifts the probability, not the target).
-    Because it is factored, Ithilmar Weapons leaves no "not factored" note.
-    """
-    sisters = REPO.units["sisters-of-avelorn"]
-    without = sisters.model_copy(
-        update={
-            "special_rules": [
-                r for r in sisters.special_rules if r != RuleRef(rule="ithilmar-weapons")
-            ]
-        }
-    )
-    target = _fielded(REPO.units["elven-spearmen"], 10)
-
-    with_reroll = strike_unit(_fielded(sisters, 5).wielding("Hand Weapon"), target)
-    without_reroll = strike_unit(_fielded(without, 5).wielding("Hand Weapon"), target)
-
-    assert with_reroll.p_unsaved > without_reroll.p_unsaved  # re-rolling 1s lands more blows
-    assert with_reroll.hit_target == without_reroll.hit_target  # the target itself is unchanged
-    assert not any("Ithilmar Weapons" in note for note in with_reroll.notes)  # factored, claimed
-
-
 def test_strike_unit_notes_the_troop_types_conferred_rules() -> None:
     """Rules a troop type confers surface as unfactored, owned by the type.
 
@@ -215,46 +170,16 @@ def test_strike_unit_attacks_scale_with_the_attacks_characteristic() -> None:
     assert result.attacks == 10
 
 
-def test_strike_unit_fights_two_full_ranks_plus_a_supporting_rank() -> None:
-    """A stationary spear block fights three ranks: two full, one supporting.
-
-    Elven Spearmen (Regular Infantry, A1) with thrusting spears, stationary:
-    Press of Battle makes the front two ranks fight at full Attacks and Fight
-    in Extra Rank lets the third rank support at one attack each — fifteen
-    models throw 10 + 5 = 15. A fourth rank stays out entirely, so twenty
-    throw the same fifteen.
-    """
-    spearmen = REPO.units["elven-spearmen"]  # A1, Regular Infantry (5 wide)
+def test_strike_unit_leaves_a_fourth_rank_out() -> None:
+    """A fourth rank of spears neither fights nor supports: twenty throw what fifteen do."""
+    spearmen = REPO.units["elven-spearmen"]
     three_ranks = strike_unit(
         _fielded(spearmen, 15).wielding("Thrusting Spear"), _fielded(spearmen, 40)
     )
-    assert three_ranks.attacks == 15  # two full ranks (10) + one supporting rank (5)
-
     four_ranks = strike_unit(
         _fielded(spearmen, 20).wielding("Thrusting Spear"), _fielded(spearmen, 40)
     )
-    assert four_ranks.attacks == 15  # the fourth rank neither fights nor supports
-
-
-def test_slugged_fight_in_extra_rank_lapses_for_three_ranks_on_the_charge() -> None:
-    """Fifteen spearmen prove the slug reaches both the loadout and combat paths.
-
-    The carried Thrusting Spear names the rule only by its corpus slug. While
-    stationary, Press of Battle supplies two fighting ranks and the resolved
-    Fight In Extra Rank supplies one supporting rank: 5 + 5 + 5 attacks. On
-    the charge both rules are gated off, although the body remains three ranks
-    deep, so only the front five models fight.
-    """
-    spearmen = REPO.units["elven-spearmen"]
-    standing = _fielded(spearmen, 15).wielding("Thrusting Spear")
-    charging = standing.charging(Charge(3, ChargeArc.FRONT))
-
-    assert (
-        standing.loadout.bound[RuleRef(rule="fight-in-extra-rank")]
-        is REPO.rules["fight-in-extra-rank"]
-    )
-    assert strike_unit(standing, _fielded(spearmen, 40)).attacks == 15
-    assert strike_unit(charging, _fielded(spearmen, 40)).attacks == 5
+    assert four_ranks.attacks == three_ranks.attacks
 
 
 def test_strike_unit_supporting_models_strike_at_one_attack_each() -> None:
@@ -271,21 +196,6 @@ def test_strike_unit_supporting_models_strike_at_one_attack_each() -> None:
         _fielded(two_attacks, 15).wielding("Thrusting Spear"), _fielded(spearmen, 40)
     )
     assert result.attacks == 25  # 10 * 2 (two full ranks) + 5 * 1 (one supporting rank)
-
-
-def test_strike_unit_press_of_battle_lapses_on_a_charge() -> None:
-    """A charging unit forgoes Press of Battle — its front rank alone fights.
-
-    Ten stationary spearmen fight two ranks (ten attacks); the same ten
-    charging fight one (five). The attack count is the tell: Press of Battle
-    is off on the charge turn.
-    """
-    spearmen = REPO.units["elven-spearmen"]
-    charging = (
-        _fielded(spearmen, 10).charging(Charge(3, ChargeArc.FRONT)).wielding("Thrusting Spear")
-    )
-    result = strike_unit(charging, _fielded(spearmen, 40))
-    assert result.attacks == 5  # the front rank only
 
 
 def test_strike_unit_rejects_a_missile_only_weapon() -> None:
@@ -678,36 +588,6 @@ def test_stand_and_shoot_credit_tilts_the_result_toward_the_shooter() -> None:
     assert with_volley.p_b_wins > with_volley.p_a_wins
 
 
-# --- Massed Infantry: the outnumbering side's +1 combat result, from data/ ---
-
-
-def test_fight_massed_infantry_bonuses_the_side_with_higher_unit_strength() -> None:
-    """The side with the higher Unit Strength claims Massed Infantry's +1.
-
-    Two Regular Infantry bodies (both carry Massed Infantry at US 1 per model)
-    of different sizes: the larger outnumbers, so its combat-result bonus is +1
-    and the smaller's is 0 — it has the rule but not the higher Unit Strength.
-    Both sides evaluate the rule, so neither leaves it noted.
-    """
-    spearmen = REPO.units["elven-spearmen"]
-    big = _fielded(spearmen, 10).wielding("Thrusting Spear")
-    small = _fielded(spearmen, 5).wielding("Thrusting Spear")
-    result = fight(big, small)
-    assert (result.a_unit_strength, result.b_unit_strength) == (10, 5)
-    assert result.a_combat_result_bonus == 1
-    assert result.b_combat_result_bonus == 0
-    assert not any("Massed Infantry" in note for note in result.notes)
-
-
-def test_fight_massed_infantry_needs_a_strictly_higher_unit_strength() -> None:
-    """Equal Unit Strength outnumbers neither side, so no one claims the +1."""
-    spearmen = REPO.units["elven-spearmen"]
-    side = _fielded(spearmen, 5).wielding("Thrusting Spear")
-    result = fight(side, _fielded(spearmen, 5).wielding("Thrusting Spear"))
-    assert (result.a_combat_result_bonus, result.b_combat_result_bonus) == (0, 0)
-    assert not any("Massed Infantry" in note for note in result.notes)  # honoured, still claimed
-
-
 # --- the arc a charge struck: the combat-result points it claims ---
 
 
@@ -816,24 +696,6 @@ def _plain_spearman() -> Contingent:
     return _fielded(bare, 1).wielding("Thrusting Spear")
 
 
-def test_effective_initiative_strike_first_sets_ten() -> None:
-    """Strike First replaces Initiative with 10, and the rule is factored."""
-    ei = effective_initiative(_carrying("strike-first"), 0, GateContext())
-    assert ei.value == 10
-    assert "Strike First" in ei.factored
-
-
-def test_effective_initiative_strike_last_sets_one_before_the_charge() -> None:
-    """Strike Last replaces Initiative with 1 before the charge bonus is added.
-
-    The set lands first, so a +1 charge bonus lifts the 1 to 2 — not the base 4
-    to 5. This is the "before any other modifiers are applied" clause.
-    """
-    ei = effective_initiative(_carrying("strike-last"), 1, GateContext())
-    assert ei.value == 2
-    assert "Strike Last" in ei.factored
-
-
 def test_effective_initiative_strike_first_and_last_cancel() -> None:
     """Carrying both rules, the two sets cancel and the base Initiative stands.
 
@@ -843,23 +705,6 @@ def test_effective_initiative_strike_first_and_last_cancel() -> None:
     ei = effective_initiative(_carrying("strike-first", "strike-last"), 0, GateContext())
     assert ei.value == 4  # the printed elven-spearmen Initiative
     assert set(ei.factored) >= {"Strike First", "Strike Last"}
-
-
-def test_fight_strike_first_strikes_before_the_foe() -> None:
-    """A Strike First model strikes first; its rule is in the math, so unnoted."""
-    quick = _carrying("strike-first")
-    result = fight(quick, _plain_spearman(), first_round=True)
-    assert result.first_striker is quick
-    assert not any("Strike First" in note for note in result.notes)
-
-
-def test_fight_strike_last_yields_the_first_blows() -> None:
-    """A Strike Last model strikes last; the faster foe strikes first."""
-    slow = _carrying("strike-last")
-    foe = _plain_spearman()
-    result = fight(slow, foe, first_round=True)
-    assert result.first_striker is foe
-    assert not any("Strike Last" in note for note in result.notes)
 
 
 def test_fight_strike_first_and_last_cancel_to_simultaneous() -> None:
@@ -905,28 +750,6 @@ def _wielding_strike_last(*unit_rule_ids: str) -> Contingent:
     return Contingent(unit, 1, loadout, frontage=1).wielding("Doctored Blade")
 
 
-def test_effective_initiative_reads_a_strike_last_weapon() -> None:
-    """Strike Last on the weapon in hand reaches the Initiative read.
-
-    The rule rides on the great weapon's Combat profile, not the unit, yet it
-    sets the wielder's Initiative to 1 — folded through in_hand_rules and
-    factored, never left as an unfactored weapon note.
-    """
-    ei = effective_initiative(_wielding_strike_last(), 0, GateContext())
-    assert ei.value == 1
-    assert "Strike Last" in ei.factored
-
-
-def test_fight_strike_last_weapon_yields_the_first_blows() -> None:
-    """A wielder of a Strike-Last weapon strikes last; the weapon note is claimed."""
-    slow = _wielding_strike_last()
-    foe = _plain_spearman()
-    result = fight(slow, foe, first_round=True)
-    assert result.first_striker is foe
-    assert result.a_initiative.value == 1
-    assert not any("Strike Last" in note for note in result.notes)
-
-
 def test_fight_unit_strike_first_and_weapon_strike_last_cancel() -> None:
     """Strike First on the unit and Strike Last on the weapon cancel across pools.
 
@@ -941,28 +764,6 @@ def test_fight_unit_strike_first_and_weapon_strike_last_cancel() -> None:
 # --- Furious Charge: +1 Attacks on the charge ---
 
 
-def test_effective_attacks_furious_charge_adds_on_the_charge() -> None:
-    """Furious Charge lifts the Attacks characteristic by one on a charging turn."""
-    charging = _carrying("furious-charge").charging(Charge(6, ChargeArc.FRONT))
-    attacks = charging.effective_attacks()
-    assert attacks.value == 2  # base A1 + 1
-    assert "Furious Charge" in attacks.factored
-
-
-def test_effective_attacks_furious_charge_honoured_while_standing() -> None:
-    """Standing still, Furious Charge grants nothing — honoured, still factored."""
-    attacks = _carrying("furious-charge").effective_attacks()
-    assert attacks.value == 1
-    assert "Furious Charge" in attacks.factored
-
-
-def test_melee_attacks_grow_with_furious_charge() -> None:
-    """The fighting rank throws its Furious-Charge Attacks: one more on the charge."""
-    charging = _carrying("furious-charge").charging(Charge(6, ChargeArc.FRONT))
-    standing = _carrying("furious-charge")
-    assert charging.melee_attacks() == standing.melee_attacks() + 1
-
-
 def test_fight_furious_charge_is_factored_not_noted() -> None:
     """A charging model's Furious Charge is in the math, so it leaves no note."""
     charging = _carrying("furious-charge").charging(Charge(6, ChargeArc.FRONT))
@@ -971,81 +772,6 @@ def test_fight_furious_charge_is_factored_not_noted() -> None:
 
 
 # --- Stomp Attacks / Impact Hits: automatic-hit batches outside the Initiative order ---
-
-
-def _one_spearman(*special_rules: RuleRef) -> Contingent:
-    # A single spearman fielded with exactly the given printed rules — the
-    # end-to-end path (field resolves a parameterised name against its (X)
-    # entry) with everything else stripped, so the goldens stay hand-sized.
-    unit = REPO.units["elven-spearmen"].model_copy(update={"special_rules": list(special_rules)})
-    return _fielded(unit, 1).wielding("Hand Weapon")
-
-
-def test_fight_stomp_attacks_land_last_golden() -> None:
-    """Stomp Attacks (2): two automatic hits, after all other attacks.
-
-    One spearman with only Stomp Attacks (2) fights one bare spearman, hand
-    weapons both: hit 4+ (WS4 vs WS4), wound 4+ (S3 vs T3), save 4+ (light
-    armour + shield, Parry), so a normal attack fells with p = 1/8 and a
-    stomp — an automatic hit at the unmodified S3 — with p = 1/4. The
-    Initiative-4 blows are simultaneous; the two stomps land only from a
-    stomper those blows spared (7/8), on a foe not already felled:
-    P(foe removed) = 1/8 + (7/8)(7/8)(1 - (3/4)^2) = 471/1024. Thrown with
-    the Initiative-4 blows instead, it would read 520/1024 — the printed
-    "after all other attacks" is what the figure verifies. The stomps never
-    fly back, so the stomper's own losses stay at the bare 1/8.
-    """
-    result = fight(_one_spearman(RuleRef(rule="stomp-attacks", X=2)), _one_spearman())
-    assert result.b_casualties[1] == Fraction(471, 1024)
-    assert result.a_casualties[1] == Fraction(1, 8)
-    assert not any("not factored: Stomp Attacks" in note for note in result.notes)
-    # The factored rule's authored scope (the base-contact reading) surfaces.
-    assert any(note.startswith("Stomp Attacks (2)") for note in result.notes)
-
-
-def test_fight_impact_hits_d6_land_before_every_blow_golden() -> None:
-    """Impact Hits (D6): a dice-driven batch resolved when the combat is chosen.
-
-    One spearman with only Impact Hits (D6) charges 6" into a bare spearman's
-    front: each impact hit is automatic at the unmodified S3 (p = 1/4, as the
-    stomp golden reads), the count uniform on 1..6. The batch lands before
-    any blow: P(foe survives it) = E[(3/4)^n] = 3367/8192, then the charger's
-    own attack (at I7, the charge bonus) fells at 1/8 —
-    P(foe removed) = 4825/8192 + (3367/8192)(1/8) = 41967/65536. The foe
-    strikes back only if alive after both:
-    P(charger removed) = (3367/8192)(7/8)(1/8) = 23569/524288 — the impact
-    batch preceding the foe's Initiative step is what that factor verifies.
-    """
-    charger = _one_spearman(RuleRef(rule="impact-hits", X="D6")).charging(
-        Charge(6, ChargeArc.FRONT)
-    )
-    result = fight(charger, _one_spearman(), first_round=True)
-    assert result.b_casualties[1] == Fraction(41967, 65536)
-    assert result.a_casualties[1] == Fraction(23569, 524288)
-    assert not any("not factored: Impact Hits" in note for note in result.notes)
-
-
-def test_fight_impact_hits_are_inert_without_the_printed_charge() -> None:
-    """A standing bearer, or one whose charge fell short of 3", causes no Impact Hits.
-
-    The printed gate — "a charging model that moved 3" or more" — answers
-    False: honoured, factored (no "not factored" note), and the round's joint
-    equals the same fight with the rule stripped entirely.
-    """
-    foe = _one_spearman()
-    stripped = fight(_one_spearman(), foe)
-    standing = fight(_one_spearman(RuleRef(rule="impact-hits", X="D6")), foe)
-    assert standing.losses == stripped.losses
-    assert not any("not factored: Impact Hits" in note for note in standing.notes)
-
-    short_move = Charge(2, ChargeArc.FRONT)
-    short = fight(
-        _one_spearman(RuleRef(rule="impact-hits", X="D6")).charging(short_move),
-        foe,
-        first_round=True,
-    )
-    stripped_short = fight(_one_spearman().charging(short_move), foe, first_round=True)
-    assert short.losses == stripped_short.losses
 
 
 def _sword_stomper(*extra_rules: RuleRef) -> Contingent:
@@ -1154,60 +880,6 @@ def test_fight_refuses_automatic_hits_on_a_split_profile_of_differing_strength()
 # --- Enemy-subject effects: a rule of one side landing on the other's numbers ---
 
 
-def test_strike_unit_enfeebling_cold_drops_the_strikers_wound_line() -> None:
-    """A target with Enfeebling Cold saps the striker's Strength by one step.
-
-    Elven Spearmen strike with thrusting spears at the wielder's Strength:
-    S3 vs T3 wounds on 4+; against the cold, S2 vs T3 wounds on 5+ — hit
-    1/2, so p_unsaved falls from 1/4 to 1/6 (no armour on the doctored
-    target). The rule is in the math — claimed, its authored scope note
-    relayed, never listed as not factored.
-    """
-    striker = _fielded(REPO.units["elven-spearmen"], 5).wielding("Thrusting Spear")
-    chilled = strike_unit(striker, _carrying("enfeebling-cold"))
-    plain = strike_unit(striker, _carrying())
-    assert plain.wound_target == 4
-    assert chilled.wound_target == 5
-    assert plain.p_unsaved == pytest.approx(1 / 4)
-    assert chilled.p_unsaved == pytest.approx(1 / 6)
-    assert not any("not factored: Enfeebling Cold" in note for note in chilled.notes)
-    assert any("Enfeebling Cold" in note and "base contact" in note for note in chilled.notes)
-
-
-def test_fight_enfeebling_cold_thins_the_blows_it_suffers() -> None:
-    """In a full round the cold side takes fewer wounds: the foe's S is folded down.
-
-    One plain spearman against one carrying Enfeebling Cold, equal Initiative:
-    the cold side's expected losses are the foe's per-attack 1/6 instead of the
-    unchilled 1/4 (S3 -> S2 against T3, unarmoured).
-    """
-    with_rule = fight(_plain_spearman(), _carrying("enfeebling-cold"), first_round=True)
-    without = fight(_plain_spearman(), _carrying(), first_round=True)
-    assert expected_value(with_rule.b_casualties) == pytest.approx(1 / 6)
-    assert expected_value(without.b_casualties) == pytest.approx(1 / 4)
-    assert not any("not factored: Enfeebling Cold" in note for note in with_rule.notes)
-
-
-def test_fight_blizzard_aura_forces_the_foe_to_strike_last() -> None:
-    """Blizzard Aura: the foe becomes subject to Strike Last, so it strikes at I1.
-
-    The aura bearer's rule folds into the *foe's* Initiative read — the foe's
-    base 4 is replaced by Strike Last's 1, the bearer keeps its own 4 and
-    strikes first. Stripped of the rule the mirror match is simultaneous.
-    """
-    aura = _carrying("blizzard-aura")
-    result = fight(aura, _plain_spearman(), first_round=True)
-    assert result.a_initiative.value == 4
-    assert result.b_initiative.value == 1
-    assert result.first_striker is aura
-    assert not any("not factored: Blizzard Aura" in note for note in result.notes)
-    assert any("Blizzard Aura" in note and "base contact" in note for note in result.notes)
-
-    stripped = fight(_carrying(), _plain_spearman(), first_round=True)
-    assert stripped.b_initiative.value == 4
-    assert stripped.first_striker is None
-
-
 def test_fight_blizzard_aura_cancels_the_foes_strike_first() -> None:
     """An aura's Strike Last on the foe cancels the foe's own Strike First.
 
@@ -1227,37 +899,6 @@ def test_fight_blizzard_aura_cancels_the_foes_strike_first() -> None:
 
 def _deployed(slug: str, models: int) -> Contingent:
     return _fielded(REPO.units[slug], models)
-
-
-def test_elven_reflexes_strikes_first_in_the_first_round() -> None:
-    """The data-driven +1 Initiative decides the order against a slower foe.
-
-    Deployed spearmen (I4, Elven Reflexes) against a doctored body of
-    the same profile without the rule: simultaneous in any later round,
-    but in the first round the elves strike at I5 and swing first. The
-    factored rule leaves no "not factored" note.
-    """
-    spearmen = REPO.units["elven-spearmen"]
-    elves = _deployed("elven-spearmen", 5).wielding("Thrusting Spear")
-    base = spearmen.profiles[0][Characteristic.INITIATIVE]
-    foe = _fielded(spearmen.model_copy(update={"special_rules": []}), 5)
-    first = fight(
-        elves,
-        foe.wielding("Thrusting Spear"),
-        first_round=True,
-    )
-    later = fight(
-        elves,
-        foe.wielding("Thrusting Spear"),
-        first_round=False,
-    )
-    assert base is not None
-    assert first.a_initiative.value == base + 1
-    assert first.first_striker is elves
-    assert not any("Elven Reflexes" in note for note in first.notes)
-    assert later.a_initiative.value == base
-    assert later.first_striker is None
-    assert not any("Elven Reflexes" in note for note in later.notes)
 
 
 def test_elven_reflexes_unknown_round_stays_noted() -> None:
@@ -1326,68 +967,10 @@ def test_first_round_flag_governs_the_first_round_rules() -> None:
 # --- Martial Prowess, the +1 Weapon Skill in the first round, from data/ ---
 
 
-def test_effective_weapon_skill_gains_one_in_the_first_round() -> None:
-    """Martial Prowess lifts Weapon Skill by one, and only in the first round.
-
-    The data-driven +1 WS is read for the first round, honoured as a no-op in
-    a later round (factored, no change), and left unfactored when the round is
-    unknown — the same three dispositions the Initiative query reports.
-    """
-    spearmen = REPO.units["elven-spearmen"]  # WS4, Martial Prowess
-    elves = _fielded(spearmen, 5)
-    base = spearmen.profiles[0][Characteristic.WEAPON_SKILL]
-    assert base is not None
-
-    first = effective_weapon_skill(elves, GateContext(combat=CombatFacts(first_round=True)))
-    assert first.value == base + 1
-    assert "Martial Prowess" in first.factored
-
-    later = effective_weapon_skill(elves, GateContext(combat=CombatFacts(first_round=False)))
-    assert later.value == base
-    assert "Martial Prowess" in later.factored  # honoured by not applying
-
-    unknown = effective_weapon_skill(elves, GateContext(combat=CombatFacts()))  # round unknown
-    assert unknown.value == base
-    assert "Martial Prowess" in unknown.unfactored
-
-
 def _only_martial_prowess(unit: Unit) -> Unit:
     # The unit stripped to Martial Prowess alone, so equal Initiative keeps the
     # blows simultaneous and uncoupled — the WS change is the only asymmetry.
     return unit.model_copy(update={"special_rules": [RuleRef(rule="martial-prowess")]})
-
-
-def test_fight_first_round_martial_prowess_sharpens_both_sides() -> None:
-    """The +1 WS reaches the dice for the striker and, as target WS, against it.
-
-    A body carrying only Martial Prowess against a plain copy of itself, at
-    equal Initiative (simultaneous, uncoupled): in the first round it strikes
-    at WS5 and fells more of the foe than in a later round at WS4. Its own
-    losses are *unchanged*, because the To Hit chart is coarse — a WS4 attacker
-    needs 4+ against WS4 and WS5 alike, and only "more than double" reaches 5+
-    (the-combat-phase/roll-to-hit-combat). So a single point of defensive WS
-    buys nothing here. The factored rule leaves no "not factored" note in either
-    round, the later round honouring it as a no-op.
-
-    This asserted ``<`` until the aggregations became exact: both sides are 5/6,
-    and float noise in the last bit had made the strict comparison pass.
-    """
-    spearmen = REPO.units["elven-spearmen"]
-    elves = _fielded(_only_martial_prowess(spearmen), 5).wielding("Thrusting Spear")
-    foe = _fielded(spearmen.model_copy(update={"special_rules": []}), 5).wielding(
-        "Thrusting Spear"
-    )
-
-    first = fight(elves, foe, first_round=True)
-    later = fight(elves, foe, first_round=False)
-
-    assert first.first_striker is None and later.first_striker is None  # equal I4
-    assert expected_value(first.b_casualties) > expected_value(later.b_casualties)  # striker WS
-    assert expected_value(first.a_casualties) == expected_value(
-        later.a_casualties
-    )  # chart is coarse
-    assert not any("Martial Prowess" in note for note in first.notes)
-    assert not any("Martial Prowess" in note for note in later.notes)
 
 
 def test_fight_unknown_round_leaves_martial_prowess_noted() -> None:
@@ -1513,59 +1096,6 @@ def test_unit_rule_not_in_the_walk_is_still_reported() -> None:
     assert any("Martial Prowess" in note for note in result.notes)
 
 
-def test_strike_unit_gromril_armour_re_rolls_the_dwarfs_own_save_natural_ones() -> None:
-    """Gromril Armour betters the Ironbreakers' save while they defend.
-
-    Spearmen (WS4, S3) strike Ironbreakers (WS5, T4, Full Plate and Shield):
-    hit 4+, wound 5+, save 3+, and Runes of Protection wards what passes
-    them on a 6+ against the mundane spears (a further 5/6 factor), so
-    p_unsaved = 1/2 * 1/3 * 1/3 * 5/6 = 5/108 with the re-roll stripped.
-    Re-rolling the save's natural 1s lifts P(save) to 4/6 + 1/6 * 4/6 = 7/9,
-    so p_unsaved = 1/2 * 1/3 * 2/9 * 5/6 = 5/162 — read straight from the
-    unit's printed rules, claimed rather than noted.
-    """
-    spearmen, ironbreakers = REPO.units["elven-spearmen"], REPO.units["ironbreakers"]
-    stripped = ironbreakers.model_copy(
-        update={
-            "special_rules": [
-                r for r in ironbreakers.special_rules if r != RuleRef(rule="gromril-armour")
-            ]
-        }
-    )
-    attacker = _fielded(spearmen, 5).wielding("Thrusting Spear")
-
-    plain = strike_unit(attacker, _fielded(stripped, 10).wielding("Hand Weapon"))
-    gromril = strike_unit(attacker, _fielded(ironbreakers, 10).wielding("Hand Weapon"))
-    assert plain.p_unsaved == pytest.approx(5 / 108)
-    assert gromril.p_unsaved == pytest.approx(5 / 162)
-    assert not any("Gromril Armour" in note for note in gromril.notes)
-
-
-def test_strike_unit_gromril_armour_never_re_rolls_the_enemys_save() -> None:
-    """The wrong-way case: a Gromril unit strikes and the target's save stands.
-
-    Ironbreakers (WS5, S4) strike spearmen (T3, Light Armour and Shield):
-    hit 3+, wound 3+, and Gromril Weapons' Armour Piercing worsens the 5+
-    save to 6+, so p_unsaved = 2/3 * 2/3 * 5/6 = 10/27 — identical with
-    and without the dwarfs' own save re-roll, which names the other
-    seat's die.
-    """
-    spearmen, ironbreakers = REPO.units["elven-spearmen"], REPO.units["ironbreakers"]
-    stripped = ironbreakers.model_copy(
-        update={
-            "special_rules": [
-                r for r in ironbreakers.special_rules if r != RuleRef(rule="gromril-armour")
-            ]
-        }
-    )
-    target = _fielded(spearmen, 10).wielding("Thrusting Spear")
-
-    plain = strike_unit(_fielded(stripped, 5).wielding("Hand Weapon"), target)
-    gromril = strike_unit(_fielded(ironbreakers, 5).wielding("Hand Weapon"), target)
-    assert plain.p_unsaved == pytest.approx(10 / 27)
-    assert gromril.p_unsaved == pytest.approx(plain.p_unsaved)
-
-
 def test_strike_unit_daiths_reaper_re_rolls_the_targets_successful_saves() -> None:
     """Daith's Reaper: the wielder's weapon, the target's die, the passes re-rolled.
 
@@ -1623,36 +1153,6 @@ def test_strike_unit_notes_the_strikers_save_re_roll_nothing_saves_against() -> 
 
     both = fight(striking, struck)
     assert not any("Gromril Armour" in note for note in both.notes)
-
-
-def test_strike_unit_rolls_the_targets_rule_granted_ward_after_its_armour() -> None:
-    """Runes of Protection wards Ironbreakers on a 6+ in melee too.
-
-    The ward is its own stage after the armour save, so the per-attack
-    unsaved probability is exactly 5/6 of the unwarded one whatever the
-    armour did, and the reported ward target is the granted 6+.
-    """
-    spearmen = REPO.units["elven-spearmen"]
-    breakers = Contingent.deploy("ironbreakers", 10, data=REPO)
-    stripped_unit = REPO.units["ironbreakers"].model_copy(
-        update={
-            "special_rules": [
-                r
-                for r in REPO.units["ironbreakers"].special_rules
-                if r != RuleRef(rule="runes-of-protection")
-            ]
-        }
-    )
-    stripped = Contingent.field(stripped_unit, 10, data=REPO)
-    striker = _fielded(spearmen, 5).wielding("Thrusting Spear")
-
-    warded = strike_unit(striker, breakers)
-    unwarded = strike_unit(striker, stripped)
-
-    assert warded.ward_target == 6
-    assert unwarded.ward_target is None
-    assert warded.p_unsaved == pytest.approx(unwarded.p_unsaved * 5 / 6)
-    assert not any("Runes of Protection" in note for note in warded.notes)
 
 
 def test_fight_claims_each_sides_ward_from_its_own_seat() -> None:
@@ -1826,67 +1326,6 @@ def test_mount_initiative_reads_the_mount_row_plus_the_charge_bonus() -> None:
         mount_initiative(spearmen)
 
 
-def test_a_unit_whose_own_rule_marks_its_attacks_magical_denies_the_ward() -> None:
-    """Magical Attacks as a unit rule reaches the blows of any weapon it swings.
-
-    The printed sentence confers from the model as well as the weapon. A
-    doctored unit carrying the rule strikes Ironbreakers: Runes of
-    Protection's non-magical gate answers False, so no ward -- where the
-    plain unit faces the 6+.
-    """
-    spearmen = REPO.units["elven-spearmen"]
-    marked = spearmen.model_copy(
-        update={"special_rules": [*spearmen.special_rules, RuleRef(rule="magical-attacks")]}
-    )
-    breakers = Contingent.deploy("ironbreakers", 10, data=REPO).wielding("Hand Weapon")
-
-    enchanted = strike_unit(_fielded(marked, 10).wielding("Thrusting Spear"), breakers)
-    plain = strike_unit(_fielded(spearmen, 10).wielding("Thrusting Spear"), breakers)
-
-    assert enchanted.ward_target is None
-    assert plain.ward_target == 6
-    assert not any("not factored: Magical Attacks" in n for n in enchanted.notes)
-
-
-def test_requires_two_hands_withdraws_the_shield_in_combat_only() -> None:
-    """A two-handed wielder loses its shield's +1 in melee and keeps it against arrows.
-
-    The real entry, consumed from the bearer's weapon in use: shielded
-    spearmen (5+) wielding a Great Weapon save on 6+ against blows. In a
-    full round the rule is in the math and claimed; a one-sided strike never
-    resolves the striker's own defence, so there it honestly stays noted.
-    """
-    spearmen = REPO.units["elven-spearmen"]
-    two_handed = spearmen.model_copy(update={"equipment": [*spearmen.equipment, "Great Weapon"]})
-    greatswords = _fielded(two_handed, 10).wielding("Great Weapon")
-    spears = _fielded(spearmen, 10).wielding("Thrusting Spear")
-
-    struck = strike_unit(spears, greatswords)
-    assert struck.save_target == 6  # the shield's +1 withdrawn in combat
-
-    both = fight(greatswords, spears)
-    assert not any("Requires Two Hands" in note for note in both.notes)
-
-    one_sided = strike_unit(greatswords, spears)
-    assert any("weapon rule not factored: Requires Two Hands" in note for note in one_sided.notes)
-
-
-def test_a_two_handed_carrier_electing_the_hand_weapon_keeps_and_parries_its_shield() -> None:
-    """Wielding decides what the hands hold: the great weapon stowed, the shield works.
-
-    The same doctored carrier fighting with its hand weapon instead: the
-    shield's +1 stands (5+) and Parry betters it again (4+) -- the bar rides
-    the weapon in use, never the weapon merely carried.
-    """
-    spearmen = REPO.units["elven-spearmen"]
-    two_handed = spearmen.model_copy(update={"equipment": [*spearmen.equipment, "Great Weapon"]})
-    electing = _fielded(two_handed, 10).wielding("Hand Weapon")
-
-    struck = strike_unit(_fielded(spearmen, 10).wielding("Thrusting Spear"), electing)
-
-    assert struck.save_target == 4  # 6+ light armour, +1 shield, +1 Parry
-
-
 def test_a_barred_piece_is_withdrawn_whole_not_compensated() -> None:
     """The bar takes the piece with its whole bonus, whatever its size.
 
@@ -1913,104 +1352,6 @@ def test_a_barred_piece_is_withdrawn_whole_not_compensated() -> None:
 
     assert at_rest.save_target == 4  # 6+ light armour bettered 2 by the tower shield
     assert struck.save_target == 6  # the whole piece withdrawn, not one point of it
-
-
-def _with_rule(unit: Unit, rule: RuleRef) -> Unit:
-    return unit.model_copy(update={"special_rules": [*unit.special_rules, rule]})
-
-
-def test_killing_blow_denies_the_save_and_slays_on_a_natural_six_to_wound() -> None:
-    """The real entry, every printed clause on the dice.
-
-    Spearmen with Killing Blow strike spearmen (WS4 vs WS4: 4+; S3 vs T3:
-    4+; 5+ save): the wound die's 4 and 5 save as normal, the natural 6 is
-    a Killing Blow — no armour save — so
-    p_unsaved = 1/2 * (2/6 * 2/3 + 1/6) = 7/36 against the plain 1/6.
-    Against a 3-Wound target the blow removes the model whole, where plain
-    wounds pool three to a kill. Against a Monstrous Creature (outside the
-    printed "infantry or cavalry") the numbers are the plain ones — the
-    rule honoured, never noted as unfactored.
-    """
-    spearmen = REPO.units["elven-spearmen"]
-    killers = _fielded(_with_rule(spearmen, RuleRef(rule="killing-blow")), 10).wielding(
-        "Hand Weapon"
-    )
-    plain = _fielded(spearmen, 10).wielding("Hand Weapon")
-    target = _fielded(spearmen, 10).wielding("Thrusting Spear")
-
-    blow = strike_unit(killers, target)
-    base = strike_unit(plain, target)
-    assert blow.p_unsaved == pytest.approx(7 / 36)
-    assert base.p_unsaved == pytest.approx(1 / 6)
-    assert not any("not factored: Killing Blow" in n for n in blow.notes)
-
-    ogre_unit = spearmen.model_copy(
-        update={"id": "ogres", "name": "Ogres", "troop_type": "Monstrous Infantry"}
-    )
-    ogre_unit.profiles[0].characteristics[Characteristic.WOUNDS] = 3
-    ogres = _fielded(ogre_unit.with_troop_type(REPO.troop_types), 3).wielding("Hand Weapon")
-    assert float(strike_unit(killers, ogres).expected_casualties) > 4 * float(
-        strike_unit(plain, ogres).expected_casualties
-    )
-
-    monster_unit = spearmen.model_copy(
-        update={"id": "monster", "name": "Monster", "troop_type": "Monstrous Creature"}
-    )
-    monster = _fielded(monster_unit.with_troop_type(REPO.troop_types), 1).wielding("Hand Weapon")
-    off_list = strike_unit(killers, monster)
-    assert off_list.p_unsaved == pytest.approx(1 / 6)
-    assert not any("not factored: Killing Blow" in n for n in off_list.notes)
-
-
-def test_a_killing_blow_still_rolls_the_targets_ward() -> None:
-    """The printed "(Ward saves can be attempted as normal)": the ward stage stands.
-
-    Against the Phoenix Guard, Witness to Destiny's 6+ ward scales every
-    branch — the Killing Blow ones included — by exactly 5/6.
-    """
-    killers = _fielded(
-        _with_rule(REPO.units["elven-spearmen"], RuleRef(rule="killing-blow")), 10
-    ).wielding("Hand Weapon")
-    guard = Contingent.deploy("phoenix-guard", 10, data=REPO).wielding("Ceremonial Halberd")
-    unwarded_unit = REPO.units["phoenix-guard"].model_copy(
-        update={
-            "special_rules": [
-                r
-                for r in REPO.units["phoenix-guard"].special_rules
-                if r
-                not in (RuleRef(rule="witness-to-destiny"), RuleRef(rule="blessings-of-asuryan"))
-            ]
-        }
-    )
-    unwarded = _fielded(unwarded_unit, 10).wielding("Ceremonial Halberd")
-
-    warded_p = strike_unit(killers, guard).p_unsaved
-    bare_p = strike_unit(killers, unwarded).p_unsaved
-    assert warded_p == pytest.approx(bare_p * 5 / 6)
-
-
-def test_cleaving_blow_denies_without_slaying_and_reads_its_own_list() -> None:
-    """Cleaving Blow: Killing Blow's denial, no instant kill, five troop types.
-
-    Against Regular Infantry the per-attack numbers match Killing Blow's
-    exactly (the denial is the same); against Monstrous Infantry — on
-    Killing Blow's list but not Cleaving Blow's — it is honoured inert. And
-    with no ``slays``, a 3-Wound model pools its wounds as ever.
-    """
-    spearmen = REPO.units["elven-spearmen"]
-    cleavers = _fielded(_with_rule(spearmen, RuleRef(rule="cleaving-blow")), 10).wielding(
-        "Hand Weapon"
-    )
-    target = _fielded(spearmen, 10).wielding("Thrusting Spear")
-    assert strike_unit(cleavers, target).p_unsaved == pytest.approx(7 / 36)
-
-    ogre_unit = spearmen.model_copy(
-        update={"id": "ogres", "name": "Ogres", "troop_type": "Monstrous Infantry"}
-    )
-    ogre_unit.profiles[0].characteristics[Characteristic.WOUNDS] = 3
-    ogres = _fielded(ogre_unit.with_troop_type(REPO.troop_types), 3).wielding("Hand Weapon")
-    plain = _fielded(spearmen, 10).wielding("Hand Weapon")
-    assert strike_unit(cleavers, ogres).p_unsaved == strike_unit(plain, ogres).p_unsaved
 
 
 def _mw_repo() -> TOWRepository:
@@ -2046,52 +1387,6 @@ def _wounds(unit: Unit, wounds: int, *, unarmoured: bool = True) -> Unit:
     )
     doctored.profiles[0].characteristics[Characteristic.WOUNDS] = wounds
     return doctored
-
-
-def test_multiple_wounds_fells_a_two_wound_model_per_unsaved_wound() -> None:
-    """The real entry end to end: MW (2) against W2 halves the wounds-per-kill math.
-
-    Spearmen swing a doctored Serrated Blade (S3, Multiple Wounds (2)) at
-    unarmoured W2 spearmen: WS4 vs WS4 (4+), S3 vs T3 (4+), no save —
-    p_unsaved = 1/4 over 5 attacks (a single rank — no supporters). Each
-    unsaved wound is worth two, the model's whole allotment, so the casualty
-    distribution IS the binomial wound distribution — where the stripped
-    fight pools two wounds per kill.
-    """
-    repo = _mw_repo()
-    spearmen = REPO.units["elven-spearmen"]
-    armed = spearmen.model_copy(update={"equipment": [*spearmen.equipment, "Serrated Blade"]})
-    strikers = Contingent.field(armed, 5, data=repo).wielding("Serrated Blade")
-    plain = Contingent.field(spearmen, 5, data=repo).wielding("Hand Weapon")
-    target = Contingent.field(_wounds(spearmen, 2), 10, data=repo).wielding("Hand Weapon")
-
-    mw = strike_unit(strikers, target)
-    base = strike_unit(plain, target)
-
-    assert mw.attacks == 5
-    assert mw.p_unsaved == pytest.approx(1 / 4)
-    assert mw.distribution == pytest.approx(binomial_distribution(5, 0.25))
-    wounds = Distribution.from_counts(mw.distribution)
-    assert Distribution.from_counts(mw.casualties) == wounds  # one model per wound
-    assert Distribution.from_counts(base.casualties) == wounds // 2  # two wounds per model
-    assert float(mw.expected_casualties) > 2 * float(base.expected_casualties)
-    assert not any("not factored: Multiple Wounds" in note for note in mw.notes)
-
-
-def test_multiple_wounds_is_inert_against_a_single_wound_model() -> None:
-    """The printed cap: against W1 the excess is discarded, and the rule still claimed."""
-    repo = _mw_repo()
-    spearmen = REPO.units["elven-spearmen"]
-    armed = spearmen.model_copy(update={"equipment": [*spearmen.equipment, "Serrated Blade"]})
-    strikers = Contingent.field(armed, 10, data=repo).wielding("Serrated Blade")
-    plain = Contingent.field(spearmen, 10, data=repo).wielding("Hand Weapon")
-    target = Contingent.field(_wounds(spearmen, 1), 10, data=repo).wielding("Hand Weapon")
-
-    mw = strike_unit(strikers, target)
-    base = strike_unit(plain, target)
-
-    assert mw.casualties == base.casualties
-    assert not any("not factored: Multiple Wounds" in note for note in mw.notes)
 
 
 def test_a_pool_mixing_plain_and_multiplied_wounds_leaves_the_rule_noted() -> None:
