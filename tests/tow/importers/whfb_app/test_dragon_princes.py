@@ -7,7 +7,7 @@ from avelorn.tow.data import DATA_DIR, TOWRepository
 from avelorn.tow.importers.whfb_app.canon import canonical_unit
 from avelorn.tow.importers.whfb_app.parse import parse_unit
 from avelorn.tow.importers.whfb_app.references import RuleReferences
-from avelorn.tow.importers.whfb_app.richtext import Node
+from avelorn.tow.importers.whfb_app.richtext import Node, list_items
 from avelorn.tow.importers.whfb_app.yamlout import unit_to_yaml
 
 REPO = TOWRepository()
@@ -30,3 +30,22 @@ def test_the_page_imports_as_the_datasheet() -> None:
     source = "https://tow.whfb.app/unit/dragon-princes"
     assert unit_to_yaml(unit, source_url=source) == _DATASHEET.read_text()
 
+
+def test_a_weapon_only_the_mount_carries_stays_off_the_unit() -> None:
+    """The steed's own weapon arms the steed; its barding stays the unit's."""
+    entry = _entry()
+    *_, mount = list_items(entry["fields"]["equipment"])
+
+    def rename(node: Node) -> None:
+        target = node.get("data", {}).get("target", {})
+        if target.get("fields", {}).get("name") == "Hand Weapon":
+            target["fields"]["name"] = "Claws"
+        for child in node.get("content", []):
+            rename(child)
+
+    rename(mount)
+    result = parse_unit(entry, _references())
+    assert result.unit.mount is not None
+    assert result.unit.mount.equipment == ["Claws"]
+    assert "Claws" not in result.unit.equipment
+    assert "Barding" in result.unit.equipment

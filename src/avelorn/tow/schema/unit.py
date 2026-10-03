@@ -77,8 +77,8 @@ class Profile(BaseModel):
     ``role`` says which part of the model the row describes
     (:class:`ProfileRole`). Every row states it.
 
-    A mount row lists its own weapons in ``equipment``; the unit's equipment
-    belongs to the other rows.
+    A mount row lists its own weapons in ``equipment``. The unit's list
+    holds the other rows' equipment and the mount's armour, such as barding.
     """
 
     model_config = ConfigDict(extra="forbid")

@@ -85,6 +85,9 @@ def parse_unit(entry: Node, references: RuleReferences) -> ImportResult:
         slug, fields.get("options"), profiles, _as_displayed(fields, refer), warnings
     )
 
+    profiles, equipment = _parse_equipment(
+        slug, fields, _with_champions(profiles, options), warnings
+    )
     unit = Unit(
         id=slug,
         name=_require(fields, slug, "name", str),
@@ -92,15 +95,8 @@ def parse_unit(entry: Node, references: RuleReferences) -> ImportResult:
         unit_size=_parse_unit_size(slug, _require(fields, slug, "unitSize", object)),
         troop_type=_parse_troop_type(slug, fields, warnings),
         base_size=_parse_base_size(slug, fields.get("baseSize"), warnings),
-        profiles=_with_mount_weapons(
-            slug, _with_champions(profiles, options), fields.get("equipment"), warnings
-        ),
-        # Equipment is prose, so display text is unusable ("thrusting
-        # spears"): use canonical entry names. The special-rules field is a
-        # bare list whose display text is the rule name as printed, which
-        # can differ from the linked entry ("Detachment" links to the
-        # "Detachment Special Rules" section).
-        equipment=_rule_list(slug, "equipment", fields, warnings),
+        profiles=profiles,
+        equipment=equipment,
         special_rules=_special_rules(slug, fields, refer, warnings),
         options=options,
     )
@@ -120,29 +116,39 @@ def _with_champions(profiles: list[Profile], options: list[UnitOption]) -> list[
     ]
 
 
-def _with_mount_weapons(
-    slug: str, profiles: list[Profile], doc: Node | None, warnings: list[str]
-) -> list[Profile]:
-    """Give the mount row the weapons its own equipment line prints.
+def _parse_equipment(
+    slug: str, fields: Node, profiles: list[Profile], warnings: list[str]
+) -> tuple[list[Profile], list[str]]:
+    """Read the equipment field into the mount row's weapons and the unit's list.
 
-    A mounted datasheet prints its equipment one line per part, the mount's
-    last ("Barded Elven Steeds: Hooves (counts as a hand weapon) and barding").
+    The field is prose, so each item is read as its linked entry's name
+    ("thrusting spears" links to Thrusting Spear). A mounted datasheet prints
+    one line per part, the mount's last ("Barded Elven Steeds: Hooves (counts
+    as a hand weapon) and barding"). The mount's weapons go to its row alone;
+    its armour stays in the unit's list.
 
     Returns:
-        The rows, the mount row listing its weapons.
+        The rows, the mount row listing its weapons, and the unit's equipment.
     """
+    equipment = _rule_list(slug, "equipment", fields, warnings)
     mounts = [row for row in profiles if row.role is ProfileRole.MOUNT]
     if not mounts:
-        return profiles
+        return profiles, equipment
+    doc = fields.get("equipment")
     lines = [] if doc is None else richtext.list_items(doc)
     if len(mounts) != 1 or len(lines) != 2:
         warnings.append(f"{slug}: equipment is not one line per part; mount weapons not read")
-        return profiles
-    weapons = richtext.linked_weapon_names(lines[-1])
-    return [
+        return profiles, equipment
+    rider, mount = lines
+    weapons = richtext.linked_weapon_names(mount)
+    if not weapons:
+        warnings.append(f"{slug}: the mount's equipment line names no weapon")
+    carried = richtext.linked_rule_names(rider)
+    rows = [
         row.model_copy(update={"equipment": weapons}) if row is mounts[0] else row
         for row in profiles
     ]
+    return rows, [name for name in equipment if name in carried or name not in weapons]
 
 
 def _as_displayed(fields: Node, refer: Refer) -> Refer:
