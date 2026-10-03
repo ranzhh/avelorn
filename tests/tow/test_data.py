@@ -7,6 +7,7 @@ import pytest
 
 from avelorn.core.registry import UnknownNameError
 from avelorn.tow.data import DATA_DIR, TOWRepository
+from avelorn.tow.importers.whfb_app.canon import canonical
 
 REPO = TOWRepository()
 
@@ -101,40 +102,13 @@ def test_a_datasheet_filed_under_two_armies_names_both(tmp_path: Path) -> None:
     assert shared.fielded_by["elven-archers"] == ("high-elf-realms", "wood-elf-realms")
 
 
-def test_printed_equipment_is_spelled_as_its_entries() -> None:
-    """An equipment reference that is a loose variant of an existing entry is a data error.
-
-    The engine resolves printed equipment names exactly, on purpose; the
-    importer canonicalises what it writes against the corpus as it stands.
-    What neither can catch is time: an entry imported *after* the files that
-    reference it leaves those files spelling it as the site did. This is where
-    that fails loudly, naming the file to re-import. A name matching nothing
-    is not an offence: its entry may simply not exist yet.
-    """
-    from avelorn.tow.importers.whfb_app.canon import canonical
-
-    equipment = {item.name for item in (*REPO.weapons.values(), *REPO.armoury.values())}
-    references: list[tuple[str, str]] = []
-    for unit in REPO.units.values():
-        references.extend((unit.id, name) for name in unit.equipment)
-        for option in unit.options:
-            references.extend(
-                (unit.id, name) for name in (*option.adds_equipment, *option.removes_equipment)
-            )
-
-    offences = [
-        f"{owner}: {name!r} should be spelled {found!r}"
-        for owner, name in references
-        if name not in equipment and (found := canonical(name, equipment)) is not None
-    ]
-    assert offences == []
-
-
 def test_every_equipment_name_resolves() -> None:
-    """Every weapon or armour a datasheet names is a filed entry."""
+    """Every weapon or armour a datasheet names is a filed entry, spelled as filed."""
     equipment = {item.name for item in (*REPO.weapons.values(), *REPO.armoury.values())}
-    unfiled = sorted(
-        (unit.id, name)
+    offences = [
+        f"{unit.id}: {name!r} should be spelled {found!r}"
+        if (found := canonical(name, equipment)) is not None
+        else f"{unit.id}: {name!r} has no entry"
         for unit in REPO.units.values()
         for name in (
             *unit.equipment,
@@ -142,8 +116,8 @@ def test_every_equipment_name_resolves() -> None:
             *(name for o in unit.options for name in (*o.adds_equipment, *o.removes_equipment)),
         )
         if name not in equipment
-    )
-    assert unfiled == []
+    ]
+    assert offences == []
 
 
 @pytest.mark.parametrize(
