@@ -16,10 +16,14 @@ from avelorn.tow.schema.rule import (
     HitOrder,
     HitsEffect,
     ModifierEffect,
+    Parameter,
+    PrintedParameter,
     Quantity,
     RerollEffect,
     Rule,
     RuleEffect,
+    SelectorParameter,
+    SelectorValue,
 )
 from avelorn.tow.schema.unit import Characteristic
 
@@ -400,11 +404,50 @@ def test_an_effect_reads_x_only_where_the_rule_declares_one() -> None:
     """An effect may use "X" only on a rule declaring its parameter."""
     with pytest.raises(ValidationError, match="declares no X"):
         Rule(
-            id="armour-bane",
-            name="Armour Bane (X)",
+            id="doctored",
+            name="Doctored",
             paragraphs=["…"],
             effects=[ModifierEffect(add={Quantity.ARMOUR_PIERCING: "X"})],
         )
+
+
+@pytest.mark.parametrize(
+    "parameter",
+    [
+        SelectorParameter(kind="selector", values={"all-enemies": SelectorValue(printed="All")}),
+        PrintedParameter(kind="printed"),
+    ],
+    ids=lambda parameter: parameter.kind,
+)
+def test_only_an_amount_x_is_read_by_an_effect(parameter: Parameter) -> None:
+    """A selector or printed X names something no operation's amount can be."""
+    with pytest.raises(ValidationError, match=f"declares a {parameter.kind} X"):
+        Rule(
+            id="doctored",
+            name="Doctored (X)",
+            parameter=parameter,
+            paragraphs=["…"],
+            effects=[ModifierEffect(add={Quantity.ARMOUR_PIERCING: "X"})],
+        )
+
+
+def test_a_name_printing_x_declares_its_parameter() -> None:
+    """A template with no parameter would bind no X and display the bare template."""
+    with pytest.raises(ValidationError, match="prints an X, but the rule declares no parameter"):
+        Rule(id="regeneration", name="Regeneration (X+)", paragraphs=["…"])
+
+
+def test_a_printed_x_reads_and_displays_as_the_bracket_prints_it() -> None:
+    """A text-only stub keeps its X verbatim until its parameter is declared."""
+    stub = Rule(
+        id="regeneration",
+        name="Regeneration (X+)",
+        parameter=PrintedParameter(kind="printed"),
+        paragraphs=["…"],
+    )
+    reference = stub.read("Regeneration (5+)")
+    assert reference == RuleRef(rule="regeneration", X=5)
+    assert stub.bound(reference.x).name == "Regeneration (5+)"
 
 
 def test_a_bounded_x_is_read_all_the_same() -> None:

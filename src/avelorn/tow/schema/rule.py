@@ -60,6 +60,15 @@ def printed_base(printed: str) -> str:
     return printed if bracket is None else bracket["base"]
 
 
+def prints_x(name: str) -> bool:
+    """Whether a rule's name prints an X in its bracket: "Regeneration (X+)" does.
+
+    Returns:
+        True when the name is a display template for an X.
+    """
+    return _TEMPLATE.match(name) is not None
+
+
 _DICE_QUANTITY = re.compile(r"^D(?P<sides>[36])(?:\+(?P<plus>\d+))?$")
 
 
@@ -219,7 +228,51 @@ class SelectorParameter(BaseModel):
         return self.values[self.value(x)].printed
 
 
-Parameter = Annotated[AmountParameter | SelectorParameter, Field(discriminator="kind")]
+class PrintedParameter(BaseModel):
+    """An X kept as the text its bracket prints: a text-only stub's, read by no effect."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    kind: Literal["printed"]
+
+    @property
+    def expected(self) -> str:
+        """What an X must be, in words, for an error message."""
+        return "the text its bracket prints"
+
+    def value(self, x: int | str) -> str:
+        """The text an X stands for.
+
+        Returns:
+            The X, as text.
+
+        Raises:
+            ValueError: X is empty.
+        """
+        if x == "":
+            raise ValueError(f"X {x!r} is not {self.expected}")
+        return str(x)
+
+    def parse(self, printed: str) -> int | str:
+        """Read an X off the text a bracket prints.
+
+        Returns:
+            The X a reference carries: a number where the text is one.
+        """
+        return int(printed) if printed.isdigit() else printed
+
+    def printed(self, x: int | str) -> str:
+        """The text a bracket prints for an X.
+
+        Returns:
+            The X, as printed.
+        """
+        return self.value(x)
+
+
+Parameter = Annotated[
+    AmountParameter | SelectorParameter | PrintedParameter, Field(discriminator="kind")
+]
 
 
 class Seam(StrEnum):
@@ -1354,10 +1407,12 @@ class Rule(BaseModel):
 
     @model_validator(mode="after")
     def _a_parameter_prints_in_the_name(self) -> "Rule":
-        if self.parameter is not None and _TEMPLATE.match(self.name) is None:
+        if self.parameter is not None and not prints_x(self.name):
             raise ValueError(
                 f"{self.name!r} declares a parameter, but its name prints no X to show it in"
             )
+        if self.parameter is None and prints_x(self.name):
+            raise ValueError(f"{self.name!r} prints an X, but the rule declares no parameter")
         return self
 
     @model_validator(mode="after")
@@ -1367,8 +1422,10 @@ class Rule(BaseModel):
             return self
         if self.parameter is None:
             raise ValueError(f"an effect of {self.name!r} reads X, but the rule declares no X")
-        if self.parameter.kind == "selector":
-            raise ValueError(f"{self.name!r} declares a selector X, which no effect can read")
+        if self.parameter.kind != "amount":
+            raise ValueError(
+                f"{self.name!r} declares a {self.parameter.kind} X, which no effect can read"
+            )
         if self.parameter.dice and any(_reads_parameter_as_amount(e) for e in readers):
             raise ValueError(
                 f"{self.name!r} declares a dice X, which binds only into a count "

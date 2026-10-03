@@ -153,7 +153,7 @@ def _write_stubs(references: RuleReferences, data_dir: Path, dry_run: bool) -> N
         path = data_dir / "tow" / "rules" / f"{stub.id}.yaml"
         with path.open("x") as written:
             written.write(text)
-        logger.warning("wrote text-only stub %s; declare its parameter if it prints one", path)
+        logger.warning("wrote text-only stub %s", path)
 
 
 def _data_files(paths: Sequence[Path]) -> list[Path]:

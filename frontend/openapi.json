@@ -1810,6 +1810,22 @@
         "title": "PanicCause",
         "description": "Why a panic test was forced, named as the sections are printed."
       },
+      "PrintedParameter": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "printed",
+            "title": "Kind"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "title": "PrintedParameter",
+        "description": "An X kept as the text its bracket prints: a text-only stub's, read by no effect."
+      },
       "Profile": {
         "properties": {
           "name": {
@@ -2077,12 +2093,16 @@
                   },
                   {
                     "$ref": "#/components/schemas/SelectorParameter"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PrintedParameter"
                   }
                 ],
                 "discriminator": {
                   "propertyName": "kind",
                   "mapping": {
                     "amount": "#/components/schemas/AmountParameter",
+                    "printed": "#/components/schemas/PrintedParameter",
                     "selector": "#/components/schemas/SelectorParameter"
                   }
                 }

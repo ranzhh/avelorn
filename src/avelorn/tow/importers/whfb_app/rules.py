@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from pydantic import ValidationError
 
-from avelorn.tow.schema.rule import Rule
+from avelorn.tow.schema.rule import PrintedParameter, Rule, prints_x
 
 from .parse import WhfbParseError
 from .richtext import Node, text_of
@@ -63,6 +63,7 @@ def parse_special_rule(entry: Node) -> RuleImport:
             category=category,
             flavour=flavour,
             paragraphs=paragraphs,
+            parameter=PrintedParameter(kind="printed") if prints_x(name) else None,
         )
     except ValidationError as err:
         raise WhfbParseError(f"{slug}: parsed fields do not validate: {err}") from err

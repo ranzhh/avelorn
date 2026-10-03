@@ -5,6 +5,7 @@ import pytest
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.importers.whfb_app.parse import WhfbParseError
 from avelorn.tow.importers.whfb_app.references import RuleReferences
+from avelorn.tow.importers.whfb_app.rules import parse_special_rule
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import Rule
 
@@ -69,6 +70,22 @@ def test_an_unknown_rule_is_fetched_as_a_text_only_stub() -> None:
         reference = references.resolve("Poisoned Attacks", "unit maneaters")
         assert reference == RuleRef(rule="poisoned-attacks")
     assert [stub.id for stub in references.stubs] == ["poisoned-attacks"]
+
+
+def test_an_unknown_rule_printing_an_x_is_stubbed_with_its_x_as_printed() -> None:
+    """The stub declares a printed X, so the bracket binds and displays before it is modelled."""
+
+    def page(slug: str) -> Rule:
+        text = {"nodeType": "text", "value": "Regenerates."}
+        body = {"content": [{"nodeType": "paragraph", "content": [text]}]}
+        entry = {"fields": {"slug": slug, "name": "Regeneration (X+)", "body": body}}
+        return parse_special_rule(entry).rule
+
+    references = RuleReferences(REPO.rules.values(), page)
+    assert references.resolve("Regeneration (5+)", "unit some-unit") == RuleRef(
+        rule="regeneration", X=5
+    )
+    assert [stub.bound(5).name for stub in references.stubs] == ["Regeneration (5+)"]
 
 
 def test_an_unknown_rule_without_the_site_fails_the_import() -> None:
