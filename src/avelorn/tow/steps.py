@@ -103,6 +103,7 @@ class Retreat(StrEnum):
     HOLDS = "holds"
     FALLS_BACK_IN_GOOD_ORDER = "falls-back-in-good-order"
     FLEES = "flees"
+    DESTROYED = "destroyed"
 
 
 class Kind(StrEnum):
@@ -395,6 +396,8 @@ def fall_back_or_flee(
     Returns:
         The retreat.
     """
+    if standing.models == 0:
+        return Distribution.pure(Retreat.DESTROYED)
     if test is not Test.FAILED:
         return Distribution.pure(Retreat.HOLDS)
     if falls_back_in_good_order(standing.models, battle_strength):

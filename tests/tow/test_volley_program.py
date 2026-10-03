@@ -212,12 +212,12 @@ def test_the_panic_steps_match_legacy_make_panic_tests(
         battle_strength=battle_strength,
     )
 
-    destroyed = evaluated.at("volley/remove-casualties").read("models").mass.get(0, 0)
     tested = evaluated.at("volley/heavy-casualties").read("tested").mass.get(True, 0)
     retreat = evaluated.at("volley/fall-back-or-flee").read("retreat").mass
     assert legacy.reroll_from is None
-    assert (tested, destroyed) == (legacy.p_test, legacy.p_destroyed)
-    assert retreat.get(Retreat.HOLDS, 0) - destroyed == legacy.p_holds
+    assert tested == legacy.p_test
+    assert retreat.get(Retreat.DESTROYED, 0) == legacy.p_destroyed
+    assert retreat.get(Retreat.HOLDS, 0) == legacy.p_holds
     assert retreat.get(Retreat.FALLS_BACK_IN_GOOD_ORDER, 0) == legacy.p_falls_back
     assert retreat.get(Retreat.FLEES, 0) == legacy.p_flees
 
