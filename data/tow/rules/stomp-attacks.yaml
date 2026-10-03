@@ -4,6 +4,7 @@ name: Stomp Attacks (X)
 parameter:
   kind: amount
   dice: true
+  min: 1
 page: 177
 category: Special Rules
 flavour: Some creatures are so massive that their sheer bulk is a threat all of its own.

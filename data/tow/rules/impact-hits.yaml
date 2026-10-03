@@ -4,6 +4,7 @@ name: Impact Hits (X)
 parameter:
   kind: amount
   dice: true
+  min: 1
 page: 172
 category: Special Rules
 flavour: The impact of a charge can itself cause severe casualties amongst the foe.

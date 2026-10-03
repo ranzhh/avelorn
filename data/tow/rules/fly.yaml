@@ -3,6 +3,7 @@ id: fly
 name: Fly (X)
 parameter:
   kind: amount
+  min: 1
 page: 170
 category: Special Rules
 flavour: Many creatures of the Warhammer world can fly, held aloft either by mighty pinions or by means of magic, soaring
