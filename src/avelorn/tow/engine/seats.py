@@ -84,7 +84,9 @@ class Offence:
             The seat, compiled under the attacker's ``conditions``.
         """
         weapon_index = {rule.name: rule for rule in in_use}
-        weapon_compiled = compile_rules(list(weapon_index), weapon_index, conditions)
+        weapon_compiled = compile_rules(
+            list(weapon_index), weapon_index, conditions, grants=grants
+        )
         index = {rule.name: rule for rule in rules}
         unit_compiled = compile_rules(list(index), index, conditions, grants=grants)
         marks = attack_marks(in_use, rules)

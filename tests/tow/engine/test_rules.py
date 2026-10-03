@@ -422,18 +422,13 @@ def test_compile_grant_unfactored_when_the_bow_gate_is_unknown() -> None:
     assert compiled.modifiers == ()
 
 
-def test_compile_grant_unfactored_when_the_granted_rule_is_unresolvable() -> None:
-    """A grant whose named rule has no entry cannot be expanded — unfactored.
-
-    All-or-nothing: the flat clause would compile, but the unresolvable grant
-    takes the whole rule down, reported rather than half-applied.
-    """
+def test_compile_grant_without_its_bound_rule_is_a_caller_error() -> None:
+    """Every grant binds at load, so a compile missing one was handed the wrong index."""
     sisters = _fielded(REPO.units["sisters-of-avelorn"], 5).wielding("Bow of Avelorn")
     bow = GateContext(wielding=WeaponFacts(type=WeaponType.BOW))
     index = {rule.name: rule for rule in sisters.loadout.rules}
-    compiled = compile_rules(["Arrows of Isha"], index, bow, grants={})
-    assert compiled.unfactored == ("Arrows of Isha",)
-    assert compiled.modifiers == ()
+    with pytest.raises(ValueError, match="armour-bane, X: 1} is granted, but compiled without"):
+        compile_rules(["Arrows of Isha"], index, bow, grants={})
 
 
 def test_scalar_fact_is_tri_state() -> None:

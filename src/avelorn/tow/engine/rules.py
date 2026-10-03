@@ -306,7 +306,7 @@ def compile_rules(
     it matters. ``grants`` maps the references of rules *conferred* by a
     grant effect to their bound entries (a loadout's ``bound``) — the lookup
     a :class:`~avelorn.tow.schema.rule.GrantEffect` expands through; a
-    granted reference absent from it is unfactored. A rule whose gate needs
+    granted reference absent from it raises. A rule whose gate needs
     an unknown fact is unfactored and reported; a rule whose gate evaluates
     False is factored, honoured by not applying — no modifier, no note.
 
@@ -632,10 +632,9 @@ def _compile_grant(
         return _UNFACTORED  # the context cannot answer the grant's gate
     if not applies:
         return _HONOURED  # honoured: the grant does not fire
-    granted = (grants or {}).get(effect.grants)
-    if granted is None:
-        return _UNFACTORED  # the granted rule is not resolvable/modelled
-    return _compile(granted, context, grants, seat)
+    if grants is None or effect.grants not in grants:
+        raise ValueError(f"{effect.grants} is granted, but compiled without its bound rule")
+    return _compile(grants[effect.grants], context, grants, seat)
 
 
 @dataclass(frozen=True)
