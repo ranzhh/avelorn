@@ -25,7 +25,6 @@ from avelorn.core.graph import (
     Sequence,
     Side,
     Slot,
-    Trace,
     Verdict,
 )
 
@@ -48,6 +47,10 @@ def _three() -> Distribution[int]:
 
 def _one() -> Distribution[int]:
     return Distribution.pure(1)
+
+
+def _six(face: int) -> int:
+    return 1 if face == 6 else 0
 
 
 def test_a_roll_edge_carries_its_own_distribution() -> None:
@@ -81,13 +84,9 @@ _certain = Program.build(
 )
 
 
-def _certain_six(world: Trace) -> int:
-    return 1 if world.of(_certain_die) == 6 else 0
-
-
 def test_a_reading_stacks_a_certain_count() -> None:
     (lane,) = _certain.evaluate()
-    stacked = lane.read(_certain_die, Projection("sixes", _certain_six, Monoid(0)))
+    stacked = lane.read(_certain_die, Projection("sixes", (_certain_die,), _six, Monoid(0)))
 
     assert stacked.mass == {
         0: Fraction(125, 216),
@@ -112,13 +111,9 @@ _open = Program.build(
 )
 
 
-def _open_six(world: Trace) -> int:
-    return 1 if world.of(_open_die) == 6 else 0
-
-
 def test_a_reading_stacks_an_uncertain_count() -> None:
     (lane,) = _open.evaluate()
-    stacked = lane.read(_open_die, Projection("sixes", _open_six, Monoid(0)))
+    stacked = lane.read(_open_die, Projection("sixes", (_open_die,), _six, Monoid(0)))
 
     assert stacked.mass == {
         0: Fraction(275, 432),
@@ -136,6 +131,8 @@ _spent_shots = Roll[int](
     name="shots", side=Side.THIS_MODEL, kernel=_none_or_two, target=Scalar("t", 1)
 )
 _spent_die = Roll[int](name="roll", side=Side.THIS_MODEL, kernel=_d6, target=Scalar("t", 6))
+_spent_sixes = Projection("sixes", (_spent_die,), _six, Monoid(0))
+_spent_die.show(_spent_sixes)
 _spent = Program.build(
     "spent",
     _SIDES,
@@ -143,16 +140,9 @@ _spent = Program.build(
 )
 
 
-def _spent_six(world: Trace) -> int:
-    return 1 if world.of(_spent_die) == 6 else 0
-
-
-_spent_die.show(Projection("sixes", _spent_six, Monoid(0)))
-
-
 def test_a_group_that_may_not_run_stacks_the_empty_tally() -> None:
     (lane,) = _spent.evaluate()
-    stacked = lane.read(_spent_die, Projection("sixes", _spent_six, Monoid(0)))
+    stacked = lane.read(_spent_die, _spent_sixes)
     shown = lane.to_view()["nodes"][1]["edge"]["readings"][0]["outcomes"]
 
     assert stacked.mass == {
@@ -190,14 +180,15 @@ _coupled = Program.build(
 )
 
 
-def _both(world: Trace) -> tuple[int | bool, ...]:
-    return world.of(_hit), world.of(_wound)
+def _both(hit: int, wound: bool) -> tuple[int | bool, ...]:
+    return hit, wound
 
 
 def test_a_reading_over_a_pair_keeps_the_coupling() -> None:
     (lane,) = _coupled.evaluate()
     joint = lane.read(
-        _wound, Projection("hit and wound", _both, Monoid[tuple[int | bool, ...]](()))
+        _wound,
+        Projection("hit and wound", (_hit, _wound), _both, Monoid[tuple[int | bool, ...]](())),
     )
     hits = lane.read(_wound, _hit.output("hit", Monoid(0)))
     wounds = lane.read(_wound, _wound.output("wound", Monoid(False)))
@@ -250,6 +241,20 @@ def test_a_step_cannot_read_inside_a_nested_block() -> None:
     )
 
     with pytest.raises(GraphError, match="roll-to-hit, which is not in scope"):
+        Program.build(
+            "volley",
+            _SIDES,
+            (shots, Repeat(name="attack", times=shots, items=(hit,)), removed),
+        )
+
+
+def test_a_reading_cannot_show_a_step_out_of_scope() -> None:
+    shots = Measurement[int](name="shots", side=Side.THIS_MODEL, kernel=_three)
+    hit = Roll[int](name="roll-to-hit", side=Side.THIS_MODEL, kernel=_d6, target=Scalar("t", 4))
+    removed = Measurement[int](name="remove-casualties", side=Side.THE_ENEMY, kernel=_three)
+    removed.show(hit.output("hits", Monoid(0)))
+
+    with pytest.raises(GraphError, match="shows roll-to-hit, which is not in scope"):
         Program.build(
             "volley",
             _SIDES,
@@ -380,6 +385,15 @@ _to_hit = Roll[int](
 _casualties = Consequence[int](
     name="remove-casualties", side=Side.THE_ENEMY, inputs=(_range,), kernel=_removed
 )
+
+
+def _landed(face: int) -> int:
+    return 1 if face >= 4 else 0
+
+
+_shots.show(_shots.output("shots", Monoid(0)))
+_to_hit.show(Projection("hits", (_to_hit,), _landed, Monoid(0)))
+_casualties.show(Scalar("models", 5))
 _stomp = Slot(name="stomp", items=())
 _volley = Program.build(
     "volley",
@@ -393,14 +407,6 @@ _volley = Program.build(
     ),
 )
 
-
-def _landed(world: Trace) -> int:
-    return 1 if world.of(_to_hit) >= 4 else 0
-
-
-_shots.show(_shots.output("shots", Monoid(0)))
-_to_hit.show(Projection("hits", _landed, Monoid(0)))
-_casualties.show(Scalar("models", 5))
 _volley.attach(
     RuleNode(
         rule="volley-fire",

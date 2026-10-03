@@ -63,7 +63,7 @@ class Edge:
         held = self.stacked.get(projection)
         if held is not None:
             return held
-        classes = self.joint.map(projection.project)
+        classes = self.joint.map(projection.of)
         count = self.count
         if count is not None:
 
@@ -78,8 +78,13 @@ class Edge:
 @dataclass(frozen=True, eq=False)
 class Projection[T: Hashable]:
     label: str
-    project: Callable[[Trace], T]
+    reads: tuple["Step[Any]", ...]
+    # Takes the values of `reads`, positionally.
+    project: Callable[..., T]
     aggregation: Monoid[T]
+
+    def of(self, world: Trace) -> T:
+        return self.project(*(world.of(source) for source in self.reads))
 
     def view(self, edge: Edge) -> dict[str, Any]:
         read = edge.read(self)
@@ -91,6 +96,7 @@ class Projection[T: Hashable]:
 class Scalar[T]:
     label: str
     value: T
+    reads: ClassVar[tuple["Step[Any]", ...]] = ()
 
     def view(self, edge: Edge) -> dict[str, Any]:
         return {"label": self.label, "value": _shown(self.value)}
@@ -122,13 +128,16 @@ class Step[Out: Hashable](ABC):
     def outcomes(self, world: Trace, lane: "Lane") -> Distribution[Out]: ...
 
     def output(self, label: str, aggregation: Monoid[Out]) -> Projection[Out]:
-        def project(world: Trace) -> Out:
-            return world.of(self)
+        def project(value: Out) -> Out:
+            return value
 
-        return Projection(label, project, aggregation)
+        return Projection(label, (self,), project, aggregation)
 
     def show(self, reading: Reading) -> None:
         self.readings.append(reading)
+
+    def shown(self) -> tuple[Reading, ...]:
+        return tuple(self.readings)
 
     def arguments(self, world: Trace) -> tuple[Any, ...]:
         return tuple(world.of(step) for step in self.inputs)
@@ -147,6 +156,10 @@ class Step[Out: Hashable](ABC):
                 ) from error
         program.take(self, path)
         visible.append(self)
+        for reading in self.shown():
+            for source in reading.reads:
+                if source not in visible:
+                    raise GraphError(f"{path} shows {source.name}, which is not in scope")
 
     def collect(self, program: "Program") -> None:
         program.steps.append(self)
@@ -203,6 +216,9 @@ class Roll[Out: Hashable](Step[Out]):
 
     def outcomes(self, world: Trace, lane: "Lane") -> Distribution[Out]:
         return self.kernel(*self.arguments(world))
+
+    def shown(self) -> tuple[Reading, ...]:
+        return (*self.readings, self.target)
 
     def detail(self, edge: Edge) -> dict[str, Any]:
         return {
