@@ -35,6 +35,7 @@ from avelorn.tow.schema.program import (
     StateFile,
     StepEntry,
 )
+from avelorn.tow.schema.stage import Side
 from avelorn.tow.schema.unit import Characteristic
 from avelorn.tow.steps import (
     HOLDERS,
@@ -84,6 +85,7 @@ class Loaded:
 
     program: Program
     inputs: Mapping[str, Input]
+    specs: Mapping[Step[Any], Spec]
 
     def evaluate(self, knowns: Mapping[str, Hashable]) -> tuple["Evaluated", ...]:
         """Evaluate the program with every input given by name.
@@ -163,39 +165,40 @@ class At:
             raise ProgramError(f"{lane.program.paths[self.step]} shows no {reading}")
         return lane.read(self.step, projection)
 
-    def part(self, part: str) -> "PartAt":
-        """A part at this step.
+    def part(self, side: Side, part: str) -> "PartAt":
+        """A part of one side at this step.
 
         Returns:
             The part's reader.
 
         Raises:
-            ProgramError: no fielded side has that part.
+            ProgramError: that side fields no such part.
         """
-        fielded = [
-            value
-            for value in self.evaluated.knowns.values()
-            if isinstance(value, Fielded) and value.part == part
-        ]
-        if len(fielded) != 1:
-            raise ProgramError(f"{part} is not the part of one fielded side")
-        return PartAt(fielded[0])
+        fielded = self.evaluated.knowns[Fact("fielded", side).full]
+        if not isinstance(fielded, Fielded) or fielded.part != part:
+            raise ProgramError(f"the {side} fields no part {part}")
+        return PartAt(self, side, fielded)
 
 
 @dataclass(frozen=True)
 class PartAt:
     """A part at a step."""
 
+    at: At
+    side: Side
     fielded: Fielded
 
     def characteristic(self, c: Characteristic) -> Operand[int | None]:
-        """The characteristic in force.
+        """The characteristic in force at the step.
 
         Returns:
             The operand; no rule is attached yet, so nothing changes it.
         """
         printed = self.fielded.characteristic(c)
-        return Operand(Distribution.pure(printed), printed)
+        spec = self.at.evaluated.loaded.specs[self.at.step]
+        resolve = spec.in_force.get((self.side, c))
+        value = printed if resolve is None else resolve(self.fielded)
+        return Operand(Distribution.pure(value), printed)
 
 
 def _parsed[ModelT: BaseModel](path: Path, model: type[ModelT]) -> ModelT:
@@ -212,6 +215,7 @@ class _Builder:
     facts: Mapping[str, StateFact]
     inputs: dict[str, Input]
     states: dict[str, State[Any]] = field(default_factory=dict)
+    specs: dict[Step[Any], Spec] = field(default_factory=dict)
     written: set[str] = field(default_factory=set)
 
     def take(self, entry: FactInput | KnownInput, here: str) -> None:
@@ -284,6 +288,7 @@ class _Builder:
             target = self.projection("needed", spec.target, spec, here, visible, tally)
         writes = None if spec.writes is None else self.write(spec.writes, here)
         step = spec.build(inputs, target, writes)
+        self.specs[step] = spec
         own = {**visible, spec.name: step}
         for name in entry.readings:
             offered = spec.readings.get(name)
@@ -402,4 +407,4 @@ def load_program(path: Path, state: Path = STATE) -> Loaded:
         raise ProgramError(f"{path.name}: {error}") from error
     for given in builder.inputs.values():
         program.hold(given.state)
-    return Loaded(program, MappingProxyType(builder.inputs))
+    return Loaded(program, MappingProxyType(builder.inputs), MappingProxyType(builder.specs))

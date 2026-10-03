@@ -176,6 +176,9 @@ class Spec:
     readings: Mapping[str, Offered] = field(default_factory=dict)
     writes: Fact | None = None
     counts: Counted | None = None
+    in_force: Mapping[tuple[Side, Characteristic], Callable[[Fielded], int]] = field(
+        default_factory=dict
+    )
 
     def __post_init__(self) -> None:
         """Refuse an inconsistent spec.
@@ -486,6 +489,7 @@ _SPECS = (
         side=Side.ATTACKER,
         reads=(_ATTACKER, _TARGET, Output("roll-to-hit")),
         kernel=roll_to_wound,
+        in_force={(Side.ATTACKER, Characteristic.STRENGTH): _strength},
         target=Offered(
             (_ATTACKER, _TARGET),
             lambda attacker, target: _shown(_wound_target(attacker, target)),

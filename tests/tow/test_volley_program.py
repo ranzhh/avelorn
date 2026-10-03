@@ -11,6 +11,7 @@ from avelorn.tow.data import TOWRepository
 from avelorn.tow.kernels import Standing
 from avelorn.tow.phases.shooting import make_panic_tests, shoot
 from avelorn.tow.programs import VOLLEY, Evaluated, load_program
+from avelorn.tow.schema.stage import Side
 from avelorn.tow.schema.unit import Characteristic
 from avelorn.tow.schema.weapon import WeaponStrength
 from avelorn.tow.steps import Fielded, Retreat
@@ -238,12 +239,37 @@ def _corpus_volley(distance: int) -> Evaluated:
 def test_a_part_at_a_step_reads_its_characteristic_as_an_operand() -> None:
     at = _corpus_volley(12).at("volley/attack/roll-to-wound")
 
-    assert at.part("elven-archers").characteristic(Characteristic.STRENGTH) == Operand(
-        Distribution.pure(3), 3
+    assert at.part(Side.TARGET, "elven-spearmen").characteristic(
+        Characteristic.TOUGHNESS
+    ) == Operand(Distribution.pure(3), 3)
+
+
+def test_a_shooter_wounds_at_its_weapon_strength() -> None:
+    volley = _volley(
+        _shooter(5, 4, 5, 0), _target(3, 1, None, None), shooters=5, models=5, battle_strength=5
     )
-    assert at.part("elven-spearmen").characteristic(Characteristic.TOUGHNESS) == Operand(
-        Distribution.pure(3), 3
+
+    archers = volley.at("volley/attack/roll-to-wound").part(Side.ATTACKER, "archers")
+    assert archers.characteristic(Characteristic.STRENGTH) == Operand(Distribution.pure(5), 3)
+
+
+def test_each_side_of_a_mirror_match_reads_its_own_part() -> None:
+    archers = Contingent.deploy("elven-archers", 10, data=REPO, frontage=5)
+    volley = _volley(
+        Fielded.of(archers, "Longbow"),
+        Fielded.of(archers),
+        shooters=10,
+        models=10,
+        battle_strength=10,
     )
+
+    at = volley.at("volley/attack/roll-to-wound")
+    assert at.part(Side.ATTACKER, "elven-archers").characteristic(
+        Characteristic.STRENGTH
+    ) == Operand(Distribution.pure(3), 3)
+    assert at.part(Side.TARGET, "elven-archers").characteristic(
+        Characteristic.TOUGHNESS
+    ) == Operand(Distribution.pure(3), 3)
 
 
 def test_the_front_rank_shoots_at_long_range() -> None:
