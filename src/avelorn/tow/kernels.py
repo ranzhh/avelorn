@@ -249,13 +249,18 @@ def save_probability(target: int | None) -> Fraction:
     return p
 
 
-def leadership_test(value: int | None) -> Fraction:
+def leadership_test(value: int | None, reroll_failed: bool = False) -> Fraction:
     """Exact probability that a 2D6 Leadership test passes.
 
     Passes on a roll equal to or under ``value``; a natural 12 always fails
     and a natural 2 always passes. A value of 0 or None ("-") fails
     automatically, read the same way as a characteristic test
-    (model-profiles/characteristic-tests).
+    (model-profiles/characteristic-tests). A re-rolled failure throws both
+    dice again, once, and the second result stands.
+
+    Args:
+        value: The Leadership tested against.
+        reroll_failed: Whether a failed test is re-rolled.
 
     Returns:
         P(pass).
@@ -268,5 +273,7 @@ def leadership_test(value: int | None) -> Fraction:
         if (roll := first + second) == 2 or (roll != 12 and roll <= value)
     )
     p = Fraction(passes, 36)
-    logger.debug("leadership test vs %s -> p=%s", value, p)
+    if reroll_failed:
+        p = p + (1 - p) * p
+    logger.debug("leadership test vs %s, re-roll failed %s -> p=%s", value, reroll_failed, p)
     return p

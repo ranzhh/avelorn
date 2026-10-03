@@ -511,6 +511,7 @@ class PanicTest(Roll):
     """
 
     leadership: int | None
+    reroll_failed: bool = False
     stage: ClassVar[Stage] = Stage.MAKE_PANIC_TESTS
 
     def chance(self) -> Fraction:
@@ -519,7 +520,7 @@ class PanicTest(Roll):
         Returns:
             The exact pass probability, 0 for no Leadership at all.
         """
-        return leadership_test(self.leadership)
+        return leadership_test(self.leadership, self.reroll_failed)
 
 
 @dataclass(frozen=True)
@@ -564,13 +565,12 @@ def make_panic_tests(
     if battle < size:
         raise ValueError(f"battle strength ({battle}) cannot be below current size ({size})")
 
-    test = PanicTest(defender.unit.highest(Characteristic.LEADERSHIP))
-    p_pass = test.chance()
+    # One re-roll of a failed test, never more, whatever the source.
     reroll_from = _reroll_grant(defender.loadout, PanicCause.HEAVY_CASUALTIES)
-    if reroll_from is not None:
-        # A failed test is taken again: both dice, same natural bounds,
-        # never more than once whatever the source.
-        p_pass = p_pass + (1 - p_pass) * p_pass
+    test = PanicTest(
+        defender.unit.highest(Characteristic.LEADERSHIP), reroll_failed=reroll_from is not None
+    )
+    p_pass = test.chance()
     # A zero of the volley's own numeric kind, so an outcome nothing reaches
     # matches the rest rather than staying a bare int.
     zero = p_pass * 0
