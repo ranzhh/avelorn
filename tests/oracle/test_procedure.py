@@ -5,7 +5,7 @@ from dataclasses import replace
 from fractions import Fraction
 from pathlib import Path
 
-from .procedure import Attack, Phase, ReRoll, one_attack
+from .procedure import Attack, Order, Phase, ReRoll, one_attack, remove_casualties, removed
 
 # S10 against T1 wounds on 2+ and nothing saves, so an attack's odds read off its hit.
 SURE_WOUND = Fraction(5, 6)
@@ -98,3 +98,32 @@ def test_a_killing_blow_skips_the_armour_save_but_not_the_ward() -> None:
     armour_fails = Fraction(1, 6) * Fraction(1, 6)  # only a natural 1, re-rolled into another
     assert odds.kill == Fraction(1, 2) * Fraction(1, 6) * ward_fails
     assert odds.wound == Fraction(1, 2) * Fraction(2, 6) * armour_fails * ward_fails
+
+
+def test_wounds_are_lost_one_model_at_a_time() -> None:
+    """The printed Ogre example: W3 Ogres losing five Wounds lose one model."""
+    assert removed([1] * 5, models=3, wounds=3) == 1
+
+
+def test_excess_wounds_do_not_spill_over() -> None:
+    """Multiple Wounds (3) twice on W2 models: each fells one, the excess is lost."""
+    assert removed([3, 3], models=3, wounds=2) == 2
+    assert removed([2, 2], models=3, wounds=3) == 1
+
+
+def test_a_killing_blow_takes_the_wounded_models_remaining_wounds() -> None:
+    """Two Wounds on a W3 model, then a Killing Blow: that model goes, the next is fresh."""
+    assert removed([1, 1, None, 1, 1], models=3, wounds=3) == 1
+    assert removed([None, 1, 1, 1, 1], models=3, wounds=3) == 2
+
+
+def test_the_monte_carlo_is_seeded() -> None:
+    """The same seed gives the same histogram, so a sized tolerance is a fixed verdict."""
+    odds = one_attack(Attack(Phase.SHOOTING, skill=4, strength=3, toughness=3))
+
+    def run() -> dict[int, float]:
+        return remove_casualties(
+            10, odds, models=3, wounds=2, order=Order.AS_ROLLED, trials=500, seed=3
+        )
+
+    assert run() == run()

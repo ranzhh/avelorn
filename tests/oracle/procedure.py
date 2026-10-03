@@ -1,11 +1,13 @@
 """The printed attack procedure, re-derived from the rulebook to settle engine disputes.
 
-One attack is enumerated die face by die face. The oracle reads plain numbers and
-imports no engine: its charts are transcribed from the printed tables on
-tow.whfb.app, each cited where it is used.
+One attack is enumerated die face by die face, and Remove Casualties is a seeded
+Monte Carlo. The oracle reads plain numbers and imports no engine: its charts are
+transcribed from the printed tables on tow.whfb.app, each cited where it is used.
 """
 
-from collections.abc import Callable
+import math
+import random
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from fractions import Fraction
@@ -72,6 +74,13 @@ class ReRoll(StrEnum):
     ONES = "ones"
     FAILED = "failed"
     SUCCESSFUL = "successful"
+
+
+class Order(StrEnum):
+    """The order a strike's unsaved wounds reach the unit; the rulebook prints none."""
+
+    AS_ROLLED = "as-rolled"
+    KILLS_FIRST = "kills-first"
 
 
 @dataclass(frozen=True)
@@ -327,3 +336,75 @@ def one_attack(attack: Attack) -> AttackOdds:
                     else:
                         wound += mass
     return AttackOdds(wound=wound, kill=kill)
+
+
+def removed(losses: list[int | None], models: int, wounds: int) -> int:
+    """Apply unsaved wounds in order to a unit and count the models removed.
+
+    Each entry is the Wounds one unsaved wound takes (Multiple Wounds' roll), or
+    None for a Killing Blow. Sources: the-shooting-phase/remove-casualties-shooting,
+    removing-casualties/multiple-wound-models (Wounds are lost by one model until
+    it is removed), special-rules/multiple-wounds (excess is lost, never spilt),
+    special-rules/killing-blow (the model loses all its remaining Wounds).
+
+    Returns:
+        The models removed, at most ``models``.
+    """
+    count, remaining = 0, wounds
+    for loss in losses:
+        if count == models:
+            break
+        if loss is None or loss >= remaining:
+            count, remaining = count + 1, wounds
+        else:
+            remaining -= loss
+    return count
+
+
+def remove_casualties(
+    attacks: int,
+    odds: AttackOdds,
+    *,
+    models: int,
+    wounds: int,
+    order: Order,
+    trials: int,
+    seed: int,
+    damage: Mapping[int, Fraction] | None = None,
+) -> dict[int, float]:
+    """Monte Carlo of ``attacks`` identical attacks against a unit, then Remove Casualties.
+
+    ``damage`` is the Wounds each unsaved wound takes, as a distribution (Multiple
+    Wounds (D3) is a third on each of 1, 2, 3); None is one Wound.
+
+    Returns:
+        The frequency of each casualty count 0..``models``.
+    """
+    rng = random.Random(seed)
+    values, weights = zip(*(damage or {1: Fraction(1)}).items(), strict=True)
+    p_kill, p_unsaved = float(odds.kill), float(odds.unsaved)
+    counts = dict.fromkeys(range(models + 1), 0)
+    for _ in range(trials):
+        losses: list[int | None] = []
+        for _ in range(attacks):
+            draw = rng.random()
+            if draw < p_kill:
+                losses.append(None)
+            elif draw < p_unsaved:
+                losses.append(rng.choices(values, weights)[0])
+        if order is Order.KILLS_FIRST:
+            losses.sort(key=lambda loss: loss is not None)
+        counts[removed(losses, models, wounds)] += 1
+    return {casualties: n / trials for casualties, n in counts.items()}
+
+
+def trials_for(tolerance: float, *, z: float = 4.0) -> int:
+    """Trials that put every frequency within ``tolerance`` of its probability at ``z`` sigma.
+
+    A frequency's standard error is at most 1 / (2 sqrt(n)), its value at p = 1/2.
+    To settle a dispute between two probabilities d apart, ask for d / 2.
+
+    Returns:
+        The number of trials.
+    """
+    return math.ceil((z / (2 * tolerance)) ** 2)
