@@ -20,7 +20,7 @@ from avelorn.tow.schema.rule import PrintedParameter, Rule, prints_x
 from .parse import WhfbParseError
 from .richtext import Node, text_of
 
-_CONTAINER_BLOCKS = frozenset({"unordered-list", "ordered-list", "list-item"})
+_CONTAINER_BLOCKS = frozenset({"document", "unordered-list", "ordered-list", "list-item"})
 _TEXT_BLOCKS = frozenset({"paragraph", *(f"heading-{level}" for level in range(1, 7))})
 
 
@@ -48,7 +48,8 @@ def parse_special_rule(entry: Node) -> RuleImport:
         raise WhfbParseError(f"rule entry has no slug/name: {fields.keys()}")
     warnings: list[str] = []
 
-    paragraphs = _paragraphs(fields.get("body"), warnings)
+    body = fields.get("body")
+    paragraphs = _block_paragraphs(body, warnings) if body else []
     if not paragraphs:
         raise WhfbParseError(f"{slug}: rule body has no text")
 
@@ -71,14 +72,6 @@ def parse_special_rule(entry: Node) -> RuleImport:
     except ValidationError as err:
         raise WhfbParseError(f"{slug}: parsed fields do not validate: {err}") from err
     return RuleImport(rule=rule, warnings=warnings)
-
-
-def _paragraphs(body: Node | None, warnings: list[str]) -> list[str]:
-    if not body:
-        return []
-    return [
-        text for block in body.get("content", []) for text in _block_paragraphs(block, warnings)
-    ]
 
 
 def _block_paragraphs(block: Node, warnings: list[str]) -> list[str]:
