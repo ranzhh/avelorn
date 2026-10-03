@@ -22,7 +22,7 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from fractions import Fraction
-from typing import ClassVar
+from typing import ClassVar, cast
 
 from avelorn.core.distribution import Distribution
 from avelorn.tow.kernels import Confirm, Die, d6, success
@@ -508,7 +508,7 @@ def walk(
 
     def branches(stage: Stage, prof: AttackProfile) -> Iterator[tuple[Fraction, int, bool]]:
         for die, p in prof.roll(stage).dice(rerolled[stage]).mass.items():
-            yield Fraction(p), die.natural, die.success
+            yield cast(Fraction, p), die.natural, die.success
 
     def on_success(stage: Stage, face: int, prof: AttackProfile) -> AttackProfile:
         shown = [m for m in fired[stage] if m.trigger is not None and m.trigger.face == face]

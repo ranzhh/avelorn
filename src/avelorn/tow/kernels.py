@@ -14,7 +14,7 @@ from collections.abc import Set
 from enum import StrEnum
 from fractions import Fraction
 from itertools import product
-from typing import NamedTuple
+from typing import NamedTuple, cast
 
 from avelorn.core.distribution import Distribution
 
@@ -195,7 +195,7 @@ def success(dice: Distribution[Die]) -> Fraction:
     Returns:
         The summed mass of the successful dice.
     """
-    return sum((Fraction(p) for die, p in dice.mass.items() if die.success), Fraction(0))
+    return sum((cast(Fraction, p) for die, p in dice.mass.items() if die.success), Fraction(0))
 
 
 def hit_probability(target: int) -> Fraction:
