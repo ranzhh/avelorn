@@ -304,6 +304,7 @@ _SUBJECT_LIMIT_RE = re.compile(
 # army rather than a ratio to its size.
 _SUBJECT_COUNT_RE = re.compile(r"^(\d+-\d+)\s+units?(?:\s+of\s+.+?)?$", re.I)
 _SUBJECT_MODEL_RE = re.compile(r"^an?\s+(.+)$", re.I)
+_SUBJECT_ANY_MODEL_RE = re.compile(r"^any model in the unit$", re.I)
 _UPGRADE_RE = re.compile(r"^upgrade one model to an?\s+(.+)$", re.I)
 _RULE_ADD_RE = re.compile(r"^have the\s+(.+?)\s+special rule$", re.I)
 _RULE_SWAP_RE = re.compile(r"^replace the\s+(.+?)\s+special rule with\s+(.+)$", re.I)
@@ -400,6 +401,8 @@ def _parse_subject(subject: str, printed: set[str]) -> OptionGroup | None:
         return OptionGroup(limit=f"{m.group(1)} unit per {m.group(2).replace(',', '')} points")
     if m := _SUBJECT_COUNT_RE.fullmatch(subject):
         return OptionGroup(limit=f"{m.group(1)} unit")
+    if _SUBJECT_ANY_MODEL_RE.fullmatch(subject):
+        return OptionGroup(scope=OptionScope.MODEL)
     if (m := _SUBJECT_MODEL_RE.fullmatch(subject)) and m.group(1) in printed:
         return OptionGroup(applies_to=m.group(1), scope=OptionScope.MODEL)
     return None

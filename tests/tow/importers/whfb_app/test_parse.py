@@ -343,6 +343,41 @@ def test_group_header_attaches_its_children_to_the_model() -> None:
     )
 
 
+def test_any_model_in_the_unit_takes_a_weapon_for_itself() -> None:
+    """The Maneaters' weapons are bought by models of the unit, named bare under the header."""
+    group, warnings = _group("Any model in the unit may take one of the following:")
+    assert group == OptionGroup(verb="take", scope=OptionScope.MODEL)
+    assert any("mutually exclusive" in w for w in warnings)
+
+    option, warnings = _option("Ogre Pistol (+6 points per model)", group)
+    assert option == UnitOption(
+        name="Ogre Pistol",
+        kind=OptionKind.EQUIPMENT,
+        scope=OptionScope.MODEL,
+        points=6,
+        per_model=True,
+        adds_equipment=["Ogre Pistol"],
+    )
+    assert warnings == []
+
+
+def test_any_model_in_the_unit_swaps_its_armour() -> None:
+    """A line stating its own model subject swaps the armour of the models that buy it."""
+    option, warnings = _option(
+        "Any model in the unit may replace Light Armour with Heavy Armour (+3 points per model)"
+    )
+    assert option == UnitOption(
+        name="Heavy Armour",
+        kind=OptionKind.EQUIPMENT,
+        scope=OptionScope.MODEL,
+        points=3,
+        per_model=True,
+        adds_equipment=["Heavy Armour"],
+        removes_equipment=["Light Armour"],
+    )
+    assert warnings == []
+
+
 def test_line_states_its_own_availability_limit() -> None:
     """A restriction written into the line reads the same as in a header."""
     option, warnings = _option(
