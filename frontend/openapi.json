@@ -8,8 +8,8 @@
   "paths": {
     "/graph/volley": {
       "get": {
-        "summary": "Evaluate the example volley graph",
-        "description": "Return the evaluated graph used by the graph frontend.",
+        "summary": "Evaluate the volley program with no rules attached",
+        "description": "Ten Elven Archers shoot twenty Elven Spearmen at 12 inches, with no rules attached.\n\nReturns:\n    The evaluated volley program.",
         "operationId": "graph_volley_graph_volley_get",
         "responses": {
           "200": {

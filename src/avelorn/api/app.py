@@ -22,15 +22,17 @@ from typing import Annotated, Literal, NamedTuple
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from avelorn.core.programs import volley_program
 from avelorn.tow.contingent import Charge, ChargeArc, Contingent
 from avelorn.tow.coverage import Coverage, coverage
 from avelorn.tow.data import TOWRepository, default_repository
 from avelorn.tow.game import TOWGame
+from avelorn.tow.kernels import Standing
 from avelorn.tow.muster import Complement
+from avelorn.tow.programs import VOLLEY, load_program
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.weapon import Weapon
+from avelorn.tow.steps import Fielded
 from avelorn.tow.views import (
     FightReport,
     MusteredUnit,
@@ -66,10 +68,31 @@ def corpus() -> TOWRepository:
 Corpus = Annotated[TOWRepository, Depends(corpus)]
 
 
-@app.get("/graph/volley", summary="Evaluate the example volley graph")
-def graph_volley() -> dict[str, object]:
-    """Return the evaluated graph used by the graph frontend."""
-    return volley_program()
+@app.get("/graph/volley", summary="Evaluate the volley program with no rules attached")
+def graph_volley(data: Corpus) -> dict[str, object]:
+    """Ten Elven Archers shoot twenty Elven Spearmen at 12 inches, with no rules attached.
+
+    Returns:
+        The evaluated volley program.
+    """
+    archers = Contingent.deploy("elven-archers", 10, data=data, frontage=5)
+    spearmen = Contingent.deploy("elven-spearmen", 20, data=data, frontage=5)
+    (volley,) = load_program(VOLLEY).evaluate(
+        {
+            "attacker/fielded": Fielded.of(archers, "Longbow"),
+            "target/fielded": Fielded.of(spearmen),
+            "distance": 12,
+            "who-can-shoot": True,
+            "line-of-sight": True,
+            "stand-and-shoot": False,
+            "attacker/moved": False,
+            "attacker/standing": Standing(archers.models, 0),
+            "target/standing": Standing(spearmen.models, 0),
+            "target/models-at-start-of-phase": spearmen.models,
+            "target/battle-strength": spearmen.models,
+        }
+    )
+    return volley.lane.to_view()
 
 
 @app.get("/units", summary="List every datasheet in the corpus")
