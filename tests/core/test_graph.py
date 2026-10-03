@@ -174,6 +174,18 @@ _wound = Roll[bool](
     kernel=_wound_on,
     target=Scalar("t", 1),
 )
+
+
+def _both(hit: int, wound: bool) -> tuple[int | bool, ...]:
+    return hit, wound
+
+
+_hit_and_wound = Projection(
+    "hit and wound", (_hit, _wound), _both, Monoid[tuple[int | bool, ...]](())
+)
+_hits = _hit.output("hit", Monoid(0))
+_wound.show(_hit_and_wound)
+_wound.show(_hits)
 _coupled = Program.build(
     "coupled",
     _SIDES,
@@ -181,17 +193,10 @@ _coupled = Program.build(
 )
 
 
-def _both(hit: int, wound: bool) -> tuple[int | bool, ...]:
-    return hit, wound
-
-
 def test_a_reading_over_a_pair_keeps_the_coupling() -> None:
     (lane,) = _coupled.evaluate()
-    joint = lane.read(
-        _wound,
-        Projection("hit and wound", (_hit, _wound), _both, Monoid[tuple[int | bool, ...]](())),
-    )
-    hits = lane.read(_wound, _hit.output("hit", Monoid(0)))
+    joint = lane.read(_wound, _hit_and_wound)
+    hits = lane.read(_wound, _hits)
     wounds = lane.read(_wound, _wound.output("wound", Monoid(False)))
 
     assert joint.mass == {
@@ -347,7 +352,7 @@ def test_a_slot_keeps_its_locals_and_its_state_writes() -> None:
     }
 
 
-def test_a_lane_keeps_its_state_writes() -> None:
+def test_a_lane_keeps_its_state_writes_and_drops_its_locals() -> None:
     models = State[int]("models", 5)
     reaction = Decision[str](name="declare-reaction", side=Side.THE_ENEMY, options=("hold",))
     hit = Measurement[int](name="hit", side=Side.THIS_MODEL, kernel=_coin)
@@ -367,6 +372,8 @@ def test_a_lane_keeps_its_state_writes() -> None:
     (lane,) = program.evaluate()
 
     assert lane.read(after, after.output("models", Monoid(0))).mass == {5: _HALF, 4: _HALF}
+    with pytest.raises(GraphError, match="hit is not held in this world"):
+        lane.read(after, hit.output("hit", Monoid(0)))
 
 
 def test_a_group_cannot_write_state() -> None:
@@ -385,6 +392,63 @@ def test_a_group_cannot_write_state() -> None:
         Program.build(
             "volley", _SIDES, (shots, Repeat(name="attack", times=shots, items=(hit, remove)))
         )
+
+
+def _add(total: int, face: int) -> Distribution[int]:
+    return Distribution.pure(total + face)
+
+
+def test_a_running_total_holds_only_the_total_between_rolls() -> None:
+    total = State[int]("total", 0)
+    items: list[Measurement[int] | Consequence[int]] = []
+    for throw in range(1, 5):
+        roll = Measurement[int](name=f"roll-{throw}", side=Side.THIS_MODEL, kernel=_d6)
+        add = Consequence[int](
+            name=f"add-{throw}",
+            side=Side.THIS_MODEL,
+            inputs=(total, roll),
+            kernel=_add,
+            writes=total,
+        )
+        items += [roll, add]
+    sums = Projection("total", (total,), _same, Monoid(0))
+    items[-1].show(sums)
+    (lane,) = Program.build("sum", _SIDES, tuple(items)).evaluate()
+
+    assert [len(lane.edges[step].joint.mass) for step in items] == [6, 6, 36, 11, 66, 16, 96, 21]
+    assert lane.read(items[-1], sums).mass[14] == Fraction(146, 6**4)
+
+
+def _up_to_five() -> Distribution[int]:
+    return Distribution({wounds: _SIXTH for wounds in range(6)})
+
+
+def _remove(models: int, wounds: int) -> Distribution[int]:
+    return Distribution.pure(max(models - wounds, 0))
+
+
+def _round(number: int, models: State[int]) -> tuple[Slot, Consequence[int]]:
+    wounds = Measurement[int](name="wounds", side=Side.THIS_MODEL, kernel=_up_to_five)
+    removal = Consequence[int](
+        name="remove-casualties",
+        side=Side.THE_ENEMY,
+        inputs=(models, wounds),
+        kernel=_remove,
+        writes=models,
+    )
+    return Slot(name=f"round-{number}", items=(wounds, removal)), removal
+
+
+def test_six_casualty_removals_keep_one_world_per_standing() -> None:
+    models = State[int]("models", 22)
+    rounds = [_round(number, models) for number in range(1, 7)]
+    last = rounds[-1][1]
+    left = Projection("models", (models,), _same, Monoid(0))
+    last.show(left)
+    (lane,) = Program.build("attrition", _SIDES, tuple(slot for slot, _ in rounds)).evaluate()
+
+    assert len(lane.edges[last].joint.mass) == 23
+    assert lane.read(last, left).mass[22] == Fraction(1, 6**6)
 
 
 def test_two_steps_cannot_share_a_path() -> None:

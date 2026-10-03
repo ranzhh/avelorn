@@ -65,6 +65,9 @@ class World:
         kept = tuple(pair for pair in self.values if pair[0] is not key)
         return World((*kept, (key, value)))
 
+    def keeping(self, keys: frozenset[Key]) -> "World":
+        return World(tuple(pair for pair in self.values if pair[0] in keys))
+
 
 @dataclass
 class Edge:
@@ -187,10 +190,26 @@ class Step[Out: Hashable](ABC):
     def collect(self, program: "Program") -> None:
         program.steps.append(self)
 
+    def liveness(
+        self, after: frozenset[Key], live: dict["Item", frozenset[Key]]
+    ) -> frozenset[Key]:
+        """Record what this step's edge keeps, given what is read after it.
+
+        The edge keeps the step's own output and what its readings read.
+
+        Returns:
+            What must be held before the step runs.
+        """
+        kept = after | {self.key} | {key for reading in self.shown() for key in reading.reads}
+        live[self] = kept
+        return (kept - {self.key}) | set(self.inputs)
+
     def run(self, lane: "Lane") -> None:
+        kept = lane.program.live[self]
+
         def advance(world: World) -> Distribution[World]:
             def attach(value: Out) -> World:
-                return world.holding(self.key, value)
+                return world.holding(self.key, value).keeping(kept)
 
             return self.outcomes(world, lane).map(attach)
 
@@ -291,6 +310,13 @@ class Block(ABC):
     def collect(self, program: "Program") -> None:
         program.blocks.append(self)
 
+    def liveness(
+        self, after: frozenset[Key], live: dict["Item", frozenset[Key]]
+    ) -> frozenset[Key]:
+        for item in reversed(self.items):
+            after = item.liveness(after, live)
+        return after
+
     def run(self, lane: "Lane") -> None:
         for item in self.items:
             item.run(lane)
@@ -339,11 +365,23 @@ class Repeat(Group):
         if self.times not in visible:
             raise GraphError(f"{path} runs {self.times.name} times, which is not in scope")
 
+    def liveness(
+        self, after: frozenset[Key], live: dict["Item", frozenset[Key]]
+    ) -> frozenset[Key]:
+        live[self] = after
+        inside = super().liveness(frozenset(), live)
+        return after | inside | {self.times}
+
     def run(self, lane: "Lane") -> None:
         outer, count = lane.joint, lane.count
         lane.count = self.multiplier(lane)
         super().run(lane)
-        lane.joint, lane.count = outer, count
+        kept = lane.program.live[self]
+
+        def resumed(world: World) -> World:
+            return world.keeping(kept)
+
+        lane.joint, lane.count = outer.map(resumed), count
 
     def multiplier(self, lane: "Lane") -> Distribution[int]:
         def counted(world: World) -> int:
@@ -415,6 +453,9 @@ class Program:
     decisions: list[Decision[Any]] = field(default_factory=list)
     rules: list[RuleNode] = field(default_factory=list)
     states: list[State[Any]] = field(default_factory=list)
+    # What each step's edge, and each group's exit, keeps of a world.
+    live: dict[Item, frozenset[Key]] = field(default_factory=dict)
+    entry: frozenset[Key] = frozenset()
 
     @classmethod
     def build(cls, name: str, sides: Mapping[Side, str], items: tuple[Item, ...]) -> "Program":
@@ -422,6 +463,10 @@ class Program:
         visible: list[Step[Any]] = []
         for item in items:
             item.declare(program, name, visible)
+        needed: frozenset[Key] = frozenset()
+        for item in reversed(items):
+            needed = item.liveness(needed, program.live)
+        program.entry = needed
         return program
 
     def take(self, item: Item, path: str) -> None:
@@ -463,7 +508,9 @@ class Program:
         )
 
     def _lane(self, choices: Mapping[Decision[Any], Any]) -> "Lane":
-        start = World(tuple((state, state.initial) for state in self.states))
+        start = World(
+            tuple((state, state.initial) for state in self.states if state in self.entry)
+        )
         lane = Lane(program=self, choices=choices, joint=Distribution.pure(start))
         for item in self.items:
             item.run(lane)
