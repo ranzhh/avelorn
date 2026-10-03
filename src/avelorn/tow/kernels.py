@@ -6,8 +6,7 @@ Sources (tow.whfb.app): the-shooting-phase/roll-to-hit-shooting,
 the-shooting-phase/roll-to-wound-shooting, the-shooting-phase/7-to-hit,
 the-shooting-phase/determining-armour-value,
 the-shooting-phase/armour-piercing,
-the-combat-phase/roll-to-hit-combat, model-profiles/characteristic-tests,
-model-profiles/leadership-tests.
+the-combat-phase/roll-to-hit-combat, model-profiles/leadership-tests.
 """
 
 import logging
@@ -250,30 +249,13 @@ def save_probability(target: int | None) -> Fraction:
     return p
 
 
-def characteristic_test(value: int | None) -> Fraction:
-    """Exact probability that a one-D6 characteristic test passes.
-
-    Passes on a roll equal to or under ``value``; a natural 6 always fails
-    and a natural 1 always passes. A value of 0 or None ("-") fails
-    automatically.
-
-    Returns:
-        P(pass).
-    """
-    if value is None or value <= 0:
-        return Fraction(0)
-    passes = sum(1 for roll in _FACES if roll == 1 or (roll != 6 and roll <= value))
-    p = Fraction(passes, 6)
-    logger.debug("characteristic test vs %s -> p=%s", value, p)
-    return p
-
-
 def leadership_test(value: int | None) -> Fraction:
     """Exact probability that a 2D6 Leadership test passes.
 
     Passes on a roll equal to or under ``value``; a natural 12 always fails
     and a natural 2 always passes. A value of 0 or None ("-") fails
-    automatically, read the same way as a characteristic test.
+    automatically, read the same way as a characteristic test
+    (model-profiles/characteristic-tests).
 
     Returns:
         P(pass).

@@ -9,7 +9,6 @@ from avelorn.tow.kernels import (
     Confirm,
     Die,
     armour_save_target,
-    characteristic_test,
     d6,
     hit_probability,
     leadership_test,
@@ -215,15 +214,7 @@ def test_leadership_natural_bounds() -> None:
     assert leadership_test(20) == Fraction(35, 36)
 
 
-def test_other_characteristics_roll_one_d6() -> None:
-    """A characteristic test passes on roll <= value, natural 6 failing, 1 passing."""
-    assert characteristic_test(3) == Fraction(3, 6)
-    assert characteristic_test(6) == Fraction(5, 6)
-    assert characteristic_test(1) == Fraction(1, 6)
-
-
 def test_zero_or_dash_fails_automatically() -> None:
-    """A characteristic of 0 or "-" automatically fails the test."""
-    for test in (characteristic_test, leadership_test):
-        assert test(0) == Fraction(0)
-        assert test(None) == Fraction(0)
+    """A Leadership of 0 or "-" automatically fails the test."""
+    assert leadership_test(0) == Fraction(0)
+    assert leadership_test(None) == Fraction(0)
