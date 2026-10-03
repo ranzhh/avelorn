@@ -19,31 +19,9 @@ from avelorn.tow.game import TOWGame
 from avelorn.tow.phases.combat import CombatResult, break_test, strike_unit
 from avelorn.tow.phases.shooting import shoot_unit
 from avelorn.tow.schema.unit import Unit
-from avelorn.tow.views import unmodelled_rules
 
 REPO = TOWRepository()
 GAME = TOWGame.load_data()
-
-# The rules each recently imported datasheet prints that have no entry, so the
-# engine cannot apply them. Pinned per unit rather than corpus-wide: this set
-# should shrink as gaps close, where a corpus-wide list grows with every import
-# and would fail on work unrelated to these units. Everything else each unit
-# prints resolves.
-UNMODELLED = {
-    "war-lions": {"Fear", "Move Through Cover", "Open Order", "Swiftstride", "Vanguard"},
-    "merwyrm": {"Close Order", "Large Target"},
-    "great-eagle": {"Close Order", "Fear", "Fly (10)", "Swiftstride"},
-    "frostheart-phoenix": {"Close Order", "Fear", "Fly (9)", "Large Target", "Swiftstride"},
-    "flamespyre-phoenix": {
-        "Close Order",
-        "Fear",
-        "Fly (10)",
-        "From the Ashes",
-        "Large Target",
-        "Swiftstride",
-        "Wake of Fire",
-    },
-}
 
 
 def _without(unit: Unit, rule: str) -> Unit:
@@ -51,13 +29,6 @@ def _without(unit: Unit, rule: str) -> Unit:
     # isolates that rule and nothing else about the unit.
     assert rule in unit.special_rules, f"{unit.name} does not print {rule}"
     return unit.model_copy(update={"special_rules": [r for r in unit.special_rules if r != rule]})
-
-
-def test_each_datasheet_models_everything_but_the_named_rules() -> None:
-    """Per unit, exactly the listed rules lack an entry. The rest reach the maths."""
-    report = unmodelled_rules(REPO)
-    for slug, expected in UNMODELLED.items():
-        assert {rule.name for rule in report if slug in rule.units} == expected, slug
 
 
 def test_blizzard_aura_makes_a_foe_of_the_frostheart_strike_last() -> None:

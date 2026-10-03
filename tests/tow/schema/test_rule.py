@@ -9,6 +9,7 @@ from avelorn.core.loading import load_yaml
 from avelorn.tow.data import TOWRepository, rule_paths
 from avelorn.tow.schema.rule import (
     Add,
+    Bounded,
     DiceQuantity,
     HitOrder,
     HitsEffect,
@@ -408,6 +409,17 @@ def test_parameter_reference_requires_a_placeholder_name() -> None:
         )
 
 
+def test_a_bounded_parameter_reference_requires_a_placeholder_name() -> None:
+    """The "X" a printed bound wraps is a parameter reference all the same."""
+    with pytest.raises(ValidationError, match="X parameter"):
+        Rule(
+            id="ironfist",
+            name="Ironfist",
+            paragraphs=["…"],
+            effects=[ModifierEffect(add={Quantity.ARMOUR_VALUE: Bounded(amount="X", maximum=2)})],
+        )
+
+
 def test_reroll_effect_parses_with_causes() -> None:
     """The re-roll operation names its seam by key and carries the cause filter."""
     effect = _EFFECT.validate_python(
@@ -609,7 +621,7 @@ def test_every_rule_entry_carries_effects() -> None:
 
     An entry with no effects reports "special rule not factored" exactly as a
     rule with no file does, so the file adds nothing but the appearance of
-    having been modelled. `avelorn rules list --unmodelled` names what is
+    having been modelled. `avelorn coverage` names what is
     missing; data/ holds only what folds.
     """
     idle = sorted(rule.id for rule in TOWRepository().rules.values() if not rule.effects)

@@ -24,6 +24,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from avelorn.core.programs import volley_program
 from avelorn.tow.contingent import Charge, ChargeArc, Contingent
+from avelorn.tow.coverage import Coverage, coverage
 from avelorn.tow.data import TOWRepository, default_repository
 from avelorn.tow.game import TOWGame
 from avelorn.tow.muster import Complement
@@ -36,12 +37,10 @@ from avelorn.tow.views import (
     RuleSummary,
     UnitDetail,
     UnitSummary,
-    UnmodelledRule,
     VolleyReport,
     WeaponDetail,
     WeaponSummary,
     rule_summaries,
-    unmodelled_rules,
 )
 
 app = FastAPI(
@@ -400,17 +399,14 @@ def list_rules(data: Corpus) -> list[RuleSummary]:
     return rule_summaries(data)
 
 
-# Declared before /rules/{slug}, so the path matches this route rather than
-# being read as a slug. No rule is filed under "unmodelled", and none can be
-# while this route owns the name.
-@app.get("/rules/unmodelled", summary="Report the printed rules the engine does not apply")
-def list_unmodelled(data: Corpus) -> list[UnmodelledRule]:
-    """Report every rule the corpus prints that never reaches the maths.
+@app.get("/coverage", summary="Report what the corpus prints that the engine never reads")
+def read_coverage(data: Corpus) -> Coverage:
+    """Report every gap between the corpus and the engine, with the ledger's reason for each.
 
     Returns:
-        The report, most-printed first.
+        The gaps, and the ledger entries no gap needs any more.
     """
-    return unmodelled_rules(data)
+    return coverage(data)
 
 
 @app.get("/rules/{slug}", summary="Read one rule entry")
@@ -422,7 +418,7 @@ def read_rule(slug: str, data: Corpus) -> Rule:
 
     Raises:
         HTTPException: 404, when no entry carries the slug. A rule the corpus
-            prints without an entry has none to read; ``/rules/unmodelled``
+            prints without an entry has none to read; ``/coverage``
             names those.
     """
     rule = data.rules.get(slug)

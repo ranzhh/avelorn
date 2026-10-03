@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from avelorn.api.app import app, corpus
+from avelorn.tow.coverage import Gap
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.views import RuleSummary
 
@@ -78,8 +79,6 @@ def test_a_rule_the_corpus_does_not_model_resolves_to_nothing(client: TestClient
     body = client.get("/units/dwarf-warriors").json()
     resolved = {r["name"]: r["slug"] for r in body["special_rules"]}
     assert resolved["Close Order"] is None
-    reported = {r["name"] for r in client.get("/rules/unmodelled").json()}
-    assert "Close Order" in reported
 
 
 def test_a_parameterised_rule_resolves_to_the_template_it_is_filed_under(
@@ -112,17 +111,12 @@ def test_rules_are_listed_through_the_shared_summary(client: TestClient) -> None
     assert set(body[0]) == set(RuleSummary.model_fields)
 
 
-def test_an_unmodelled_report_names_the_rules_and_who_prints_them(client: TestClient) -> None:
-    """The report is the per-action "not factored" notes, totalled."""
-    body = client.get("/rules/unmodelled").json()
-    close_order = next(r for r in body if r["name"] == "Close Order")
-    assert "elven-spearmen" in close_order["units"]
-    assert set(close_order) == {"name", "units", "weapons"}
-
-
-def test_unmodelled_is_a_route_not_a_slug(client: TestClient) -> None:
-    """Declared before /rules/{slug}, so the report wins the path."""
-    assert isinstance(client.get("/rules/unmodelled").json(), list)
+def test_the_coverage_report_names_each_gap_where_it_occurs_and_why(client: TestClient) -> None:
+    """The report is the per-action "not factored" notes, totalled and explained."""
+    gap = client.get("/coverage").json()["gaps"][0]
+    assert set(gap) == set(Gap.model_fields)
+    assert set(gap["sites"][0]) == {"entry", "id"}
+    assert gap["reason"]
 
 
 def test_a_rule_is_served_whole(client: TestClient) -> None:

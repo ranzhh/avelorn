@@ -23,7 +23,7 @@ Units, weapons, armour, and special rules live in validated YAML under `data/`. 
 ```sh
 uv run avelorn units list
 uv run avelorn units show white-lions-of-chrace
-uv run avelorn rules list --unmodelled
+uv run avelorn coverage
 ```
 
 ### Muster units and resolve battles

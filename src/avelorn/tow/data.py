@@ -1,8 +1,9 @@
 """Locating and loading the hand-authored game data under ``data/``.
 
 ``data/`` is the single source of truth — armies (and their units),
-weapons, armour, and rules. :class:`TOWRepository` is the one place that
-knows the tree's layout, so tests, demos, and the app read through it.
+weapons, armour, rules, and the ledger of what the engine leaves unmodelled.
+:class:`TOWRepository` is the one place that knows the tree's layout, so tests,
+demos, and the app read through it.
 """
 
 from collections.abc import Mapping, Sequence
@@ -12,6 +13,7 @@ from pathlib import Path
 from avelorn.core.loading import load_yaml, load_yaml_dir
 from avelorn.core.registry import Registry
 from avelorn.tow.schema.armour import Armour
+from avelorn.tow.schema.ledger import Ledger
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.troop_type import TroopTypeProfile
 from avelorn.tow.schema.unit import Unit
@@ -158,6 +160,11 @@ class TOWRepository:
         """The troop-type table: each troop type's rank-and-file data."""
         loaded = load_yaml_dir(self._data_dir / "tow/troop-types", TroopTypeProfile)
         return Registry(loaded, kind="troop type")
+
+    @cached_property
+    def ledger(self) -> Ledger:
+        """The gaps between the corpus and the engine, each acknowledged with a reason."""
+        return load_yaml(self._data_dir / "tow/unmodelled.yaml", Ledger)
 
 
 _default_repository: "TOWRepository | None" = None

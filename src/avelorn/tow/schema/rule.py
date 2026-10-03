@@ -1140,17 +1140,24 @@ def references_parameter(effect: RuleEffect) -> bool:
     """Whether any of the effect's values reference the X parameter.
 
     Introspects the effect's fields, looking inside mappings (an
-    operation's amounts), so a new X-bearing field participates
-    automatically.
+    operation's amounts, bare or :class:`Bounded`), so a new X-bearing
+    field participates automatically.
 
     Returns:
-        True if the literal "X" appears as a field or mapping value.
+        True if the literal "X" appears as a field, a mapping value, or a
+        bounded amount.
     """
     for name in type(effect).model_fields:
         value = getattr(effect, name)
-        if value == "X" or (isinstance(value, Mapping) and "X" in value.values()):
+        if value == "X" or (
+            isinstance(value, Mapping) and any(_is_parameter(amount) for amount in value.values())
+        ):
             return True
     return False
+
+
+def _is_parameter(amount: object) -> bool:
+    return amount == "X" or (isinstance(amount, Bounded) and amount.amount == "X")
 
 
 class Rule(BaseModel):

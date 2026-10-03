@@ -261,15 +261,31 @@ def printed_rule(printed: str, rules: Registry[Rule]) -> Rule | None:
         return rules[printed]
     with suppress(UnknownNameError):
         return rules.by_name(printed)
-    if match := _PARAMETERISED.match(printed):
+    placeholder, value = split_parameter(printed)
+    if value is not None:
         with suppress(UnknownNameError):
-            entry = rules.by_name(match.group("base") + PARAMETER_SUFFIX)
-            parameter = _parameter(match.group("value"))
+            entry = rules.by_name(placeholder)
+            parameter = _parameter(value)
             if parameter is None:
                 return None
             effects = [_with_parameter(effect, parameter) for effect in entry.effects]
             return entry.model_copy(update={"name": printed, "effects": effects})
     return None
+
+
+def split_parameter(printed: str) -> tuple[str, str | None]:
+    """Split a printed rule name into its "(X)" entry's name and the bracketed value.
+
+    "Armour Bane (1)" is filed under "Armour Bane (X)" with the value "1"; a
+    bare "Armour Bane" names the same entry with no value printed.
+
+    Returns:
+        The name the "(X)" entry would be filed under, and the printed value
+        (None when the name prints no bracket).
+    """
+    if match := _PARAMETERISED.match(printed):
+        return match.group("base") + PARAMETER_SUFFIX, match.group("value")
+    return printed + PARAMETER_SUFFIX, None
 
 
 def _parameter(printed: str) -> int | DiceQuantity | None:

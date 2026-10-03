@@ -1,9 +1,13 @@
 """The CLI's commands: what each one reads out of the real corpus under data/."""
 
+import shutil
+from pathlib import Path
+
 import pytest
+import yaml
 
 from avelorn.cli import commands
-from avelorn.tow.data import TOWRepository
+from avelorn.tow.data import DATA_DIR, TOWRepository
 
 REPO = TOWRepository()
 
@@ -51,32 +55,28 @@ def test_rules_list_says_which_entries_reach_the_maths() -> None:
     lines = commands.list_rules(REPO)
     assert len(lines) == len(REPO.rules) + 1
     stubborn = next(line for line in lines if line.startswith("stubborn"))
-    assert stubborn.split()[-2:] == ["yes", "3"]  # effects, and three units print it
+    assert stubborn.split()[-2:] == ["yes", "4"]  # effects; three units and an option print it
     # Every entry folds, because one that did not would not be filed at all.
     assert all(line.split()[-2] == "yes" for line in lines[1:])
 
 
-def test_unmodelled_reports_a_name_with_no_entry_and_who_prints_it() -> None:
-    """A rule the corpus prints without an entry is invisible in the registry."""
-    printed = "\n".join(commands.list_unmodelled(REPO))
-    assert "\nClose Order\n" in printed
-    assert "elven-spearmen" in printed
+def test_coverage_leads_with_what_the_ledger_does_not_match(tmp_path: Path) -> None:
+    """A gap the ledger misses and an entry nothing needs are the first lines printed."""
+    data = tmp_path / "data"
+    shutil.copytree(DATA_DIR, data)
+    ledger = data / "tow/unmodelled.yaml"
+    entries = yaml.safe_load(ledger.read_text())
+    dropped = entries[0]
+    entries[0] = {**dropped, "subject": "No Such Rule"}
+    ledger.write_text(yaml.safe_dump(entries))
 
-
-def test_unmodelled_resolves_a_printed_parameter_before_judging_it() -> None:
-    """Armour Bane (1) is modelled by the entry filed under (X), so it is not reported.
-
-    Three weapons print the parameterised name and no file carries it, so a
-    plain lookup would report it missing. Fielding resolves it; so does this.
-    """
-    printed_by = {
-        name
-        for weapon in REPO.weapons.values()
-        for p in weapon.profiles
-        for name in p.special_rules
-    }
-    assert "Armour Bane (1)" in printed_by
-    assert "Armour Bane" not in "\n".join(commands.list_unmodelled(REPO))
+    printed = commands.show_coverage(TOWRepository(data_dir=data))
+    assert printed[0] == "!! 1 UNACKNOWLEDGED -- add each to data/tow/unmodelled.yaml:"
+    assert printed[1].startswith(f"!!   {dropped['kind']}: {dropped['subject']}  (")
+    assert printed[3:5] == [
+        "!! 1 STALE -- delete from data/tow/unmodelled.yaml:",
+        f"!!   {dropped['kind']}: No Such Rule",
+    ]
 
 
 def test_rules_show_prints_the_text_the_effects_and_what_is_left_out() -> None:
@@ -88,7 +88,7 @@ def test_rules_show_prints_the_text_the_effects_and_what_is_left_out() -> None:
     assert "Not covered:" in printed
 
 
-def test_rules_show_points_a_miss_at_the_unmodelled_report() -> None:
+def test_rules_show_points_a_miss_at_the_coverage_report() -> None:
     """A printed rule with no entry cannot be shown, so the miss says where it is named."""
-    with pytest.raises(LookupError, match="--unmodelled"):
+    with pytest.raises(LookupError, match="avelorn coverage"):
         commands.show_rule(REPO, "close-order")
