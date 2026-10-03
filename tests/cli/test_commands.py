@@ -37,11 +37,11 @@ def test_show_prints_what_the_datasheet_offers() -> None:
 
 
 def test_show_marks_the_rules_the_engine_does_not_apply() -> None:
-    """A printed rule with no entry is starred, and the star is explained once."""
+    """A printed rule with no effects is starred, and the star is explained once."""
     printed = "\n".join(commands.show_unit(REPO, "dwarf-warriors"))
     assert "Close Order *" in printed
     assert "Shieldwall\n" in printed
-    assert printed.count("* no entry") == 1
+    assert printed.count("* no entry, or no effects") == 1
 
 
 def test_show_refuses_an_unknown_slug_and_says_where_to_look() -> None:
