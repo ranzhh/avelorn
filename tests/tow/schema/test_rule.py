@@ -9,6 +9,7 @@ from avelorn.core.loading import load_yaml
 from avelorn.tow.data import TOWRepository, rule_paths
 from avelorn.tow.schema.rule import (
     Add,
+    Bounded,
     DiceQuantity,
     HitOrder,
     HitsEffect,
@@ -405,6 +406,17 @@ def test_parameter_reference_requires_a_placeholder_name() -> None:
             name="Armour Bane",
             paragraphs=["…"],
             effects=[ModifierEffect(add={Quantity.ARMOUR_PIERCING: "X"})],
+        )
+
+
+def test_a_bounded_parameter_reference_requires_a_placeholder_name() -> None:
+    """The "X" a printed bound wraps is a parameter reference all the same."""
+    with pytest.raises(ValidationError, match="X parameter"):
+        Rule(
+            id="ironfist",
+            name="Ironfist",
+            paragraphs=["…"],
+            effects=[ModifierEffect(add={Quantity.ARMOUR_VALUE: Bounded(amount="X", maximum=2)})],
         )
 
 
