@@ -1,0 +1,1290 @@
+{
+  "metadata": {
+    "tags": [],
+    "concepts": []
+  },
+  "sys": {
+    "space": {
+      "sys": {
+        "type": "Link",
+        "linkType": "Space",
+        "id": "0v8db9sevlqj"
+      }
+    },
+    "id": "g2NBUZ1Ew50suQKIB3p9ln",
+    "type": "Entry",
+    "createdAt": "2024-01-26T03:09:43.801Z",
+    "updatedAt": "2024-01-26T03:28:21.810Z",
+    "environment": {
+      "sys": {
+        "id": "master",
+        "type": "Link",
+        "linkType": "Environment"
+      }
+    },
+    "publishedVersion": 8,
+    "revision": 2,
+    "contentType": {
+      "sys": {
+        "type": "Link",
+        "linkType": "ContentType",
+        "id": "rule"
+      }
+    },
+    "locale": "en-US"
+  },
+  "fields": {
+    "name": "Choose & Fight Combat",
+    "slug": "choose-and-fight-combat",
+    "pageReference": 145,
+    "order": 30,
+    "body": {
+      "nodeType": "document",
+      "data": {},
+      "content": [
+        {
+          "nodeType": "paragraph",
+          "data": {},
+          "content": [
+            {
+              "nodeType": "text",
+              "value": "The Choose Combat & Fight sub-phase is further broken down into four steps. These are:",
+              "marks": [],
+              "data": {}
+            }
+          ]
+        },
+        {
+          "nodeType": "ordered-list",
+          "data": {},
+          "content": [
+            {
+              "nodeType": "list-item",
+              "data": {},
+              "content": [
+                {
+                  "nodeType": "paragraph",
+                  "data": {},
+                  "content": [
+                    {
+                      "nodeType": "text",
+                      "value": "",
+                      "marks": [],
+                      "data": {}
+                    },
+                    {
+                      "nodeType": "entry-hyperlink",
+                      "data": {
+                        "target": {
+                          "metadata": {
+                            "tags": [],
+                            "concepts": []
+                          },
+                          "sys": {
+                            "space": {
+                              "sys": {
+                                "type": "Link",
+                                "linkType": "Space",
+                                "id": "0v8db9sevlqj"
+                              }
+                            },
+                            "id": "Zq6g709H3Nwz9Z8YSJe5x8",
+                            "type": "Entry",
+                            "createdAt": "2024-01-26T03:09:44.214Z",
+                            "updatedAt": "2024-01-26T03:29:39.999Z",
+                            "environment": {
+                              "sys": {
+                                "id": "master",
+                                "type": "Link",
+                                "linkType": "Environment"
+                              }
+                            },
+                            "publishedVersion": 3,
+                            "revision": 2,
+                            "contentType": {
+                              "sys": {
+                                "type": "Link",
+                                "linkType": "ContentType",
+                                "id": "rule"
+                              }
+                            },
+                            "locale": "en-US"
+                          },
+                          "fields": {
+                            "name": "Choose Combat & Determine Who Can Fight",
+                            "slug": "choose-combat-and-determine-who-can-fight",
+                            "pageReference": 145,
+                            "order": 40,
+                            "body": {
+                              "data": {},
+                              "content": [
+                                {
+                                  "data": {},
+                                  "content": [
+                                    {
+                                      "data": {},
+                                      "marks": [],
+                                      "value": "Any units that are in base contact with one or more enemy units are 'engaged in combat'. Each individual engagement between two or more units is referred to as a 'combat'. The active player chooses one combat to be resolved in full, referred to as fighting a 'round' of combat. This process is repeated until all combats have been fought.",
+                                      "nodeType": "text"
+                                    }
+                                  ],
+                                  "nodeType": "paragraph"
+                                }
+                              ],
+                              "nodeType": "document"
+                            },
+                            "relatedLinks": [
+                              {
+                                "sys": {
+                                  "type": "Link",
+                                  "linkType": "Entry",
+                                  "id": "40usl0OR52KLC43mO72XXc"
+                                }
+                              },
+                              {
+                                "sys": {
+                                  "type": "Link",
+                                  "linkType": "Entry",
+                                  "id": "sDQgI4VNh7S1X8ZBwlK6ur"
+                                }
+                              },
+                              {
+                                "sys": {
+                                  "type": "Link",
+                                  "linkType": "Entry",
+                                  "id": "j1LMHjb87648TF2i5Le81u"
+                                }
+                              },
+                              {
+                                "sys": {
+                                  "type": "Link",
+                                  "linkType": "Entry",
+                                  "id": "r8222apXaD8a7h9Pym7J1n"
+                                }
+                              },
+                              {
+                                "sys": {
+                                  "type": "Link",
+                                  "linkType": "Entry",
+                                  "id": "A026Irt7YnK1968402PdMJ"
+                                }
+                              }
+                            ],
+                            "ruleType": [
+                              {
+                                "metadata": {
+                                  "tags": [],
+                                  "concepts": []
+                                },
+                                "sys": {
+                                  "space": {
+                                    "sys": {
+                                      "type": "Link",
+                                      "linkType": "Space",
+                                      "id": "0v8db9sevlqj"
+                                    }
+                                  },
+                                  "id": "272453Y0FaplJl4h79Y581",
+                                  "type": "Entry",
+                                  "createdAt": "2024-01-16T15:16:31.171Z",
+                                  "updatedAt": "2024-01-21T16:48:41.084Z",
+                                  "environment": {
+                                    "sys": {
+                                      "id": "master",
+                                      "type": "Link",
+                                      "linkType": "Environment"
+                                    }
+                                  },
+                                  "publishedVersion": 3,
+                                  "revision": 2,
+                                  "contentType": {
+                                    "sys": {
+                                      "type": "Link",
+                                      "linkType": "ContentType",
+                                      "id": "ruleType"
+                                    }
+                                  },
+                                  "locale": "en-US"
+                                },
+                                "fields": {
+                                  "name": "The Combat Phase",
+                                  "slug": "the-combat-phase",
+                                  "pageReference": 144,
+                                  "order": 140,
+                                  "body": {
+                                    "nodeType": "document",
+                                    "data": {},
+                                    "content": [
+                                      {
+                                        "nodeType": "paragraph",
+                                        "data": {},
+                                        "content": [
+                                          {
+                                            "nodeType": "text",
+                                            "value": "With the foe outmanoeuvred and weakened by spellcraft and shooting, it is time to finish the job! The Combat phase is when your warriors hack, slice and pummel their way through the enemy ranks. A successful Combat phase can completely change the fortunes of your army and, if you have prepared well in your earlier phases, victory is likely to be your reward.",
+                                            "marks": [],
+                                            "data": {}
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "nodeType": "paragraph",
+                                        "data": {},
+                                        "content": [
+                                          {
+                                            "nodeType": "text",
+                                            "value": "The Combat phase heavily involves both players, although the active player will be the one choosing the order in which each of the combats is fought and resolved. All combats must be resolved during this phase – a unit engaged in combat with the enemy cannot choose not to fight.",
+                                            "marks": [],
+                                            "data": {}
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  "bodyIndex": "With the foe outmanoeuvred and weakened by spellcraft and shooting, it is time to finish the job! The Combat phase is when your warriors hack, slice and pummel their way through the enemy ranks. A successful Combat phase can completely change the fortunes of your army and, if you have prepared well in your earlier phases, victory is likely to be your reward. The Combat phase heavily involves both players, although the active player will be the one choosing the order in which each of the combats is fought and resolved. All combats must be resolved during this phase – a unit engaged in combat with the enemy cannot choose not to fight."
+                                }
+                              }
+                            ],
+                            "association": [
+                              {
+                                "metadata": {
+                                  "tags": [],
+                                  "concepts": []
+                                },
+                                "sys": {
+                                  "space": {
+                                    "sys": {
+                                      "type": "Link",
+                                      "linkType": "Space",
+                                      "id": "0v8db9sevlqj"
+                                    }
+                                  },
+                                  "id": "1ajj5ld8tacvR3LPTz6t5S",
+                                  "type": "Entry",
+                                  "createdAt": "2024-01-14T21:10:21.561Z",
+                                  "updatedAt": "2024-02-18T20:25:22.109Z",
+                                  "environment": {
+                                    "sys": {
+                                      "id": "master",
+                                      "type": "Link",
+                                      "linkType": "Environment"
+                                    }
+                                  },
+                                  "publishedVersion": 9,
+                                  "revision": 5,
+                                  "contentType": {
+                                    "sys": {
+                                      "type": "Link",
+                                      "linkType": "ContentType",
+                                      "id": "association"
+                                    }
+                                  },
+                                  "locale": "en-US"
+                                },
+                                "fields": {
+                                  "abbreviation": "RB",
+                                  "name": "Rulebook",
+                                  "slug": "rulebook",
+                                  "order": 10
+                                }
+                              }
+                            ],
+                            "bodyIndex": "Any units that are in base contact with one or more enemy units are 'engaged in combat'. Each individual engagement between two or more units is referred to as a 'combat'. The active player chooses one combat to be resolved in full, referred to as fighting a 'round' of combat. This process is repeated until all combats have been fought."
+                          }
+                        }
+                      },
+                      "content": [
+                        {
+                          "nodeType": "text",
+                          "value": "Choose Combat & Determine Who Can Fight",
+                          "marks": [],
+                          "data": {}
+                        }
+                      ]
+                    },
+                    {
+                      "nodeType": "text",
+                      "value": "",
+                      "marks": [],
+                      "data": {}
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "nodeType": "list-item",
+              "data": {},
+              "content": [
+                {
+                  "nodeType": "paragraph",
+                  "data": {},
+                  "content": [
+                    {
+                      "nodeType": "text",
+                      "value": "",
+                      "marks": [],
+                      "data": {}
+                    },
+                    {
+                      "nodeType": "entry-hyperlink",
+                      "data": {
+                        "target": {
+                          "metadata": {
+                            "tags": [],
+                            "concepts": []
+                          },
+                          "sys": {
+                            "space": {
+                              "sys": {
+                                "type": "Link",
+                                "linkType": "Space",
+                                "id": "0v8db9sevlqj"
+                              }
+                            },
+                            "id": "yzayAJE358OhMSgTQY5U7E",
+                            "type": "Entry",
+                            "createdAt": "2024-01-26T03:09:49.957Z",
+                            "updatedAt": "2024-01-31T03:16:06.298Z",
+                            "environment": {
+                              "sys": {
+                                "id": "master",
+                                "type": "Link",
+                                "linkType": "Environment"
+                              }
+                            },
+                            "publishedVersion": 18,
+                            "revision": 8,
+                            "contentType": {
+                              "sys": {
+                                "type": "Link",
+                                "linkType": "ContentType",
+                                "id": "rule"
+                              }
+                            },
+                            "locale": "en-US"
+                          },
+                          "fields": {
+                            "name": "Roll to Hit (Combat)",
+                            "slug": "roll-to-hit-combat",
+                            "pageReference": 148,
+                            "order": 180,
+                            "body": {
+                              "data": {},
+                              "content": [
+                                {
+                                  "data": {},
+                                  "content": [
+                                    {
+                                      "data": {},
+                                      "marks": [],
+                                      "value": "Not all models are skilled fighters, meaning that not every attack made has an equal chance of hitting the enemy. To complicate matters, the enemy will try to defend themselves, meaning their fighting prowess must also be taken into account.",
+                                      "nodeType": "text"
+                                    }
+                                  ],
+                                  "nodeType": "paragraph"
+                                },
+                                {
+                                  "data": {},
+                                  "content": [
+                                    {
+                                      "data": {},
+                                      "marks": [],
+                                      "value": "When a model's turn to fight comes, you must make a number of rolls To Hit equal to that model's Attacks characteristic. To make a roll To Hit, roll a D6 and consult the To Hit chart, cross-referencing the Weapon Skill of the attacking model with that of the target model. Any dice that equal or beat the target number shown (after applying any modifiers) have hit the target:",
+                                      "nodeType": "text"
+                                    }
+                                  ],
+                                  "nodeType": "paragraph"
+                                },
+                                {
+                                  "data": {
+                                    "target": {
+                                      "sys": {
+                                        "id": "6B9swLHJ8PW1q2QGFodQlI",
+                                        "type": "Link",
+                                        "linkType": "Entry"
+                                      }
+                                    }
+                                  },
+                                  "content": [],
+                                  "nodeType": "embedded-entry-block"
+                                },
+                                {
+                                  "data": {},
+                                  "content": [
+                                    {
+                                      "data": {},
+                                      "marks": [],
+                                      "value": "Rolls of a Natural 1",
+                                      "nodeType": "text"
+                                    }
+                                  ],
+                                  "nodeType": "heading-2"
+                                },
+                                {
+                                  "data": {},
+                                  "content": [
+                                    {
+                                      "data": {},
+                                      "marks": [],
+                                      "value": "Regardless of a warrior's skill, some blows struck just fail to find their mark. When making a roll To Hit, a roll of a natural 1 is always a fail, regardless of modifiers.",
+                                      "nodeType": "text"
+                                    }
+                                  ],
+                                  "nodeType": "paragraph"
+                                },
+                                {
+                                  "data": {},
+                                  "content": [
+                                    {
+                                      "data": {},
+                                      "marks": [],
+                                      "value": "Rolls of a Natural 6",
+                                      "nodeType": "text"
+                                    }
+                                  ],
+                                  "nodeType": "heading-2"
+                                },
+                                {
+                                  "data": {},
+                                  "content": [
+                                    {
+                                      "data": {},
+                                      "marks": [],
+                                      "value": "Even the most unskilled fighter can sometimes land a lucky blow against a superior foe. When making a roll To Hit, a roll of a natural 6 is always a success, regardless of modifiers.",
+                                      "nodeType": "text"
+                                    }
+                                  ],
+                                  "nodeType": "paragraph"
+                                }
+                              ],
+                              "nodeType": "document"
+                            },
+                            "relatedLinks": [
+                              {
+                                "sys": {
+                                  "type": "Link",
+                                  "linkType": "Entry",
+                                  "id": "6sJ01H7F530Imtvr0aKCwB"
+                                }
+                              }
+                            ],
+                            "ruleType": [
+                              {
+                                "metadata": {
+                                  "tags": [],
+                                  "concepts": []
+                                },
+                                "sys": {
+                                  "space": {
+                                    "sys": {
+                                      "type": "Link",
+                                      "linkType": "Space",
+                                      "id": "0v8db9sevlqj"
+                                    }
+                                  },
+                                  "id": "272453Y0FaplJl4h79Y581",
+                                  "type": "Entry",
+                                  "createdAt": "2024-01-16T15:16:31.171Z",
+                                  "updatedAt": "2024-01-21T16:48:41.084Z",
+                                  "environment": {
+                                    "sys": {
+                                      "id": "master",
+                                      "type": "Link",
+                                      "linkType": "Environment"
+                                    }
+                                  },
+                                  "publishedVersion": 3,
+                                  "revision": 2,
+                                  "contentType": {
+                                    "sys": {
+                                      "type": "Link",
+                                      "linkType": "ContentType",
+                                      "id": "ruleType"
+                                    }
+                                  },
+                                  "locale": "en-US"
+                                },
+                                "fields": {
+                                  "name": "The Combat Phase",
+                                  "slug": "the-combat-phase",
+                                  "pageReference": 144,
+                                  "order": 140,
+                                  "body": {
+                                    "nodeType": "document",
+                                    "data": {},
+                                    "content": [
+                                      {
+                                        "nodeType": "paragraph",
+                                        "data": {},
+                                        "content": [
+                                          {
+                                            "nodeType": "text",
+                                            "value": "With the foe outmanoeuvred and weakened by spellcraft and shooting, it is time to finish the job! The Combat phase is when your warriors hack, slice and pummel their way through the enemy ranks. A successful Combat phase can completely change the fortunes of your army and, if you have prepared well in your earlier phases, victory is likely to be your reward.",
+                                            "marks": [],
+                                            "data": {}
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "nodeType": "paragraph",
+                                        "data": {},
+                                        "content": [
+                                          {
+                                            "nodeType": "text",
+                                            "value": "The Combat phase heavily involves both players, although the active player will be the one choosing the order in which each of the combats is fought and resolved. All combats must be resolved during this phase – a unit engaged in combat with the enemy cannot choose not to fight.",
+                                            "marks": [],
+                                            "data": {}
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  "bodyIndex": "With the foe outmanoeuvred and weakened by spellcraft and shooting, it is time to finish the job! The Combat phase is when your warriors hack, slice and pummel their way through the enemy ranks. A successful Combat phase can completely change the fortunes of your army and, if you have prepared well in your earlier phases, victory is likely to be your reward. The Combat phase heavily involves both players, although the active player will be the one choosing the order in which each of the combats is fought and resolved. All combats must be resolved during this phase – a unit engaged in combat with the enemy cannot choose not to fight."
+                                }
+                              }
+                            ],
+                            "association": [
+                              {
+                                "metadata": {
+                                  "tags": [],
+                                  "concepts": []
+                                },
+                                "sys": {
+                                  "space": {
+                                    "sys": {
+                                      "type": "Link",
+                                      "linkType": "Space",
+                                      "id": "0v8db9sevlqj"
+                                    }
+                                  },
+                                  "id": "1ajj5ld8tacvR3LPTz6t5S",
+                                  "type": "Entry",
+                                  "createdAt": "2024-01-14T21:10:21.561Z",
+                                  "updatedAt": "2024-02-18T20:25:22.109Z",
+                                  "environment": {
+                                    "sys": {
+                                      "id": "master",
+                                      "type": "Link",
+                                      "linkType": "Environment"
+                                    }
+                                  },
+                                  "publishedVersion": 9,
+                                  "revision": 5,
+                                  "contentType": {
+                                    "sys": {
+                                      "type": "Link",
+                                      "linkType": "ContentType",
+                                      "id": "association"
+                                    }
+                                  },
+                                  "locale": "en-US"
+                                },
+                                "fields": {
+                                  "abbreviation": "RB",
+                                  "name": "Rulebook",
+                                  "slug": "rulebook",
+                                  "order": 10
+                                }
+                              }
+                            ],
+                            "bodyIndex": "Not all models are skilled fighters, meaning that not every attack made has an equal chance of hitting the enemy. To complicate matters, the enemy will try to defend themselves, meaning their fighting prowess must also be taken into account. When a model's turn to fight comes, you must make a number of rolls To Hit equal to that model's Attacks characteristic. To make a roll To Hit, roll a D6 and consult the To Hit chart, cross-referencing the Weapon Skill of the attacking model with that of the target model. Any dice that equal or beat the target number shown (after applying any modifiers) have hit the target: Rolls of a Natural 1 Regardless of a warrior's skill, some blows struck just fail to find their mark. When making a roll To Hit, a roll of a natural 1 is always a fail, regardless of modifiers. Rolls of a Natural 6 Even the most unskilled fighter can sometimes land a lucky blow against a superior foe. When making a roll To Hit, a roll of a natural 6 is always a success, regardless of modifiers."
+                          }
+                        }
+                      },
+                      "content": [
+                        {
+                          "nodeType": "text",
+                          "value": "Roll To Hit",
+                          "marks": [],
+                          "data": {}
+                        }
+                      ]
+                    },
+                    {
+                      "nodeType": "text",
+                      "value": "",
+                      "marks": [],
+                      "data": {}
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "nodeType": "list-item",
+              "data": {},
+              "content": [
+                {
+                  "nodeType": "paragraph",
+                  "data": {},
+                  "content": [
+                    {
+                      "nodeType": "text",
+                      "value": "",
+                      "marks": [],
+                      "data": {}
+                    },
+                    {
+                      "nodeType": "entry-hyperlink",
+                      "data": {
+                        "target": {
+                          "metadata": {
+                            "tags": [],
+                            "concepts": []
+                          },
+                          "sys": {
+                            "space": {
+                              "sys": {
+                                "type": "Link",
+                                "linkType": "Space",
+                                "id": "0v8db9sevlqj"
+                              }
+                            },
+                            "id": "5OjP12xfx7XGBnq6TH7y27",
+                            "type": "Entry",
+                            "createdAt": "2024-01-26T03:09:50.744Z",
+                            "updatedAt": "2024-04-19T16:54:37.494Z",
+                            "environment": {
+                              "sys": {
+                                "id": "master",
+                                "type": "Link",
+                                "linkType": "Environment"
+                              }
+                            },
+                            "publishedVersion": 11,
+                            "revision": 5,
+                            "contentType": {
+                              "sys": {
+                                "type": "Link",
+                                "linkType": "ContentType",
+                                "id": "rule"
+                              }
+                            },
+                            "locale": "en-US"
+                          },
+                          "fields": {
+                            "name": "Roll to Wound & Make Armour Saves (Combat)",
+                            "slug": "roll-to-wound-and-make-armour-saves-combat",
+                            "pageReference": 149,
+                            "order": 200,
+                            "body": {
+                              "data": {},
+                              "content": [
+                                {
+                                  "data": {},
+                                  "content": [
+                                    {
+                                      "data": {},
+                                      "marks": [],
+                                      "value": "As described in the ",
+                                      "nodeType": "text"
+                                    },
+                                    {
+                                      "data": {
+                                        "target": {
+                                          "sys": {
+                                            "id": "Ih2gAFD3hR2Y3lfrYS38K8",
+                                            "type": "Link",
+                                            "linkType": "Entry"
+                                          }
+                                        }
+                                      },
+                                      "content": [
+                                        {
+                                          "data": {},
+                                          "marks": [],
+                                          "value": "Shooting section",
+                                          "nodeType": "text"
+                                        }
+                                      ],
+                                      "nodeType": "entry-hyperlink"
+                                    },
+                                    {
+                                      "data": {},
+                                      "marks": [],
+                                      "value": ", for each successful roll To Hit, a hit has been caused. Unfortunately, causing a hit is not always enough to cause a wound.",
+                                      "nodeType": "text"
+                                    }
+                                  ],
+                                  "nodeType": "paragraph"
+                                }
+                              ],
+                              "nodeType": "document"
+                            },
+                            "relatedLinks": [
+                              {
+                                "sys": {
+                                  "type": "Link",
+                                  "linkType": "Entry",
+                                  "id": "mb8EgqOO48GH37jcNNCR6Z"
+                                }
+                              },
+                              {
+                                "sys": {
+                                  "type": "Link",
+                                  "linkType": "Entry",
+                                  "id": "436Dq1U3TxeX8oeFL079uO"
+                                }
+                              },
+                              {
+                                "sys": {
+                                  "type": "Link",
+                                  "linkType": "Entry",
+                                  "id": "H74SSm4ey9SnE18307FbSm"
+                                }
+                              }
+                            ],
+                            "ruleType": [
+                              {
+                                "metadata": {
+                                  "tags": [],
+                                  "concepts": []
+                                },
+                                "sys": {
+                                  "space": {
+                                    "sys": {
+                                      "type": "Link",
+                                      "linkType": "Space",
+                                      "id": "0v8db9sevlqj"
+                                    }
+                                  },
+                                  "id": "272453Y0FaplJl4h79Y581",
+                                  "type": "Entry",
+                                  "createdAt": "2024-01-16T15:16:31.171Z",
+                                  "updatedAt": "2024-01-21T16:48:41.084Z",
+                                  "environment": {
+                                    "sys": {
+                                      "id": "master",
+                                      "type": "Link",
+                                      "linkType": "Environment"
+                                    }
+                                  },
+                                  "publishedVersion": 3,
+                                  "revision": 2,
+                                  "contentType": {
+                                    "sys": {
+                                      "type": "Link",
+                                      "linkType": "ContentType",
+                                      "id": "ruleType"
+                                    }
+                                  },
+                                  "locale": "en-US"
+                                },
+                                "fields": {
+                                  "name": "The Combat Phase",
+                                  "slug": "the-combat-phase",
+                                  "pageReference": 144,
+                                  "order": 140,
+                                  "body": {
+                                    "nodeType": "document",
+                                    "data": {},
+                                    "content": [
+                                      {
+                                        "nodeType": "paragraph",
+                                        "data": {},
+                                        "content": [
+                                          {
+                                            "nodeType": "text",
+                                            "value": "With the foe outmanoeuvred and weakened by spellcraft and shooting, it is time to finish the job! The Combat phase is when your warriors hack, slice and pummel their way through the enemy ranks. A successful Combat phase can completely change the fortunes of your army and, if you have prepared well in your earlier phases, victory is likely to be your reward.",
+                                            "marks": [],
+                                            "data": {}
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "nodeType": "paragraph",
+                                        "data": {},
+                                        "content": [
+                                          {
+                                            "nodeType": "text",
+                                            "value": "The Combat phase heavily involves both players, although the active player will be the one choosing the order in which each of the combats is fought and resolved. All combats must be resolved during this phase – a unit engaged in combat with the enemy cannot choose not to fight.",
+                                            "marks": [],
+                                            "data": {}
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  "bodyIndex": "With the foe outmanoeuvred and weakened by spellcraft and shooting, it is time to finish the job! The Combat phase is when your warriors hack, slice and pummel their way through the enemy ranks. A successful Combat phase can completely change the fortunes of your army and, if you have prepared well in your earlier phases, victory is likely to be your reward. The Combat phase heavily involves both players, although the active player will be the one choosing the order in which each of the combats is fought and resolved. All combats must be resolved during this phase – a unit engaged in combat with the enemy cannot choose not to fight."
+                                }
+                              }
+                            ],
+                            "association": [
+                              {
+                                "metadata": {
+                                  "tags": [],
+                                  "concepts": []
+                                },
+                                "sys": {
+                                  "space": {
+                                    "sys": {
+                                      "type": "Link",
+                                      "linkType": "Space",
+                                      "id": "0v8db9sevlqj"
+                                    }
+                                  },
+                                  "id": "1ajj5ld8tacvR3LPTz6t5S",
+                                  "type": "Entry",
+                                  "createdAt": "2024-01-14T21:10:21.561Z",
+                                  "updatedAt": "2024-02-18T20:25:22.109Z",
+                                  "environment": {
+                                    "sys": {
+                                      "id": "master",
+                                      "type": "Link",
+                                      "linkType": "Environment"
+                                    }
+                                  },
+                                  "publishedVersion": 9,
+                                  "revision": 5,
+                                  "contentType": {
+                                    "sys": {
+                                      "type": "Link",
+                                      "linkType": "ContentType",
+                                      "id": "association"
+                                    }
+                                  },
+                                  "locale": "en-US"
+                                },
+                                "fields": {
+                                  "abbreviation": "RB",
+                                  "name": "Rulebook",
+                                  "slug": "rulebook",
+                                  "order": 10
+                                }
+                              }
+                            ],
+                            "bodyIndex": "As described in the Shooting section, for each successful roll To Hit, a hit has been caused. Unfortunately, causing a hit is not always enough to cause a wound."
+                          }
+                        }
+                      },
+                      "content": [
+                        {
+                          "nodeType": "text",
+                          "value": "Roll To Wound & Make Armour Saves",
+                          "marks": [],
+                          "data": {}
+                        }
+                      ]
+                    },
+                    {
+                      "nodeType": "text",
+                      "value": "",
+                      "marks": [],
+                      "data": {}
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "nodeType": "list-item",
+              "data": {},
+              "content": [
+                {
+                  "nodeType": "paragraph",
+                  "data": {},
+                  "content": [
+                    {
+                      "nodeType": "text",
+                      "value": "",
+                      "marks": [],
+                      "data": {}
+                    },
+                    {
+                      "nodeType": "entry-hyperlink",
+                      "data": {
+                        "target": {
+                          "metadata": {
+                            "tags": [],
+                            "concepts": []
+                          },
+                          "sys": {
+                            "space": {
+                              "sys": {
+                                "type": "Link",
+                                "linkType": "Space",
+                                "id": "0v8db9sevlqj"
+                              }
+                            },
+                            "id": "1o5QO8KT2JiFJj5qsW4L84",
+                            "type": "Entry",
+                            "createdAt": "2024-01-26T03:09:52.308Z",
+                            "updatedAt": "2024-02-01T17:32:48.974Z",
+                            "environment": {
+                              "sys": {
+                                "id": "master",
+                                "type": "Link",
+                                "linkType": "Environment"
+                              }
+                            },
+                            "publishedVersion": 8,
+                            "revision": 4,
+                            "contentType": {
+                              "sys": {
+                                "type": "Link",
+                                "linkType": "ContentType",
+                                "id": "rule"
+                              }
+                            },
+                            "locale": "en-US"
+                          },
+                          "fields": {
+                            "name": "Remove Casualties (Combat)",
+                            "slug": "remove-casualties-combat",
+                            "pageReference": 150,
+                            "order": 240,
+                            "body": {
+                              "nodeType": "document",
+                              "data": {},
+                              "content": [
+                                {
+                                  "nodeType": "paragraph",
+                                  "data": {},
+                                  "content": [
+                                    {
+                                      "nodeType": "text",
+                                      "value": "Each unsaved wound is applied to the target unit, causing one Wound to be ",
+                                      "marks": [],
+                                      "data": {}
+                                    },
+                                    {
+                                      "nodeType": "entry-hyperlink",
+                                      "data": {
+                                        "target": {
+                                          "sys": {
+                                            "id": "K6c88DHQDaWDFIpTM74qT2",
+                                            "type": "Link",
+                                            "linkType": "Entry"
+                                          }
+                                        }
+                                      },
+                                      "content": [
+                                        {
+                                          "nodeType": "text",
+                                          "value": "lost",
+                                          "marks": [],
+                                          "data": {}
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "nodeType": "text",
+                                      "value": ". When a model is reduced to zero Wounds, it becomes a casualty and is removed from play. This continues until there are no more unsaved wounds to be applied to the unit, or there are no models remaining to be removed as casualties.",
+                                      "marks": [],
+                                      "data": {}
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            "relatedLinks": [
+                              {
+                                "sys": {
+                                  "type": "Link",
+                                  "linkType": "Entry",
+                                  "id": "YKQEU50fO8Yty0FxU0m38A"
+                                }
+                              },
+                              {
+                                "sys": {
+                                  "type": "Link",
+                                  "linkType": "Entry",
+                                  "id": "Ssn7Mq4D0PVUZ66q2yZ13P"
+                                }
+                              },
+                              {
+                                "sys": {
+                                  "type": "Link",
+                                  "linkType": "Entry",
+                                  "id": "h585jY0jY5rx1C58uCgU80"
+                                }
+                              },
+                              {
+                                "sys": {
+                                  "type": "Link",
+                                  "linkType": "Entry",
+                                  "id": "ShymGMm6F01S5Nad0g8k6v"
+                                }
+                              }
+                            ],
+                            "ruleType": [
+                              {
+                                "metadata": {
+                                  "tags": [],
+                                  "concepts": []
+                                },
+                                "sys": {
+                                  "space": {
+                                    "sys": {
+                                      "type": "Link",
+                                      "linkType": "Space",
+                                      "id": "0v8db9sevlqj"
+                                    }
+                                  },
+                                  "id": "272453Y0FaplJl4h79Y581",
+                                  "type": "Entry",
+                                  "createdAt": "2024-01-16T15:16:31.171Z",
+                                  "updatedAt": "2024-01-21T16:48:41.084Z",
+                                  "environment": {
+                                    "sys": {
+                                      "id": "master",
+                                      "type": "Link",
+                                      "linkType": "Environment"
+                                    }
+                                  },
+                                  "publishedVersion": 3,
+                                  "revision": 2,
+                                  "contentType": {
+                                    "sys": {
+                                      "type": "Link",
+                                      "linkType": "ContentType",
+                                      "id": "ruleType"
+                                    }
+                                  },
+                                  "locale": "en-US"
+                                },
+                                "fields": {
+                                  "name": "The Combat Phase",
+                                  "slug": "the-combat-phase",
+                                  "pageReference": 144,
+                                  "order": 140,
+                                  "body": {
+                                    "nodeType": "document",
+                                    "data": {},
+                                    "content": [
+                                      {
+                                        "nodeType": "paragraph",
+                                        "data": {},
+                                        "content": [
+                                          {
+                                            "nodeType": "text",
+                                            "value": "With the foe outmanoeuvred and weakened by spellcraft and shooting, it is time to finish the job! The Combat phase is when your warriors hack, slice and pummel their way through the enemy ranks. A successful Combat phase can completely change the fortunes of your army and, if you have prepared well in your earlier phases, victory is likely to be your reward.",
+                                            "marks": [],
+                                            "data": {}
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "nodeType": "paragraph",
+                                        "data": {},
+                                        "content": [
+                                          {
+                                            "nodeType": "text",
+                                            "value": "The Combat phase heavily involves both players, although the active player will be the one choosing the order in which each of the combats is fought and resolved. All combats must be resolved during this phase – a unit engaged in combat with the enemy cannot choose not to fight.",
+                                            "marks": [],
+                                            "data": {}
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  "bodyIndex": "With the foe outmanoeuvred and weakened by spellcraft and shooting, it is time to finish the job! The Combat phase is when your warriors hack, slice and pummel their way through the enemy ranks. A successful Combat phase can completely change the fortunes of your army and, if you have prepared well in your earlier phases, victory is likely to be your reward. The Combat phase heavily involves both players, although the active player will be the one choosing the order in which each of the combats is fought and resolved. All combats must be resolved during this phase – a unit engaged in combat with the enemy cannot choose not to fight."
+                                }
+                              }
+                            ],
+                            "association": [
+                              {
+                                "metadata": {
+                                  "tags": [],
+                                  "concepts": []
+                                },
+                                "sys": {
+                                  "space": {
+                                    "sys": {
+                                      "type": "Link",
+                                      "linkType": "Space",
+                                      "id": "0v8db9sevlqj"
+                                    }
+                                  },
+                                  "id": "1ajj5ld8tacvR3LPTz6t5S",
+                                  "type": "Entry",
+                                  "createdAt": "2024-01-14T21:10:21.561Z",
+                                  "updatedAt": "2024-02-18T20:25:22.109Z",
+                                  "environment": {
+                                    "sys": {
+                                      "id": "master",
+                                      "type": "Link",
+                                      "linkType": "Environment"
+                                    }
+                                  },
+                                  "publishedVersion": 9,
+                                  "revision": 5,
+                                  "contentType": {
+                                    "sys": {
+                                      "type": "Link",
+                                      "linkType": "ContentType",
+                                      "id": "association"
+                                    }
+                                  },
+                                  "locale": "en-US"
+                                },
+                                "fields": {
+                                  "abbreviation": "RB",
+                                  "name": "Rulebook",
+                                  "slug": "rulebook",
+                                  "order": 10
+                                }
+                              }
+                            ],
+                            "bodyIndex": "Each unsaved wound is applied to the target unit, causing one Wound to be lost. When a model is reduced to zero Wounds, it becomes a casualty and is removed from play. This continues until there are no more unsaved wounds to be applied to the unit, or there are no models remaining to be removed as casualties."
+                          }
+                        }
+                      },
+                      "content": [
+                        {
+                          "nodeType": "text",
+                          "value": "Remove Casualties",
+                          "marks": [],
+                          "data": {}
+                        }
+                      ]
+                    },
+                    {
+                      "nodeType": "text",
+                      "value": "",
+                      "marks": [],
+                      "data": {}
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "nodeType": "paragraph",
+          "data": {},
+          "content": [
+            {
+              "nodeType": "text",
+              "value": "",
+              "marks": [],
+              "data": {}
+            }
+          ]
+        }
+      ]
+    },
+    "ruleType": [
+      {
+        "metadata": {
+          "tags": [],
+          "concepts": []
+        },
+        "sys": {
+          "space": {
+            "sys": {
+              "type": "Link",
+              "linkType": "Space",
+              "id": "0v8db9sevlqj"
+            }
+          },
+          "id": "272453Y0FaplJl4h79Y581",
+          "type": "Entry",
+          "createdAt": "2024-01-16T15:16:31.171Z",
+          "updatedAt": "2024-01-21T16:48:41.084Z",
+          "environment": {
+            "sys": {
+              "id": "master",
+              "type": "Link",
+              "linkType": "Environment"
+            }
+          },
+          "publishedVersion": 3,
+          "revision": 2,
+          "contentType": {
+            "sys": {
+              "type": "Link",
+              "linkType": "ContentType",
+              "id": "ruleType"
+            }
+          },
+          "locale": "en-US"
+        },
+        "fields": {
+          "name": "The Combat Phase",
+          "slug": "the-combat-phase",
+          "pageReference": 144,
+          "order": 140,
+          "body": {
+            "nodeType": "document",
+            "data": {},
+            "content": [
+              {
+                "nodeType": "paragraph",
+                "data": {},
+                "content": [
+                  {
+                    "nodeType": "text",
+                    "value": "With the foe outmanoeuvred and weakened by spellcraft and shooting, it is time to finish the job! The Combat phase is when your warriors hack, slice and pummel their way through the enemy ranks. A successful Combat phase can completely change the fortunes of your army and, if you have prepared well in your earlier phases, victory is likely to be your reward.",
+                    "marks": [],
+                    "data": {}
+                  }
+                ]
+              },
+              {
+                "nodeType": "paragraph",
+                "data": {},
+                "content": [
+                  {
+                    "nodeType": "text",
+                    "value": "The Combat phase heavily involves both players, although the active player will be the one choosing the order in which each of the combats is fought and resolved. All combats must be resolved during this phase – a unit engaged in combat with the enemy cannot choose not to fight.",
+                    "marks": [],
+                    "data": {}
+                  }
+                ]
+              }
+            ]
+          },
+          "bodyIndex": "With the foe outmanoeuvred and weakened by spellcraft and shooting, it is time to finish the job! The Combat phase is when your warriors hack, slice and pummel their way through the enemy ranks. A successful Combat phase can completely change the fortunes of your army and, if you have prepared well in your earlier phases, victory is likely to be your reward. The Combat phase heavily involves both players, although the active player will be the one choosing the order in which each of the combats is fought and resolved. All combats must be resolved during this phase – a unit engaged in combat with the enemy cannot choose not to fight."
+        }
+      }
+    ],
+    "association": [
+      {
+        "metadata": {
+          "tags": [],
+          "concepts": []
+        },
+        "sys": {
+          "space": {
+            "sys": {
+              "type": "Link",
+              "linkType": "Space",
+              "id": "0v8db9sevlqj"
+            }
+          },
+          "id": "1ajj5ld8tacvR3LPTz6t5S",
+          "type": "Entry",
+          "createdAt": "2024-01-14T21:10:21.561Z",
+          "updatedAt": "2024-02-18T20:25:22.109Z",
+          "environment": {
+            "sys": {
+              "id": "master",
+              "type": "Link",
+              "linkType": "Environment"
+            }
+          },
+          "publishedVersion": 9,
+          "revision": 5,
+          "contentType": {
+            "sys": {
+              "type": "Link",
+              "linkType": "ContentType",
+              "id": "association"
+            }
+          },
+          "locale": "en-US"
+        },
+        "fields": {
+          "abbreviation": "RB",
+          "name": "Rulebook",
+          "slug": "rulebook",
+          "order": 10
+        }
+      }
+    ],
+    "bodyIndex": "The Choose Combat & Fight sub-phase is further broken down into four steps. These are: Choose Combat & Determine Who Can Fight Roll To Hit Roll To Wound & Make Armour Saves Remove Casualties "
+  }
+}
