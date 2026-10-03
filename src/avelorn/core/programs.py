@@ -110,15 +110,9 @@ def volley_program() -> dict[str, object]:
     target_models.show(target_models.output("target", Monoid(0)))
     distance.show(distance.output("distance", Monoid(0)))
     weapon_range.show(weapon_range.output("range", Monoid(0)))
-    range_band.show(Projection("range", lambda world: world.of(range_band), Monoid("unknown")))
+    range_band.show(range_band.output("range", Monoid("unknown")))
     shots.show(shots.output("shots", Monoid(0)))
-    hit.show(
-        Projection(
-            "hits",
-            lambda world: int(world.of(hit) >= 4),
-            Monoid(0),
-        )
-    )
+    hit.show(Projection("hits", (hit,), lambda face: int(face >= 4), Monoid(0)))
     wound_roll.show(wound_roll.output("wounds", Monoid(0)))
     remove.show(remove.output("casualties", Monoid(0)))
     flight.show(flight.output("panic", Monoid("unknown")))
