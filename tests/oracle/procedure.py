@@ -209,20 +209,25 @@ def _shooting_hit(attack: Attack) -> tuple[Throw, int]:
     """The roll To Hit when shooting, and the D6 roll it needs.
 
     Sources: the-shooting-phase/roll-to-hit-shooting (a natural 1 always fails),
-    the-shooting-phase/7-to-hit, the-shooting-phase/bs-of-6-or-higher.
+    the-shooting-phase/7-to-hit, the-shooting-phase/bs-of-6-or-higher,
+    the-shooting-phase/to-hit-modifiers ("In the case of models with a BS of 6 or
+    higher, these modifiers are only applied to the first dice roll").
 
     Returns:
-        The enumerated roll, the natural face being the first die's, and the roll needed.
+        The enumerated roll, each natural face the last die rolled, and the first roll's need.
 
     Raises:
         ValueError: a case the printed text does not settle.
     """
     bs, modifier = attack.skill, attack.hit_modifier
     if bs >= 6:
-        if modifier or attack.hit_re_rolls:
-            raise ValueError("unprinted: BS 6 or higher with a modifier or another re-roll")
+        if attack.hit_re_rolls:
+            raise ValueError("unprinted: which re-roll a BS 6+ miss takes when another applies")
+        if 2 - modifier > 6:
+            raise ValueError("unprinted: a BS 6+ first roll that needs 7+")
+        first = _d6(lambda face: face != 1 and face + modifier >= 2)
         second = _d6(lambda face: face != 1 and face >= HIGH_BS_RE_ROLL[bs])
-        return _re_rolled(_d6(lambda face: face != 1), frozenset({ReRoll.FAILED}), second), 2
+        return _re_rolled(first, frozenset({ReRoll.FAILED}), second), 2 - modifier
     target = shooting_to_hit(bs)
     needed = target - modifier
     if needed <= 6:

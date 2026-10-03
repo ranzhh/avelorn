@@ -74,12 +74,16 @@ def test_the_charts_match_the_printed_tables() -> None:
 
 @pytest.mark.xfail(
     strict=True,
-    reason="legacy reads BS6 as 1+ (5/6); the-shooting-phase/bs-of-6-or-higher prints 2+/6+",
+    raises=AssertionError,
+    reason="legacy reads BS6 as 7 - BS - modifier; the-shooting-phase/bs-of-6-or-higher prints"
+    " 2+/6+ and to-hit-modifiers applies modifiers to the first roll only",
 )
-def test_ballistic_skill_six_hits_as_printed() -> None:
-    """BS6 hits on 2+ and re-rolls a miss at 6+: 31/36 of shots hit."""
-    legacy = shoot(1, ballistic_skill=6, strength=10, toughness=1).p_unsaved
-    assert legacy == one_attack(Attack(SHOOTING, skill=6, strength=10, toughness=1)).unsaved
+@pytest.mark.parametrize("modifier", [0, -1])
+def test_ballistic_skill_six_hits_as_printed(modifier: int) -> None:
+    """BS6 hits on 2+ and re-rolls a miss at 6+ (31/36); at -1, on 3+ then 6+ (26/36)."""
+    legacy = shoot(1, 6, strength=10, toughness=1, hit_modifier=modifier).p_unsaved
+    attack = Attack(SHOOTING, skill=6, strength=10, toughness=1, hit_modifier=modifier)
+    assert legacy == one_attack(attack).unsaved
 
 
 def _legacy_volley(attack: Attack) -> Probability:

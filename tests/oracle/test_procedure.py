@@ -127,3 +127,11 @@ def test_the_monte_carlo_is_seeded() -> None:
         )
 
     assert run() == run()
+
+
+def test_ballistic_skill_six_applies_a_modifier_to_the_first_roll_only() -> None:
+    """BS6 at -1 hits on 3+, and a miss is re-rolled at the unmodified 6+."""
+    attack = Attack(Phase.SHOOTING, skill=6, strength=10, toughness=1, hit_modifier=-1)
+    assert one_attack(attack).unsaved == (Fraction(4, 6) + Fraction(2, 6) * Fraction(1, 6)) * (
+        SURE_WOUND
+    )
