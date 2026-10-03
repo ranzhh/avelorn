@@ -87,6 +87,12 @@ def test_rules_show_prints_the_text_the_effects_and_what_is_left_out() -> None:
     assert "Not covered:" in printed
 
 
+def test_rules_show_names_a_granted_rule_as_it_prints() -> None:
+    """Arrows of Isha grants Armour Bane (1), not the reference it is authored as."""
+    printed = "\n".join(commands.show_rule(REPO, "arrows-of-isha"))
+    assert "grants: Armour Bane (1)" in printed
+
+
 def test_rules_show_points_a_miss_at_the_rule_listing() -> None:
     """A slug with no entry cannot be shown, so the miss says where the slugs are listed."""
     with pytest.raises(LookupError, match="avelorn rules list"):
