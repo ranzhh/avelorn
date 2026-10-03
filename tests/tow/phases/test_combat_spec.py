@@ -375,10 +375,11 @@ def _outnumbering_scores_massed_infantry(f: _Field) -> tuple:
 
 def _the_score_adds_the_bonuses_to_the_wounds(f: _Field) -> tuple:
     # combat-result-score: the score is the wounds plus the Rank Bonus plus the
-    # rule-granted points. 15 against 5 claims two ranks and Massed Infantry, so
-    # the scored margin sits exactly three above the wounds margin.
+    # rule-granted points. 20 against 5 still has three ranks after the five
+    # losses its foe can at most inflict, so it claims two ranks and Massed
+    # Infantry: the scored margin sits exactly three above the wounds margin.
     plain = f.unit()
-    fought = f.fight(plain, plain, 15, 5)
+    fought = f.fight(plain, plain, 20, 5)
     return _scored_margin(fought) - _margin(fought), Fraction(3)
 
 
