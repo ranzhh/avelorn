@@ -40,6 +40,14 @@ def test_every_ledger_entry_still_matches_a_gap() -> None:
     )
 
 
+def test_every_printed_rule_has_an_entry() -> None:
+    """A rule the corpus prints is imported as text, never ledgered as missing."""
+    missing = [gap.subject for gap in REPORT.gaps if gap.kind is GapKind.RULE_WITHOUT_ENTRY]
+    assert not missing, "import with scripts/import_whfb_app.py rule <slug>:\n" + "\n".join(
+        missing
+    )
+
+
 @pytest.mark.parametrize(
     ("printed", "gap"),
     [
