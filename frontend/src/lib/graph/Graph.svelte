@@ -51,6 +51,7 @@
 	const bearer = (who: Side | 'core') => (who === 'core' ? 'core rules' : program.sides[who]);
 	const signed = (move: number) => (move > 0 ? `+${move}` : `${move}`);
 	const is = (kind: Pick['kind'], id: string) => selected?.kind === kind && selected.id === id;
+	const percent = (p: number) => `${Math.round(p * 100)}%`;
 
 	function toggle(path: string) {
 		folded = { ...folded, [path]: !collapsed.includes(path) };
@@ -327,6 +328,13 @@
 				<h2>options</h2>
 				{#each node.options as option}
 					<div class="field"><span>{option}</span></div>
+				{/each}
+				<h2>taken</h2>
+				{#each node.taken as taken}
+					<div class="field">
+						<span>{taken.option} <span class="meta">{taken.by}</span></span>
+						<span class="num">{percent(taken.p)}</span>
+					</div>
 				{/each}
 			{/if}
 			<h2>edge out</h2>

@@ -4,6 +4,8 @@ export type StepKind = 'measurement' | 'decision' | 'roll' | 'consequence';
 
 export type Verdict = 'applied' | 'honoured' | 'held' | 'inapplicable';
 
+export type By = 'chosen' | 'only' | 'otherwise';
+
 export interface Outcome {
 	value: number | string;
 	p: number;
@@ -42,9 +44,16 @@ export interface Measurement extends Step {
 	kind: 'measurement';
 }
 
+export interface Taken {
+	option: string;
+	by: By;
+	p: number;
+}
+
 export interface Decision extends Step {
 	kind: 'decision';
 	options: string[];
+	taken: Taken[];
 }
 
 export interface Roll extends Step {
@@ -78,13 +87,13 @@ export interface Slot {
 	empty: boolean;
 }
 
-export interface Lanes {
+export interface Body {
 	path: string;
-	kind: 'lanes';
+	kind: 'body';
 	decision: string;
 }
 
-export type Block = Sequence | Repeat | Slot | Lanes;
+export type Block = Sequence | Repeat | Slot | Body;
 
 export interface Landing {
 	at: string;

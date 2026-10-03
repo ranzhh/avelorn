@@ -9,13 +9,18 @@ import pytest
 from avelorn.core.distribution import Distribution, Monoid
 from avelorn.core.graph import (
     Bearer,
+    Body,
+    By,
     Consequence,
+    Contribution,
     Decision,
+    Eligibility,
     GraphError,
     Landing,
-    Lanes,
+    May,
     Measurement,
     Modifier,
+    Operation,
     Program,
     Projection,
     Repeat,
@@ -27,6 +32,7 @@ from avelorn.core.graph import (
     Slot,
     State,
     Step,
+    Taken,
     Tally,
     Verdict,
     World,
@@ -430,9 +436,8 @@ def test_a_slot_keeps_its_locals_and_its_state_writes() -> None:
     }
 
 
-def test_a_lane_keeps_its_state_writes() -> None:
+def test_a_body_keeps_its_state_writes() -> None:
     models = State[int]("models")
-    reaction = Decision[str](name="declare-reaction", side=Side.THE_ENEMY, options=("hold",))
     hit = Measurement[int](name="hit", side=Side.THIS_MODEL, kernel=_coin)
     remove = Consequence[int](
         name="remove-casualties",
@@ -441,30 +446,30 @@ def test_a_lane_keeps_its_state_writes() -> None:
         kernel=_lose,
         writes=models,
     )
+    reaction = Decision[str](
+        name="declare-reaction",
+        side=Side.THE_ENEMY,
+        options={"hold": (hit, remove)},
+        otherwise="hold",
+    )
     after = Consequence[int](name="after", side=Side.THE_ENEMY, inputs=(models,), kernel=_toll)
     left = after.output("models", Monoid(0))
     after.show(left)
-    program = Program.build(
-        "charge",
-        _SIDES,
-        (reaction, Lanes(name="reaction", decision=reaction, items=(hit, remove)), after),
-    )
+    program = Program.build("charge", _SIDES, (reaction, after))
     (lane,) = program.evaluate(state={models: 5})
 
     assert lane.read(after, left).mass == {5: _HALF, 4: _HALF}
 
 
-def test_a_lane_local_is_out_of_scope_after_it() -> None:
-    reaction = Decision[str](name="declare-reaction", side=Side.THE_ENEMY, options=("hold",))
+def test_a_body_local_is_out_of_scope_after_it() -> None:
     hit = Measurement[int](name="hit", side=Side.THIS_MODEL, kernel=_coin)
+    reaction = Decision[str](
+        name="declare-reaction", side=Side.THE_ENEMY, options={"hold": (hit,)}, otherwise="hold"
+    )
     after = Consequence[int](name="after", side=Side.THE_ENEMY, inputs=(hit,), kernel=_toll)
 
     with pytest.raises(GraphError, match="after inputs hit, which is not in scope"):
-        Program.build(
-            "charge",
-            _SIDES,
-            (reaction, Lanes(name="reaction", decision=reaction, items=(hit,)), after),
-        )
+        Program.build("charge", _SIDES, (reaction, after))
 
 
 def test_a_repeat_holds_inside_only_what_its_inside_reads() -> None:
@@ -719,21 +724,19 @@ def _hits_on_the_charge(charged: bool) -> Distribution[int]:
 
 
 def test_a_tally_of_a_group_out_of_scope_is_refused() -> None:
-    reaction = Decision[str](name="declare-reaction", side=Side.THE_ENEMY, options=("hold",))
     once = Measurement[int](name="once", side=Side.THIS_MODEL, kernel=_one)
     hit = Measurement[int](name="hit", side=Side.THIS_MODEL, kernel=_coin)
     attack = Repeat(name="attack", times=once, items=(hit,))
+    reaction = Decision[str](
+        name="declare-reaction", side=Side.THE_ENEMY, options={"hold": (attack,)}, otherwise="hold"
+    )
     hits = Tally[int]("hits", {attack: hit.output("hits", Monoid(0))})
     remove = Consequence[int](
         name="remove-casualties", side=Side.THE_ENEMY, inputs=(hits,), kernel=_toll
     )
 
     with pytest.raises(GraphError, match="tallies attack, which is not in scope"):
-        Program.build(
-            "charge",
-            _SIDES,
-            (reaction, once, Lanes(name="reaction", decision=reaction, items=(attack,)), remove),
-        )
+        Program.build("charge", _SIDES, (once, reaction, remove))
 
 
 type _Counts = dict[Repeat, Projection[Any]]
@@ -833,18 +836,17 @@ def _ground(reaction: str) -> Distribution[int]:
 
 def _fight() -> tuple[Program, Decision[str], Consequence[int], Projection[int]]:
     reaction = Decision[str](
-        name="declare-reaction", side=Side.THE_ENEMY, options=("hold", "flee")
+        name="declare-reaction",
+        side=Side.THE_ENEMY,
+        options={"hold": (), "flee": ()},
+        otherwise="hold",
     )
     given = Consequence[int](
         name="ground-given", side=Side.THE_ENEMY, inputs=(reaction,), kernel=_ground
     )
     ground = given.output("ground", Monoid(0))
     given.show(ground)
-    program = Program.build(
-        "charge",
-        _SIDES,
-        (reaction, Lanes(name="reaction", decision=reaction, items=(given,))),
-    )
+    program = Program.build("charge", _SIDES, (reaction, given))
     return program, reaction, given, ground
 
 
@@ -868,7 +870,7 @@ def test_a_fixed_decision_leaves_one_lane() -> None:
 
 def test_an_unknown_decision_is_rejected() -> None:
     program, _, _, _ = _fight()
-    stray = Decision[str](name="stray", side=Side.THIS_MODEL, options=("yes",))
+    stray = Decision[str](name="stray", side=Side.THIS_MODEL, options={"yes": ()}, otherwise="yes")
 
     with pytest.raises(GraphError, match="stray is not a decision in charge"):
         program.evaluate(choices={stray: "yes"})
@@ -896,16 +898,291 @@ def test_a_rule_cannot_land_on_a_step_the_program_lacks() -> None:
         )
 
 
+def _three_or_nine() -> Distribution[int]:
+    return Distribution({3: _HALF, 9: _HALF})
+
+
+def _six_inches() -> Distribution[int]:
+    return Distribution.pure(6)
+
+
+def _one_falls(models: int) -> Distribution[int]:
+    return Distribution.pure(models - 1)
+
+
+def _shooting_when_too_close(gap: int, movement: int) -> frozenset[str]:
+    return frozenset({"shoot"} if gap < movement else ())
+
+
+def _charge_reaction() -> tuple[
+    Program, Decision[str], Decision[str], Projection[int], State[int]
+]:
+    chargers = State[int]("chargers")
+    gap = Measurement[int](name="gap", side=Side.THE_ENEMY, kernel=_three_or_nine)
+    movement = Measurement[int](name="movement", side=Side.THIS_MODEL, kernel=_six_inches)
+    volley = Consequence[int](
+        name="volley", side=Side.THE_ENEMY, inputs=(chargers,), kernel=_one_falls, writes=chargers
+    )
+    instead = Decision[str](
+        name="hold-or-flee-instead",
+        side=Side.THE_ENEMY,
+        options={"shoot": (volley,), "hold": (), "flee": ()},
+        otherwise="hold",
+        contributions=(
+            Contribution(
+                rule="stand-and-shoot",
+                operation=Operation.FORBID,
+                inputs=(gap, movement),
+                options=_shooting_when_too_close,
+            ),
+        ),
+    )
+    reactions = Decision[str](
+        name="charge-reactions",
+        side=Side.THE_ENEMY,
+        options={"hold": (), "stand-and-shoot": (instead,), "flee": ()},
+        otherwise="hold",
+    )
+    charge = Consequence[int](
+        name="charge", side=Side.THIS_MODEL, inputs=(chargers,), kernel=_toll
+    )
+    left = charge.output("chargers", Monoid(0))
+    charge.show(left)
+    program = Program.build("charge", _SIDES, (gap, movement, reactions, charge))
+    return program, reactions, instead, left, chargers
+
+
+def test_a_charger_inside_its_movement_sends_stand_and_shoot_to_its_otherwise() -> None:
+    program, reactions, instead, left, chargers = _charge_reaction()
+    (lane,) = program.evaluate(
+        choices={reactions: "stand-and-shoot", instead: "shoot"}, state={chargers: 5}
+    )
+    charge = program.steps[-1]
+
+    assert lane.read(charge, left).mass == {4: _HALF, 5: _HALF}
+    assert lane.taken[instead].mass == {
+        Taken("shoot", By.CHOSEN): _HALF,
+        Taken("hold", By.OTHERWISE): _HALF,
+    }
+    assert lane.verdicts("stand-and-shoot", instead).mass == {
+        Verdict.APPLIED: _HALF,
+        Verdict.HONOURED: _HALF,
+    }
+
+
+def test_a_decision_inside_an_option_splits_only_the_lanes_that_took_it() -> None:
+    program, _, _, _, chargers = _charge_reaction()
+    lanes = program.evaluate(state={chargers: 5})
+
+    assert [tuple(lane.choices.values()) for lane in lanes] == [
+        ("hold",),
+        ("stand-and-shoot", "shoot"),
+        ("stand-and-shoot", "hold"),
+        ("stand-and-shoot", "flee"),
+        ("flee",),
+    ]
+
+
+def _hold_when_close(gap: int) -> frozenset[str]:
+    return frozenset({"hold"} if gap < 6 else ())
+
+
+def _hold_always(gap: int) -> frozenset[str]:
+    return frozenset({"hold"})
+
+
+def _held(force: Callable[[int], frozenset[str]]) -> tuple[Program, Decision[str]]:
+    gap = Measurement[int](name="gap", side=Side.THE_ENEMY, kernel=_three_or_nine)
+    reaction = Decision[str](
+        name="charge-reactions",
+        side=Side.THE_ENEMY,
+        options={"hold": (), "flee": ()},
+        otherwise="flee",
+        contributions=(
+            Contribution(
+                rule="must-hold", operation=Operation.FORCE, inputs=(gap,), options=force
+            ),
+        ),
+    )
+    return Program.build("charge", _SIDES, (gap, reaction)), reaction
+
+
+def test_a_forced_option_narrows_what_a_world_may_take() -> None:
+    program, reaction = _held(_hold_when_close)
+    (lane,) = program.evaluate(choices={reaction: "flee"})
+
+    assert lane.taken[reaction].mass == {
+        Taken("hold", By.ONLY): _HALF,
+        Taken("flee", By.CHOSEN): _HALF,
+    }
+
+
+def test_a_decision_left_one_option_in_every_world_does_not_split() -> None:
+    program, _ = _held(_hold_always)
+
+    (lane,) = program.evaluate()
+
+    assert lane.choices == {}
+
+
+def _fire_and_flee_when_far(gap: int) -> frozenset[str]:
+    return frozenset({"fire-and-flee"} if gap >= 6 else ())
+
+
+@pytest.mark.parametrize(
+    ("opened", "lanes"),
+    [(False, [("hold",), ("flee",)]), (True, [("hold",), ("flee",), ("fire-and-flee",)])],
+    ids=["unopened", "opened-when-far"],
+)
+def test_a_closed_option_exists_only_where_a_rule_opens_it(
+    opened: bool, lanes: list[tuple[str, ...]]
+) -> None:
+    gap = Measurement[int](name="gap", side=Side.THE_ENEMY, kernel=_three_or_nine)
+    opener = Contribution(
+        rule="fire-and-flee",
+        operation=Operation.ALLOW,
+        inputs=(gap,),
+        options=_fire_and_flee_when_far,
+    )
+    reaction = Decision[str](
+        name="charge-reactions",
+        side=Side.THE_ENEMY,
+        options={"hold": (), "flee": (), "fire-and-flee": ()},
+        closed="fire-and-flee",
+        otherwise="hold",
+        contributions=(opener,) if opened else (),
+    )
+    program = Program.build("charge", _SIDES, (gap, reaction))
+
+    assert [tuple(lane.choices.values()) for lane in program.evaluate()] == lanes
+
+
+def _a_bow() -> Distribution[frozenset[str]]:
+    return Distribution.pure(frozenset({"bow"}))
+
+
+def _a_pistol() -> frozenset[str]:
+    return frozenset({"pistol"})
+
+
+def _every_weapon_when_too_close(gap: int, movement: int) -> frozenset[str]:
+    return frozenset({"bow", "pistol"} if gap < movement else ())
+
+
+def test_a_forbid_wins_over_an_allow_at_an_eligibility() -> None:
+    gap = Measurement[int](name="gap", side=Side.THE_ENEMY, kernel=_three_or_nine)
+    movement = Measurement[int](name="movement", side=Side.THIS_MODEL, kernel=_six_inches)
+    who = Eligibility[str](
+        name="who-can-shoot",
+        side=Side.THE_ENEMY,
+        kernel=_a_bow,
+        contributions=(
+            Contribution(rule="quick-shot", operation=Operation.ALLOW, options=_a_pistol),
+            Contribution(
+                rule="stand-and-shoot",
+                operation=Operation.FORBID,
+                inputs=(gap, movement),
+                options=_every_weapon_when_too_close,
+            ),
+        ),
+    )
+    weapons = who.output("weapons", Monoid(frozenset[str]()))
+    who.show(weapons)
+    (lane,) = Program.build("volley", _SIDES, (gap, movement, who)).evaluate()
+
+    assert lane.read(who, weapons).mass == {
+        frozenset(): _HALF,
+        frozenset({"bow", "pistol"}): _HALF,
+    }
+
+
+def _hold_if_taken(taken: bool) -> frozenset[str]:
+    return frozenset({"hold"} if taken else ())
+
+
+def test_a_rule_the_player_may_decline_lands_only_in_the_lane_that_takes_it() -> None:
+    stubborn = May(name="stubborn", side=Side.THE_ENEMY)
+    reaction = Decision[str](
+        name="charge-reactions",
+        side=Side.THE_ENEMY,
+        options={"hold": (), "flee": ()},
+        otherwise="flee",
+        contributions=(
+            Contribution(
+                rule="stubborn",
+                operation=Operation.FORCE,
+                inputs=(stubborn,),
+                options=_hold_if_taken,
+            ),
+        ),
+    )
+    program = Program.build("charge", _SIDES, (stubborn, reaction))
+
+    lanes = program.evaluate(choices={reaction: "flee"})
+
+    assert [(lane.choices[stubborn], lane.taken[reaction].mass) for lane in lanes] == [
+        (True, {Taken("hold", By.ONLY): 1}),
+        (False, {Taken("flee", By.CHOSEN): 1}),
+    ]
+
+
+def test_a_may_below_the_top_of_its_program_is_refused() -> None:
+    stubborn = May(name="stubborn", side=Side.THE_ENEMY)
+
+    with pytest.raises(GraphError, match="charge/round/stubborn is chosen once per evaluation"):
+        Program.build("charge", _SIDES, (Slot(name="round", items=(stubborn,)),))
+
+
+def test_a_decision_inside_a_repeat_is_refused() -> None:
+    once = Measurement[int](name="once", side=Side.THIS_MODEL, kernel=_one)
+    weapon = Decision[str](
+        name="weapon", side=Side.THIS_MODEL, options={"hand": ()}, otherwise="hand"
+    )
+
+    with pytest.raises(
+        GraphError, match="fight/attack/weapon settles options inside fight/attack"
+    ):
+        Program.build("fight", _SIDES, (once, Repeat(name="attack", times=once, items=(weapon,))))
+
+
+def _charge_offered(gap: int) -> frozenset[str]:
+    return frozenset({"charge"})
+
+
+def test_a_rule_offering_an_option_the_decision_lacks_is_refused() -> None:
+    gap = Measurement[int](name="gap", side=Side.THE_ENEMY, kernel=_three_or_nine)
+    reaction = Decision[str](
+        name="charge-reactions",
+        side=Side.THE_ENEMY,
+        options={"hold": ()},
+        otherwise="hold",
+        contributions=(
+            Contribution(
+                rule="stray", operation=Operation.ALLOW, inputs=(gap,), options=_charge_offered
+            ),
+        ),
+    )
+    program = Program.build("charge", _SIDES, (gap, reaction))
+
+    with pytest.raises(GraphError, match=re.escape("is offered ['charge']")):
+        program.evaluate()
+
+
 def _hit_on(range_band: str) -> Distribution[int]:
     return _d6()
 
 
-def _removed(range_band: str) -> Distribution[int]:
-    return Distribution.pure(1 if range_band == "close" else 0)
+def _stand_when_close(range_band: str) -> frozenset[str]:
+    return frozenset({"stand"} if range_band == "close" else ())
 
 
 _shots = Measurement[int](name="shots", side=Side.THIS_MODEL, kernel=_three)
-_range = Decision[str](name="choose-range", side=Side.THIS_MODEL, options=("close", "long"))
+_range = Decision[str](
+    name="choose-range",
+    side=Side.THIS_MODEL,
+    options={"close": (), "long": ()},
+    otherwise="close",
+)
 _to_hit = Roll[int](
     name="roll-to-hit",
     side=Side.THIS_MODEL,
@@ -914,8 +1191,20 @@ _to_hit = Roll[int](
     target=Scalar("to hit", 4),
     modifiers=(Modifier("Volley Fire", 1),),
 )
-_casualties = Consequence[int](
-    name="remove-casualties", side=Side.THE_ENEMY, inputs=(_range,), kernel=_removed
+_casualties = Measurement[int](name="remove-casualties", side=Side.THE_ENEMY, kernel=_one)
+_aftermath = Decision[str](
+    name="aftermath",
+    side=Side.THE_ENEMY,
+    options={"stand": (_casualties,), "flee": ()},
+    otherwise="flee",
+    contributions=(
+        Contribution(
+            rule="volley-fire",
+            operation=Operation.FORCE,
+            inputs=(_range,),
+            options=_stand_when_close,
+        ),
+    ),
 )
 
 
@@ -935,7 +1224,7 @@ _volley = Program.build(
         _range,
         Repeat(name="attack", times=_shots, items=(_to_hit,)),
         _stomp,
-        Lanes(name="aftermath", decision=_range, items=(_casualties,)),
+        _aftermath,
     ),
 )
 
@@ -944,10 +1233,7 @@ _volley.attach(
         rule="volley-fire",
         name="Volley Fire",
         bearer=Bearer.THIS_MODEL,
-        landings=(
-            Landing(_to_hit, Verdict.APPLIED),
-            Landing(_casualties, Verdict.HONOURED),
-        ),
+        landings=(Landing(_to_hit, Verdict.APPLIED), Landing(_aftermath, Verdict.APPLIED)),
     )
 )
 _volley.attach(RuleNode(rule="stubborn", name="Stubborn", bearer=Bearer.CORE))
@@ -963,7 +1249,7 @@ def test_a_rule_node_lists_its_landings() -> None:
 
     assert rules[0]["landings"] == [
         {"at": "volley/attack/roll-to-hit", "verdict": "applied"},
-        {"at": "volley/aftermath/remove-casualties", "verdict": "honoured"},
+        {"at": "volley/aftermath", "verdict": "applied"},
     ]
     assert rules[1] == {"rule": "stubborn", "name": "Stubborn", "bearer": "core", "landings": []}
 
@@ -971,11 +1257,15 @@ def test_a_rule_node_lists_its_landings() -> None:
 def test_the_view_carries_the_blocks_and_the_stacked_readings() -> None:
     view = _view()
     hits = next(node for node in view["nodes"] if node["step"] == "roll-to-hit")
+    aftermath = next(node for node in view["nodes"] if node["step"] == "aftermath")
 
     assert view["blocks"] == [
+        {"path": "volley/choose-range/close", "kind": "body", "decision": "volley/choose-range"},
+        {"path": "volley/choose-range/long", "kind": "body", "decision": "volley/choose-range"},
         {"path": "volley/attack", "kind": "repeat", "times": "volley/shots", "collapsed": False},
         {"path": "volley/stomp", "kind": "slot", "empty": True},
-        {"path": "volley/aftermath", "kind": "lanes", "decision": "volley/choose-range"},
+        {"path": "volley/aftermath/stand", "kind": "body", "decision": "volley/aftermath"},
+        {"path": "volley/aftermath/flee", "kind": "body", "decision": "volley/aftermath"},
     ]
     assert hits["inputs"] == ["volley/choose-range"]
     assert hits["target"] == {"label": "to hit", "value": 4}
@@ -986,11 +1276,12 @@ def test_the_view_carries_the_blocks_and_the_stacked_readings() -> None:
         {"value": 2, "p": 0.375},
         {"value": 3, "p": 0.125},
     ]
+    assert aftermath["taken"] == [{"option": "stand", "by": "only", "p": 1.0}]
 
 
 _TYPES = Path(__file__).resolve().parents[2] / "frontend/src/lib/graph/types.ts"
 _NODE_OF = {step.kind: step.__name__ for step in (Measurement, Decision, Roll, Consequence)}
-_BLOCK_OF = {block.kind: block.__name__ for block in (Sequence, Repeat, Slot, Lanes)}
+_BLOCK_OF = {block.kind: block.__name__ for block in (Sequence, Repeat, Slot, Body)}
 
 
 def _declared() -> dict[str, set[str]]:
@@ -1021,6 +1312,8 @@ def test_the_view_matches_the_front_end_types() -> None:
             _reading_shape(reading, declared)
         for modifier in node.get("modifiers", ()):
             assert set(modifier) == declared["Modifier"]
+        for taken in node.get("taken", ()):
+            assert set(taken) == declared["Taken"]
     for block in view["blocks"]:
         assert set(block) == declared[_BLOCK_OF[block["kind"]]]
     for rule in view["rules"]:
