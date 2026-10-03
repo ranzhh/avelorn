@@ -147,32 +147,26 @@ def _misses(*faces: int) -> dict[Die, Fraction]:
 @pytest.mark.parametrize(
     ("target", "rerolls", "confirm", "expected"),
     [
-        # Shooting 7+ to Hit: the natural 6 is confirmed on a second 4+.
         (
             7,
             frozenset(),
             Confirm.SECOND_DIE,
             {**_misses(1, 2, 3, 4, 5), Die(6, True): _SIXTH / 2, Die(6, False): _SIXTH / 2},
         ),
-        # Close-combat To Hit of 9: a natural 6 always hits.
         (9, frozenset(), Confirm.ALWAYS, {**_misses(1, 2, 3, 4, 5), Die(6, True): _SIXTH}),
-        # A Roll to Wound pushed to 7: the die is thrown and every face fails.
         (7, frozenset(), Confirm.NEVER, _misses(1, 2, 3, 4, 5, 6)),
-        # A target of 1: the natural 1 still fails.
         (
             1,
             frozenset(),
             Confirm.NEVER,
             {**_misses(1), **{Die(f, True): _SIXTH for f in range(2, 7)}},
         ),
-        # Re-rolled natural 1s at 2+: the fresh 1 stands, it is not re-rolled again.
         (
             2,
             frozenset({Die(1, False)}),
             Confirm.NEVER,
             {Die(1, False): _SIXTH**2, **{Die(f, True): _SIXTH + _SIXTH**2 for f in range(2, 7)}},
         ),
-        # A failed 7+ confirmation re-rolled: the whole die is thrown again, not the second.
         (
             7,
             frozenset({Die(6, False)}),
@@ -183,6 +177,14 @@ def _misses(*faces: int) -> dict[Die, Fraction]:
                 Die(6, False): Fraction(1, 144),
             },
         ),
+    ],
+    ids=[
+        "shooting-7-plus-confirms-on-a-second-4-plus",
+        "combat-9-plus-hits-on-a-natural-6",
+        "wound-pushed-to-7-always-fails",
+        "target-1-still-fails-a-natural-1",
+        "re-rolled-natural-1-stands",
+        "failed-confirmation-re-rolls-the-whole-die",
     ],
 )
 def test_d6_lands_every_face_as_printed(
@@ -195,7 +197,6 @@ def test_d6_lands_every_face_as_printed(
 @pytest.mark.parametrize(
     ("leadership", "expected"),
     [
-        # Hand-counted cumulative ways to roll <= n on 2D6.
         (7, Fraction(21, 36)),
         (8, Fraction(26, 36)),
         (9, Fraction(30, 36)),

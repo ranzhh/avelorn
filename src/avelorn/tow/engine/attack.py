@@ -543,8 +543,6 @@ def walk(
 
 
 def _rerolls_by_stage(rerolls: Sequence[Reroll]) -> dict[Stage, frozenset[Die]]:
-    # The landed dice each stage's grants cover: a die matching a grant's
-    # printed result (failed / successful) and its face, if it names one.
     return {
         stage: frozenset(
             Die(face, landed)

@@ -565,7 +565,6 @@ def make_panic_tests(
     if battle < size:
         raise ValueError(f"battle strength ({battle}) cannot be below current size ({size})")
 
-    # One re-roll of a failed test, never more, whatever the source.
     reroll_from = _reroll_grant(defender.loadout, PanicCause.HEAVY_CASUALTIES)
     test = PanicTest(
         defender.unit.highest(Characteristic.LEADERSHIP), reroll_failed=reroll_from is not None

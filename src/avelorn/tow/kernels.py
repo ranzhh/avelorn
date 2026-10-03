@@ -139,12 +139,11 @@ class Die(NamedTuple):
 class Confirm(StrEnum):
     """How a natural 6 fares against a target above 6."""
 
-    NEVER = "never"  # it fails like every other face
-    SECOND_DIE = "second-die"  # the-shooting-phase/7-to-hit
-    ALWAYS = "always"  # the-combat-phase/roll-to-hit-combat: a natural 6 always hits
+    NEVER = "never"
+    SECOND_DIE = "second-die"
+    ALWAYS = "always"
 
 
-# A target of 7+ under Confirm.SECOND_DIE: the natural 6 confirms at this target; 10+ cannot.
 CONFIRM_TARGETS = {7: 4, 8: 5, 9: 6}
 
 
