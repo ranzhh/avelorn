@@ -35,14 +35,6 @@ from avelorn.tow.engine.attack import (
 )
 from avelorn.tow.engine.casualties import wound_and_casualties
 from avelorn.tow.engine.characteristic_tests import pass_probability
-from avelorn.tow.engine.charts import (
-    armour_save_target,
-    hit_probability,
-    save_probability,
-    shooting_hit_target,
-    wound_probability,
-    wound_target,
-)
 from avelorn.tow.engine.rules import (
     AttackFacts,
     GateContext,
@@ -55,6 +47,14 @@ from avelorn.tow.engine.rules import (
     factored_notes,
 )
 from avelorn.tow.engine.seats import Defence, Offence
+from avelorn.tow.kernels import (
+    armour_save_target,
+    hit_probability,
+    save_probability,
+    shooting_hit_target,
+    wound_probability,
+    wound_target,
+)
 from avelorn.tow.schema.psychology import PanicCause
 from avelorn.tow.schema.rule import AttackKind, RerollEffect, Rule
 from avelorn.tow.schema.stage import Stage

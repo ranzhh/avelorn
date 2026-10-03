@@ -4,7 +4,7 @@ The printed "Determining Armour Value" step (the-shooting-phase); the
 close-combat step "Determining Armour Saves (Combat)" defers to it. A
 model's worn armour resolves to a single value — the best suit worn,
 improved by stacking bonuses (a shield's +1) — which
-:func:`~avelorn.tow.engine.charts.armour_save_target` then turns into a
+:func:`~avelorn.tow.kernels.armour_save_target` then turns into a
 save roll after the weapon's Armour Piercing. Phase-neutral: both
 shooting and close combat resolve the defender's save this way.
 
@@ -18,7 +18,7 @@ no dependency on the on-field :class:`~avelorn.tow.contingent.Contingent`.
 
 from collections.abc import Sequence
 
-from avelorn.tow.engine.charts import BEST_ARMOUR_VALUE, UNARMOURED
+from avelorn.tow.kernels import BEST_ARMOUR_VALUE, UNARMOURED
 from avelorn.tow.schema.armour import Armour
 
 

@@ -1,4 +1,6 @@
-"""Roll-target charts from the rulebook.
+"""The rulebook's dice mechanics as pure functions of plain values.
+
+Shared by both engines; no game objects and no special rules.
 
 Sources (tow.whfb.app): the-shooting-phase/roll-to-hit-shooting,
 the-shooting-phase/roll-to-wound-shooting, the-shooting-phase/7-to-hit,
