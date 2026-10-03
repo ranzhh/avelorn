@@ -1,0 +1,5 @@
+# Source: https://tow.whfb.app/weapons-of-war/ogre-pistol
+id: ogre-pistol
+name: Ogre Pistol
+profiles:
+  - { R: 24, S: 4, AP: -1, special_rules: [{rule: armour-bane, X: 1}, quick-shot] }

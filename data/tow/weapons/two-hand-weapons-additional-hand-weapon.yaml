@@ -1,0 +1,5 @@
+# Source: https://tow.whfb.app/weapons-of-war/two-hand-weapons-additional-hand-weapon
+id: two-hand-weapons-additional-hand-weapon
+name: Two Hand Weapons/Additional Hand Weapon
+profiles:
+  - { R: Combat, S: S, AP: '-', special_rules: [{rule: extra-attacks, X: 1}, requires-two-hands] }
