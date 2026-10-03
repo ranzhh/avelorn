@@ -7,7 +7,8 @@ flavour: Should a Phoenix be slain, it explodes in a shower of flaming cinders. 
   fragments swiftly coalesce and the Phoenix is reborn.
 paragraphs:
   - 'When a Flamespyre Phoenix loses its last Wound, roll a D6 before removing the model from play:'
-  - On a roll of 1-2, the Phoenix crumbles into cold ashes and is removed from play.On a roll of 3-5, the Phoenix explodes
-    into flame. Every enemy unit in base contact with it suffers D6 Strength 3 hits, each with an AP of -1 and the Flaming
-    Attacks special rule. Once these hits are resolved, this model is removed from play.On a roll of 6, the Phoenix (and its
-    rider, should it have one) are briefly consumed in a ball of flames, and are immediately reborn, recovering D3 Wounds.
+  - On a roll of 1-2, the Phoenix crumbles into cold ashes and is removed from play.
+  - On a roll of 3-5, the Phoenix explodes into flame. Every enemy unit in base contact with it suffers D6 Strength 3 hits,
+    each with an AP of -1 and the Flaming Attacks special rule. Once these hits are resolved, this model is removed from play.
+  - On a roll of 6, the Phoenix (and its rider, should it have one) are briefly consumed in a ball of flames, and are immediately
+    reborn, recovering D3 Wounds.
