@@ -1,0 +1,7 @@
+# Source: https://tow.whfb.app/weapons-of-war/brace-of-ogre-pistols
+id: brace-of-ogre-pistols
+name: Brace of Ogre Pistols
+profiles:
+  - { name: Ranged, R: 24, S: 4, AP: -1, special_rules: [Armour Bane (1), Multiple Shots (2), Quick Shot] }
+  - { name: Combat, R: Combat, S: S, AP: '-', special_rules: [Extra Attacks (+1), Requires Two Hands] }
+notes: A brace of Ogre pistols has two profiles, representing how the weapons are used in combat.
