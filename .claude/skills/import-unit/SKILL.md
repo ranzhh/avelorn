@@ -143,7 +143,8 @@ someone models it.
 
 ## Commit and open the PR
 
-Plain, factual commit messages; do not imitate a repo PR-title voice.
+Conventional Commits for commits and the PR title, e.g. `feat(data): import maneaters`,
+`feat(data): import the brace of ogre pistols`.
 
 The PR description carries **only a list of what is unmodelled and why**: the
 ledger entries the PR adds, with their issues. No change summary, no test plan,
