@@ -47,6 +47,7 @@ options:
     points: 10
     adds_equipment: [Brace of Drakefire Pistols]
     removes_equipment: [Shield]
+    limit: 'An Ironbeard may replace their Shield with one of the following:'
   - name: Drakegun
     kind: equipment
     scope: model
@@ -54,6 +55,7 @@ options:
     points: 10
     adds_equipment: [Drakegun]
     removes_equipment: [Shield]
+    limit: 'An Ironbeard may replace their Shield with one of the following:'
   - name: Cinderblast Bombs
     kind: equipment
     scope: model
