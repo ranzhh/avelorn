@@ -69,9 +69,8 @@ class Coverage(BaseModel):
     stale: list[Acknowledgement]
 
 
-# Command models say what they are by kind; what the engine leaves out of them
-# is general (champions #46, standards #28, musicians), not news about one datasheet.
-_TYPED = {OptionKind.CHAMPION, OptionKind.STANDARD_BEARER, OptionKind.MUSICIAN}
+# The engine reads no command model, so each kind is one gap across every datasheet.
+_COMMAND = {OptionKind.CHAMPION, OptionKind.STANDARD_BEARER, OptionKind.MUSICIAN}
 
 
 def coverage(data: TOWRepository) -> Coverage:
@@ -166,7 +165,9 @@ def _scan(data: TOWRepository) -> Iterator[tuple[GapKind, str, Site]]:
         for option in unit.options:
             subject = f"{slug}/{option.name}"
             bought = Site(entry=Entry.OPTION, id=subject)
-            if _inert(option):
+            if option.kind in _COMMAND:
+                yield GapKind.INERT_OPTION, option.kind.value, bought
+            elif _inert(option):
                 yield GapKind.INERT_OPTION, subject, bought
     for slug, weapon in sorted(data.weapons.items()):
         if weapon.notes is not None:
@@ -179,11 +180,13 @@ def _scan(data: TOWRepository) -> Iterator[tuple[GapKind, str, Site]]:
 def _inert(option: UnitOption) -> bool:
     """Whether buying the option changes nothing the engine reads but its cost.
 
-    A points budget buys magic items, unmodelled (#31) and left out here.
+    An option for one named model never reaches the engine: the muster
+    refuses it (#120). A points budget buys magic items, unmodelled (#31) and
+    left out here.
 
     Returns:
-        True for an option that is no command model or budget and folds no
-        rule or equipment.
+        True for an option that is no budget and folds no rule or equipment
+        into the whole unit.
     """
     folds = (
         option.adds_rules,
@@ -191,4 +194,6 @@ def _inert(option: UnitOption) -> bool:
         option.adds_equipment,
         option.removes_equipment,
     )
-    return option.kind not in _TYPED and option.points_budget is None and not any(folds)
+    if option.applies_to is not None:
+        return True
+    return option.points_budget is None and not any(folds)

@@ -2,7 +2,8 @@
 # `avelorn coverage` lists the gaps; tests/tow/test_coverage.py fails on a gap
 # missing here and on an entry no gap needs. Subjects: the printed rule name for
 # rule kinds, <unit>/<row> for profile rows, the weapon or armour slug for
-# printed notes, <unit>/<option> for options.
+# printed notes, <unit>/<option> for options, and the option kind for a command
+# model (champion, standard_bearer, musician).
 
 # rule-without-entry
 
@@ -282,8 +283,32 @@
   reason: The +1 Initiative when charged in the front arc has no gate on the arc; the troop-type limit is equipment legality. Its supporting-attack ban folds through Fight In Extra Rank.
   issue: 17
 
-# inert-option
+# inert-option: a command model is one entry per kind, covering every datasheet
+# that sells one.
 
+- kind: inert-option
+  subject: champion
+  reason: A champion fights as the rank and file (its row is unread) and challenges are not modelled; buying one changes only the cost.
+  issue: 46
+- kind: inert-option
+  subject: musician
+  reason: The +1 combat result on a drawn combat is not scored; its +1 Leadership to march and to rally needs movement and rallying, neither modelled.
+- kind: inert-option
+  subject: standard_bearer
+  reason: The +1 combat result for a standard is not scored.
+  issue: 28
+- kind: inert-option
+  subject: ironbreakers/Brace of Drakefire Pistols
+  reason: Bought for the Ironbeard alone; mustering refuses an option for one model until a unit has parts.
+  issue: 120
+- kind: inert-option
+  subject: ironbreakers/Cinderblast Bombs
+  reason: Bought for the Ironbeard alone; mustering refuses an option for one model until a unit has parts.
+  issue: 120
+- kind: inert-option
+  subject: ironbreakers/Drakegun
+  reason: Bought for the Ironbeard alone; mustering refuses an option for one model until a unit has parts.
+  issue: 120
 - kind: inert-option
   subject: maneaters/A standard bearer may have the Look-out Gnoblar special rule
   reason: Imported as prose, adding no rule; Look Out, Sir! is not modelled.
