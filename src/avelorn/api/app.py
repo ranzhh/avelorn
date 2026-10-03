@@ -84,8 +84,6 @@ def graph_volley(data: Corpus) -> dict[str, object]:
             "distance": 12,
             "who-can-shoot": True,
             "line-of-sight": True,
-            "stand-and-shoot": False,
-            "attacker/moved": False,
             "attacker/standing": Standing(archers.models, 0),
             "target/standing": Standing(spearmen.models, 0),
             "target/models-at-start-of-phase": spearmen.models,

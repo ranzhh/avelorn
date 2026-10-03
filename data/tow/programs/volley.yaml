@@ -6,8 +6,6 @@ inputs:
   - {known: distance, type: int}
   - {known: who-can-shoot, type: bool}
   - {known: line-of-sight, type: bool}
-  - {known: stand-and-shoot, type: bool}
-  - {fact: moved, of: attacker}
   - {fact: standing, of: attacker}
   - {fact: standing, of: target}
   - {known: models-at-start-of-phase, of: target, type: int}

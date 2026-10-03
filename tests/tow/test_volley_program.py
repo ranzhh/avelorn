@@ -67,8 +67,6 @@ def _volley(
         "distance": distance,
         "who-can-shoot": True,
         "line-of-sight": True,
-        "stand-and-shoot": False,
-        "attacker/moved": False,
         "attacker/standing": Standing(shooters, 0),
         "target/standing": Standing(models, 0),
         "target/models-at-start-of-phase": models,

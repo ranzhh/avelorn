@@ -91,12 +91,12 @@ def _known_without_a_type(volley: dict[str, Any]) -> None:
         ),
         pytest.param(
             _per_side_fact_without_a_side,
-            "volley.yaml: inputs[11]: moved is kept per side, so names its side",
+            "volley.yaml: inputs[9]: moved is kept per side, so names its side",
             id="per-side-fact-without-a-side",
         ),
         pytest.param(
             _known_without_a_type,
-            "inputs.11.KnownInput.type\n  Field required",
+            "inputs.9.KnownInput.type\n  Field required",
             id="known-without-a-type",
         ),
     ],
