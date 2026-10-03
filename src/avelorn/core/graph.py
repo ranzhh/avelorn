@@ -1,4 +1,3 @@
-import operator
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Hashable, Mapping
 from dataclasses import dataclass, field
@@ -347,9 +346,13 @@ class Repeat(Group):
     collapsed: bool = False
 
     def declare(self, program: "Program", prefix: str, visible: list[Step[Any]]) -> None:
-        first = len(program.steps)
+        first_step, first_block = len(program.steps), len(program.blocks)
         super().declare(program, prefix, visible)
-        for step in program.steps[first:]:
+        path = program.paths[self]
+        for block in program.blocks[first_block + 1 :]:
+            if isinstance(block, Repeat):
+                raise GraphError(f"{program.paths[block]} repeats inside {path}")
+        for step in program.steps[first_step:]:
             if step.writes is not None:
                 raise GraphError(
                     f"{program.paths[step]} writes {step.writes.name} inside a repeat, "
@@ -369,7 +372,7 @@ class Repeat(Group):
 
     def run(self, lane: "Lane") -> None:
         outer, count = lane.joint, lane.count
-        lane.count = self.multiplier(lane)
+        lane.count = self.counted(lane)
         super().run(lane)
         kept = lane.program.live[self]
 
@@ -378,13 +381,11 @@ class Repeat(Group):
 
         lane.joint, lane.count = outer.map(resumed), count
 
-    def multiplier(self, lane: "Lane") -> Distribution[int]:
-        def counted(world: World) -> int:
+    def counted(self, lane: "Lane") -> Distribution[int]:
+        def times(world: World) -> int:
             return world.of(self.times)
 
-        mine = lane.joint.map(counted)
-        outer = lane.count
-        return mine if outer is None else outer.combine(mine, operator.mul)
+        return lane.joint.map(times)
 
     def detail(self, paths: Mapping[Any, str]) -> dict[str, Any]:
         return {"times": paths[self.times], "collapsed": self.collapsed}

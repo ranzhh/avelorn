@@ -573,6 +573,15 @@ def test_six_casualty_removals_keep_one_world_per_standing() -> None:
     assert lane.read(last, left).mass[22] == Fraction(1, 6**6)
 
 
+def test_a_repeat_inside_a_repeat_is_refused() -> None:
+    once = Measurement[int](name="once", side=Side.THIS_MODEL, kernel=_one)
+    hit = Measurement[int](name="hit", side=Side.THIS_MODEL, kernel=_coin)
+    inner = Repeat(name="inner", times=once, items=(hit,))
+
+    with pytest.raises(GraphError, match="fight/outer/inner repeats inside fight/outer"):
+        Program.build("fight", _SIDES, (once, Repeat(name="outer", times=once, items=(inner,))))
+
+
 def test_two_steps_cannot_share_a_path() -> None:
     first = Measurement[int](name="shots", side=Side.THIS_MODEL, kernel=_three)
     second = Measurement[int](name="shots", side=Side.THIS_MODEL, kernel=_three)
