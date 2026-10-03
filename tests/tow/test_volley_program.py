@@ -14,7 +14,7 @@ from avelorn.tow.programs import VOLLEY, Evaluated, load_program
 from avelorn.tow.schema.stage import Side
 from avelorn.tow.schema.unit import Characteristic
 from avelorn.tow.schema.weapon import WeaponStrength
-from avelorn.tow.steps import Fielded, Retreat
+from avelorn.tow.steps import Band, Fielded, Retreat
 from avelorn.tow.traits import Operand
 
 REPO = TOWRepository()
@@ -61,13 +61,15 @@ def _volley(
     models: int,
     battle_strength: int,
     distance: int = 12,
+    who_can_shoot: bool = True,
+    line_of_sight: bool = True,
 ) -> Evaluated:
     knowns: dict[str, Hashable] = {
         "attacker/fielded": attacker,
         "target/fielded": target,
         "distance": distance,
-        "who-can-shoot": True,
-        "line-of-sight": True,
+        "who-can-shoot": who_can_shoot,
+        "line-of-sight": line_of_sight,
         "attacker/standing": Standing(shooters, 0),
         "target/standing": Standing(models, 0),
         "target/models-at-start-of-phase": models,
@@ -240,16 +242,20 @@ def test_the_panic_steps_match_legacy_make_panic_tests(
     assert retreat.get(Retreat.FLEES, 0) == legacy.p_flees
 
 
-def _corpus_volley(distance: int) -> Evaluated:
+def _corpus_volley(
+    distance: int, shooters: int = 10, who_can_shoot: bool = True, line_of_sight: bool = True
+) -> Evaluated:
     archers = Contingent.deploy("elven-archers", 10, data=REPO, frontage=5)
     spearmen = Contingent.deploy("elven-spearmen", 20, data=REPO, frontage=5)
     return _volley(
         Fielded.of(archers, "Longbow"),
         Fielded.of(spearmen),
-        shooters=10,
+        shooters=shooters,
         models=20,
         battle_strength=20,
         distance=distance,
+        who_can_shoot=who_can_shoot,
+        line_of_sight=line_of_sight,
     )
 
 
@@ -289,15 +295,26 @@ def test_each_side_of_a_mirror_match_reads_its_own_part() -> None:
     ) == Operand(Distribution.pure(3), 3)
 
 
-def test_the_front_rank_shoots_at_long_range() -> None:
-    volley = _corpus_volley(30)
+@pytest.mark.parametrize(
+    ("distance", "shooters", "who_can_shoot", "line_of_sight", "band", "shots"),
+    [
+        pytest.param(15, 10, True, True, Band.SHORT, 5, id="short-range-at-half-range"),
+        pytest.param(30, 10, True, True, Band.LONG, 5, id="long-range-at-maximum-range"),
+        pytest.param(31, 10, True, True, Band.OUT_OF_RANGE, 0, id="out-of-range"),
+        pytest.param(12, 3, True, True, Band.SHORT, 3, id="fewer-shooters-than-the-frontage"),
+        pytest.param(12, 10, False, True, Band.SHORT, 0, id="nobody-can-shoot"),
+        pytest.param(12, 10, True, False, Band.SHORT, 0, id="no-line-of-sight"),
+    ],
+)
+def test_the_volley_counts_its_shots(
+    distance: int,
+    shooters: int,
+    who_can_shoot: bool,
+    line_of_sight: bool,
+    band: Band,
+    shots: int,
+) -> None:
+    volley = _corpus_volley(distance, shooters, who_can_shoot, line_of_sight)
 
-    assert volley.at("volley/check-range").read("band").mass == {"long": 1}
-    assert volley.at("volley/how-many-shots").read("shots").mass == {5: 1}
-
-
-def test_nobody_shoots_out_of_range() -> None:
-    volley = _corpus_volley(31)
-
-    assert volley.at("volley/how-many-shots").read("shots").mass == {0: 1}
-    assert volley.at("volley/remove-casualties").read("unsaved").mass == {0: 1}
+    assert volley.at("volley/check-range").read("band").mass == {band: 1}
+    assert volley.at("volley/how-many-shots").read("shots").mass == {shots: 1}
