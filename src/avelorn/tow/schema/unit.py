@@ -110,6 +110,14 @@ class Profile(BaseModel):
         """
         return self.characteristics[characteristic]
 
+    def characteristic(self, c: Characteristic) -> int | None:
+        """The printed value of a characteristic, as the ``Profiled`` trait reads it.
+
+        Returns:
+            The printed value, or None for a printed "-".
+        """
+        return self.characteristics[c]
+
 
 class UnitSize(BaseModel):
     """Allowed model count for a unit."""
