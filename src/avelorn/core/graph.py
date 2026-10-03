@@ -44,7 +44,6 @@ class State[T: Hashable]:
     name: str
 
 
-# A step's own output is a local, keyed by the step.
 type Key = Step[Any] | State[Any]
 
 
@@ -94,7 +93,6 @@ class Edge:
 class Projection[T: Hashable]:
     label: str
     reads: tuple[Key, ...]
-    # Takes the values of `reads`, positionally.
     project: Callable[..., T]
     aggregation: Monoid[T]
 
@@ -134,11 +132,9 @@ class Step[Out: Hashable](ABC):
     kind: ClassVar[str]
     name: str
     side: Side
-    # Inputs are earlier in-scope locals and state facts, passed positionally to the kernel.
     inputs: tuple[Key, ...] = ()
     kernel: Kernel[Out] | None = None
     readings: list[Reading] = field(default_factory=list)
-    # A step that writes a state fact replaces it and declares no local.
     writes: State[Out] | None = None
 
     @property
@@ -193,7 +189,6 @@ class Step[Out: Hashable](ABC):
         program.steps.append(self)
         program.readings[self] = self.shown()
 
-    # Records what is read after the step; returns what must be held before it.
     def liveness(
         self, after: frozenset[Key], live: dict["Item", frozenset[Key]]
     ) -> frozenset[Key]:
@@ -226,7 +221,6 @@ class Step[Out: Hashable](ABC):
             "step": self.name,
             "kind": self.kind,
             "side": self.side.value,
-            # The canvas draws only steps, so a state fact stays off the wire for now.
             "inputs": [paths[source] for source in self.inputs if isinstance(source, Step)],
             "edge": {"readings": [reading.view(edge) for reading in self.readings]},
             **self.detail(edge),
@@ -293,7 +287,6 @@ type Item = Step[Any] | Block
 @dataclass(frozen=True, eq=False, kw_only=True)
 class Block(ABC):
     kind: ClassVar[str]
-    # A scoped block's locals die at its exit.
     scoped: ClassVar[bool] = True
     name: str
     items: tuple[Item, ...]
@@ -456,7 +449,6 @@ class Program:
     rules: list[RuleNode] = field(default_factory=list)
     states: list[State[Any]] = field(default_factory=list)
     readings: dict[Step[Any], tuple[Reading, ...]] = field(default_factory=dict)
-    # What each step and each repeat hands on: the values read after it.
     live: dict[Item, frozenset[Key]] = field(default_factory=dict)
     entry: frozenset[Key] = frozenset()
 
