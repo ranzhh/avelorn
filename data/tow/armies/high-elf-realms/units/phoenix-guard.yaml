@@ -50,4 +50,5 @@ options:
   - name: Keeper of the Flame magic items
     kind: other
     scope: model
+    applies_to: Keeper of the Flame
     points_budget: 25

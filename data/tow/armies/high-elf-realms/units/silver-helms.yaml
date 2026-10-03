@@ -46,4 +46,5 @@ options:
   - name: High Helm magic items
     kind: other
     scope: model
+    applies_to: High Helm
     points_budget: 25

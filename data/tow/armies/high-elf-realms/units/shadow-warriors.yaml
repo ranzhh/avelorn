@@ -34,6 +34,7 @@ options:
   - name: Shadow-walker magic items
     kind: other
     scope: model
+    applies_to: Shadow-walker
     points_budget: 25
   - name: Ambushers
     kind: special_rule

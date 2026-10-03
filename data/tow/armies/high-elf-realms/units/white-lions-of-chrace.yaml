@@ -53,4 +53,5 @@ options:
   - name: Guardian magic items
     kind: other
     scope: model
+    applies_to: Guardian
     points_budget: 25

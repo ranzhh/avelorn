@@ -45,6 +45,7 @@ options:
   - name: Sea Master magic items
     kind: other
     scope: model
+    applies_to: Sea Master
     points_budget: 25
   - name: Veteran
     kind: special_rule

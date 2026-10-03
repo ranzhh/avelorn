@@ -34,6 +34,7 @@ options:
   - name: High Sister magic items
     kind: other
     scope: model
+    applies_to: High Sister
     points_budget: 50
   - name: Ambushers
     kind: special_rule

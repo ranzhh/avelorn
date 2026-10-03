@@ -79,6 +79,7 @@ options:
   - name: Maneater Captain magic items
     kind: other
     scope: model
+    applies_to: Maneater Captain
     points_budget: 50
   - name: A standard bearer may have the Look-out Gnoblar special rule
     kind: other

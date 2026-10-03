@@ -44,4 +44,5 @@ options:
   - name: Lion Guard Captain magic items
     kind: other
     scope: model
+    applies_to: Lion Guard Captain
     points_budget: 50

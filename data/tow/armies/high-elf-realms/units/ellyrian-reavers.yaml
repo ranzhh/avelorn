@@ -52,6 +52,7 @@ options:
   - name: Harbinger magic items
     kind: other
     scope: model
+    applies_to: Harbinger
     points_budget: 25
   - name: Scouts
     kind: special_rule

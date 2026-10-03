@@ -51,4 +51,5 @@ options:
   - name: Bladelord magic items
     kind: other
     scope: model
+    applies_to: Bladelord
     points_budget: 50
