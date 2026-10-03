@@ -159,9 +159,7 @@ def test_every_plain_dice_combination_matches() -> None:
     assert [dispute for dispute in disputes if dispute[1] != dispute[2]] == []
 
 
-# Legacy fields each side from the data; the oracle reads the printed datasheets:
-# BS4 archers' longbow S3 Armour Bane (1); spearmen T3 WS4, light armour and shield 5+;
-# Ironbreakers T4 WS5, full plate and shield 3+, Gromril Armour, Runes of Protection 6+.
+# Legacy fields each side from the data; the oracle reads the printed datasheets.
 FIELDED: list[tuple[str, Callable[[], Probability], Attack]] = [
     (
         "archers-v-spearmen",
@@ -201,8 +199,7 @@ FIELDED: list[tuple[str, Callable[[], Probability], Attack]] = [
         Attack(SHOOTING, 4, 3, 3, armour_value=4, armour_bane=1),
     ),
     (
-        # The magical Bow of Avelorn: no Lion Cloak; its Armour Bane (1) and Arrows of
-        # Isha's make Armour Bane 2, and Arrows of Isha adds AP -1.
+        # Magical, so no Lion Cloak; the bow's and Arrows of Isha's Armour Bane (1), AP -1.
         "sisters-v-white-lions",
         lambda: (
             shoot_unit(
@@ -353,7 +350,12 @@ FIELDED: list[tuple[str, Callable[[], Probability], Attack]] = [
     [pytest.param(legacy, attack, id=name) for name, legacy, attack in FIELDED],
 )
 def test_fielded_scenarios_match(legacy: Callable[[], Probability], attack: Attack) -> None:
-    """The legacy tests' data-driven volleys and strikes, attack by attack."""
+    """The legacy tests' data-driven volleys and strikes, attack by attack.
+
+    BS4 archers' longbow is S3 Armour Bane (1); spearmen are T3 WS4 with light armour
+    and shield, 5+; Ironbreakers are T4 WS5 with full plate and shield, 3+, Gromril
+    Armour and Runes of Protection's 6+ ward against a mundane attack.
+    """
     assert legacy() == one_attack(attack).unsaved
 
 
