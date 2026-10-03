@@ -1,10 +1,17 @@
-"""Chart tests against verbatim rulebook values (tow.whfb.app)."""
+"""Kernel tests against verbatim rulebook values (tow.whfb.app)."""
+
+from fractions import Fraction
 
 import pytest
 
-from avelorn.tow.engine.charts import (
+from avelorn.core.distribution import Distribution
+from avelorn.tow.kernels import (
+    Confirm,
+    Die,
     armour_save_target,
+    d6,
     hit_probability,
+    leadership_test,
     melee_hit_probability,
     melee_hit_target,
     save_probability,
@@ -128,3 +135,87 @@ def test_wound_probability() -> None:
     assert wound_probability(4) == pytest.approx(3 / 6)
     assert wound_probability(2) == pytest.approx(5 / 6)
     assert wound_probability(6) == pytest.approx(1 / 6)
+
+
+_SIXTH = Fraction(1, 6)
+
+
+def _misses(*faces: int) -> dict[Die, Fraction]:
+    return {Die(face, False): _SIXTH for face in faces}
+
+
+@pytest.mark.parametrize(
+    ("target", "rerolls", "confirm", "expected"),
+    [
+        (
+            7,
+            frozenset(),
+            Confirm.SECOND_DIE,
+            {**_misses(1, 2, 3, 4, 5), Die(6, True): _SIXTH / 2, Die(6, False): _SIXTH / 2},
+        ),
+        (9, frozenset(), Confirm.ALWAYS, {**_misses(1, 2, 3, 4, 5), Die(6, True): _SIXTH}),
+        (7, frozenset(), Confirm.NEVER, _misses(1, 2, 3, 4, 5, 6)),
+        (
+            1,
+            frozenset(),
+            Confirm.NEVER,
+            {**_misses(1), **{Die(f, True): _SIXTH for f in range(2, 7)}},
+        ),
+        (
+            2,
+            frozenset({Die(1, False)}),
+            Confirm.NEVER,
+            {Die(1, False): _SIXTH**2, **{Die(f, True): _SIXTH + _SIXTH**2 for f in range(2, 7)}},
+        ),
+        (
+            7,
+            frozenset({Die(6, False)}),
+            Confirm.SECOND_DIE,
+            {
+                **{Die(f, False): Fraction(13, 72) for f in range(1, 6)},
+                Die(6, True): Fraction(13, 144),
+                Die(6, False): Fraction(1, 144),
+            },
+        ),
+    ],
+    ids=[
+        "shooting-7-plus-confirms-on-a-second-4-plus",
+        "combat-9-plus-hits-on-a-natural-6",
+        "wound-pushed-to-7-always-fails",
+        "target-1-still-fails-a-natural-1",
+        "re-rolled-natural-1-stands",
+        "failed-confirmation-re-rolls-the-whole-die",
+    ],
+)
+def test_d6_lands_every_face_as_printed(
+    target: int, rerolls: frozenset[Die], confirm: Confirm, expected: dict[Die, Fraction]
+) -> None:
+    """The one die walk keeps each natural face, so face-triggered rules can read it."""
+    assert d6(target, rerolls, confirm) == Distribution(expected)
+
+
+@pytest.mark.parametrize(
+    ("leadership", "expected"),
+    [
+        (7, Fraction(21, 36)),
+        (8, Fraction(26, 36)),
+        (9, Fraction(30, 36)),
+        (10, Fraction(33, 36)),
+    ],
+)
+def test_leadership_matches_hand_count(leadership: int, expected: Fraction) -> None:
+    """Golden 2D6 cumulative counts for the common Leadership values."""
+    assert leadership_test(leadership) == expected
+
+
+def test_leadership_natural_bounds() -> None:
+    """The double 1 always passes; the double 6 always fails."""
+    assert leadership_test(1) == Fraction(1, 36)
+    assert leadership_test(12) == Fraction(35, 36)
+    assert leadership_test(20) == Fraction(35, 36)
+
+
+def test_zero_or_dash_fails_automatically() -> None:
+    """A Leadership of 0 or "-" automatically fails the test."""
+    assert leadership_test(0) == Fraction(0)
+    assert leadership_test(None) == Fraction(0)

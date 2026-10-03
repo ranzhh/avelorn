@@ -48,14 +48,6 @@ from avelorn.tow.engine.casualties import (
     strike_toll,
     wound_and_casualties,
 )
-from avelorn.tow.engine.charts import (
-    armour_save_target,
-    melee_hit_probability,
-    melee_hit_target,
-    save_probability,
-    wound_probability,
-    wound_target,
-)
 from avelorn.tow.engine.rules import (
     ArmourFacts,
     AttackFacts,
@@ -80,6 +72,14 @@ from avelorn.tow.engine.rules import (
     outcome_substitutions,
 )
 from avelorn.tow.engine.seats import Defence, Offence
+from avelorn.tow.kernels import (
+    armour_save_target,
+    melee_hit_probability,
+    melee_hit_target,
+    save_probability,
+    wound_probability,
+    wound_target,
+)
 from avelorn.tow.phases.movement import Engagement
 from avelorn.tow.schema.psychology import BreakOutcome
 from avelorn.tow.schema.rule import AttackKind, Decision, HitOrder, Rule
