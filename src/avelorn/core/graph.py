@@ -226,7 +226,8 @@ class Step[Out: Hashable](ABC):
             "step": self.name,
             "kind": self.kind,
             "side": self.side.value,
-            "inputs": [paths[source] for source in self.inputs],
+            # The canvas draws only steps, so a state fact stays off the wire for now.
+            "inputs": [paths[source] for source in self.inputs if isinstance(source, Step)],
             "edge": {"readings": [reading.view(edge) for reading in self.readings]},
             **self.detail(edge),
         }

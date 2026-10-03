@@ -495,6 +495,17 @@ def test_a_running_total_holds_only_the_total_between_rolls() -> None:
     assert lane.read(items[-1], sums).mass[14] == Fraction(146, 6**4)
 
 
+def test_the_view_lists_only_steps_as_inputs() -> None:
+    total = State[int]("total")
+    roll = Measurement[int](name="roll", side=Side.THIS_MODEL, kernel=_d6)
+    add = Consequence[int](
+        name="add", side=Side.THIS_MODEL, inputs=(total, roll), kernel=_add, writes=total
+    )
+    (lane,) = Program.build("sum", _SIDES, (roll, add)).evaluate(state={total: 0})
+
+    assert [node["inputs"] for node in lane.to_view()["nodes"]] == [[], ["sum/roll"]]
+
+
 def _up_to_five() -> Distribution[int]:
     return Distribution({wounds: _SIXTH for wounds in range(6)})
 
