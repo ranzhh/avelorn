@@ -53,7 +53,7 @@ type Key = Step[Any] | State[Any]
 class World:
     """One way things could have gone: the values of the state and of the locals."""
 
-    values: tuple[tuple[Key, Any], ...] = ()
+    values: frozenset[tuple[Key, Any]] = frozenset()
 
     def of[T: Hashable](self, key: "Step[T] | State[T]") -> T:
         for held, value in self.values:
@@ -62,11 +62,11 @@ class World:
         raise GraphError(f"{key.name} is not held in this world")
 
     def holding(self, key: Key, value: Hashable) -> "World":
-        kept = tuple(pair for pair in self.values if pair[0] is not key)
-        return World((*kept, (key, value)))
+        kept = {pair for pair in self.values if pair[0] is not key}
+        return World(frozenset({*kept, (key, value)}))
 
     def keeping(self, keys: frozenset[Key]) -> "World":
-        return World(tuple(pair for pair in self.values if pair[0] in keys))
+        return World(frozenset(pair for pair in self.values if pair[0] in keys))
 
 
 @dataclass
@@ -509,7 +509,7 @@ class Program:
 
     def _lane(self, choices: Mapping[Decision[Any], Any]) -> "Lane":
         start = World(
-            tuple((state, state.initial) for state in self.states if state in self.entry)
+            frozenset((state, state.initial) for state in self.states if state in self.entry)
         )
         lane = Lane(program=self, choices=choices, joint=Distribution.pure(start))
         for item in self.items:

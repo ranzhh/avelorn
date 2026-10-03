@@ -27,6 +27,7 @@ from avelorn.core.graph import (
     Slot,
     State,
     Verdict,
+    World,
 )
 
 _SIXTH = Fraction(1, 6)
@@ -332,6 +333,16 @@ def test_a_state_writing_step_shows_its_own_output() -> None:
     (lane,) = Program.build("tally", _SIDES, (add,)).evaluate()
 
     assert lane.read(add, added).mass == {3: 1}
+
+
+def test_worlds_holding_the_same_values_are_equal_whatever_the_write_order() -> None:
+    fleeing = State[bool]("fleeing", False)
+    models = State[int]("models", 5)
+
+    first = World().holding(fleeing, True).holding(models, 4)
+    second = World().holding(models, 4).holding(fleeing, True)
+
+    assert first == second
 
 
 def _lose(models: int, hit: int) -> Distribution[int]:
