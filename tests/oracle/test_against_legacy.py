@@ -13,7 +13,7 @@ import pytest
 from avelorn.core.distribution import Distribution, Probability
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.engine.charts import melee_hit_target, shooting_hit_target, wound_target
+from avelorn.tow.kernels import melee_hit_target, shooting_hit_target, wound_target
 from avelorn.tow.phases.combat import StrikeResult, strike, strike_unit
 from avelorn.tow.phases.shooting import shoot, shoot_unit
 from avelorn.tow.schema.unit import Characteristic, Unit
