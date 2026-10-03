@@ -153,7 +153,7 @@ class Step[Out: Hashable](ABC):
         def project(value: Out) -> Out:
             return value
 
-        return Projection(label, (self,), project, aggregation)
+        return Projection(label, (self.key,), project, aggregation)
 
     def show(self, reading: Reading) -> None:
         self.readings.append(reading)

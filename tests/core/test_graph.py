@@ -322,6 +322,18 @@ def test_a_state_write_replaces_the_fact() -> None:
     assert lane.read(second, sums).mass == {7: 1}
 
 
+def test_a_state_writing_step_shows_its_own_output() -> None:
+    total = State[int]("total", 0)
+    add = Consequence[int](
+        name="add-three", side=Side.THIS_MODEL, inputs=(total,), kernel=_add_three, writes=total
+    )
+    added = add.output("total", Monoid(0))
+    add.show(added)
+    (lane,) = Program.build("tally", _SIDES, (add,)).evaluate()
+
+    assert lane.read(add, added).mass == {3: 1}
+
+
 def _lose(models: int, hit: int) -> Distribution[int]:
     return Distribution.pure(models - hit)
 
