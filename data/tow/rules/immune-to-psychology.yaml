@@ -1,0 +1,11 @@
+# Source: https://tow.whfb.app/special-rules/immune-to-psychology
+id: immune-to-psychology
+name: Immune to Psychology
+page: 171
+category: Special Rules
+flavour: There are warriors so brave, or perhaps so jaded by the dangers of the world, that they heed no peril.
+paragraphs:
+  - If the majority of the models in a unit are Immune to Psychology, the unit automatically passes any Fear, Panic or Terror
+    tests it is required to make. However, if the majority of the models in a unit have this special rule, the unit cannot
+    choose to Flee as a charge reaction.
+  - Note that this special rule does not make a unit immune to any test made against Leadership not stated here.

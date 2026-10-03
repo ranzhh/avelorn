@@ -1,0 +1,9 @@
+# Source: https://tow.whfb.app/special-rules/fast-cavalry
+id: fast-cavalry
+name: Fast Cavalry
+page: 168
+category: Special Rules
+flavour: A highly trained unit of cavalry is able to perform complex manoeuvres, even at a full gallop.
+paragraphs:
+  - If all of the models (including characters) within a unit arrayed in an Open Order formation have this special rule, the
+    unit may perform its Quick Turn even if it marched.

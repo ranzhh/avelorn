@@ -128,9 +128,9 @@ Left to do:
    phase of two. A melee round reports no ledger; giving it one means threading
    the same shape through `phases/combat.py`.
 3. **Named situational modifiers.** #205's stepper is deliberately unnamed:
-   cover and large target have no entry in the corpus, so a label would assert
-   a rulebook value nothing here can check. Import those rules and the dock can
-   offer real toggles.
+   cover has no entry in the corpus and Large Target has one with no effects,
+   so a label would assert a rulebook value nothing here can check. Model those
+   rules and the dock can offer real toggles.
 
 ## Conventions
 

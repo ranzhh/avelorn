@@ -1,0 +1,10 @@
+# Source: https://tow.whfb.app/special-rules/swiftstride
+id: swiftstride
+name: Swiftstride
+page: 178
+category: Special Rules
+flavour: Mounted warriors, warbeasts and chariots, amongst others, are swift and deadly, crossing the battlefields of the
+  Old World with unexpected speed.
+paragraphs:
+  - A unit which consists entirely of models with this special rule increases its maximum possible charge range by 3" and,
+    before making a Charge, Flee or Pursuit roll, may choose to apply a +D6 modifier to the result.

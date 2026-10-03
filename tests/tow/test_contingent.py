@@ -148,8 +148,7 @@ def test_field_resolves_equipment_into_the_loadout(spearmen_unit: Unit) -> None:
     Spearmen carry Hand Weapon and Thrusting Spear (weapons) plus Light
     Armour and Shield (armour); the loadout partitions them resolved, in
     equipment order. The unit's own rules come first, then the ones its
-    troop type (Regular Infantry) confers — Press of Battle resolves,
-    Massed Infantry and Parry ride along printed.
+    troop type (Regular Infantry) confers, text-only entries included.
     """
     contingent = Contingent.field(
         Complement(unit=spearmen_unit, size=10),
@@ -159,17 +158,16 @@ def test_field_resolves_equipment_into_the_loadout(spearmen_unit: Unit) -> None:
         weapons=(REPO.weapons["hand-weapon"], REPO.weapons["thrusting-spear"]),
         armour=(REPO.armoury["light-armour"], REPO.armoury["shield"]),
         rules=(
+            REPO.rules["close-order"],
             REPO.rules["elven-reflexes"],
             REPO.rules["martial-prowess"],
+            REPO.rules["regimental-unit"],
             REPO.rules["valour-of-ages"],
             REPO.rules["press-of-battle"],
             REPO.rules["massed-infantry"],
             REPO.rules["parry"],
         ),
-        unresolved_rules=(
-            "Close Order",
-            "Regimental Unit",
-        ),
+        unresolved_rules=(),
         weapon_rules={"fight-in-extra-rank": REPO.rules["fight-in-extra-rank"]},
     )
 
@@ -271,25 +269,22 @@ def test_default_repository_is_a_cached_singleton() -> None:
 
 
 def test_field_tolerates_rules_without_entries(spearmen_unit: Unit) -> None:
-    """A special rule with no entry is the norm: carried printed, not lost.
+    """A special rule with no entry is carried printed, not lost.
 
-    Option-granted rules resolve on the same terms — Shieldwall resolves to
-    its entry, while Close Order (no entry) joins the printed remainder that
-    keeps feeding the "not factored" notes.
+    Option-granted rules resolve on the same terms: Shieldwall resolves to its
+    entry, while a name with no entry joins the printed remainder.
     """
-    mustered = Complement(unit=spearmen_unit, size=10, options=["Shieldwall"])
+    doctored = spearmen_unit.model_copy(update={"special_rules": ["Unprinted Rule"]})
+    mustered = Complement(unit=doctored, size=10, options=["Shieldwall"])
     contingent = Contingent.field(mustered, data=REPO)
     assert contingent.loadout is not None
     assert [rule.id for rule in contingent.loadout.rules] == [
-        "elven-reflexes",
-        "martial-prowess",
-        "valour-of-ages",
         "shieldwall",
         "press-of-battle",  # conferred by the Regular Infantry troop type
         "massed-infantry",  # also conferred by the troop type
         "parry",  # also conferred by the troop type
     ]
-    assert "Close Order" in contingent.loadout.unresolved_rules
+    assert contingent.loadout.unresolved_rules == ("Unprinted Rule",)
 
 
 def test_field_substitutes_rule_parameters_as_printed(spearmen_unit: Unit) -> None:

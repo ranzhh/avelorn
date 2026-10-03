@@ -1,0 +1,11 @@
+# Source: https://tow.whfb.app/special-rules/magic-resistance
+id: magic-resistance
+name: Magic Resistance (-X)
+page: 173
+category: Special Rules
+flavour: Some creatures are naturally resistant to magic, whilst others bear charms or fetishes intended to ward off its effects.
+paragraphs:
+  - The Casting roll of any enemy spell (including Bound spells) that targets a unit that includes one or more models with
+    this special rule suffers a modifier, as shown in brackets after the name of this special rule (shown here as '-X').
+  - Note that this special rule is not cumulative. If two or more models in a unit have this special rule, use the highest
+    modifier.

@@ -31,11 +31,11 @@ Run everything with `uv run` from your own root, never another checkout's.
 ## Survey before you touch anything
 
 Run `uv run avelorn coverage` first and read it. It is every gap between the
-corpus and the engine -- printed rules with no entry, parameters that do not
-bind, profile rows nothing reads, printed notes, options that change nothing --
-each with the ledger's reason it stays open. That is what the engine leaves
-out; a rule the unit prints that is not listed there, and has an entry under
-`data/tow/rules/`, already reaches the maths.
+corpus and the engine -- printed rules with no entry or no effects, parameters
+that do not bind, profile rows nothing reads, printed notes, options that change
+nothing -- each with the ledger's reason it stays open. That is what the engine
+leaves out; a rule the unit prints that is not listed there already reaches the
+maths.
 
 Then read what the unit needs before importing, so a blocker is found in one
 pass rather than four:
@@ -84,7 +84,7 @@ prose option lines, #5 for either/or groups.
 Run `uv run avelorn coverage` again: the import's gaps are listed first, as
 UNACKNOWLEDGED. Each one gets modelled or acknowledged; nothing is left bare.
 
-For a rule with no entry, read the printed text -- `WhfbAppClient().rule_entry(slug)["fields"]["bodyIndex"]`
+For a rule with no entry or no effects, read the printed text -- `WhfbAppClient().rule_entry(slug)["fields"]["bodyIndex"]`
 is the plain prose -- and decide.
 
 **If it folds into something the engine models, author it.** Import the entry,
@@ -110,10 +110,13 @@ schema vocabulary -- that belongs in the schema's own docstrings. Most rules
 need no comment at all (`dragon-armour.yaml`, `press-of-battle.yaml`); where one
 earns its place it is a line or three (`parry.yaml`, `killing-blow.yaml`).
 
-**If it cannot fold, do not create a file at all.** No entry means the rule
-rides along printed and reports `special rule not factored`, which is the
-honest state. A file with `notes:` and no `effects:` produces the same warning
-and only looks authored, and `test_every_rule_entry_carries_effects` refuses it.
+**If it cannot fold, import the entry text-only**
+(`uv run python scripts/import_whfb_app.py rule <slug>`), with no `effects:` and
+no `notes:`. Every printed rule gets an entry, so references can become slugs
+(#230). A text-only entry reports `special rule not factored` exactly as a
+missing one did, and coverage lists it as `rule-without-effects`. The site files
+a bracketed rule under its template ("Multiple Shots (X)", "Extra Attacks
+(+X)"); keep that name.
 
 **Acknowledge every gap you leave open** in `data/tow/unmodelled.yaml`:
 `kind`, `subject`, a `reason`, and the `issue` where one covers it. The reason

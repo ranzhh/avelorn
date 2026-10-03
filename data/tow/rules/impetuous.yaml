@@ -1,0 +1,10 @@
+# Source: https://tow.whfb.app/special-rules/impetuous
+id: impetuous
+name: Impetuous
+page: 172
+category: Special Rules
+flavour: The eagerness of brash and brave warriors can lead them into foolish charges.
+paragraphs:
+  - If during the Declare Charges & Charge Reactions sub-phase of its turn, a unit that includes one or more Impetuous models
+    is able to declare a charge, it must make a Leadership test. If this test is failed, the unit must declare a charge. If
+    this test is passed, the unit may act as normal.

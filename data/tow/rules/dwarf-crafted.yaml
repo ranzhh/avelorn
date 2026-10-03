@@ -1,0 +1,9 @@
+# Source: https://tow.whfb.app/special-rules/dwarf-crafted
+id: dwarf-crafted
+name: Dwarf Crafted
+page: 39
+category: Special Rules
+flavour: Dwarfs craft missile weapons with a skill and precision of both form and function that is not seen in the weapons
+  of other races.
+paragraphs:
+  - Models with this special rule do not suffer the usual -1 To Hit modifier when making a Stand & Shoot charge reaction.

@@ -7,8 +7,7 @@ entry with no gap is stale. The CLI, the API and the gate test all read this
 one report.
 
 The scan reads the corpus, not the rule registry, since a rule with no entry is
-invisible there. An entry with no effects is not a gap kind: no such entry may
-be filed (``test_every_rule_entry_carries_effects``).
+invisible there.
 """
 
 from collections import defaultdict
@@ -17,9 +16,9 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict
 
-from avelorn.core.registry import Registry, UnknownNameError
+from avelorn.core.registry import Registry
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.engine.rules import printed_rule, split_parameter
+from avelorn.tow.engine.rules import filed_rule, printed_rule
 from avelorn.tow.schema.ledger import Acknowledgement, GapKind
 from avelorn.tow.schema.rule import GrantEffect, Rule, references_parameter
 from avelorn.tow.schema.unit import OptionKind, UnitOption
@@ -135,20 +134,22 @@ def printed_rules(data: TOWRepository) -> Iterator[tuple[str, Site]]:
 def rule_gap(name: str, rules: Registry[Rule]) -> GapKind | None:
     """How a printed rule reference fails to reach the maths, if it does.
 
+    A signed value ("Extra Attacks (+1)") is filed under its signed template
+    ("Extra Attacks (+X)") or the plain "(X)" one, and binds to neither yet.
+
     Returns:
-        The gap kind, or None when the reference resolves with every
-        parameter bound.
+        The gap kind, or None when the reference resolves to effects with
+        every parameter bound.
     """
     rule = printed_rule(name, rules)
     if rule is not None:
+        if not rule.effects:
+            return GapKind.RULE_WITHOUT_EFFECTS
         unbound = any(references_parameter(effect) for effect in rule.effects)
         return GapKind.PARAMETER_UNBOUND if unbound else None
-    placeholder, _ = split_parameter(name)
-    try:
-        rules.by_name(placeholder)
-    except UnknownNameError:
-        return GapKind.RULE_WITHOUT_ENTRY
-    return GapKind.PARAMETER_UNBOUND
+    if filed_rule(name, rules) is not None:
+        return GapKind.PARAMETER_UNBOUND
+    return GapKind.RULE_WITHOUT_ENTRY
 
 
 def _order(kind: GapKind, subject: str) -> tuple[int, str]:

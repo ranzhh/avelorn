@@ -1,0 +1,11 @@
+# Source: https://tow.whfb.app/special-rules/ogre-charge
+id: ogre-charge
+name: Ogre Charge
+page: 40
+category: Special Rules
+flavour: Ogres barge into combat using their great lumbering mass as a weapon, harnessing their tremendous momentum to crush
+  anything they collide with.
+paragraphs:
+  - The Armour Piercing characteristic of any Impact Hits caused by a model with this special rule (but not its mount) is
+    improved by the current Rank Bonus of its unit (or, in the case of characters, the current Rank Bonus of any unit they
+    have joined).

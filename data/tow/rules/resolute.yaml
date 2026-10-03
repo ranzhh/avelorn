@@ -1,0 +1,10 @@
+# Source: https://tow.whfb.app/special-rules/resolute
+id: resolute
+name: Resolute
+page: 20
+category: Special Rules
+flavour: All Dwarfs are grim and determined warriors that abandon a position with great reluctance.
+paragraphs:
+  - Models with this special rule suffer a -1 modifier to the result of any Flee roll or Pursuit roll they make (to a minimum
+    of 1).
+  - Note that this modifier does not apply to Chaos Dwarf mounted characters.

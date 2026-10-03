@@ -10,7 +10,7 @@ from collections.abc import Sequence
 
 import yaml
 
-from avelorn.tow.coverage import Gap, coverage
+from avelorn.tow.coverage import Gap, coverage, rule_gap
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
@@ -24,6 +24,7 @@ from avelorn.tow.schema.unit import (
 )
 from avelorn.tow.schema.weapon import Weapon, WeaponStrength
 from avelorn.tow.views import (
+    Kind,
     Reference,
     UnitDetail,
     UnitSummary,
@@ -91,10 +92,10 @@ def show_unit(data: TOWRepository, slug: str) -> list[str]:
         *_columns(rows),
     ]
     detail = UnitDetail.of(unit, data)
-    lines.extend(_listing("Equipment", [_named(item) for item in detail.equipment]))
-    lines.extend(_listing("Special rules", [_named(rule) for rule in detail.special_rules]))
-    if any(ref.slug is None for ref in (*detail.equipment, *detail.special_rules)):
-        lines.append("  * no entry: the engine holds the name and never applies it")
+    lines.extend(_listing("Equipment", [_named(item, data) for item in detail.equipment]))
+    lines.extend(_listing("Special rules", [_named(rule, data) for rule in detail.special_rules]))
+    if any(_unapplied(ref, data) for ref in (*detail.equipment, *detail.special_rules)):
+        lines.append(_UNAPPLIED)
     lines.extend(_listing("Options", [_option(option) for option in unit.options]))
     return lines
 
@@ -148,9 +149,9 @@ def show_weapon(data: TOWRepository, slug: str) -> list[str]:
     for profile in weapon.profiles:
         for name in profile.special_rules:
             printed.setdefault(name, Reference.rule(name, data.rules))
-    lines.extend(_listing("Special rules", [_named(ref) for ref in printed.values()]))
-    if any(ref.slug is None for ref in printed.values()):
-        lines.append("  * no entry: the engine holds the name and never applies it")
+    lines.extend(_listing("Special rules", [_named(ref, data) for ref in printed.values()]))
+    if any(_unapplied(ref, data) for ref in printed.values()):
+        lines.append(_UNAPPLIED)
     if weapon.notes:
         lines.extend(["", "Not covered:", *(f"  {line}" for line in _wrapped(weapon.notes))])
     return lines
@@ -229,9 +230,17 @@ def _strength(strength: WeaponStrength) -> str:
     return f"S{strength.modifier:+d}" if strength.modifier else "S"
 
 
-def _named(reference: Reference) -> str:
-    # A printed name, starred where the corpus holds no entry behind it.
-    return reference.name if reference.slug else f"{reference.name} *"
+_UNAPPLIED = "  * no entry, no effects, or an unbound parameter: the engine never applies it"
+
+
+def _named(reference: Reference, data: TOWRepository) -> str:
+    return f"{reference.name} *" if _unapplied(reference, data) else reference.name
+
+
+def _unapplied(reference: Reference, data: TOWRepository) -> bool:
+    if reference.slug is None:
+        return True
+    return reference.kind is Kind.RULE and rule_gap(reference.name, data.rules) is not None
 
 
 def list_rules(data: TOWRepository) -> list[str]:

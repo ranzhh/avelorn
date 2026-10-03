@@ -1,0 +1,15 @@
+# Source: https://tow.whfb.app/special-rules/naval-discipline
+id: naval-discipline
+name: Naval Discipline
+page: 162
+category: Special Rules
+flavour: The citizens of Lothern are justifiably proud of the discipline of the Sea Guard regiments. These skilled warriors
+  drill for many hours, perfecting the art of firing a volley of shots even as they redress their ranks to receive the enemy's
+  charge.
+paragraphs:
+  - A unit of Lothern Sea Guard may use this special rule when it makes a Stand & Shoot charge reaction. A unit that does
+    so can make a Stand & Shoot charge reaction regardless of how close the charging unit is. Once this shooting has been
+    resolved, the charged unit may make a free redress the ranks manoeuvre, after which it will Hold and await the charging
+    unit.
+  - Units that are fleeing, that are already engaged in combat when charged, or that have been joined by a character that
+    does not have this special rule cannot use this special rule.

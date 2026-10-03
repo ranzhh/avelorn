@@ -1,0 +1,10 @@
+# Source: https://tow.whfb.app/special-rules/quick-shot
+id: quick-shot
+name: Quick Shot
+page: 175
+category: Special Rules
+flavour: Weapons designed for speed can be brought to bear in less than a heartbeat.
+paragraphs:
+  - A weapon with this special rule does not suffer the usual -1 To Hit modifier for Moving and Shooting. In addition, a unit
+    equipped with weapons with this special rule can use them to make a Stand & Shoot charge reaction regardless of how close
+    the charging unit is.

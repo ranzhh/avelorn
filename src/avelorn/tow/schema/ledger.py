@@ -15,6 +15,7 @@ class GapKind(StrEnum):
     """How a piece of the corpus fails to reach the maths."""
 
     RULE_WITHOUT_ENTRY = "rule-without-entry"
+    RULE_WITHOUT_EFFECTS = "rule-without-effects"
     PARAMETER_UNBOUND = "parameter-unbound"
     PROFILE_ROW_UNREAD = "profile-row-unread"
     PRINTED_NOTES = "printed-notes"

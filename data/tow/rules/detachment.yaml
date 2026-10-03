@@ -1,0 +1,8 @@
+# Source: https://tow.whfb.app/special-rules/detachment
+id: detachment
+name: Detachment
+page: 167
+category: Special Rules
+flavour: Large regiments may be accompanied by smaller detachments.
+paragraphs:
+  - A unit with this special rule can be fielded as a detachment.
