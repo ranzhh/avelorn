@@ -31,6 +31,7 @@ options:
     adds_equipment: [Shield]
   - name: High Helm
     kind: champion
+    profile: High Helm
     points: 6
   - name: Standard Bearer
     kind: standard_bearer

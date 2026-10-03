@@ -33,6 +33,7 @@ options:
     adds_equipment: [Shield]
   - name: Veteran
     kind: champion
+    profile: Veteran
     points: 5
   - name: Standard Bearer
     kind: standard_bearer

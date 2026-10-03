@@ -80,6 +80,9 @@ def parse_unit(entry: Node, references: RuleReferences) -> ImportResult:
     # profiles, so the rows are parsed before the options that name them.
     profiles = _parse_profiles(slug, _require(fields, slug, "unitProfile", list))
     refer = references.at(f"unit {slug}")
+    options = _parse_options(
+        slug, fields.get("options"), profiles, _as_displayed(fields, refer), warnings
+    )
 
     unit = Unit(
         id=slug,
@@ -88,7 +91,7 @@ def parse_unit(entry: Node, references: RuleReferences) -> ImportResult:
         unit_size=_parse_unit_size(slug, _require(fields, slug, "unitSize", object)),
         troop_type=_parse_troop_type(slug, fields, warnings),
         base_size=_parse_base_size(slug, fields.get("baseSize"), warnings),
-        profiles=profiles,
+        profiles=_with_champions(profiles, options),
         # Equipment is prose, so display text is unusable ("thrusting
         # spears"): use canonical entry names. The special-rules field is a
         # bare list whose display text is the rule name as printed, which
@@ -96,11 +99,22 @@ def parse_unit(entry: Node, references: RuleReferences) -> ImportResult:
         # "Detachment Special Rules" section).
         equipment=_rule_list(slug, "equipment", fields, warnings),
         special_rules=_special_rules(slug, fields, refer, warnings),
-        options=_parse_options(
-            slug, fields.get("options"), profiles, _as_displayed(fields, refer), warnings
-        ),
+        options=options,
     )
     return ImportResult(unit=unit, warnings=warnings)
+
+
+def _with_champions(profiles: list[Profile], options: list[UnitOption]) -> list[Profile]:
+    """Tag the rows the champion options name as champions.
+
+    Returns:
+        The rows, each named champion row with the champion role.
+    """
+    champions = {option.profile for option in options if option.profile is not None}
+    return [
+        row.model_copy(update={"role": ProfileRole.CHAMPION}) if row.name in champions else row
+        for row in profiles
+    ]
 
 
 def _as_displayed(fields: Node, refer: Refer) -> Refer:
@@ -427,9 +441,9 @@ def _parse_option_line(
     warnings: list[str],
 ) -> UnitOption:
     text = line.text
-    if text.endswith(" Or:"):
+    if text.endswith(" Or:") or text.startswith("Or: "):
         # Mutually exclusive alternatives; the schema cannot express that yet.
-        text = text.removesuffix(" Or:")
+        text = text.removesuffix(" Or:").removeprefix("Or: ")
         warnings.append(
             f"{slug}: option {text!r} is part of an either/or choice; exclusivity not recorded"
         )
@@ -470,12 +484,22 @@ def _parse_option_line(
             applies_to=stated.applies_to or group.applies_to,
         )
 
-    option = _matched_option(slug, body, points, per_model, scope, line.rules, refer, warnings)
+    option = _matched_option(
+        slug, body, points, per_model, scope, line.rules, printed, refer, warnings
+    )
     if option is None and group.verb:
         # The header stated the action for the whole group, so this line is
         # a bare name: "take" + "Great Weapon".
         option = _matched_option(
-            slug, f"{group.verb} {body}", points, per_model, scope, line.rules, refer, warnings
+            slug,
+            f"{group.verb} {body}",
+            points,
+            per_model,
+            scope,
+            line.rules,
+            printed,
+            refer,
+            warnings,
         )
     if option is not None:
         return option
@@ -512,6 +536,7 @@ def _matched_option(
     per_model: bool,
     scope: OptionGroup,
     linked: list[str],
+    printed: set[str],
     refer: Refer,
     warnings: list[str],
 ) -> UnitOption | None:
@@ -529,7 +554,7 @@ def _matched_option(
             limit=scope.limit,
         )
     if m := _UPGRADE_RE.fullmatch(body):
-        return _upgrade_option(slug, m.group(1), points, per_model, scope, warnings)
+        return _upgrade_option(slug, m.group(1), points, per_model, scope, printed, warnings)
     if m := _RULE_SWAP_RE.fullmatch(body):
         return UnitOption(
             name=m.group(2),
@@ -585,6 +610,7 @@ def _upgrade_option(
     points: int | None,
     per_model: bool,
     scope: OptionGroup,
+    printed: set[str],
     warnings: list[str],
 ) -> UnitOption:
     name = raw_name
@@ -603,9 +629,12 @@ def _upgrade_option(
             f"{slug}: upgrade target {raw_name!r} has no known role; kind set to other"
         )
         kind = OptionKind.OTHER
+    if kind is OptionKind.CHAMPION and name not in printed:
+        raise WhfbParseError(f"{slug}: champion {name!r} has no profile row")
     return UnitOption(
         name=_capitalized(name),
         kind=kind,
+        profile=name if kind is OptionKind.CHAMPION else None,
         applies_to=scope.applies_to,
         points=points,
         per_model=per_model,

@@ -35,6 +35,7 @@ options:
     removes_equipment: [Light Armour]
   - name: Chracian Captain
     kind: champion
+    profile: Chracian Captain
     points: 7
   - name: Standard Bearer
     kind: standard_bearer

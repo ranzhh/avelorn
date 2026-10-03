@@ -29,6 +29,7 @@ special_rules:
 options:
   - name: Ironbeard
     kind: champion
+    profile: Ironbeard
     points: 7
   - name: Standard Bearer
     kind: standard_bearer

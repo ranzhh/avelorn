@@ -1,5 +1,6 @@
 """Unit model tests against real data files under data/."""
 
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -87,16 +88,26 @@ def test_unknown_troop_type_rejected(elven_spearmen: dict) -> None:
 
 def test_option_attaches_to_a_printed_model(elven_spearmen: dict) -> None:
     """An option may name a model the unit prints a profile for."""
-    option = {"name": "Shield", "kind": "equipment", "applies_to": "Sentinel", "points": 2}
-    unit = Unit.model_validate(dict(elven_spearmen, options=[option]))
-    assert unit.options[0].applies_to == "Sentinel"
+    option = {
+        "name": "Shield",
+        "kind": "equipment",
+        "applies_to": "Sentinel",
+        "points": 2,
+    }
+    unit = Unit.model_validate(dict(elven_spearmen, options=[*elven_spearmen["options"], option]))
+    assert unit.options[-1].applies_to == "Sentinel"
 
 
 def test_option_attached_to_an_absent_model_rejected(elven_spearmen: dict) -> None:
     """A model with no profile row cannot carry an option."""
-    option = {"name": "Shield", "kind": "equipment", "applies_to": "Sea Master", "points": 2}
+    option = {
+        "name": "Shield",
+        "kind": "equipment",
+        "applies_to": "Sea Master",
+        "points": 2,
+    }
     with pytest.raises(ValidationError, match="no profile"):
-        Unit.model_validate(dict(elven_spearmen, options=[option]))
+        Unit.model_validate(dict(elven_spearmen, options=[*elven_spearmen["options"], option]))
 
 
 def test_unit_size_max_below_min_rejected() -> None:
@@ -181,6 +192,40 @@ def test_a_row_must_state_its_role() -> None:
     unstated = {key: value for key, value in _RIDER.items() if key != "role"}
     with pytest.raises(ValidationError, match="role"):
         Profile.model_validate(unstated)
+
+
+def _without_the_champion_option(unit: dict) -> None:
+    unit["options"] = [o for o in unit["options"] if o["kind"] != "champion"]
+
+
+def _champion_naming_the_rank_and_file(unit: dict) -> None:
+    unit["options"][0]["profile"] = "Elven Spearman"
+
+
+def _champion_naming_no_row(unit: dict) -> None:
+    del unit["options"][0]["profile"]
+
+
+@pytest.mark.parametrize(
+    ("edit", "refusal"),
+    [
+        (_without_the_champion_option, "champion rows no option names: \\['Sentinel'\\]"),
+        (_champion_naming_the_rank_and_file, "name no champion row"),
+        (_champion_naming_no_row, "names its profile"),
+    ],
+    ids=[
+        "champion-row-unnamed",
+        "champion-names-rank-and-file",
+        "champion-names-no-row",
+    ],
+)
+def test_parts_are_checked_at_load(
+    elven_spearmen: dict, edit: Callable[[dict], None], refusal: str
+) -> None:
+    """Rows and options must agree on which row is the champion."""
+    edit(elven_spearmen)
+    with pytest.raises(ValidationError, match=refusal):
+        Unit.model_validate(elven_spearmen)
 
 
 def test_main_is_the_rank_and_file_row() -> None:

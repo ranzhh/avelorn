@@ -1748,6 +1748,17 @@
             "$ref": "#/components/schemas/OptionKind",
             "default": "other"
           },
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile"
+          },
           "applies_to": {
             "anyOf": [
               {

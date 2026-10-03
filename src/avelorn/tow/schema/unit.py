@@ -178,12 +178,15 @@ class UnitOption(BaseModel):
     Exactly one cost shape applies: a flat `points` cost (per unit, or per
     model when `per_model` is set) or a `points_budget` to spend up to
     (e.g. magic standards).
+
+    A champion option names its profile row in `profile`.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     name: str
     kind: OptionKind = OptionKind.OTHER
+    profile: str | None = None
     # The model the option attaches to, named as its profile row prints it
     # ("An Ironbeard may take Cinderblast Bombs" -> "Ironbeard"). None is
     # the whole unit. The Unit validator checks the name against the
@@ -207,6 +210,12 @@ class UnitOption(BaseModel):
             raise ValueError("exactly one of points or points_budget must be set")
         if self.per_model and self.points is None:
             raise ValueError("per_model applies to points, not points_budget")
+        return self
+
+    @model_validator(mode="after")
+    def _champion_names_its_row(self) -> Self:
+        if (self.kind is OptionKind.CHAMPION) != (self.profile is not None):
+            raise ValueError(f"{self.name}: a champion option, and only one, names its profile")
         return self
 
 
@@ -246,6 +255,16 @@ class Unit(BaseModel):
         )
         if unknown:
             raise ValueError(f"options attach to models with no profile: {unknown}")
+        return self
+
+    @model_validator(mode="after")
+    def _champion_options_name_champion_rows(self) -> Self:
+        champions = {p.name for p in self.profiles if p.role is ProfileRole.CHAMPION}
+        named = {option.profile for option in self.options if option.profile is not None}
+        if unknown := sorted(named - champions):
+            raise ValueError(f"champion options name no champion row: {unknown}")
+        if unnamed := sorted(champions - named):
+            raise ValueError(f"champion rows no option names: {unnamed}")
         return self
 
     @property

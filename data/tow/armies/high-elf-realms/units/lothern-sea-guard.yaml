@@ -30,6 +30,7 @@ options:
     adds_equipment: [Shield]
   - name: Sea Master
     kind: champion
+    profile: Sea Master
     points: 7
   - name: Standard Bearer
     kind: standard_bearer

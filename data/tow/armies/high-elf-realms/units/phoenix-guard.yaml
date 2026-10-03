@@ -26,6 +26,7 @@ special_rules:
 options:
   - name: Keeper of the Flame
     kind: champion
+    profile: Keeper of the Flame
     points: 7
   - name: Standard Bearer
     kind: standard_bearer

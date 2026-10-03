@@ -351,9 +351,29 @@ def test_line_states_its_own_availability_limit() -> None:
 
 def test_champion_upgrade_line() -> None:
     """The champion shape: named role, flat per-unit cost."""
-    option, warnings = _option("Upgrade one model to a Sentinel (champion) (+5 points per unit)")
-    assert option == UnitOption(name="Sentinel", kind=OptionKind.CHAMPION, points=5)
+    option, warnings = _option(
+        "Upgrade one model to a Sentinel (champion) (+5 points per unit)", printed={"Sentinel"}
+    )
+    assert option == UnitOption(
+        name="Sentinel", kind=OptionKind.CHAMPION, profile="Sentinel", points=5
+    )
     assert warnings == []
+
+
+def test_an_alternative_champion_names_its_own_row() -> None:
+    """Ship's Company prints the Bosun as an "Or:" to the Midshipman; the Bosun names its row."""
+    option, warnings = _option(
+        "Or: Upgrade one model to a Bosun (champion) (+5 points per unit)",
+        printed={"Ship's Company", "Midshipman", "Bosun"},
+    )
+    assert option == UnitOption(name="Bosun", kind=OptionKind.CHAMPION, profile="Bosun", points=5)
+    assert any("either/or" in w for w in warnings)
+
+
+def test_a_champion_without_a_row_fails_the_import() -> None:
+    """A champion the datasheet prints no row for cannot name its profile."""
+    with pytest.raises(WhfbParseError, match="champion 'Sentinel' has no profile row"):
+        _option("Upgrade one model to a Sentinel (champion) (+5 points per unit)")
 
 
 def test_command_upgrades_take_printed_names() -> None:

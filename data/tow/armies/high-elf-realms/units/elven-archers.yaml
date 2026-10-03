@@ -22,6 +22,7 @@ special_rules:
 options:
   - name: Sentinel
     kind: champion
+    profile: Sentinel
     points: 5
   - name: Standard Bearer
     kind: standard_bearer

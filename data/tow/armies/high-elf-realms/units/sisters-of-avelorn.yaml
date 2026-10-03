@@ -28,6 +28,7 @@ special_rules:
 options:
   - name: High Sister
     kind: champion
+    profile: High Sister
     points: 7
   - name: High Sister magic items
     kind: other

@@ -36,6 +36,7 @@ options:
     removes_equipment: [Cavalry Spear]
   - name: Harbinger
     kind: champion
+    profile: Harbinger
     points: 8
   - name: Standard Bearer
     kind: standard_bearer

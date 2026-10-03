@@ -28,6 +28,7 @@ special_rules:
 options:
   - name: Shadow-walker
     kind: champion
+    profile: Shadow-walker
     points: 6
   - name: Shadow-walker magic items
     kind: other

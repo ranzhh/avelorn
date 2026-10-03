@@ -36,6 +36,7 @@ options:
     adds_equipment: [Shield]
   - name: Elder
     kind: champion
+    profile: Elder
     points: 6
   - name: Standard Bearer
     kind: standard_bearer

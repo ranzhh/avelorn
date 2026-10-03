@@ -27,6 +27,7 @@ special_rules:
 options:
   - name: Bladelord
     kind: champion
+    profile: Bladelord
     points: 6
   - name: Standard Bearer
     kind: standard_bearer

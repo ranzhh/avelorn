@@ -34,6 +34,7 @@ special_rules:
 options:
   - name: Drakemaster
     kind: champion
+    profile: Drakemaster
     points: 7
   - name: Standard Bearer
     kind: standard_bearer

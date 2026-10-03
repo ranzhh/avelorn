@@ -26,6 +26,7 @@ special_rules:
 options:
   - name: Lion Guard Captain
     kind: champion
+    profile: Lion Guard Captain
     points: 7
   - name: Standard Bearer
     kind: standard_bearer

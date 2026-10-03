@@ -28,6 +28,7 @@ special_rules:
 options:
   - name: Guardian
     kind: champion
+    profile: Guardian
     points: 6
   - name: Standard Bearer
     kind: standard_bearer

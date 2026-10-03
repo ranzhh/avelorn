@@ -171,6 +171,8 @@ def _option_row(option: UnitOption) -> dict:
     # model's; a drift guard in the tests fails if a field is added to
     # UnitOption and not written here.
     row: dict = {"name": option.name, "kind": option.kind.value}
+    if option.profile is not None:
+        row["profile"] = option.profile
     if option.applies_to is not None:
         row["applies_to"] = option.applies_to
     if option.points is not None:

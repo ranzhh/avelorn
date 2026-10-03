@@ -30,9 +30,11 @@ options:
     removes_equipment: [Warbow]
   - name: Midshipman
     kind: champion
+    profile: Midshipman
     points: 5
-  - name: 'Or: Upgrade one model to a Bosun (champion)'
+  - name: Bosun
     kind: champion
+    profile: Bosun
     points: 5
   - name: Standard Bearer
     kind: standard_bearer

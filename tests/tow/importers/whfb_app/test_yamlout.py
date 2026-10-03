@@ -38,8 +38,11 @@ def test_option_row_writes_every_field_of_the_schema() -> None:
         limit="0-1 unit per 1000 points",
     )
     budget = UnitOption(name="Magic standard", kind=OptionKind.MAGIC_STANDARD, points_budget=50)
+    champion = UnitOption(
+        name="Ironbeard", kind=OptionKind.CHAMPION, profile="Ironbeard", points=7
+    )
 
-    written = set(_option_row(flat)) | set(_option_row(budget))
+    written = set(_option_row(flat)) | set(_option_row(budget)) | set(_option_row(champion))
     assert written == set(UnitOption.model_fields)
 
 
