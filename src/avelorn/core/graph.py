@@ -1,4 +1,3 @@
-import operator
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Hashable, Mapping
 from dataclasses import dataclass, field
@@ -44,7 +43,13 @@ class State[T: Hashable]:
     name: str
 
 
-type Key = Step[Any] | State[Any]
+@dataclass(frozen=True, eq=False)
+class Tally[T: Hashable]:
+    name: str
+    counts: Mapping["Repeat", "Projection[T]"]
+
+
+type Key = Step[Any] | State[Any] | Tally[Any]
 
 
 @dataclass(frozen=True)
@@ -53,7 +58,7 @@ class World:
 
     values: frozenset[tuple[Key, Any]] = frozenset()
 
-    def of[T: Hashable](self, key: "Step[T] | State[T]") -> T:
+    def of[T: Hashable](self, key: "Step[T] | State[T] | Tally[T]") -> T:
         for held, value in self.values:
             if held is key:
                 return value
@@ -67,26 +72,52 @@ class World:
         return World(frozenset(pair for pair in self.values if pair[0] in keys))
 
 
+@dataclass(frozen=True, eq=False)
+class Stack:
+    table: Distribution[World] | None
+    count: int
+    taken: dict["Projection[Any]", Distribution[Any]] = field(default_factory=dict)
+
+    def read[T: Hashable](self, projection: "Projection[T]") -> Distribution[T]:
+        held = self.taken.get(projection)
+        if held is not None:
+            return held
+        aggregation = projection.aggregation
+        if self.table is None:
+            read = Distribution.pure(aggregation.identity)
+        else:
+            read = self.table.map(projection.of).repeat(self.count, aggregation)
+        self.taken[projection] = read
+        return read
+
+
 @dataclass
 class Edge:
-    joint: Distribution[World]
-    count: Distribution[int] | None
+    stacks: Distribution[Stack]
     stacked: dict["Projection[Any]", Distribution[Any]] = field(default_factory=dict)
+
+    @classmethod
+    def single(cls, joint: Distribution[World]) -> "Edge":
+        return cls(Distribution.pure(Stack(joint, 1)))
+
+    @property
+    def joint(self) -> Distribution[World]:
+        tables = [stack.table for stack in self.stacks.mass]
+        if len(tables) != 1 or tables[0] is None:
+            raise GraphError("an edge inside a group holds a stack per outer world, not one table")
+        return tables[0]
 
     def read[T: Hashable](self, projection: "Projection[T]") -> Distribution[T]:
         held = self.stacked.get(projection)
         if held is not None:
             return held
-        classes = self.joint.map(projection.of)
-        count = self.count
-        if count is not None:
 
-            def copies(times: int) -> Distribution[T]:
-                return classes.repeat(times, projection.aggregation)
+        def taken(stack: Stack) -> Distribution[T]:
+            return stack.read(projection)
 
-            classes = count.bind(copies)
-        self.stacked[projection] = classes
-        return classes
+        read = self.stacks.bind(taken)
+        self.stacked[projection] = read
+        return read
 
 
 @dataclass(frozen=True, eq=False)
@@ -162,7 +193,7 @@ class Step[Out: Hashable](ABC):
     def arguments(self, world: World) -> tuple[Any, ...]:
         return tuple(world.of(source) for source in self.inputs)
 
-    def declare(self, program: "Program", prefix: str, visible: list["Step[Any]"]) -> None:
+    def declare(self, program: "Program", prefix: str, visible: list["Item"]) -> None:
         path = f"{prefix}/{self.name}"
         for source in self.inputs:
             if isinstance(source, Step) and source not in visible:
@@ -184,15 +215,15 @@ class Step[Out: Hashable](ABC):
         for key in (*self.inputs, *reads, self.key):
             if isinstance(key, State):
                 program.hold(key)
+            if isinstance(key, Tally):
+                program.count(key, path, visible)
 
     def collect(self, program: "Program") -> None:
         program.steps.append(self)
         program.readings[self] = self.shown()
 
-    def liveness(
-        self, after: frozenset[Key], live: dict["Item", frozenset[Key]]
-    ) -> frozenset[Key]:
-        live[self] = after
+    def liveness(self, after: frozenset[Key], program: "Program") -> frozenset[Key]:
+        program.live[self] = after
         return ((after | self.reads()) - {self.key}) | set(self.inputs)
 
     def run(self, lane: "Lane") -> None:
@@ -209,7 +240,7 @@ class Step[Out: Hashable](ABC):
             return world.keeping(after)
 
         edge = lane.joint.bind(advance)
-        lane.edges[self] = Edge(edge, lane.count)
+        lane.edges[self] = Edge.single(edge)
         lane.joint = edge if held <= after else edge.map(onward)
 
     def detail(self, edge: Edge) -> dict[str, Any]:
@@ -291,7 +322,7 @@ class Block(ABC):
     name: str
     items: tuple[Item, ...]
 
-    def declare(self, program: "Program", prefix: str, visible: list[Step[Any]]) -> None:
+    def declare(self, program: "Program", prefix: str, visible: list[Item]) -> None:
         path = f"{prefix}/{self.name}"
         self.check(path, visible)
         program.take(self, path)
@@ -299,17 +330,15 @@ class Block(ABC):
         for item in self.items:
             item.declare(program, path, inner)
 
-    def check(self, path: str, visible: list[Step[Any]]) -> None:
+    def check(self, path: str, visible: list[Item]) -> None:
         return None
 
     def collect(self, program: "Program") -> None:
         program.blocks.append(self)
 
-    def liveness(
-        self, after: frozenset[Key], live: dict["Item", frozenset[Key]]
-    ) -> frozenset[Key]:
+    def liveness(self, after: frozenset[Key], program: "Program") -> frozenset[Key]:
         for item in reversed(self.items):
-            after = item.liveness(after, live)
+            after = item.liveness(after, program)
         return after
 
     def run(self, lane: "Lane") -> None:
@@ -346,45 +375,99 @@ class Repeat(Group):
     times: Step[int]
     collapsed: bool = False
 
-    def declare(self, program: "Program", prefix: str, visible: list[Step[Any]]) -> None:
-        first = len(program.steps)
+    def declare(self, program: "Program", prefix: str, visible: list[Item]) -> None:
+        first_step, first_block = len(program.steps), len(program.blocks)
         super().declare(program, prefix, visible)
-        for step in program.steps[first:]:
+        path = program.paths[self]
+        for block in program.blocks[first_block + 1 :]:
+            if isinstance(block, Repeat):
+                raise GraphError(f"{program.paths[block]} repeats inside {path}")
+        inside = program.steps[first_step:]
+        for step in inside:
             if step.writes is not None:
                 raise GraphError(
                     f"{program.paths[step]} writes {step.writes.name} inside a repeat, "
                     "which cannot carry state out"
                 )
+        program.inside[self] = frozenset(inside)
+        visible.append(self)
 
-    def check(self, path: str, visible: list[Step[Any]]) -> None:
+    def check(self, path: str, visible: list[Item]) -> None:
         if self.times not in visible:
             raise GraphError(f"{path} runs {self.times.name} times, which is not in scope")
 
-    def liveness(
-        self, after: frozenset[Key], live: dict["Item", frozenset[Key]]
-    ) -> frozenset[Key]:
-        live[self] = after
-        inside = super().liveness(frozenset(), live)
-        return after | inside | {self.times}
+    def liveness(self, after: frozenset[Key], program: "Program") -> frozenset[Key]:
+        program.live[self] = after
+        tally = program.tallies.get(self)
+        counted = frozenset() if tally is None else frozenset(tally.counts[self].reads)
+        body = super().liveness(counted, program)
+        program.entries[self] = body
+        if tally is not None and program.seeds[tally] is self:
+            after = after - {tally}
+        return after | body | {self.times}
 
     def run(self, lane: "Lane") -> None:
-        outer, count = lane.joint, lane.count
-        lane.count = self.multiplier(lane)
-        super().run(lane)
-        kept = lane.program.live[self]
+        program = lane.program
+        body = program.entries[self]
+        counts = {world: world.of(self.times) for world in lane.joint.mass}
+        opened = {world: world.keeping(body) for world in counts}
+        ran: dict[World, Lane] = {}
+        for world, count in counts.items():
+            start = opened[world]
+            if count > 0 and start not in ran:
+                inner = Lane(program=program, choices=lane.choices, joint=Distribution.pure(start))
+                super().run(inner)
+                ran[start] = inner
+        for step in program.inside[self]:
+            tables = {start: inner.edges[step].joint for start, inner in ran.items()}
+            lane.edges[step] = Edge(lane.joint.map(self.stacker(counts, opened, tables)))
+        tables = {start: inner.joint for start, inner in ran.items()}
+        lane.joint = lane.joint.bind(self.exit(program, self.stacker(counts, opened, tables)))
 
-        def resumed(world: World) -> World:
-            return world.keeping(kept)
+    def stacker(
+        self,
+        counts: Mapping[World, int],
+        opened: Mapping[World, World],
+        tables: Mapping[World, Distribution[World]],
+    ) -> Callable[[World], Stack]:
+        stacks: dict[tuple[World, int], Stack] = {}
+        empty = Stack(None, 0)
 
-        lane.joint, lane.count = outer.map(resumed), count
+        def stack(world: World) -> Stack:
+            count = counts[world]
+            if count == 0:
+                return empty
+            start = opened[world]
+            made = stacks.get((start, count))
+            if made is None:
+                made = stacks[start, count] = Stack(tables[start], count)
+            return made
 
-    def multiplier(self, lane: "Lane") -> Distribution[int]:
-        def counted(world: World) -> int:
-            return world.of(self.times)
+        return stack
 
-        mine = lane.joint.map(counted)
-        outer = lane.count
-        return mine if outer is None else outer.combine(mine, operator.mul)
+    def exit(self, program: "Program", stack: Callable[[World], Stack]) -> Kernel[World]:
+        after = program.live[self]
+        tally = program.tallies.get(self)
+        if tally is None:
+
+            def resumed(world: World) -> Distribution[World]:
+                return Distribution.pure(world.keeping(after))
+
+            return resumed
+        projection = tally.counts[self]
+        aggregation = projection.aggregation
+        seeds = program.seeds[tally] is self
+
+        def tallied(world: World) -> Distribution[World]:
+            prior = aggregation.identity if seeds else world.of(tally)
+
+            def summed(count: Hashable) -> World:
+                total = aggregation.operation(prior, count)
+                return world.holding(tally, total).keeping(after)
+
+            return stack(world).read(projection).map(summed)
+
+        return tallied
 
     def detail(self, paths: Mapping[Any, str]) -> dict[str, Any]:
         return {"times": paths[self.times], "collapsed": self.collapsed}
@@ -404,7 +487,7 @@ class Lanes(Block):
     kind = "lanes"
     decision: Decision[Any]
 
-    def check(self, path: str, visible: list[Step[Any]]) -> None:
+    def check(self, path: str, visible: list[Item]) -> None:
         if self.decision not in visible:
             raise GraphError(f"{path} splits on {self.decision.name}, which is not in scope")
 
@@ -450,17 +533,21 @@ class Program:
     states: list[State[Any]] = field(default_factory=list)
     readings: dict[Step[Any], tuple[Reading, ...]] = field(default_factory=dict)
     live: dict[Item, frozenset[Key]] = field(default_factory=dict)
+    inside: dict[Repeat, frozenset[Step[Any]]] = field(default_factory=dict)
+    entries: dict[Repeat, frozenset[Key]] = field(default_factory=dict)
+    tallies: dict[Repeat, Tally[Any]] = field(default_factory=dict)
+    seeds: dict[Tally[Any], Repeat] = field(default_factory=dict)
     entry: frozenset[Key] = frozenset()
 
     @classmethod
     def build(cls, name: str, sides: Mapping[Side, str], items: tuple[Item, ...]) -> "Program":
         program = cls(name=name, sides=sides, items=items)
-        visible: list[Step[Any]] = []
+        visible: list[Item] = []
         for item in items:
             item.declare(program, name, visible)
         needed: frozenset[Key] = frozenset()
         for item in reversed(items):
-            needed = item.liveness(needed, program.live)
+            needed = item.liveness(needed, program)
         program.entry = needed
         return program
 
@@ -478,6 +565,30 @@ class Program:
             raise GraphError(f"{path} is declared twice")
         self.paths[state] = path
         self.states.append(state)
+
+    def count(self, tally: Tally[Any], path: str, visible: list[Item]) -> None:
+        groups = list(tally.counts)
+        if not groups:
+            raise GraphError(f"{tally.name} counts no group")
+        for group in groups:
+            if group not in visible:
+                raise GraphError(f"{path} tallies {group.name}, which is not in scope")
+        if tally in self.seeds:
+            return
+        blocks = {self.paths[group].rsplit("/", 1)[0] for group in groups}
+        if len(blocks) != 1:
+            raise GraphError(f"{tally.name} sums groups from {', '.join(sorted(blocks))}")
+        aggregations = {projection.aggregation for projection in tally.counts.values()}
+        if len(aggregations) != 1:
+            raise GraphError(f"{tally.name} sums its groups with different aggregations")
+        for group, projection in tally.counts.items():
+            if group in self.tallies:
+                raise GraphError(f"{group.name} is tallied by {self.tallies[group].name} already")
+            for source in projection.reads:
+                if isinstance(source, Step) and source not in self.inside[group]:
+                    raise GraphError(f"{tally.name} counts {source.name}, outside {group.name}")
+            self.tallies[group] = tally
+        self.seeds[tally] = min(groups, key=self.blocks.index)
 
     def attach(self, rule: RuleNode) -> None:
         for landing in rule.landings:
@@ -528,7 +639,6 @@ class Lane:
     program: Program
     choices: Mapping[Decision[Any], Any]
     joint: Distribution[World]
-    count: Distribution[int] | None = None
     edges: dict[Step[Any], Edge] = field(default_factory=dict)
 
     def read[T: Hashable](self, step: Step[Any], projection: Projection[T]) -> Distribution[T]:
