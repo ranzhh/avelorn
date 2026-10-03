@@ -37,7 +37,7 @@ HOLDERS = MappingProxyType({Side.ATTACKER: Holder.THIS_MODEL, Side.TARGET: Holde
 
 @dataclass(frozen=True, eq=False)
 class Fielded:
-    """A fielded side."""
+    """A fielded side as one part, until fielded sides carry their parts."""
 
     part: str
     row: Profile
