@@ -173,6 +173,17 @@ def _misses(*faces: int) -> dict[Die, Fraction]:
             Confirm.NEVER,
             {Die(1, False): _SIXTH**2, **{Die(f, True): _SIXTH + _SIXTH**2 for f in range(2, 7)}},
         ),
+        # A failed 7+ confirmation re-rolled: the whole die is thrown again, not the second.
+        (
+            7,
+            frozenset({Die(6, False)}),
+            Confirm.SECOND_DIE,
+            {
+                **{Die(f, False): Fraction(13, 72) for f in range(1, 6)},
+                Die(6, True): Fraction(13, 144),
+                Die(6, False): Fraction(1, 144),
+            },
+        ),
     ],
 )
 def test_d6_lands_every_face_as_printed(
