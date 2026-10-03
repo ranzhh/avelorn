@@ -100,6 +100,16 @@ def test_a_killing_blow_skips_the_armour_save_but_not_the_ward() -> None:
     assert odds.wound == Fraction(1, 2) * Fraction(2, 6) * armour_fails * ward_fails
 
 
+def test_a_cleaving_blow_skips_the_armour_save_without_slaying() -> None:
+    """Cleaving Blow denies armour as Killing Blow does, but scores a plain wound."""
+    attack = Attack(
+        Phase.COMBAT, skill=4, strength=3, toughness=3, foe_weapon_skill=4, armour_value=2
+    )
+    cleaving = one_attack(replace(attack, cleaving_blow=True))
+    assert cleaving.kill == 0
+    assert cleaving.wound == one_attack(replace(attack, killing_blow=True)).unsaved
+
+
 def test_wounds_are_lost_one_model_at_a_time() -> None:
     """The printed Ogre example: W3 Ogres losing five Wounds lose one model."""
     assert removed([1] * 5, models=3, wounds=3) == 1

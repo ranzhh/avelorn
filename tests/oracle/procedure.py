@@ -90,8 +90,8 @@ class Attack:
     ``skill`` is Ballistic Skill when shooting and Weapon Skill in combat, where
     ``foe_weapon_skill`` is the target's. Modifiers follow the printed sign: a
     penalty is negative. ``armour_piercing`` is printed negative (AP -1),
-    ``armour_bane`` is Armour Bane's X. ``killing_blow`` is set only when the
-    target's troop type is one the rule names.
+    ``armour_bane`` is Armour Bane's X. ``killing_blow`` and ``cleaving_blow``
+    are set only when the target's troop type is one the rule names.
     """
 
     phase: Phase
@@ -106,6 +106,7 @@ class Attack:
     ward: int | None = None
     armour_bane: int = 0
     killing_blow: bool = False
+    cleaving_blow: bool = False
     poisoned: bool = False
     hit_re_rolls: frozenset[ReRoll] = frozenset()
     save_re_rolls: frozenset[ReRoll] = frozenset()
@@ -113,8 +114,8 @@ class Attack:
     def __post_init__(self) -> None:
         if (self.phase is Phase.COMBAT) != (self.foe_weapon_skill is not None):
             raise ValueError("a foe's Weapon Skill is read in combat and only there")
-        if self.killing_blow and self.phase is not Phase.COMBAT:
-            raise ValueError("Killing Blow is printed for an attack made in combat")
+        if (self.killing_blow or self.cleaving_blow) and self.phase is not Phase.COMBAT:
+            raise ValueError("Killing and Cleaving Blow are printed for attacks made in combat")
         if not BEST_ARMOUR <= self.armour_value <= NO_ARMOUR:
             raise ValueError(f"armour value {self.armour_value}+ is outside 2+..7+")
         if self.armour_piercing > 0 or self.armour_bane < 0:
@@ -311,8 +312,10 @@ def one_attack(attack: Attack) -> AttackOdds:
 
     Natural-6 triggers read the face of the die they name: Poisoned Attacks on
     the To Hit die when it needed 6 or less (special-rules/poisoned-attacks),
-    Armour Bane and Killing Blow on the To Wound die (special-rules/armour-bane,
-    special-rules/killing-blow, which denies the armour save but not the ward).
+    Armour Bane, Killing Blow and Cleaving Blow on the To Wound die
+    (special-rules/armour-bane; special-rules/killing-blow and
+    special-rules/cleaving-blow deny the armour save but not the ward, and only
+    Killing Blow slays).
 
     Returns:
         The probability of each unsaved class.
@@ -327,8 +330,10 @@ def one_attack(attack: Attack) -> AttackOdds:
             if not wounded:
                 continue
             blow = attack.killing_blow and wound_face == 6
+            cleaves = attack.cleaving_blow and wound_face == 6
             bane = attack.armour_bane if wound_face == 6 else 0
-            saves = NOT_ROLLED if blow else _armour_save(attack, attack.armour_piercing - bane)
+            denied = blow or cleaves
+            saves = NOT_ROLLED if denied else _armour_save(attack, attack.armour_piercing - bane)
             for p_save, _, saved in saves:
                 if saved:
                     continue

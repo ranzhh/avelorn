@@ -299,6 +299,27 @@ FIELDED: list[tuple[str, Callable[[], Probability], Attack]] = [
         ),
         Attack(COMBAT, 4, 3, 3, foe_weapon_skill=4, armour_value=5, killing_blow=True),
     ),
+    (
+        "cleaving-blow-v-spearmen",
+        lambda: (
+            strike_unit(
+                _fielded(_with("elven-spearmen", rule="Cleaving Blow"), 10, "Hand Weapon"),
+                _fielded("elven-spearmen", 10, "Thrusting Spear"),
+            ).p_unsaved
+        ),
+        Attack(COMBAT, 4, 3, 3, foe_weapon_skill=4, armour_value=5, cleaving_blow=True),
+    ),
+    (
+        # Monstrous Infantry is off Cleaving Blow's list and has no Parry: plain, saving on 5+.
+        "cleaving-blow-v-ogres",
+        lambda: (
+            strike_unit(
+                _fielded(_with("elven-spearmen", rule="Cleaving Blow"), 10, "Hand Weapon"),
+                _fielded(_ogres(), 3, "Hand Weapon"),
+            ).p_unsaved
+        ),
+        Attack(COMBAT, 4, 3, 3, foe_weapon_skill=4, armour_value=5),
+    ),
 ]
 
 
