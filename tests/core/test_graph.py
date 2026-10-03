@@ -475,7 +475,7 @@ def test_a_repeat_holds_inside_only_what_its_inside_reads() -> None:
     attack = Repeat(name="attack", times=shots, items=(roll,))
     (lane,) = Program.build("volley", _SIDES, (outer, shots, attack, later)).evaluate()
 
-    assert len(lane.edges[roll].joint.mass) == 6
+    assert len(lane.edges[roll].stacks.mass) == 2
 
 
 def test_a_repeat_exit_drops_what_only_its_inside_read() -> None:
@@ -618,15 +618,19 @@ def _hit_if_charged(charged: bool) -> Distribution[int]:
     return Distribution({1: Fraction(5, 6), 0: _SIXTH})
 
 
-def _remove_up_to(models: int, wounds: int) -> Distribution[int]:
+def _left_after(models: int, wounds: int) -> Distribution[int]:
     return Distribution.pure(max(models - wounds, 0))
+
+
+def _charged_and_models(charged: bool, models: int) -> tuple[bool, int]:
+    return (charged, models)
 
 
 def test_remove_casualties_reads_the_tally_of_its_own_world() -> None:
     """Uncharged, nobody attacks; charged, two attackers hit on 5/6 each.
 
-    Three left: 1/2 * (5/6)^2 = 25/72. Four left: 1/2 * 2 * 5/6 * 1/6 = 5/36.
-    Five left: 1/2 + 1/2 * (1/6)^2 = 37/72.
+    Two hits: 1/2 * (5/6)^2 = 25/72. One hit: 1/2 * 2 * 5/6 * 1/6 = 5/36.
+    No hit: 1/2 + 1/2 * (1/6)^2 = 37/72.
     """
     models = State[int]("models")
     charged = Measurement[bool](name="charged", side=Side.THIS_MODEL, kernel=_charged)
@@ -640,36 +644,54 @@ def test_remove_casualties_reads_the_tally_of_its_own_world() -> None:
         kernel=_hit_if_charged,
         target=Scalar("to hit", 2),
     )
+    hits = hit.output("hits", Monoid(0))
+    hit.show(hits)
     attack = Repeat(name="attack", times=attackers, items=(hit,))
-    hits = Tally[int]("hits", {attack: hit.output("hits", Monoid(0))})
+    tally = Tally[int]("hits", {attack: hits})
     remove = Consequence[int](
         name="remove-casualties",
         side=Side.THE_ENEMY,
-        inputs=(models, hits),
-        kernel=_remove_up_to,
+        inputs=(models, tally),
+        kernel=_left_after,
         writes=models,
     )
     left = Projection("models", (models,), _same, Monoid(0))
+    standing = Projection[tuple[bool, int]](
+        "charged and models", (charged, models), _charged_and_models, Monoid((False, 0))
+    )
     remove.show(left)
+    remove.show(standing)
     program = Program.build("fight", _SIDES, (charged, attackers, attack, remove))
     (lane,) = program.evaluate(state={models: 5})
 
+    assert lane.read(hit, hits).mass == {
+        0: Fraction(37, 72),
+        1: Fraction(5, 36),
+        2: Fraction(25, 72),
+    }
     assert lane.read(remove, left).mass == {
         5: Fraction(37, 72),
         4: Fraction(5, 36),
         3: Fraction(25, 72),
     }
-
-
-def _always() -> Distribution[int]:
-    return Distribution.pure(1)
+    assert lane.read(remove, standing).mass == {
+        (False, 5): _HALF,
+        (True, 5): Fraction(1, 72),
+        (True, 4): Fraction(5, 36),
+        (True, 3): Fraction(25, 72),
+    }
 
 
 def test_a_tally_sums_every_group_it_counts() -> None:
     models = State[int]("models")
+    charged = Measurement[bool](name="charged", side=Side.THIS_MODEL, kernel=_charged)
     once = Measurement[int](name="once", side=Side.THIS_MODEL, kernel=_one)
-    rider = Measurement[int](name="rider-hit", side=Side.THIS_MODEL, kernel=_always)
-    mount = Measurement[int](name="mount-hit", side=Side.THIS_MODEL, kernel=_coin)
+    rider = Measurement[int](
+        name="rider-hit", side=Side.THIS_MODEL, inputs=(charged,), kernel=_hits_on_the_charge
+    )
+    mount = Measurement[int](
+        name="mount-hit", side=Side.THIS_MODEL, inputs=(charged,), kernel=_hits_on_the_charge
+    )
     riders = Repeat(name="riders", times=once, items=(rider,))
     mounts = Repeat(name="mounts", times=once, items=(mount,))
     hits = Tally[int](
@@ -680,15 +702,19 @@ def test_a_tally_sums_every_group_it_counts() -> None:
         name="remove-casualties",
         side=Side.THE_ENEMY,
         inputs=(models, hits),
-        kernel=_remove_up_to,
+        kernel=_left_after,
         writes=models,
     )
     left = Projection("models", (models,), _same, Monoid(0))
     remove.show(left)
     slot = Slot(name="initiative-4", items=(riders, mounts, remove))
-    (lane,) = Program.build("fight", _SIDES, (once, slot)).evaluate(state={models: 5})
+    (lane,) = Program.build("fight", _SIDES, (charged, once, slot)).evaluate(state={models: 5})
 
-    assert lane.read(remove, left).mass == {4: _HALF, 3: _HALF}
+    assert lane.read(remove, left).mass == {5: _HALF, 3: _HALF}
+
+
+def _hits_on_the_charge(charged: bool) -> Distribution[int]:
+    return Distribution.pure(int(charged))
 
 
 def test_a_tally_of_a_group_out_of_scope_is_refused() -> None:
