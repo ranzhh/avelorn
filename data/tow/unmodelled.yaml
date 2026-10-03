@@ -5,17 +5,6 @@
 # printed notes, <unit>/<option> for options, and the option kind for a command
 # model (champion, standard_bearer, musician).
 
-# rule-without-entry
-
-- kind: rule-without-entry
-  subject: Ithilmar Armour
-  reason: 'The site prints both on one page, "Ithilmar Armour/Ithilmar Barding" (ithilmar-armour-ithilmar-barding), which no printed name matches until references are slugs. Dangerous Terrain re-rolls and Wizards wearing armour; terrain and magic are not modelled.'
-  issue: 230
-- kind: rule-without-entry
-  subject: Ithilmar Barding
-  reason: 'The site prints both on one page, "Ithilmar Armour/Ithilmar Barding" (ithilmar-armour-ithilmar-barding), which no printed name matches until references are slugs. Dangerous Terrain re-rolls and Wizards wearing armour; terrain and magic are not modelled.'
-  issue: 230
-
 # rule-without-effects: an entry holds the printed text, and nothing folds it.
 
 - kind: rule-without-effects
@@ -89,6 +78,12 @@
 - kind: rule-without-effects
   subject: Impetuous
   reason: Forced charge declarations; declaring charges is not modelled.
+- kind: rule-without-effects
+  subject: Ithilmar Armour
+  reason: Dangerous Terrain re-rolls and Wizards wearing armour; terrain and magic are not modelled.
+- kind: rule-without-effects
+  subject: Ithilmar Barding
+  reason: Dangerous Terrain re-rolls and Wizards wearing armour; terrain and magic are not modelled.
 - kind: rule-without-effects
   subject: King's Guard
   reason: Challenges once the General joins; challenges and joined characters are not modelled.
