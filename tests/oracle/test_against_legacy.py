@@ -1,30 +1,35 @@
-"""Legacy's attack walk against the oracle of the printed procedure.
+"""Legacy's attack walk and casualty fold against the oracle of the printed procedure.
 
-Each per-attack figure must match exactly.
+Each per-attack figure must match exactly. A casualty distribution must match the
+oracle's Monte Carlo within a tolerance the sample is sized to.
 """
 
 import itertools
 from collections.abc import Callable
+from fractions import Fraction
 
 import pytest
 
-from avelorn.core.distribution import Probability
+from avelorn.core.distribution import Distribution, Probability
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.engine.charts import melee_hit_target, shooting_hit_target, wound_target
-from avelorn.tow.phases.combat import strike, strike_unit
+from avelorn.tow.phases.combat import StrikeResult, strike, strike_unit
 from avelorn.tow.phases.shooting import shoot, shoot_unit
-from avelorn.tow.schema.unit import Unit
+from avelorn.tow.schema.unit import Characteristic, Unit
 
 from .procedure import (
     NO_ARMOUR,
     SHOOTING_TO_HIT,
     Attack,
+    Order,
     Phase,
     ReRoll,
     combat_to_hit,
     one_attack,
+    remove_casualties,
     to_wound,
+    trials_for,
 )
 
 REPO = TOWRepository()
@@ -46,6 +51,16 @@ def _with(slug: str, *, rule: str | None = None, equipment: str | None = None) -
             "equipment": [*unit.equipment, *([equipment] if equipment else [])],
         }
     )
+
+
+def _ogres() -> Unit:
+    # test_combat.py's doctored target: spearmen as W3 Monstrous Infantry.
+    spearmen = REPO.units["elven-spearmen"]
+    ogres = spearmen.model_copy(
+        update={"id": "ogres", "name": "Ogres", "troop_type": "Monstrous Infantry"}, deep=True
+    )
+    ogres.profiles[0].characteristics[Characteristic.WOUNDS] = 3
+    return ogres.with_troop_type(REPO.troop_types)
 
 
 def test_the_charts_match_the_printed_tables() -> None:
@@ -291,3 +306,72 @@ def test_fielded_scenarios_match(legacy: Callable[[], Probability], attack: Atta
     """The legacy tests' data-driven volleys and strikes, attack by attack."""
     assert legacy() == one_attack(attack).unsaved
 
+
+# test_combat.py's Killing Blow strike: ten spearmen into three W3 Ogres, saving on 5+.
+OGRE_BLOW = Attack(COMBAT, 4, 3, 3, foe_weapon_skill=4, armour_value=5, killing_blow=True)
+
+
+def _killing_blows_into_ogres() -> StrikeResult:
+    killers = _fielded(_with("elven-spearmen", rule="Killing Blow"), 10, "Hand Weapon")
+    return strike_unit(killers, _fielded(_ogres(), 3, "Hand Weapon"))
+
+
+def test_killing_blow_casualties_match_with_kills_applied_first() -> None:
+    """Legacy's fold of plain wounds and Killing Blows into W3 models removed."""
+    legacy = _killing_blows_into_ogres()
+    tolerance = 0.01
+    oracle = remove_casualties(
+        legacy.attacks,
+        one_attack(OGRE_BLOW),
+        models=3,
+        wounds=3,
+        order=Order.KILLS_FIRST,
+        trials=trials_for(tolerance),
+        seed=1,
+    )
+    assert [oracle[k] for k in range(4)] == pytest.approx(
+        [float(p) for p in legacy.casualties], abs=tolerance
+    )
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="unprinted order: legacy applies Killing Blows before plain wounds, so none lands"
+    " on a wounded model (the-shooting-phase/remove-casualties-shooting, killing-blow)",
+)
+def test_killing_blow_casualties_match_with_wounds_applied_as_rolled() -> None:
+    """Applied as rolled, a Killing Blow can land on a wounded model and waste its Wounds."""
+    legacy = _killing_blows_into_ogres()
+    tolerance = 0.007  # half the 0.014 in dispute at one model removed
+    oracle = remove_casualties(
+        legacy.attacks,
+        one_attack(OGRE_BLOW),
+        models=3,
+        wounds=3,
+        order=Order.AS_ROLLED,
+        trials=trials_for(tolerance),
+        seed=1,
+    )
+    assert [oracle[k] for k in range(4)] == pytest.approx(
+        [float(p) for p in legacy.casualties], abs=tolerance
+    )
+
+
+def test_multiple_wounds_casualties_match() -> None:
+    """Multiple Wounds (D3), rolled per unsaved wound, from six shots into two W3 models."""
+    d3 = {wounds: Fraction(1, 3) for wounds in (1, 2, 3)}
+    legacy = shoot(6, 4, 3, 3, wounds_per_model=3, targets=2, damage=Distribution(d3))
+    tolerance = 0.01
+    oracle = remove_casualties(
+        6,
+        one_attack(Attack(SHOOTING, 4, 3, 3)),
+        models=2,
+        wounds=3,
+        order=Order.AS_ROLLED,
+        trials=trials_for(tolerance),
+        seed=1,
+        damage=d3,
+    )
+    assert [oracle[k] for k in range(3)] == pytest.approx(
+        [float(p) for p in legacy.casualties], abs=tolerance
+    )
