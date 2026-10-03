@@ -462,15 +462,17 @@ def test_a_bounded_x_is_read_all_the_same() -> None:
 
 
 def test_a_dice_x_never_binds_into_an_amount() -> None:
-    """A die rolled per attack has no place in a modifier's amount."""
-    with pytest.raises(ValidationError, match="dice X"):
-        Rule(
-            id="armour-bane",
-            name="Armour Bane (X)",
-            parameter=AmountParameter(kind="amount", dice=True),
-            paragraphs=["…"],
-            effects=[ModifierEffect(add={Quantity.ARMOUR_PIERCING: "X"})],
-        )
+    """A rule may take a number or a roll; only the number binds into a modifier's amount."""
+    rule = Rule(
+        id="extra-attacks",
+        name="Extra Attacks (+X)",
+        parameter=AmountParameter(kind="amount", dice=True),
+        paragraphs=["…"],
+        effects=[ModifierEffect(add={Characteristic.ATTACKS: "X"})],
+    )
+    assert rule.bound(1).effects == [ModifierEffect(add={Characteristic.ATTACKS: 1})]
+    with pytest.raises(ValueError, match="'D3' is a dice roll, which binds only into a count"):
+        rule.bound("D3")
 
 
 def test_a_declared_parameter_prints_in_the_name() -> None:

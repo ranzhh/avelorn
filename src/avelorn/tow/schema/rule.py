@@ -1426,11 +1426,6 @@ class Rule(BaseModel):
             raise ValueError(
                 f"{self.name!r} declares a {self.parameter.kind} X, which no effect can read"
             )
-        if self.parameter.dice and any(_reads_parameter_as_amount(e) for e in readers):
-            raise ValueError(
-                f"{self.name!r} declares a dice X, which binds only into a count "
-                "(hits, multiplies), never into an operation's amount"
-            )
         return self
 
     def display(self, x: int | str | None) -> str:
@@ -1494,6 +1489,11 @@ class Rule(BaseModel):
         if x is None:
             raise ValueError(f"X missing; {self.id} expects {self.parameter.expected}")
         value = self.parameter.value(x)
+        if isinstance(value, DiceQuantity) and any(map(_reads_parameter_as_amount, self.effects)):
+            raise ValueError(
+                f"X {x!r} is a dice roll, which binds only into a count (hits, multiplies), "
+                f"never into an amount an effect of {self.id} adds"
+            )
         effects = (
             self.effects
             if isinstance(value, str)
