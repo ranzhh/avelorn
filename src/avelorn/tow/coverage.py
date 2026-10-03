@@ -12,16 +12,15 @@ invisible there.
 
 from collections import defaultdict
 from collections.abc import Iterator
-from contextlib import suppress
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict
 
-from avelorn.core.registry import Registry, UnknownNameError
+from avelorn.core.registry import Registry
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.engine.rules import printed_rule, split_parameter
+from avelorn.tow.engine.rules import filed_rule, printed_rule
 from avelorn.tow.schema.ledger import Acknowledgement, GapKind
-from avelorn.tow.schema.rule import PARAMETER_SUFFIX, GrantEffect, Rule, references_parameter
+from avelorn.tow.schema.rule import GrantEffect, Rule, references_parameter
 from avelorn.tow.schema.unit import OptionKind, UnitOption
 
 
@@ -148,14 +147,8 @@ def rule_gap(name: str, rules: Registry[Rule]) -> GapKind | None:
             return GapKind.RULE_WITHOUT_EFFECTS
         unbound = any(references_parameter(effect) for effect in rule.effects)
         return GapKind.PARAMETER_UNBOUND if unbound else None
-    placeholder, value = split_parameter(name)
-    templates = [placeholder]
-    if value is not None and value[0] in "+-":
-        templates.append(placeholder.removesuffix(PARAMETER_SUFFIX) + f" ({value[0]}X)")
-    for template in templates:
-        with suppress(UnknownNameError):
-            rules.by_name(template)
-            return GapKind.PARAMETER_UNBOUND
+    if filed_rule(name, rules) is not None:
+        return GapKind.PARAMETER_UNBOUND
     return GapKind.RULE_WITHOUT_ENTRY
 
 

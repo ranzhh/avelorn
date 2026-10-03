@@ -41,7 +41,7 @@ def test_show_marks_the_rules_the_engine_does_not_apply() -> None:
     printed = "\n".join(commands.show_unit(REPO, "dwarf-warriors"))
     assert "Close Order *" in printed
     assert "Shieldwall\n" in printed
-    assert printed.count("* no entry, or no effects") == 1
+    assert printed.count("* no entry, no effects, or an unbound parameter") == 1
 
 
 def test_show_refuses_an_unknown_slug_and_says_where_to_look() -> None:
@@ -88,6 +88,6 @@ def test_rules_show_prints_the_text_the_effects_and_what_is_left_out() -> None:
 
 
 def test_rules_show_points_a_miss_at_the_coverage_report() -> None:
-    """A printed rule with no entry cannot be shown, so the miss says where it is named."""
+    """A slug with no entry cannot be shown, so the miss says where printed names are listed."""
     with pytest.raises(LookupError, match="avelorn coverage"):
         commands.show_rule(REPO, "unprinted-rule")

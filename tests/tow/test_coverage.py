@@ -69,7 +69,6 @@ TEXT_ONLY = Registry(
     ("printed", "gap"),
     [
         ("Fear", GapKind.RULE_WITHOUT_EFFECTS),
-        ("fear", GapKind.RULE_WITHOUT_EFFECTS),
         ("Fly (9)", GapKind.RULE_WITHOUT_EFFECTS),
         ("Extra Attacks (+1)", GapKind.PARAMETER_UNBOUND),
         ("Extra Attacks (-1)", GapKind.RULE_WITHOUT_ENTRY),

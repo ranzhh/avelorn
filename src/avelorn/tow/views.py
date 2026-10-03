@@ -32,7 +32,7 @@ from avelorn.core.registry import Registry
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.coverage import Site, printed_rules
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.engine.rules import printed_rule
+from avelorn.tow.engine.rules import filed_rule
 from avelorn.tow.muster import Complement
 from avelorn.tow.phases.combat import BreakResult, CombatResult, FightResult, SideBreak
 from avelorn.tow.phases.shooting import PanicResult, ShootingResult
@@ -95,8 +95,9 @@ class Reference(BaseModel):
 
     ``slug`` addresses the entry and ``kind`` says which registry holds it, so a
     caller can follow the name without knowing how one finds its file -- for a
-    rule, an exact match or the "(X)" template a parameterised name comes from
-    ("Impact Hits (D3)" is filed under ``impact-hits``).
+    rule, the entry :func:`~avelorn.tow.engine.rules.filed_rule` finds, the
+    "(X)" or "(+X)" template for a parameterised name ("Impact Hits (D3)" is
+    filed under ``impact-hits``).
 
     Both are ``None`` together, and that says the corpus prints this name with
     no entry behind it: the gap :func:`~avelorn.tow.coverage.coverage` reports
@@ -116,7 +117,7 @@ class Reference(BaseModel):
         Returns:
             The printed name, carrying the entry it addresses or nothing.
         """
-        entry = printed_rule(printed, rules)
+        entry = filed_rule(printed, rules)
         if entry is None:
             return cls(name=printed, kind=None, slug=None)
         name = entry.name if printed == entry.id else printed
@@ -635,7 +636,7 @@ def rule_summaries(data: TOWRepository) -> list[RuleSummary]:
     """
     printed_by: dict[str, set[Site]] = defaultdict(set)
     for name, site in printed_rules(data):
-        if (rule := printed_rule(name, data.rules)) is not None:
+        if (rule := filed_rule(name, data.rules)) is not None:
             printed_by[rule.id].add(site)
     return [
         RuleSummary.of(rule, len(printed_by[slug])) for slug, rule in sorted(data.rules.items())

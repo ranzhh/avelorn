@@ -10,7 +10,7 @@ from collections.abc import Sequence
 
 import yaml
 
-from avelorn.tow.coverage import Gap, coverage
+from avelorn.tow.coverage import Gap, coverage, rule_gap
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
@@ -230,7 +230,7 @@ def _strength(strength: WeaponStrength) -> str:
     return f"S{strength.modifier:+d}" if strength.modifier else "S"
 
 
-_UNAPPLIED = "  * no entry, or no effects: the engine holds the name or text and never applies it"
+_UNAPPLIED = "  * no entry, no effects, or an unbound parameter: the engine never applies it"
 
 
 def _named(reference: Reference, data: TOWRepository) -> str:
@@ -238,10 +238,9 @@ def _named(reference: Reference, data: TOWRepository) -> str:
 
 
 def _unapplied(reference: Reference, data: TOWRepository) -> bool:
-    # No entry behind the name, or a rule entry holding only its text.
     if reference.slug is None:
         return True
-    return reference.kind is Kind.RULE and not data.rules[reference.slug].effects
+    return reference.kind is Kind.RULE and rule_gap(reference.name, data.rules) is not None
 
 
 def list_rules(data: TOWRepository) -> list[str]:
