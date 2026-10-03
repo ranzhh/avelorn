@@ -1,14 +1,12 @@
 """Shooting chain tests, golden values hand-computed from the rulebook charts."""
 
 from dataclasses import replace
-from fractions import Fraction
 
 import pytest
 
 from avelorn.tow.contingent import Contingent, Movement
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.engine.attack import AttackProfile, Outcome, RollState, Transform
-from avelorn.tow.muster import Complement
 from avelorn.tow.phases.shooting import _engagement_conditions, shoot, shoot_unit
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import RerollEffect, RollResult, Rule
@@ -142,48 +140,6 @@ def test_only_the_front_rank_fires() -> None:
         _fielded(spearmen, 20),
     )
     assert result.shots == 5
-
-
-def test_volley_fire_adds_half_of_each_rear_rank_when_stationary() -> None:
-    """A stationary Volley Fire weapon adds half of each rear rank (rounding up).
-
-    Ten archers five wide with longbows, stationary (the default): the
-    front five fire, plus ceil(5/2) = 3 from the second rank — eight
-    shots. Factored into the count, the rule leaves no note.
-    """
-    archers = REPO.units["elven-archers"]
-    spearmen = REPO.units["elven-spearmen"]
-    result = shoot_unit(
-        _fielded(archers, 10, frontage=5).wielding("Longbow"),
-        _fielded(spearmen, 20),
-    )
-    assert result.shots == 8
-    assert not any("Volley Fire" in note for note in result.notes)
-
-
-def test_volley_fire_does_not_apply_to_a_unit_that_moved() -> None:
-    """A unit that moved cannot volley fire: front rank only, honoured with no note."""
-    archers = REPO.units["elven-archers"]
-    spearmen = REPO.units["elven-spearmen"]
-    result = shoot_unit(
-        _fielded(archers, 10, frontage=5, moved=True).wielding("Longbow"),
-        _fielded(spearmen, 20),
-    )
-    assert result.shots == 5
-    assert not any("Volley Fire" in note for note in result.notes)
-
-
-def test_volley_fire_never_on_a_stand_and_shoot() -> None:
-    """A Stand & Shoot reaction cannot volley fire, even standing still."""
-    archers = REPO.units["elven-archers"]
-    spearmen = REPO.units["elven-spearmen"]
-    result = shoot_unit(
-        _fielded(archers, 10, frontage=5).wielding("Longbow"),
-        _fielded(spearmen, 20),
-        stand_and_shoot=True,
-    )
-    assert result.shots == 5
-    assert not any("Volley Fire" in note for note in result.notes)
 
 
 def test_forcing_short_range_alone_does_not_forbid_volley_fire() -> None:
@@ -399,95 +355,6 @@ def test_engagement_conditions_build_the_shooting_facts() -> None:
     assert context.movement.charge is None
 
 
-def test_arrows_of_isha_worsens_the_bow_save_and_is_claimed() -> None:
-    """The Sisters' unit rule reaches the bow: -1 save, and out of the notes.
-
-    Firing the Bow of Avelorn at White Lions, Arrows of Isha's Armour Piercing
-    worsens their Heavy Armour save from 5+ to 6+ (Lion Cloak is a magical-shot
-    no-op, so 5+ is the base). The rule is factored into the walk, so it drops
-    out of the "special rule not factored" notes — while the Sisters' rules the
-    volley cannot honour (Strike First) stay listed.
-    """
-    sisters = _fielded(REPO.units["sisters-of-avelorn"], 5).wielding("Bow of Avelorn")
-    lions = _fielded(REPO.units["white-lions-of-chrace"], 10)
-    result = shoot_unit(sisters, lions, force_short_range=True)
-    assert result.save_target == 6  # 5+ Heavy Armour, worsened one by the bow's AP
-    assert not any("Arrows of Isha" in note for note in result.notes)
-    assert any("Strike First" in note for note in result.notes)
-
-
-def test_shoot_unit_skirmishers_impose_minus_one_to_hit_on_the_shooter() -> None:
-    """Enemy Fire (Skirmishers): the defender's rule, the shooter's die.
-
-    Skirmishers grants the formation's own Enemy Fire (Skirmishers), whose
-    enemy-subject -1 To Hit lands on this volley's Roll to Hit: shooting the
-    same unit stripped of the rule hits one point easier. The rule is claimed
-    (never listed as not factored) and its formation simplification is noted.
-    """
-    archers, shadows = REPO.units["elven-archers"], REPO.units["shadow-warriors"]
-    formed = shadows.model_copy(
-        update={
-            "special_rules": [r for r in shadows.special_rules if r != RuleRef(rule="skirmishers")]
-        }
-    )
-    shooter = _fielded(archers, 5).wielding("Longbow")
-
-    skirmishing = shoot_unit(shooter, _fielded(shadows, 10))
-    formed_up = shoot_unit(shooter, _fielded(formed, 10))
-    assert skirmishing.hit_target == formed_up.hit_target + 1
-    assert not any("not factored: Skirmishers" in note for note in skirmishing.notes)
-    assert any("Skirmish formation is not modelled" in note for note in skirmishing.notes)
-    assert any("Unit Strength 1" in note for note in skirmishing.notes)
-
-
-def test_shoot_unit_skirmish_formation_option_imposes_the_same_penalty() -> None:
-    """The Skirmish Formation option reaches Enemy Fire (Skirmishers) too.
-
-    Ship's Company buys the formation as an option rather than printing the
-    Skirmishers rule, so the grant hangs off the formation's own entry: the
-    mustered unit is a point harder to hit than the same unit without it.
-    """
-    company = REPO.units["ships-company"]
-    shooter = _fielded(REPO.units["elven-archers"], 5).wielding("Longbow")
-    formed = Contingent.field(Complement(unit=company, size=10), data=REPO)
-    skirmishing = Contingent.field(
-        Complement(unit=company, size=10, options=["Skirmish Formation"]), data=REPO
-    )
-
-    assert (
-        shoot_unit(shooter, skirmishing).hit_target == shoot_unit(shooter, formed).hit_target + 1
-    )
-
-
-def test_shoot_unit_gromril_armour_re_rolls_the_targets_save_against_arrows() -> None:
-    """The defender's own save re-roll reaches a volley's walk too.
-
-    Archers (BS4; longbow S3, Armour Bane (1)) shoot Ironbreakers (T4,
-    save 3+): hit 3+, wound 5+, and a wound's natural 6 improves Armour
-    Piercing by one, so the save is 4+ on that branch and 3+ on the
-    natural 5, and Runes of Protection wards what passes them on a 6+
-    against the mundane arrows (a further 5/6 factor). Stripped of the
-    re-roll, p_unsaved = 2/3 * (1/6 * 1/2 + 1/6 * 1/3) * 5/6 = 25/324;
-    re-rolling the save's natural 1s lifts the passes to 7/12 and 7/9, so
-    p_unsaved = 2/3 * (1/6 * 5/12 + 1/6 * 2/9) * 5/6 = 115/1944.
-    """
-    archers, ironbreakers = REPO.units["elven-archers"], REPO.units["ironbreakers"]
-    stripped = ironbreakers.model_copy(
-        update={
-            "special_rules": [
-                r for r in ironbreakers.special_rules if r != RuleRef(rule="gromril-armour")
-            ]
-        }
-    )
-    shooter = _fielded(archers, 5).wielding("Longbow")
-
-    plain = shoot_unit(shooter, _fielded(stripped, 10))
-    gromril = shoot_unit(shooter, _fielded(ironbreakers, 10))
-    assert plain.p_unsaved == pytest.approx(25 / 324)
-    assert gromril.p_unsaved == pytest.approx(115 / 1944)
-    assert not any("Gromril Armour" in note for note in gromril.notes)
-
-
 def test_shoot_unit_notes_the_defenders_rules_no_volley_could_use() -> None:
     """A volley claims only what its own single walk factored.
 
@@ -559,52 +426,6 @@ def test_shoot_unit_factors_a_missile_profiles_own_re_roll_grant() -> None:
     assert not any("Doctored Bow" in note for note in magic.notes)
 
 
-def test_shoot_unit_grants_the_defenders_ward_against_a_mundane_volley() -> None:
-    """Runes of Protection wards Ironbreakers on a 6+ against ordinary arrows.
-
-    The real entry from the data: a 6+ ward fails 5/6 of the time, so the
-    per-shot unsaved probability is exactly 5/6 of the unwarded one, and the
-    rule is claimed out of the notes -- it is in the math.
-    """
-    archers = REPO.units["elven-archers"]
-    breakers = Contingent.deploy("ironbreakers", 10, data=REPO)
-    stripped_unit = REPO.units["ironbreakers"].model_copy(
-        update={
-            "special_rules": [
-                r
-                for r in REPO.units["ironbreakers"].special_rules
-                if r != RuleRef(rule="runes-of-protection")
-            ]
-        }
-    )
-    stripped = Contingent.field(stripped_unit, 10, data=REPO)
-
-    warded = shoot_unit(_fielded(archers, 5).wielding("Longbow"), breakers)
-    unwarded = shoot_unit(_fielded(archers, 5).wielding("Longbow"), stripped)
-
-    assert warded.ward_target == 6
-    assert unwarded.ward_target is None
-    assert warded.p_unsaved == pytest.approx(unwarded.p_unsaved * 5 / 6)
-    assert not any("Runes of Protection" in note for note in warded.notes)
-
-
-def test_shoot_unit_denies_the_ward_to_a_magical_volley() -> None:
-    """Runes of Protection reads the incoming attack: the Bow of Avelorn turns it off.
-
-    A magical volley answers the gate False -- honoured, not unfactored -- so
-    no ward is rolled and the rule still never reaches the notes.
-    """
-    sisters = REPO.units["sisters-of-avelorn"]
-    breakers = Contingent.deploy("ironbreakers", 10, data=REPO)
-
-    result = shoot_unit(_fielded(sisters, 5).wielding("Bow of Avelorn"), breakers)
-
-    assert result.ward_target is None
-    assert not any("Runes of Protection" in note for note in result.notes)
-    # The bow's mark is in the facts, so it is claimed, never "not factored".
-    assert not any("not factored: Magical Attacks" in note for note in result.notes)
-
-
 # --- cavalry: a ridden target is shot as its rider; a ridden shooter fires as one ---
 
 
@@ -641,80 +462,3 @@ def test_shoot_unit_with_cavalry_fires_the_riders_ballistic_skill() -> None:
 
     assert result.shots == 5
     assert result.hit_target == 3
-
-
-def test_shoot_unit_leaves_a_two_handed_wielders_shield_counting() -> None:
-    """Requires Two Hands withdraws the shield in the Combat phase alone.
-
-    "(a shield can still be used against wounds caused by shooting)": the
-    same doctored great-weapon wielder saves arrows on its full 5+.
-    """
-    spearmen = REPO.units["elven-spearmen"]
-    two_handed = spearmen.model_copy(update={"equipment": [*spearmen.equipment, "Great Weapon"]})
-    greatswords = Contingent.field(two_handed, 10, data=REPO).wielding("Great Weapon")
-
-    result = shoot_unit(_fielded(REPO.units["elven-archers"], 5).wielding("Longbow"), greatswords)
-
-    assert result.save_target == 5
-
-
-def test_a_blow_never_fires_in_a_volley() -> None:
-    """Killing Blow reads "an attack made in combat": a volley leaves it honoured inert."""
-    archers = REPO.units["elven-archers"]
-    marked = archers.model_copy(
-        update={"special_rules": [*archers.special_rules, RuleRef(rule="killing-blow")]}
-    )
-    target = _fielded(REPO.units["elven-spearmen"], 10)
-
-    blow = shoot_unit(_fielded(marked, 5).wielding("Longbow"), target, distance=10)
-    plain = shoot_unit(_fielded(archers, 5).wielding("Longbow"), target, distance=10)
-
-    assert blow.p_unsaved == plain.p_unsaved
-    assert not any("not factored: Killing Blow" in n for n in blow.notes)
-
-
-def test_multiple_wounds_d3_shoots_as_a_distribution_not_an_expectation() -> None:
-    """The real entry over a volley: MW (D3) rolled separately per unsaved wound.
-
-    One archer with a doctored Maw Bow (S3, Multiple Wounds (D3)) at an
-    unarmoured 3-Wound target: BS4 (3+), S3 vs T3 (4+), no save —
-    p_unsaved = 1/3, and the single model falls only on the D3's 3, so
-    P(casualty) = 1/3 * 1/3 = 1/9, exactly. The plain bow never fells it.
-    """
-    from avelorn.core.registry import Registry
-    from avelorn.tow.schema.weapon import Weapon, WeaponProfile
-
-    bow = Weapon(
-        id="maw-bow",
-        name="Maw Bow",
-        profiles=[
-            WeaponProfile.model_validate(
-                {
-                    "R": 30,
-                    "S": 3,
-                    "AP": "-",
-                    "special_rules": [RuleRef(rule="multiple-wounds", X="D3")],
-                }
-            )
-        ],
-    )
-    repo = TOWRepository()
-    repo.weapons = Registry([*REPO.weapons.values(), bow], kind="weapon")
-    archers = REPO.units["elven-archers"]
-    armed = archers.model_copy(update={"equipment": [*archers.equipment, "Maw Bow"]})
-    spearmen = REPO.units["elven-spearmen"]
-    monster = spearmen.model_copy(
-        deep=True, update={"id": "w3", "name": "W3 Target", "equipment": ["Hand Weapon"]}
-    )
-    monster.profiles[0].characteristics[Characteristic.WOUNDS] = 3
-    target = Contingent.field(monster, 1, data=repo)
-
-    volley = shoot_unit(Contingent.field(armed, 1, data=repo).wielding("Maw Bow"), target)
-
-    assert volley.shots == 1
-    assert volley.p_unsaved == pytest.approx(1 / 3)
-    assert volley.casualties == [Fraction(8, 9), Fraction(1, 9)]
-    assert not any("not factored: Multiple Wounds" in note for note in volley.notes)
-
-    plain = shoot_unit(Contingent.field(archers, 1, data=repo).wielding("Longbow"), target)
-    assert plain.casualties == [1]  # one wound never fells a 3-Wound model

@@ -9,9 +9,15 @@ from pathlib import Path
 
 from .procedure import (
     Attack,
+    AttackOdds,
+    BreakOdds,
     Order,
     Phase,
     ReRoll,
+    break_test,
+    casualties,
+    exchange,
+    leadership_test,
     most_removed,
     one_attack,
     remove_casualties,
@@ -180,3 +186,43 @@ def test_ballistic_skill_six_applies_a_modifier_to_the_first_roll_only() -> None
     assert one_attack(attack).unsaved == (Fraction(4, 6) + Fraction(2, 6) * Fraction(1, 6)) * (
         SURE_WOUND
     )
+
+
+def test_an_automatic_hit_rolls_no_die_to_hit() -> None:
+    """An Impact Hit at S4 against T4 and no save: the wound roll alone, 4+."""
+    attack = Attack(
+        Phase.COMBAT, skill=1, strength=4, toughness=4, foe_weapon_skill=10, automatic_hit=True
+    )
+    assert one_attack(attack).unsaved == Fraction(1, 2)
+
+
+def test_exact_casualties_land_wounds_one_model_at_a_time() -> None:
+    """Two attacks each half likely to wound one W2 model: it falls only to both."""
+    half = AttackOdds(wound=Fraction(1, 2), kill=Fraction(0))
+    assert casualties([half, half], models=1, wounds=2) == {0: Fraction(3, 4), 1: Fraction(1, 4)}
+    blow = AttackOdds(wound=Fraction(0), kill=Fraction(1, 3))
+    assert casualties([blow], models=1, wounds=3) == {0: Fraction(2, 3), 1: Fraction(1, 3)}
+
+
+def test_a_leadership_test_passes_at_or_under_leadership() -> None:
+    """Ld 8 passes on 26 of 36 rolls; Ld 12 still fails a double 6; a re-roll is one more try."""
+    assert leadership_test(8) == Fraction(26, 36)
+    assert leadership_test(12) == Fraction(35, 36)
+    assert leadership_test(8, re_roll_failed=True) == 1 - Fraction(10, 36) ** 2
+
+
+def test_a_break_test_splits_on_the_natural_and_the_modified_roll() -> None:
+    """Ld 8 losing by 2: natural 9+ Breaks, natural 7 or 8 Falls Back, the rest Gives Ground."""
+    assert break_test(8, 2) == BreakOdds(Fraction(15, 36), Fraction(11, 36), Fraction(10, 36))
+    assert break_test(8, 20).gives_ground == Fraction(1, 36)
+
+
+def test_an_exchange_lets_only_the_slower_sides_survivors_strike_back() -> None:
+    """One model a side: the slower strikes back only if the faster's blow missed."""
+    first = AttackOdds(wound=Fraction(1, 2), kill=Fraction(0))
+    back = AttackOdds(wound=Fraction(1, 3), kill=Fraction(0))
+    assert exchange(first, back, models=1) == {
+        (1, 0): Fraction(1, 2),
+        (0, 1): Fraction(1, 6),
+        (0, 0): Fraction(1, 3),
+    }
