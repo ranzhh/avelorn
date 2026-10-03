@@ -216,6 +216,18 @@ def _equipment_on_the_rank_and_file(unit: dict) -> None:
     unit["profiles"][0]["equipment"] = ["Hand Weapon"]
 
 
+def _no_rank_and_file_row(unit: dict) -> None:
+    unit["profiles"] = [row for row in unit["profiles"] if row["role"] != "rank-and-file"]
+
+
+def _two_rank_and_file_rows(unit: dict) -> None:
+    unit["profiles"].append({**_RIDER, "name": "Second Rider"})
+
+
+def _two_mount_rows(unit: dict) -> None:
+    unit["profiles"].extend([_STEED, {**_STEED, "name": "Second Steed"}])
+
+
 @pytest.mark.parametrize(
     ("edit", "refusal"),
     [
@@ -224,6 +236,9 @@ def _equipment_on_the_rank_and_file(unit: dict) -> None:
         (_champion_naming_no_row, "names a profile row"),
         (_unit_scope_for_a_named_model, "must have model scope"),
         (_equipment_on_the_rank_and_file, "only a mount row lists equipment"),
+        (_no_rank_and_file_row, "needs one rank-and-file row, has 0"),
+        (_two_rank_and_file_rows, "needs one rank-and-file row, has 2"),
+        (_two_mount_rows, "may have one mount row, has 2"),
     ],
     ids=[
         "champion-row-unnamed",
@@ -231,6 +246,9 @@ def _equipment_on_the_rank_and_file(unit: dict) -> None:
         "champion-names-no-row",
         "named-model-unit-scope",
         "rank-and-file-lists-equipment",
+        "no-rank-and-file",
+        "two-rank-and-file",
+        "two-mounts",
     ],
 )
 def test_parts_are_checked_at_load(
@@ -271,19 +289,3 @@ def test_a_unit_on_foot_rides_nothing() -> None:
     )
     assert unit.main.name == "Footman"
     assert unit.mount is None
-
-
-def test_a_datasheet_of_only_a_mount_has_no_main() -> None:
-    """A mount row alone is not a unit anyone can field."""
-    unit = Unit.model_validate(
-        {
-            "id": "steeds",
-            "name": "Steeds",
-            "points": 5,
-            "unit_size": {"min": 5},
-            "troop_type": "War Beast",
-            "profiles": [_STEED],
-        }
-    )
-    with pytest.raises(ValueError, match="no rank-and-file profile row"):
-        _ = unit.main

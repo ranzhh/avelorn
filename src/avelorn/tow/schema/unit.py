@@ -286,6 +286,15 @@ class Unit(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def _one_rank_and_file_row(self) -> Self:
+        roles = [p.role for p in self.profiles]
+        if (count := roles.count(ProfileRole.RANK_AND_FILE)) != 1:
+            raise ValueError(f"{self.name}: needs one rank-and-file row, has {count}")
+        if (count := roles.count(ProfileRole.MOUNT)) > 1:
+            raise ValueError(f"{self.name}: may have one mount row, has {count}")
+        return self
+
+    @model_validator(mode="after")
     def _champion_options_name_champion_rows(self) -> Self:
         champions = {p.name for p in self.profiles if p.role is ProfileRole.CHAMPION}
         named = {option.profile for option in self.options if option.profile is not None}
@@ -330,15 +339,9 @@ class Unit(BaseModel):
         rows are other parts of the unit, reached by their own accessors.
 
         Returns:
-            The first rank-and-file profile row.
-
-        Raises:
-            ValueError: no row is rank-and-file -- a malformed datasheet.
+            The rank-and-file profile row.
         """
-        row = next((p for p in self.profiles if p.role is ProfileRole.RANK_AND_FILE), None)
-        if row is None:
-            raise ValueError(f"{self.name}: no rank-and-file profile row")
-        return row
+        return next(p for p in self.profiles if p.role is ProfileRole.RANK_AND_FILE)
 
     @property
     def mount(self) -> Profile | None:
