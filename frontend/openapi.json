@@ -1345,6 +1345,7 @@
         "type": "string",
         "enum": [
           "rule-without-entry",
+          "rule-without-effects",
           "parameter-unbound",
           "profile-row-unread",
           "printed-notes",
