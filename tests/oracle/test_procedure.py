@@ -1,6 +1,8 @@
 """The oracle against the rulebook's own examples and rules no engine models yet."""
 
-import ast
+import os
+import subprocess
+import sys
 from dataclasses import replace
 from fractions import Fraction
 from pathlib import Path
@@ -16,26 +18,39 @@ from .procedure import (
     removed,
 )
 
+ORACLE = Path(__file__).parent
+TESTS = ORACLE.parent
+
 # S10 against T1 wounds on 2+ and nothing saves, so an attack's odds read off its hit.
 SURE_WOUND = Fraction(5, 6)
 
 
+def _loaded(*modules: str) -> set[str]:
+    script = (
+        "import importlib, sys\n"
+        f"for name in {modules!r}: importlib.import_module(name)\n"
+        "print(*(n for n in sys.modules if n.split('.')[0] not in sys.stdlib_module_names))"
+    )
+    run = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=TESTS,
+        env={**os.environ, "PYTHONPATH": str(TESTS)},
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return set(run.stdout.split())
+
+
 def test_the_oracle_imports_no_engine() -> None:
-    """Independence is the point: only core math may be imported from avelorn."""
-    tree = ast.parse(Path(__file__).with_name("procedure.py").read_text())
-    imported = [
-        name
-        for node in ast.walk(tree)
-        for name in (
-            [node.module or ""]
-            if isinstance(node, ast.ImportFrom)
-            else [alias.name for alias in node.names]
-            if isinstance(node, ast.Import)
-            else []
-        )
+    """Independence is the point: the oracle loads nothing core math does not."""
+    oracle = ["oracle"] + [
+        f"oracle.{path.stem}"
+        for path in ORACLE.glob("*.py")
+        if path.stem != "__init__" and not path.stem.startswith("test_")
     ]
-    allowed = {"avelorn.core.dice", "avelorn.core.distribution"}
-    assert not {name for name in imported if name.startswith("avelorn")} - allowed
+    allowed = _loaded("avelorn.core.dice", "avelorn.core.distribution") | set(oracle)
+    assert _loaded(*oracle) - allowed == set()
 
 
 def test_seven_plus_to_hit_confirms_a_natural_six() -> None:
