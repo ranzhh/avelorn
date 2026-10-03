@@ -55,6 +55,16 @@ def test_unit_file_parses(path: Path) -> None:
     assert unit.id == path.stem
 
 
+def test_highest_reads_the_unit_s_highest_value(elven_spearmen: dict) -> None:
+    """A unit tests against its highest value; with none printed there is none."""
+    unit = Unit.model_validate(elven_spearmen)
+    unit.profiles[1].characteristics[Characteristic.LEADERSHIP] = 9
+    assert unit.highest(Characteristic.LEADERSHIP) == 9
+    for profile in unit.profiles:
+        profile.characteristics[Characteristic.LEADERSHIP] = None
+    assert unit.highest(Characteristic.LEADERSHIP) is None
+
+
 def test_dash_stat_becomes_none() -> None:
     """A "-" characteristic in source material is coerced to None."""
     stats = {"M": 4, "WS": 3, "BS": "-", "S": 3, "T": 3, "W": 1, "I": 3, "A": 1, "Ld": 7}

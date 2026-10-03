@@ -34,15 +34,6 @@ from avelorn.tow.engine.attack import (
     roll_target,
 )
 from avelorn.tow.engine.casualties import wound_and_casualties
-from avelorn.tow.engine.characteristic_tests import pass_probability
-from avelorn.tow.engine.charts import (
-    armour_save_target,
-    hit_probability,
-    save_probability,
-    shooting_hit_target,
-    wound_probability,
-    wound_target,
-)
 from avelorn.tow.engine.rules import (
     AttackFacts,
     GateContext,
@@ -55,6 +46,15 @@ from avelorn.tow.engine.rules import (
     factored_notes,
 )
 from avelorn.tow.engine.seats import Defence, Offence
+from avelorn.tow.kernels import (
+    armour_save_target,
+    hit_probability,
+    leadership_test,
+    save_probability,
+    shooting_hit_target,
+    wound_probability,
+    wound_target,
+)
 from avelorn.tow.schema.psychology import PanicCause
 from avelorn.tow.schema.rule import AttackKind, RerollEffect, Rule
 from avelorn.tow.schema.stage import Stage
@@ -507,10 +507,11 @@ class PanicTest(Roll):
     Rolled once for the whole unit — no single natural face exists, so
     it is no attack roll and a ``natural:`` trigger cannot name it. The
     printed bounds (a double 6 always fails, a double 1 always passes)
-    live in the characteristic-test procedure this delegates to.
+    live in the Leadership test kernel this delegates to.
     """
 
     leadership: int | None
+    reroll_failed: bool = False
     stage: ClassVar[Stage] = Stage.MAKE_PANIC_TESTS
 
     def chance(self) -> Fraction:
@@ -519,7 +520,7 @@ class PanicTest(Roll):
         Returns:
             The exact pass probability, 0 for no Leadership at all.
         """
-        return pass_probability(Characteristic.LEADERSHIP, self.leadership)
+        return leadership_test(self.leadership, self.reroll_failed)
 
 
 @dataclass(frozen=True)
@@ -564,13 +565,11 @@ def make_panic_tests(
     if battle < size:
         raise ValueError(f"battle strength ({battle}) cannot be below current size ({size})")
 
-    test = PanicTest(defender.unit.highest(Characteristic.LEADERSHIP))
-    p_pass = test.chance()
     reroll_from = _reroll_grant(defender.loadout, PanicCause.HEAVY_CASUALTIES)
-    if reroll_from is not None:
-        # A failed test is taken again: both dice, same natural bounds,
-        # never more than once whatever the source.
-        p_pass = p_pass + (1 - p_pass) * p_pass
+    test = PanicTest(
+        defender.unit.highest(Characteristic.LEADERSHIP), reroll_failed=reroll_from is not None
+    )
+    p_pass = test.chance()
     # A zero of the volley's own numeric kind, so an outcome nothing reaches
     # matches the rest rather than staying a bare int.
     zero = p_pass * 0

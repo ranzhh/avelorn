@@ -1,24 +1,28 @@
-"""Roll-target charts from the rulebook.
+"""The rulebook's dice mechanics as pure functions of plain values.
+
+Meant for both engines; legacy calls them today. No game objects and no
+special rules.
 
 Sources (tow.whfb.app): the-shooting-phase/roll-to-hit-shooting,
 the-shooting-phase/roll-to-wound-shooting, the-shooting-phase/7-to-hit,
 the-shooting-phase/determining-armour-value,
 the-shooting-phase/armour-piercing,
-the-combat-phase/roll-to-hit-combat.
+the-combat-phase/roll-to-hit-combat, model-profiles/leadership-tests.
 """
 
 import logging
+from collections.abc import Set
+from enum import StrEnum
+from fractions import Fraction
+from itertools import product
+from typing import NamedTuple, cast
 
-from avelorn.core.distribution import Probability
-from avelorn.tow.engine.attack import (
-    ArmourSave,
-    RollToHitCombat,
-    RollToHitShooting,
-    RollToWound,
-    roll_target,
-)
+from avelorn.core.distribution import Distribution
 
 logger = logging.getLogger(__name__)
+
+_FACE = Fraction(1, 6)
+_FACES = range(1, 7)
 
 # A model wearing no armour counts as 7+ for modifier purposes; improvements cap at 2+.
 UNARMOURED = 7
@@ -125,53 +129,147 @@ def armour_save_target(armour_value: int | None, armour_piercing: int = 0) -> in
     return target
 
 
-def hit_probability(target: int) -> Probability:
+class Die(NamedTuple):
+    """One die as it lands: its natural face and whether it succeeded."""
+
+    natural: int
+    success: bool
+
+
+class Confirm(StrEnum):
+    """How a natural 6 fares against a target above 6."""
+
+    NEVER = "never"
+    SECOND_DIE = "second-die"
+    ALWAYS = "always"
+
+
+CONFIRM_TARGETS = {7: 4, 8: 5, 9: 6}
+
+
+def d6(
+    target: int, rerolls: Set[Die] = frozenset(), confirm: Confirm = Confirm.NEVER
+) -> Distribution[Die]:
+    """Roll one D6 against ``target``, exactly.
+
+    A natural 1 always fails, regardless of modifiers. Above 6, ``confirm``
+    says what a natural 6 does. Each die in ``rerolls`` is re-rolled once
+    and the fresh die stands as thrown ("no single dice can be re-rolled more
+    than once"); a failed confirmation re-rolls the whole die.
+
+    Args:
+        target: The modified roll needed; any integer.
+        rerolls: The landed dice a re-roll covers, by natural face and result.
+        confirm: How a natural 6 fares against a target above 6.
+
+    Returns:
+        Each landed die's exact probability.
+    """
+    throw = _throw(target, confirm)
+    return throw.bind(lambda die: throw if die in rerolls else Distribution({die: Fraction(1)}))
+
+
+def _throw(target: int, confirm: Confirm) -> Distribution[Die]:
+    mass: dict[Die, Fraction] = {}
+    for face in _FACES:
+        if face < 6 or target <= 6 or confirm is Confirm.NEVER:
+            landed = [(Die(face, face >= max(target, 2)), _FACE)]
+        elif confirm is Confirm.ALWAYS:
+            landed = [(Die(6, True), _FACE)]
+        elif (second := CONFIRM_TARGETS.get(target)) is None:
+            landed = [(Die(6, False), _FACE)]
+        else:
+            landed = [(Die(6, again >= second), _FACE * _FACE) for again in _FACES]
+        for die, p in landed:
+            mass[die] = mass.get(die, Fraction(0)) + p
+    return Distribution(mass)
+
+
+def success(dice: Distribution[Die]) -> Fraction:
+    """The exact probability that a roll succeeds.
+
+    Returns:
+        The summed mass of the successful dice.
+    """
+    return sum((cast(Fraction, p) for die, p in dice.mass.items() if die.success), Fraction(0))
+
+
+def hit_probability(target: int) -> Fraction:
     """Probability that one shooting attack hits, given its To Hit target.
 
     A natural 1 always fails; targets of 7+ confirm on a second die
-    ("7 to Hit"). Derived from the walk's own Roll to Hit.
+    ("7 to Hit").
 
     Returns:
         The hit probability, in [0, 5/6], exact.
     """
-    p = RollToHitShooting(target).chance()
+    p = success(d6(target, confirm=Confirm.SECOND_DIE))
     logger.debug("hit %s -> p=%.3f", _fmt_target(target), p)
     return p
 
 
-def melee_hit_probability(target: int) -> Probability:
+def melee_hit_probability(target: int) -> Fraction:
     """Probability that one close-combat attack hits, given its To Hit target.
 
     A natural 1 always fails and a natural 6 always hits, with no 7+
-    confirmation (the-combat-phase/roll-to-hit-combat). Derived from
-    the walk's own close-combat Roll to Hit.
+    confirmation (the-combat-phase/roll-to-hit-combat).
 
     Returns:
         The hit probability, in [1/6, 5/6], exact.
     """
-    p = RollToHitCombat(target).chance()
+    p = success(d6(target, confirm=Confirm.ALWAYS))
     logger.debug("melee hit %s -> p=%.3f", _fmt_target(target), p)
     return p
 
 
-def wound_probability(target: int | None) -> Probability:
+def wound_probability(target: int | None) -> Fraction:
     """Probability that one wound roll succeeds; a natural 1 always fails.
 
     Returns:
         The exact success probability, or 0 when ``target`` is None (the
         chart shows "-": the attack cannot wound).
     """
-    p = RollToWound(roll_target(target)).chance()
+    p = Fraction(0) if target is None else success(d6(target))
     logger.debug("wound %s -> p=%.3f", _fmt_target(target), p)
     return p
 
 
-def save_probability(target: int | None) -> Probability:
+def save_probability(target: int | None) -> Fraction:
     """Probability that a save roll succeeds; a natural 1 always fails.
 
     Returns:
         The exact success probability, or 0 when ``target`` is None (no save).
     """
-    p = ArmourSave(roll_target(target)).chance()
+    p = Fraction(0) if target is None else success(d6(target))
     logger.debug("save %s -> p=%.3f", _fmt_target(target), p)
+    return p
+
+
+def leadership_test(value: int | None, reroll_failed: bool = False) -> Fraction:
+    """Exact probability that a 2D6 Leadership test passes.
+
+    Passes on a roll equal to or under ``value``; a natural 12 always fails
+    and a natural 2 always passes. A value of 0 or None ("-") fails
+    automatically, read the same way as a characteristic test
+    (model-profiles/characteristic-tests). A re-rolled failure throws both
+    dice again, once, and the second result stands.
+
+    Args:
+        value: The Leadership tested against.
+        reroll_failed: Whether a failed test is re-rolled.
+
+    Returns:
+        P(pass).
+    """
+    if value is None or value <= 0:
+        return Fraction(0)
+    passes = sum(
+        1
+        for first, second in product(_FACES, repeat=2)
+        if (roll := first + second) == 2 or (roll != 12 and roll <= value)
+    )
+    p = Fraction(passes, 36)
+    if reroll_failed:
+        p = p + (1 - p) * p
+    logger.debug("leadership test vs %s, re-roll failed %s -> p=%s", value, reroll_failed, p)
     return p
