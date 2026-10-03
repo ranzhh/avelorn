@@ -34,7 +34,6 @@ from avelorn.tow.engine.attack import (
     roll_target,
 )
 from avelorn.tow.engine.casualties import wound_and_casualties
-from avelorn.tow.engine.characteristic_tests import pass_probability
 from avelorn.tow.engine.rules import (
     AttackFacts,
     GateContext,
@@ -50,6 +49,7 @@ from avelorn.tow.engine.seats import Defence, Offence
 from avelorn.tow.kernels import (
     armour_save_target,
     hit_probability,
+    leadership_test,
     save_probability,
     shooting_hit_target,
     wound_probability,
@@ -507,7 +507,7 @@ class PanicTest(Roll):
     Rolled once for the whole unit — no single natural face exists, so
     it is no attack roll and a ``natural:`` trigger cannot name it. The
     printed bounds (a double 6 always fails, a double 1 always passes)
-    live in the characteristic-test procedure this delegates to.
+    live in the Leadership test kernel this delegates to.
     """
 
     leadership: int | None
@@ -519,7 +519,7 @@ class PanicTest(Roll):
         Returns:
             The exact pass probability, 0 for no Leadership at all.
         """
-        return pass_probability(Characteristic.LEADERSHIP, self.leadership)
+        return leadership_test(self.leadership)
 
 
 @dataclass(frozen=True)

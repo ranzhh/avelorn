@@ -9,8 +9,10 @@ from avelorn.tow.kernels import (
     Confirm,
     Die,
     armour_save_target,
+    characteristic_test,
     d6,
     hit_probability,
+    leadership_test,
     melee_hit_probability,
     melee_hit_target,
     save_probability,
@@ -178,3 +180,39 @@ def test_d6_lands_every_face_as_printed(
 ) -> None:
     """The one die walk keeps each natural face, so face-triggered rules can read it."""
     assert d6(target, rerolls, confirm) == Distribution(expected)
+
+
+@pytest.mark.parametrize(
+    ("leadership", "expected"),
+    [
+        # Hand-counted cumulative ways to roll <= n on 2D6.
+        (7, Fraction(21, 36)),
+        (8, Fraction(26, 36)),
+        (9, Fraction(30, 36)),
+        (10, Fraction(33, 36)),
+    ],
+)
+def test_leadership_matches_hand_count(leadership: int, expected: Fraction) -> None:
+    """Golden 2D6 cumulative counts for the common Leadership values."""
+    assert leadership_test(leadership) == expected
+
+
+def test_leadership_natural_bounds() -> None:
+    """The double 1 always passes; the double 6 always fails."""
+    assert leadership_test(1) == Fraction(1, 36)
+    assert leadership_test(12) == Fraction(35, 36)
+    assert leadership_test(20) == Fraction(35, 36)
+
+
+def test_other_characteristics_roll_one_d6() -> None:
+    """A characteristic test passes on roll <= value, natural 6 failing, 1 passing."""
+    assert characteristic_test(3) == Fraction(3, 6)
+    assert characteristic_test(6) == Fraction(5, 6)
+    assert characteristic_test(1) == Fraction(1, 6)
+
+
+def test_zero_or_dash_fails_automatically() -> None:
+    """A characteristic of 0 or "-" automatically fails the test."""
+    for test in (characteristic_test, leadership_test):
+        assert test(0) == Fraction(0)
+        assert test(None) == Fraction(0)
