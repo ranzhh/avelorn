@@ -163,8 +163,49 @@ def test_printed_equipment_is_spelled_as_its_entries() -> None:
             "- { rule: hatred, X: skaven }",
             "unit ironbreakers: .*: X 'skaven' is not a selector: one of all-enemies",
         ),
+        (
+            "weapons/brace-of-ogre-pistols.yaml",
+            "{rule: armour-bane, X: 1}",
+            "{rule: armour-bane, X: 0}",
+            r"weapon brace-of-ogre-pistols: .*: X 0 is not an amount: a whole number from 1",
+        ),
+        (
+            "weapons/brace-of-ogre-pistols.yaml",
+            "{rule: armour-bane, X: 1}",
+            "{rule: armour-bane, X: -1}",
+            "greater than or equal to 0",
+        ),
+        (
+            "armies/dwarfen-mountain-holds/units/ironbreakers.yaml",
+            "adds_rules: [drilled]",
+            "adds_rules: [drilld]",
+            "unit ironbreakers: drilld: no rule entry 'drilld'",
+        ),
+        (
+            "rules/arrows-of-isha.yaml",
+            "grants: {rule: armour-bane, X: 1}",
+            "grants: armour-bane",
+            "rule arrows-of-isha: armour-bane: X missing; armour-bane expects an amount",
+        ),
+        (
+            "troop-types/regular-infantry.yaml",
+            "- parry",
+            "- parryy",
+            "troop type regular-infantry: parryy: no rule entry 'parryy'",
+        ),
     ],
-    ids=["no-rule", "x-missing", "x-extra", "x-unparsable", "selector-unknown"],
+    ids=[
+        "no-rule",
+        "x-missing",
+        "x-extra",
+        "x-unparsable",
+        "selector-unknown",
+        "x-below-min",
+        "x-negative",
+        "option-no-rule",
+        "grant-x-missing",
+        "troop-type-no-rule",
+    ],
 )
 def test_a_reference_that_does_not_bind_fails_the_load(
     tmp_path: Path, path: str, printed: str, written: str, refusal: str
@@ -177,4 +218,4 @@ def test_a_reference_that_does_not_bind_fails_the_load(
     held.write_text(held.read_text().replace(printed, written, 1))
     corpus = TOWRepository(data_dir=data)
     with pytest.raises(ValueError, match=refusal):
-        _ = corpus.units, corpus.weapons
+        _ = corpus.rules, corpus.troop_types, corpus.units, corpus.weapons
