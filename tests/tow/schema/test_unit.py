@@ -219,10 +219,10 @@ def _equipment_on_the_rank_and_file(unit: dict) -> None:
 @pytest.mark.parametrize(
     ("edit", "refusal"),
     [
-        (_without_the_champion_option, "champion rows no option names: \\['Sentinel'\\]"),
+        (_without_the_champion_option, "no option names the champion rows: \\['Sentinel'\\]"),
         (_champion_naming_the_rank_and_file, "name no champion row"),
-        (_champion_naming_no_row, "names its profile"),
-        (_unit_scope_for_a_named_model, "has model scope"),
+        (_champion_naming_no_row, "names a profile row"),
+        (_unit_scope_for_a_named_model, "must have model scope"),
         (_equipment_on_the_rank_and_file, "only a mount row lists equipment"),
     ],
     ids=[

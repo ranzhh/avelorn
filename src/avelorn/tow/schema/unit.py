@@ -234,13 +234,16 @@ class UnitOption(BaseModel):
     @model_validator(mode="after")
     def _champion_names_its_row(self) -> Self:
         if (self.kind is OptionKind.CHAMPION) != (self.profile is not None):
-            raise ValueError(f"{self.name}: a champion option, and only one, names its profile")
+            raise ValueError(
+                f"{self.name}: only a champion option names a profile row, "
+                "and every champion option must"
+            )
         return self
 
     @model_validator(mode="after")
     def _named_model_takes_model_scope(self) -> Self:
         if self.applies_to is not None and self.scope is not OptionScope.MODEL:
-            raise ValueError(f"{self.name}: an option for {self.applies_to} has model scope")
+            raise ValueError(f"{self.name}: an option for {self.applies_to} must have model scope")
         return self
 
 
@@ -289,7 +292,7 @@ class Unit(BaseModel):
         if unknown := sorted(named - champions):
             raise ValueError(f"champion options name no champion row: {unknown}")
         if unnamed := sorted(champions - named):
-            raise ValueError(f"champion rows no option names: {unnamed}")
+            raise ValueError(f"no option names the champion rows: {unnamed}")
         return self
 
     @property
