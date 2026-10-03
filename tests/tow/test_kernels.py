@@ -1,5 +1,6 @@
 """Kernel tests against verbatim rulebook values (tow.whfb.app)."""
 
+from collections.abc import Callable
 from fractions import Fraction
 
 import pytest
@@ -11,6 +12,8 @@ from avelorn.tow.kernels import (
     Standing,
     armour_save_target,
     d6,
+    falls_back_in_good_order,
+    heavy_casualties,
     hit_probability,
     leadership_test,
     melee_hit_probability,
@@ -236,3 +239,29 @@ def test_remove_casualties_carries_wounds_across_models(
 ) -> None:
     """Wounds carry across Two-Wound models."""
     assert remove_casualties(standing, wounds, 2) == after
+
+
+@pytest.mark.parametrize(
+    ("kernel", "message"),
+    [
+        pytest.param(
+            lambda: remove_casualties(Standing(10, 5), 0, 1),
+            "a damaged model cannot have lost 5 of 1 Wounds",
+            id="damage-beyond-the-model",
+        ),
+        pytest.param(
+            lambda: heavy_casualties(11, 10),
+            "11 models exceed the 10 at the start of the phase",
+            id="more-models-than-at-the-start",
+        ),
+        pytest.param(
+            lambda: falls_back_in_good_order(11, 10),
+            "11 models exceed the battle strength of 10",
+            id="more-models-than-the-battle-strength",
+        ),
+    ],
+)
+def test_an_impossible_standing_is_refused(kernel: Callable[[], object], message: str) -> None:
+    """A standing no table can hold is refused."""
+    with pytest.raises(ValueError, match=message):
+        kernel()

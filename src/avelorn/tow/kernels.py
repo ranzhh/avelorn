@@ -298,12 +298,17 @@ def remove_casualties(standing: Standing, wounds: int, wounds_per_model: int) ->
         The side's standing once the wounds are removed.
 
     Raises:
-        ValueError: ``wounds_per_model`` is below 1, or ``wounds`` is negative.
+        ValueError: ``wounds_per_model`` is below 1, ``wounds`` is negative, or the
+            damaged model has lost all its Wounds.
     """
     if wounds_per_model < 1:
         raise ValueError("wounds_per_model must be >= 1")
     if wounds < 0:
         raise ValueError("wounds must be >= 0")
+    if standing.wounds_lost >= wounds_per_model:
+        raise ValueError(
+            f"a damaged model cannot have lost {standing.wounds_lost} of {wounds_per_model} Wounds"
+        )
     taken = standing.wounds_lost + wounds
     models = max(standing.models - taken // wounds_per_model, 0)
     return Standing(models, taken % wounds_per_model if models else 0)
@@ -316,7 +321,14 @@ def heavy_casualties(models: int, at_start_of_phase: int) -> bool:
 
     Returns:
         True when the unit must take a Panic test.
+
+    Raises:
+        ValueError: the unit has more models than at the start of the phase.
     """
+    if models > at_start_of_phase:
+        raise ValueError(
+            f"{models} models exceed the {at_start_of_phase} at the start of the phase"
+        )
     return models > 0 and (at_start_of_phase - models) * 4 > at_start_of_phase
 
 
@@ -327,5 +339,10 @@ def falls_back_in_good_order(models: int, battle_strength: int) -> bool:
 
     Returns:
         True to Fall Back in Good Order, False to Flee.
+
+    Raises:
+        ValueError: the unit has more models than its battle strength.
     """
+    if models > battle_strength:
+        raise ValueError(f"{models} models exceed the battle strength of {battle_strength}")
     return models * 2 > battle_strength
