@@ -151,7 +151,8 @@ def _write_stubs(references: RuleReferences, data_dir: Path, dry_run: bool) -> N
             print(text)
             continue
         path = data_dir / "tow" / "rules" / f"{stub.id}.yaml"
-        path.write_text(text)
+        with path.open("x") as written:
+            written.write(text)
         logger.warning("wrote text-only stub %s; declare its parameter if it prints one", path)
 
 
@@ -307,8 +308,7 @@ def _import_equipment(
     except WhfbParseError:
         logger.exception("%s: parse failed", slug)
         return False
-    finally:
-        _write_stubs(references, data_dir, dry_run)
+    _write_stubs(references, data_dir, dry_run)
     for warning in (*result.warnings, *merge_warnings):
         logger.warning("%s: %s", slug, warning)
     if dry_run:
@@ -380,8 +380,7 @@ def _write_unit(
     except WhfbParseError:
         logger.exception("%s: parse failed", slug)
         return False
-    finally:
-        _write_stubs(references, data_dir, dry_run)
+    _write_stubs(references, data_dir, dry_run)
     for warning in result.warnings:
         logger.warning("%s: %s", slug, warning)
     unit, fixes = canonical_unit(result.unit, equipment=_equipment_names(data_dir))

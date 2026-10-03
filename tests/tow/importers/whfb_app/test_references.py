@@ -21,6 +21,8 @@ REPO = TOWRepository()
         ("Magic Resistance (-1)", RuleRef(rule="magic-resistance", X=1)),
         ("Impact Hits (D3)", RuleRef(rule="impact-hits", X="D3")),
         ("Hatred (Orcs & Goblins)", RuleRef(rule="hatred", X="orcs-and-goblins")),
+        ("armour bane (1)", RuleRef(rule="armour-bane", X=1)),
+        ("Requires two-hands", RuleRef(rule="requires-two-hands")),
     ],
 )
 def test_a_printed_name_resolves_to_its_reference(printed: str, reference: RuleRef) -> None:
@@ -29,23 +31,29 @@ def test_a_printed_name_resolves_to_its_reference(printed: str, reference: RuleR
 
 
 @pytest.mark.parametrize(
-    ("printed", "refusal"),
+    ("printed", "aliases", "refusal"),
     [
-        ("Extra Attacks (-1)", "does not print X as 'Extra Attacks \\(\\+X\\)' does"),
-        ("Armour Bane (D3)", "X 'D3' is not an amount"),
-        ("Hatred (Skaven)", "'Skaven' is not a selector: one of all-enemies, orcs-and-goblins"),
-        ("Stubborn (1)", "prints an X, but stubborn declares none"),
+        ("Extra Attacks (-1)", (), "does not print X as 'Extra Attacks \\(\\+X\\)' does"),
+        ("Armour Bane (D3)", (), "X 'D3' is not an amount"),
+        ("Hatred (Skaven)", (), "'Skaven' is not a selector: one of all-enemies, orcs-and"),
+        ("Stubborn (1)", (), "prints an X, but stubborn declares none"),
+        ("Stubborn (1)", ("Stubborn",), "prints an X, but stubborn declares none"),
+        ("Armour Bane", (), "prints no X; armour-bane expects an amount"),
     ],
+    ids=["sign", "kind", "selector", "extra", "extra-through-alias", "missing"],
 )
-def test_a_bracket_that_does_not_read_fails_the_import(printed: str, refusal: str) -> None:
-    """The failure names where the name is printed, the name, and the X expected."""
-    references = RuleReferences(REPO.rules.values())
+def test_a_bracket_that_does_not_read_fails_the_import(
+    printed: str, aliases: tuple[str, ...], refusal: str
+) -> None:
+    """The failure names where and what is printed and the X expected; nothing is fetched."""
+    references = RuleReferences(REPO.rules.values(), _no_fetch)
     with pytest.raises(WhfbParseError, match=f"^unit some-unit: '.+': .*{refusal}"):
-        references.resolve(printed, "unit some-unit")
+        references.resolve(printed, "unit some-unit", aliases)
+    assert references.stubs == []
 
 
 def test_a_link_target_answers_where_the_displayed_name_does_not() -> None:
-    """Ship's Company displays "Open Order Formation", linking the Open Order entry."""
+    """The site files Open Order as "Open Order Formation"; an alias carries the corpus name."""
     references = RuleReferences(REPO.rules.values())
     resolved = references.resolve("Open Order Formation", "unit ships-company", ("Open Order",))
     assert resolved == RuleRef(rule="open-order")
@@ -67,3 +75,18 @@ def test_an_unknown_rule_without_the_site_fails_the_import() -> None:
     """With nothing to fetch it from, the import names the rule to import first."""
     with pytest.raises(WhfbParseError, match="no rule entry; import rule poisoned-attacks"):
         RuleReferences(REPO.rules.values()).resolve("Poisoned Attacks", "unit maneaters")
+
+
+def test_a_fetched_page_the_corpus_already_holds_fails_the_import() -> None:
+    """A stub never stands in for an entry the corpus holds, so no hand-written file is lost."""
+    references = RuleReferences(
+        REPO.rules.values(),
+        lambda slug: Rule(id="stubborn", name="Stubborn", paragraphs=["…"]),
+    )
+    with pytest.raises(WhfbParseError, match="files it as stubborn, held as 'Stubborn'"):
+        references.resolve("Stubbornness", "unit some-unit")
+    assert references.stubs == []
+
+
+def _no_fetch(slug: str) -> Rule:
+    raise AssertionError(f"fetched {slug}")
