@@ -1,0 +1,12 @@
+# Source: https://tow.whfb.app/special-rules/wake-of-fire
+id: wake-of-fire
+name: Wake of Fire
+page: 175
+category: Special Rules
+flavour: When a Flamespyre Phoenix is enraged, its plumage explodes into a magical flame, causing the creature to leave a
+  trail of angry fire in its wake.
+paragraphs:
+  - This model may perform a 'Wake of Fire' attack against a single enemy unit that is not engaged in combat. To do so, this
+    model must move (by flying) over the unit it wishes to attack during the Remaining Moves sub-phase. Once this model's
+    movement is complete, the enemy unit suffers D6 Strength 4 hits, each with an AP of -1 and with the Flaming Attacks special
+    rule.

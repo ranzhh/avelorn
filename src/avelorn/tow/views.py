@@ -98,8 +98,8 @@ class Reference(BaseModel):
     rule, an exact match or the "(X)" template a parameterised name comes from
     ("Impact Hits (D3)" is filed under ``impact-hits``).
 
-    Both are ``None`` together, and that says the corpus prints this name while
-    nothing models it: the gap :func:`~avelorn.tow.coverage.coverage` reports
+    Both are ``None`` together, and that says the corpus prints this name with
+    no entry behind it: the gap :func:`~avelorn.tow.coverage.coverage` reports
     over the whole corpus, said here on the entry that prints it.
     """
 

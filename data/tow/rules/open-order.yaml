@@ -1,0 +1,8 @@
+# Source: https://tow.whfb.app/special-rules/open-order
+id: open-order
+name: Open Order
+page: 175
+category: Special Rules
+flavour: Many regiments adopt an open formation, increasing their manoeuvrability.
+paragraphs:
+  - A unit consisting of models with this special rule may adopt an Open Order formation.

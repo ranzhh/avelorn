@@ -1,0 +1,10 @@
+# Source: https://tow.whfb.app/special-rules/sons-of-caledor
+id: sons-of-caledor
+name: Sons of Caledor
+page: 170
+category: Special Rules
+flavour: Dragon Princes consider themselves superior to Ulthuan's other soldiers. Worse, they pay little heed to orders given
+  by commanders they consider their inferiors (though they may consent to consider the suggestions of a noble).
+paragraphs:
+  - A unit with this special rule may only be joined by your army's General, or by a character with the Blood of Caledor Elven
+    Honour.

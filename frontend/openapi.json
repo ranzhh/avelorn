@@ -1915,7 +1915,7 @@
           "slug"
         ],
         "title": "Reference",
-        "description": "A name as an entry prints it, and the entry it resolves to.\n\n``slug`` addresses the entry and ``kind`` says which registry holds it, so a\ncaller can follow the name without knowing how one finds its file -- for a\nrule, an exact match or the \"(X)\" template a parameterised name comes from\n(\"Impact Hits (D3)\" is filed under ``impact-hits``).\n\nBoth are ``None`` together, and that says the corpus prints this name while\nnothing models it: the gap :func:`~avelorn.tow.coverage.coverage` reports\nover the whole corpus, said here on the entry that prints it."
+        "description": "A name as an entry prints it, and the entry it resolves to.\n\n``slug`` addresses the entry and ``kind`` says which registry holds it, so a\ncaller can follow the name without knowing how one finds its file -- for a\nrule, an exact match or the \"(X)\" template a parameterised name comes from\n(\"Impact Hits (D3)\" is filed under ``impact-hits``).\n\nBoth are ``None`` together, and that says the corpus prints this name with\nno entry behind it: the gap :func:`~avelorn.tow.coverage.coverage` reports\nover the whole corpus, said here on the entry that prints it."
       },
       "ReplaceEffect": {
         "properties": {

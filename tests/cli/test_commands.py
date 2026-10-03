@@ -56,8 +56,7 @@ def test_rules_list_says_which_entries_reach_the_maths() -> None:
     assert len(lines) == len(REPO.rules) + 1
     stubborn = next(line for line in lines if line.startswith("stubborn"))
     assert stubborn.split()[-2:] == ["yes", "4"]  # effects; three units and an option print it
-    # Every entry folds, because one that did not would not be filed at all.
-    assert all(line.split()[-2] == "yes" for line in lines[1:])
+    assert any(line.split()[-2] == "no" for line in lines[1:])  # a text-only entry
 
 
 def test_coverage_leads_with_what_the_ledger_does_not_match(tmp_path: Path) -> None:
@@ -91,4 +90,4 @@ def test_rules_show_prints_the_text_the_effects_and_what_is_left_out() -> None:
 def test_rules_show_points_a_miss_at_the_coverage_report() -> None:
     """A printed rule with no entry cannot be shown, so the miss says where it is named."""
     with pytest.raises(LookupError, match="avelorn coverage"):
-        commands.show_rule(REPO, "close-order")
+        commands.show_rule(REPO, "unprinted-rule")

@@ -1,0 +1,11 @@
+# Source: https://tow.whfb.app/special-rules/ithilmar-armour-ithilmar-barding
+id: ithilmar-armour-ithilmar-barding
+name: Ithilmar Armour/Ithilmar Barding
+page: 185
+category: Special Rules
+flavour: Ithilmar is a wondrous and lightweight metal found only in Vaul's Anvil, the largest volcano in Ulthuan. A warrior
+  wearing a gleaming suit of Ithilmar armour enjoys great protection and freedom of movement, enabling them to traverse the
+  most hostile of terrain with ease.
+paragraphs:
+  - A model with this special rule may re-roll any rolls of 1 when making Dangerous Terrain tests. In addition, a Wizard with
+    this special rule may wear armour without penalty.

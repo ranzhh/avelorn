@@ -8,154 +8,164 @@
 # rule-without-entry
 
 - kind: rule-without-entry
+  subject: Ithilmar Armour
+  reason: 'The site prints both on one page, "Ithilmar Armour/Ithilmar Barding" (ithilmar-armour-ithilmar-barding), which no printed name matches until references are slugs. Dangerous Terrain re-rolls and Wizards wearing armour; terrain and magic are not modelled.'
+  issue: 230
+- kind: rule-without-entry
+  subject: Ithilmar Barding
+  reason: 'The site prints both on one page, "Ithilmar Armour/Ithilmar Barding" (ithilmar-armour-ithilmar-barding), which no printed name matches until references are slugs. Dangerous Terrain re-rolls and Wizards wearing armour; terrain and magic are not modelled.'
+  issue: 230
+
+# rule-without-effects: an entry holds the printed text, and nothing folds it.
+
+- kind: rule-without-effects
   subject: Ambushers
   reason: Held in reserve and arriving from a table edge; deployment is not modelled.
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Breath Weapon
   reason: A flame-template attack once per round; templates are not modelled.
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Champions of Chrace
   reason: Challenges and Look Out, Sir! for joined characters; neither is modelled.
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Chariot Runners
   reason: Line of sight and movement around friendly chariots; neither is modelled.
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Chracian Warriors
   reason: Limits which characters may join; characters joining units are not modelled.
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Close Order
   reason: Formations are not modelled; every unit fights as a ranked block and the Close Order +1 combat result is not scored.
   issue: 28
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Counter Charge
   reason: A charge reaction; only Hold and Stand & Shoot are modelled.
   issue: 29
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Detachment
   reason: Detachments are not modelled.
   issue: 30
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Drilled
   reason: Free redress and marching near the enemy; movement manoeuvres are not modelled.
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Dwarf Crafted
   reason: Not authored yet; it waives the fixed -1 To Hit of a Stand & Shoot.
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Evasive
   reason: Fleeing when targeted by shooting; reactions to being shot are not modelled.
-- kind: rule-without-entry
-  subject: Extra Attacks (+1)
-  reason: 'No entry, and one would not help yet: the Attacks count reads unit rules only, never a weapon profile''s; an Extra Attacks (X) entry would also need a signed "+1" to bind.'
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Fast Cavalry
   reason: Quick Turn after marching; movement is not modelled.
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Fear
   reason: Psychology; Fear tests (refused charges, -1 To Hit on a failed test) are not modelled.
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Feigned Flight
   reason: Rallying after a Flee reaction; Flee reactions and rallying are not modelled.
   issue: 29
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Fire & Flee
   reason: A charge reaction; Flee reactions are not modelled.
   issue: 29
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: First Charge
   reason: Makes the charge target Disrupted; Disruption is not modelled.
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Fly (10)
   reason: Flying movement; movement is not modelled.
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Fly (9)
   reason: Flying movement; movement is not modelled.
-- kind: rule-without-entry
-  subject: From the Ashes
+- kind: rule-without-effects
+  subject: From The Ashes
   reason: Hits or rebirth when the model loses its last Wound; nothing triggers on a model's removal.
-- kind: rule-without-entry
-  subject: Hatred (Orcs & Goblins)
-  reason: Hated enemies are named by race; the foe gate has no race to match.
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Ignores Cover
   reason: Cover modifiers; terrain is not modelled.
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Immune to Psychology
   reason: Psychology; Fear and Terror tests are not modelled, and no effect can force a Panic test passed.
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Impetuous
   reason: Forced charge declarations; declaring charges is not modelled.
-- kind: rule-without-entry
-  subject: Ithilmar Armour
-  reason: Dangerous Terrain re-rolls and Wizards wearing armour; terrain and magic are not modelled.
-- kind: rule-without-entry
-  subject: Ithilmar Barding
-  reason: Dangerous Terrain re-rolls and Wizards wearing armour; terrain and magic are not modelled.
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: King's Guard
   reason: Challenges once the General joins; challenges and joined characters are not modelled.
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Large Target
   reason: Cover and line of sight are not modelled, and no effect adds the shooting rank a foe gains against it.
-- kind: rule-without-entry
-  subject: Magic Resistance (-1)
-  reason: Modifies enemy Casting rolls; magic is not modelled.
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Motley Crew
   reason: Models armed and armoured differently in one unit; a fielded unit has one loadout.
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Move Through Cover
   reason: Difficult and dangerous terrain; terrain is not modelled.
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Multiple Shots (2)
   reason: Firing X shots at a further -1 To Hit; no quantity counts shots per model.
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Naval Discipline
   reason: Stand & Shoot at any distance and a free redress; the Stand & Shoot distance limit and manoeuvres are not modelled.
   issue: 29
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Ogre Charge
   reason: Impact Hits AP improved by the Rank Bonus; no effect amount reads the Rank Bonus.
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Open Order
   reason: Formations are not modelled; every unit fights as a ranked block.
   issue: 28
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Quick Shot
   reason: Not authored yet for the Moving and Shooting -1; the Stand & Shoot distance limit it waives is not enforced.
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Regimental Unit
   reason: May be accompanied by detachments; detachments are not modelled.
   issue: 30
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Resolute
   reason: Modifies Flee and Pursuit rolls; neither roll is modelled.
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Scouts
   reason: Deploying late and far forward; deployment is not modelled.
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Sons of Caledor
   reason: Limits which characters may join; characters joining units are not modelled.
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Steady in the Ranks
   reason: Resists Disruption from flank and rear charges; Disruption is not modelled.
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Swiftstride
   reason: Charge range and Charge, Flee and Pursuit rolls; none is modelled.
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Vanguard
   reason: A move after deployment; deployment is not modelled.
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Venerable
   reason: Panic re-rolls for friendly units within 6"; no rule reaches a friendly unit.
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Wake of Fire
   reason: Hits on a unit flown over; movement is not modelled.
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Warriors of Nagarythe
   reason: Limits which characters may join; characters joining units are not modelled.
-- kind: rule-without-entry
+- kind: rule-without-effects
   subject: Warriors of the White Tower
   reason: Limits which characters may join; characters joining units are not modelled.
+
+# parameter-unbound
+
+- kind: parameter-unbound
+  subject: Extra Attacks (+1)
+  reason: "Signed parameters bind with #230 (PR 3 of DESIGN-GRAPH.md's sequence)."
+  issue: 230
+- kind: parameter-unbound
+  subject: Hatred (Orcs & Goblins)
+  reason: Hated enemies are named by race; the foe gate has no race to match.
+- kind: parameter-unbound
+  subject: Magic Resistance (-1)
+  reason: "Signed parameters bind with #230 (PR 3 of DESIGN-GRAPH.md's sequence)."
+  issue: 230
 
 # profile-row-unread: a champion fights as the rank and file; only its
 # Leadership reaches the maths, through highest-value characteristic tests.
@@ -326,7 +336,7 @@
   issue: 33
 - kind: inert-option
   subject: maneaters/Immune to Psychology
-  reason: 'Imported as prose, adding no rule; Immune to Psychology has no entry (psychology is not modelled). The "0-2 of the following" cap was dropped.'
+  reason: 'Imported as prose, adding no rule; Immune to Psychology has no effects (psychology is not modelled). The "0-2 of the following" cap was dropped.'
   issue: 33
 - kind: inert-option
   subject: maneaters/Ironfist
@@ -350,5 +360,5 @@
   issue: 33
 - kind: inert-option
   subject: maneaters/Vanguard
-  reason: 'Imported as prose, adding no rule; Vanguard has no entry (deployment is not modelled). The "0-2 of the following" cap was dropped.'
+  reason: 'Imported as prose, adding no rule; Vanguard has no effects (deployment is not modelled). The "0-2 of the following" cap was dropped.'
   issue: 33

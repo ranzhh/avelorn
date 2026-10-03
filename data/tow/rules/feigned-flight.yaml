@@ -1,0 +1,9 @@
+# Source: https://tow.whfb.app/special-rules/feigned-flight
+id: feigned-flight
+name: Feigned Flight
+page: 168
+category: Special Rules
+flavour: Some units are adept at escaping from the foe and regrouping, drawing the enemy into careless charges before vanishing
+  into the distance.
+paragraphs:
+  - If this unit chooses to Flee (or Fire & Flee) as a charge reaction, it automatically rallies at the end of its move.

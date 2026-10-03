@@ -74,11 +74,11 @@ def test_a_printed_rule_carries_the_entry_it_resolves_to(client: TestClient) -> 
     assert client.get("/rules/lion-cloak").status_code == 200
 
 
-def test_a_rule_the_corpus_does_not_model_resolves_to_nothing(client: TestClient) -> None:
-    """An unmodelled name is served as printed, with no entry to link to."""
+def test_a_text_only_rule_links_to_its_entry(client: TestClient) -> None:
+    """A rule the engine does not apply still links to the text it holds."""
     body = client.get("/units/dwarf-warriors").json()
     resolved = {r["name"]: r["slug"] for r in body["special_rules"]}
-    assert resolved["Close Order"] is None
+    assert resolved["Close Order"] == "close-order"
 
 
 def test_a_parameterised_rule_resolves_to_the_template_it_is_filed_under(
@@ -129,7 +129,7 @@ def test_a_rule_is_served_whole(client: TestClient) -> None:
 
 
 def test_an_unknown_rule_slug_is_a_404(client: TestClient) -> None:
-    """A rule printed without an entry has none to read."""
-    response = client.get("/rules/close-order")
+    """A slug no entry carries has nothing to read."""
+    response = client.get("/rules/unprinted-rule")
     assert response.status_code == 404
-    assert response.json() == {"detail": "no rule entry 'close-order'"}
+    assert response.json() == {"detail": "no rule entry 'unprinted-rule'"}

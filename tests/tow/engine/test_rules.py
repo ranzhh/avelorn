@@ -143,7 +143,7 @@ def test_printed_rule_substitutes_under_a_printed_bound() -> None:
 
 def test_printed_rule_unknown_name() -> None:
     """A name matching nothing resolves to None."""
-    assert printed_rule("Quick Shot", REPO.rules) is None
+    assert printed_rule("Unprinted Rule", REPO.rules) is None
 
 
 def test_compile_armour_bane_from_data_reproduces_the_golden() -> None:

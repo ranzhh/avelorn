@@ -1,0 +1,10 @@
+# Source: https://tow.whfb.app/special-rules/evasive
+id: evasive
+name: Evasive
+page: 168
+category: Special Rules
+flavour: In the face of enemy fire, it is often wise to step back! Some warriors are particularly adept at this manoeuvre.
+paragraphs:
+  - Once per turn, when a unit in which the majority of the models have this special rule is declared the target during the
+    enemy Shooting phase, that unit may choose to Fall Back in Good Order, fleeing directly away from the enemy unit shooting
+    at it. Once this unit has completed its move, the enemy unit may continue with its shooting as declared.

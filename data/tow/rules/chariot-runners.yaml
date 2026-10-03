@@ -1,0 +1,14 @@
+# Source: https://tow.whfb.app/special-rules/chariot-runners
+id: chariot-runners
+name: Chariot Runners
+page: 167
+category: Special Rules
+flavour: Chariots are often accompanied by light troops that fight at their side, protecting their vulnerable flanks from
+  the enemy.
+paragraphs:
+  - Friendly models whose troop type is chariot can draw a line of sight over or through models with this special rule and
+    can move through friendly units if they are in Skirmish formation and if the majority of models have this special rule.
+    If the chariot's move would result in it ending up 'on top' of a Chariot Runner, simply nudge the Chariot Runner aside,
+    by the smallest amount possible, to make space for the chariot. Whilst in Skirmish formation units of Chariot Runners
+    can treat friendly chariots that are within 1" of one or more of the unit's models as a part of the unit for the purposes
+    of unit coherency.

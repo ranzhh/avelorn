@@ -46,11 +46,10 @@ class Loadout:
     (:func:`~avelorn.tow.engine.rules.printed_rule`).
 
     The two halves miss differently, by design. Equipment coverage is
-    complete, so an unresolvable equipment name fails the deploy. Rule
-    entries exist only for what the engine can honour, so a rule without
-    one is the norm — unit rules without entries ride along printed, in
-    :attr:`unresolved_rules`, and keep feeding the "not factored" notes
-    rather than silently vanishing, and a weapon-rule name absent from
+    complete, so an unresolvable equipment name fails the deploy. A rule
+    name with no entry rides along printed, in :attr:`unresolved_rules`,
+    and keeps feeding the "not factored" notes rather than silently
+    vanishing, as a text-only entry does; a weapon-rule name absent from
     :attr:`weapon_rules` compiles to unfactored the same way.
     """
 
@@ -861,9 +860,9 @@ def _resolve_loadout(
     resolved: list[Rule] = []
     unresolved: list[str] = []
     # The unit's own printed rules, then the rules its troop type confers
-    # (Press of Battle, ...): both resolve the same way — an entry with
-    # effects joins the loadout, a name without one rides along printed and
-    # feeds the "not factored" notes.
+    # (Press of Battle, ...): both resolve the same way — an entry joins the
+    # loadout, a name without one rides along printed and feeds the "not
+    # factored" notes.
     troop_type = unit.troop_type_profile
     conferred = troop_type.special_rules if troop_type is not None else ()
     for printed in (*unit.special_rules, *conferred):
