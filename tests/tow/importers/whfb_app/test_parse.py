@@ -421,6 +421,25 @@ def test_line_states_its_own_availability_limit() -> None:
     assert warnings == []
 
 
+def test_line_limit_under_a_model_header_keeps_the_model() -> None:
+    """A line stating only a limit stays the option of the model its header names."""
+    group = OptionGroup(applies_to="Ironbeard", scope=OptionScope.MODEL)
+    option, _ = _option(
+        "0-1 unit per 1,000 points may have the Drilled special rule (+5 points)",
+        group,
+        printed={"Ironbreaker", "Ironbeard"},
+    )
+    assert option == UnitOption(
+        name="Drilled",
+        kind=OptionKind.SPECIAL_RULE,
+        scope=OptionScope.MODEL,
+        applies_to="Ironbeard",
+        points=5,
+        adds_rules=[RuleRef(rule="drilled")],
+        limit="0-1 unit per 1000 points",
+    )
+
+
 # --- option lines -----------------------------------------------------------
 
 

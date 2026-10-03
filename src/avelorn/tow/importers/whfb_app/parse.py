@@ -525,12 +525,11 @@ def _parse_option_line(
         stated := _parse_subject(m.group("subject"), printed)
     ) is not None:
         body = m.group("body")
-        # What the line states about itself wins; what it leaves unsaid
-        # still comes from the group it sits under.
+        applies_to = stated.applies_to or group.applies_to
         scope = OptionGroup(
             limit=stated.limit or group.limit,
-            applies_to=stated.applies_to or group.applies_to,
-            scope=stated.scope,
+            applies_to=applies_to,
+            scope=OptionScope.MODEL if applies_to else stated.scope,
         )
 
     option = _matched_option(
