@@ -45,7 +45,7 @@
   reason: Fleeing when targeted by shooting; reactions to being shot are not modelled.
 - kind: rule-without-entry
   subject: Extra Attacks (+1)
-  reason: No entry; an Extra Attacks (X) entry would also need a signed "+1" to bind, and parameters bind only numbers and dice.
+  reason: 'No entry, and one would not help yet: the Attacks count reads unit rules only, never a weapon profile''s; an Extra Attacks (X) entry would also need a signed "+1" to bind.'
 - kind: rule-without-entry
   subject: Fast Cavalry
   reason: Quick Turn after marching; movement is not modelled.
@@ -237,7 +237,8 @@
   reason: Champion; split profiles are not modelled.
   issue: 46
 
-# printed-notes
+# printed-notes: the notes stay in the weapon file once modelled, so these never
+# go stale on their own. Delete an entry when its note is modelled.
 
 - kind: printed-notes
   subject: brace-of-drakefire-pistols
@@ -251,7 +252,6 @@
 - kind: printed-notes
   subject: cavalry-spear
   reason: S+1 and AP -1 apply every turn, not only on the charge (profiles carry no gate); the troop-type limit is equipment legality. Its supporting-attack ban folds through Fight In Extra Rank.
-  issue: 17
 - kind: printed-notes
   subject: ceremonial-halberd
   reason: Modelled elsewhere; Fight In Extra Rank's charge gate applies the supporting-attack ban.
@@ -263,12 +263,11 @@
   reason: Descriptive; nothing to model. Every datasheet that carries a hand weapon lists it.
 - kind: printed-notes
   subject: ironfist
-  reason: The +1 armour value is printed only here, not as a rule; the magic-weapon exclusions need magic items.
+  reason: Weapon rules reach only attacks made with the weapon, so a weapon's always-on +1 armour value has nothing to carry it; the magic-weapon exclusions need magic items.
   issue: 31
 - kind: printed-notes
   subject: lance
   reason: S+2 and AP -2 apply every turn and against any foe, not only the unit charged (profiles carry no gate); the troop-type limit is equipment legality.
-  issue: 17
 - kind: printed-notes
   subject: serpentine-tail
   reason: One attack must use this weapon; a unit fights with one weapon in hand.
@@ -315,41 +314,41 @@
   issue: 33
 - kind: inert-option
   subject: maneaters/Any model in the unit may replace Light Armour with Heavy Armour
-  reason: Imported as prose, swapping no armour.
+  reason: Imported as prose; fixable in the datasheet as an equipment swap, the Heavy Armour entry exists.
   issue: 33
 - kind: inert-option
   subject: maneaters/Brace of Ogre Pistols
-  reason: Imported as prose, adding no weapon; one of an exclusive per-model choice.
+  reason: Imported as prose; fixable in the datasheet as kind equipment, the Brace of Ogre Pistols entry exists.
   issue: 33
 - kind: inert-option
   subject: maneaters/Great Weapon
-  reason: Imported as prose, adding no weapon; one of an exclusive per-model choice.
+  reason: Imported as prose; fixable in the datasheet as kind equipment, the Great Weapon entry exists.
   issue: 33
 - kind: inert-option
   subject: maneaters/Immune to Psychology
-  reason: Imported as prose, adding no rule; one of "0-2 of the following", a capped choice.
+  reason: 'Imported as prose, adding no rule; Immune to Psychology has no entry (psychology is not modelled). The "0-2 of the following" cap was dropped.'
   issue: 33
 - kind: inert-option
   subject: maneaters/Ironfist
-  reason: Imported as prose, adding no weapon; one of an exclusive per-model choice.
+  reason: Imported as prose; fixable in the datasheet as kind equipment, the Ironfist entry exists.
   issue: 33
 - kind: inert-option
   subject: maneaters/Ogre Pistol
-  reason: Imported as prose, adding no weapon; one of an exclusive per-model choice.
+  reason: Imported as prose, adding no weapon; there is no Ogre Pistol weapon entry to add.
   issue: 33
 - kind: inert-option
   subject: maneaters/Poisoned Attacks
-  reason: Imported as prose, adding no rule; one of "0-2 of the following", a capped choice.
+  reason: 'Imported as prose, adding no rule; there is no Poisoned Attacks entry to add. The "0-2 of the following" cap was dropped.'
   issue: 33
 - kind: inert-option
   subject: maneaters/Stubborn
-  reason: Imported as prose, adding no rule; one of "0-2 of the following", a capped choice.
+  reason: 'Imported as prose; fixable in the datasheet as kind special_rule, the Stubborn entry has effects. The "0-2 of the following" cap was dropped.'
   issue: 33
 - kind: inert-option
   subject: maneaters/Two Hand Weapons/Additional Hand Weapon
-  reason: Imported as prose, adding no weapon; one of an exclusive per-model choice.
+  reason: Imported as prose, adding no weapon; there is no Additional Hand Weapon weapon entry to add.
   issue: 33
 - kind: inert-option
   subject: maneaters/Vanguard
-  reason: Imported as prose, adding no rule; one of "0-2 of the following", a capped choice.
+  reason: 'Imported as prose, adding no rule; Vanguard has no entry (deployment is not modelled). The "0-2 of the following" cap was dropped.'
   issue: 33
