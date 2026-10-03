@@ -1,4 +1,4 @@
-import type { Block, Distribution, Repeat, Node, Program, Reading, Rule, Verdict } from './types';
+import type { Block, Distribution, Judged, Repeat, Node, Program, Reading, Rule } from './types';
 
 export interface Metrics {
 	node: { width: number; height: number };
@@ -59,7 +59,7 @@ export interface PlacedRule {
 export interface PlacedLanding {
 	rule: string;
 	at: string;
-	verdict: Verdict;
+	verdicts: Judged[];
 	start: Point;
 	end: Point;
 }
@@ -377,7 +377,7 @@ export function layout(program: Program, collapsed: string[], metrics = METRICS)
 		rule.landings.map((landing) => ({
 			rule: rule.rule,
 			at: standsFor.get(landing.at)!,
-			verdict: landing.verdict,
+			verdicts: landing.verdicts,
 			start: NOWHERE,
 			end: NOWHERE
 		}))

@@ -13,6 +13,7 @@ const program: Program = {
 			step: 'a',
 			kind: 'measurement',
 			side: 'this-model',
+			ran: true,
 			inputs: [],
 			edge: { readings: [{ label: 'n', value: 2 }] }
 		},
@@ -21,6 +22,7 @@ const program: Program = {
 			step: 'b',
 			kind: 'roll',
 			side: 'this-model',
+			ran: true,
 			inputs: [],
 			target: { label: 't', value: 1 },
 			modifiers: [{ rule: 'r1', move: 1 }],
@@ -41,6 +43,7 @@ const program: Program = {
 			step: 'c',
 			kind: 'roll',
 			side: 'the-enemy',
+			ran: true,
 			inputs: ['p/g/b'],
 			target: {
 				label: 'u',
@@ -68,6 +71,7 @@ const program: Program = {
 			step: 'd',
 			kind: 'consequence',
 			side: 'the-enemy',
+			ran: true,
 			inputs: ['p/g/c'],
 			edge: {
 				readings: [
@@ -88,7 +92,7 @@ const program: Program = {
 			rule: 'r1',
 			name: 'R1',
 			bearer: 'this-model',
-			landings: [{ at: 'p/g/b', verdict: 'applied' }]
+			landings: [{ at: 'p/g/b', verdicts: [{ verdict: 'applied', p: 1 }] }]
 		},
 		{ rule: 'r2', name: 'R2', bearer: 'core', landings: [] }
 	],
@@ -151,8 +155,8 @@ describe('the program the tests draw', () => {
 
 	it('gives every distribution a total mass of one', () => {
 		const distributions = [
-			...program.nodes.flatMap((node) => node.edge.readings),
-			...rolls.map((roll) => roll.target)
+			...program.nodes.filter((node) => node.ran).flatMap((node) => node.edge.readings),
+			...rolls.filter((roll) => roll.ran).map((roll) => roll.target)
 		].filter(isDistribution);
 		expect(distributions.length).toBeGreaterThan(0);
 		for (const distribution of distributions) {
@@ -165,7 +169,10 @@ describe('the program the tests draw', () => {
 		for (const roll of rolls) {
 			for (const modifier of roll.modifiers) {
 				const rule = program.rules.find((candidate) => candidate.rule === modifier.rule);
-				expect(rule?.landings).toContainEqual({ at: roll.path, verdict: 'applied' });
+				expect(rule?.landings).toContainEqual({
+					at: roll.path,
+					verdicts: [{ verdict: 'applied', p: 1 }]
+				});
 			}
 		}
 	});

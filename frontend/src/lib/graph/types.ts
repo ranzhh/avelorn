@@ -35,6 +35,7 @@ interface Step {
 	step: string;
 	side: Side;
 	inputs: string[];
+	ran: boolean;
 	edge: Edge;
 }
 
@@ -78,17 +79,22 @@ export interface Slot {
 	empty: boolean;
 }
 
-export interface Lanes {
+export interface Body {
 	path: string;
-	kind: 'lanes';
+	kind: 'body';
 	decision: string;
 }
 
-export type Block = Sequence | Repeat | Slot | Lanes;
+export type Block = Sequence | Repeat | Slot | Body;
+
+export interface Judged {
+	verdict: Verdict;
+	p: number;
+}
 
 export interface Landing {
 	at: string;
-	verdict: Verdict;
+	verdicts: Judged[];
 }
 
 export interface Rule {
