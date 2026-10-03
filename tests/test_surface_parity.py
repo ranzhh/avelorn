@@ -88,9 +88,13 @@ def test_the_coverage_report_names_the_same_gaps_on_both() -> None:
     printed = "\n".join(commands.show_coverage(REPO))
     for gap in served["gaps"]:
         assert gap["subject"] in printed
-        assert gap["reason"] in printed
+        assert (gap["reason"] or "!! UNACKNOWLEDGED") in printed
+        if gap["issue"] is not None:
+            assert f"#{gap['issue']}" in printed
         for site in gap["sites"]:
             assert site["id"] in printed
+    for entry in served["stale"]:
+        assert entry["subject"] in printed
     assert f"{len(served['gaps'])} gaps:" in printed
 
 

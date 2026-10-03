@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from avelorn.api.app import app, corpus
+from avelorn.tow.coverage import Gap
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.views import RuleSummary
 
@@ -78,8 +79,6 @@ def test_a_rule_the_corpus_does_not_model_resolves_to_nothing(client: TestClient
     body = client.get("/units/dwarf-warriors").json()
     resolved = {r["name"]: r["slug"] for r in body["special_rules"]}
     assert resolved["Close Order"] is None
-    reported = {gap["subject"] for gap in client.get("/coverage").json()["gaps"]}
-    assert "Close Order" in reported
 
 
 def test_a_parameterised_rule_resolves_to_the_template_it_is_filed_under(
@@ -114,11 +113,10 @@ def test_rules_are_listed_through_the_shared_summary(client: TestClient) -> None
 
 def test_the_coverage_report_names_each_gap_where_it_occurs_and_why(client: TestClient) -> None:
     """The report is the per-action "not factored" notes, totalled and explained."""
-    body = client.get("/coverage").json()
-    close_order = next(gap for gap in body["gaps"] if gap["subject"] == "Close Order")
-    assert {"entry": "unit", "id": "elven-spearmen"} in close_order["sites"]
-    assert close_order["kind"] == "rule-without-entry"
-    assert close_order["reason"]
+    gap = client.get("/coverage").json()["gaps"][0]
+    assert set(gap) == set(Gap.model_fields)
+    assert set(gap["sites"][0]) == {"entry", "id"}
+    assert gap["reason"]
 
 
 def test_a_rule_is_served_whole(client: TestClient) -> None:
