@@ -102,8 +102,8 @@ class Loaded:
             raise ProgramError(f"{self.program.name} takes no input {', '.join(unknown)}")
         for name, value in knowns.items():
             expected = self.inputs[name].type
-            if not isinstance(value, expected):
-                raise ProgramError(f"{name} expects a {expected.__name__}; got {value!r}")
+            if type(value) is not expected:
+                raise ProgramError(f"{name} expects {expected.__name__}; got {value!r}")
         given = {self.inputs[name].state: value for name, value in knowns.items()}
         return tuple(
             Evaluated(self, lane, MappingProxyType(dict(knowns)))

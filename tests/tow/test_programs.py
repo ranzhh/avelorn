@@ -7,7 +7,10 @@ from typing import Any
 import pytest
 import yaml
 
+from avelorn.tow.contingent import Contingent
+from avelorn.tow.kernels import Standing
 from avelorn.tow.programs import VOLLEY, ProgramError, load_program
+from avelorn.tow.steps import Fielded
 
 type Edit = Callable[[dict[str, Any]], None]
 
@@ -144,3 +147,21 @@ def test_evaluating_without_every_input_is_refused() -> None:
     with pytest.raises(ProgramError, match="volley needs attacker/fielded, attacker/standing"):
         load_program(VOLLEY).evaluate({"distance": 12})
 
+
+def test_a_bool_given_as_an_int_is_refused() -> None:
+    archers = Contingent.deploy("elven-archers", 10, frontage=5)
+    spearmen = Contingent.deploy("elven-spearmen", 20, frontage=5)
+    knowns = {
+        "attacker/fielded": Fielded.of(archers, "Longbow"),
+        "target/fielded": Fielded.of(spearmen),
+        "distance": True,
+        "who-can-shoot": True,
+        "line-of-sight": True,
+        "attacker/standing": Standing(10, 0),
+        "target/standing": Standing(20, 0),
+        "target/models-at-start-of-phase": 20,
+        "target/battle-strength": 20,
+    }
+
+    with pytest.raises(ProgramError, match="distance expects int; got True"):
+        load_program(VOLLEY).evaluate(knowns)
