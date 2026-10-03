@@ -1,0 +1,258 @@
+{
+  "metadata": {
+    "tags": [],
+    "concepts": []
+  },
+  "sys": {
+    "space": {
+      "sys": {
+        "type": "Link",
+        "linkType": "Space",
+        "id": "0v8db9sevlqj"
+      }
+    },
+    "id": "LX920VU7JbgSd6v5SxLJ24",
+    "type": "Entry",
+    "createdAt": "2024-01-26T14:11:02.618Z",
+    "updatedAt": "2024-01-26T14:11:02.618Z",
+    "environment": {
+      "sys": {
+        "id": "master",
+        "type": "Link",
+        "linkType": "Environment"
+      }
+    },
+    "publishedVersion": 1,
+    "revision": 1,
+    "contentType": {
+      "sys": {
+        "type": "Link",
+        "linkType": "ContentType",
+        "id": "rule"
+      }
+    },
+    "locale": "en-US"
+  },
+  "fields": {
+    "name": "Motley Crew",
+    "slug": "motley-crew",
+    "pageReference": 174,
+    "order": 490,
+    "description": {
+      "nodeType": "document",
+      "data": {},
+      "content": [
+        {
+          "nodeType": "paragraph",
+          "content": [
+            {
+              "nodeType": "text",
+              "value": "Some regiments contain an assortment of differently armed and armoured warriors.",
+              "marks": [],
+              "data": {}
+            }
+          ],
+          "data": {}
+        }
+      ]
+    },
+    "body": {
+      "nodeType": "document",
+      "data": {},
+      "content": [
+        {
+          "nodeType": "paragraph",
+          "content": [
+            {
+              "nodeType": "text",
+              "value": "Units with this special rule may include models of the same type that are equipped differently to one another, and/or models of different types that fight together in a single unit. If necessary, the army list entry for such units will be accompanied by a brief explanation of the unit's composition.",
+              "marks": [],
+              "data": {}
+            }
+          ],
+          "data": {}
+        },
+        {
+          "nodeType": "heading-2",
+          "content": [
+            {
+              "nodeType": "text",
+              "value": "Different Weapons",
+              "marks": [],
+              "data": {}
+            }
+          ],
+          "data": {}
+        },
+        {
+          "nodeType": "paragraph",
+          "content": [
+            {
+              "nodeType": "text",
+              "value": "The fighting rank of a Motley Crew may contain models that are armed with different weapons. In such cases, the controlling player must roll different batches of dice for the different models, making it clear to their opponent which model's attacks they represent and where they are being directed. These attacks are made in the Initiative order of the individual models, as usual.",
+              "marks": [],
+              "data": {}
+            }
+          ],
+          "data": {}
+        },
+        {
+          "nodeType": "heading-2",
+          "content": [
+            {
+              "nodeType": "text",
+              "value": "Different Armour",
+              "marks": [],
+              "data": {}
+            }
+          ],
+          "data": {}
+        },
+        {
+          "nodeType": "paragraph",
+          "content": [
+            {
+              "nodeType": "text",
+              "value": "Models within a Motley Crew may have different armour values. In combat, use the armour value of the majority of the models in the fighting rank. Against enemy shooting, use the armour value of the majority of the models in the unit.",
+              "marks": [],
+              "data": {}
+            }
+          ],
+          "data": {}
+        },
+        {
+          "nodeType": "heading-2",
+          "content": [
+            {
+              "nodeType": "text",
+              "value": "Casualty Removal",
+              "marks": [],
+              "data": {}
+            }
+          ],
+          "data": {}
+        },
+        {
+          "nodeType": "paragraph",
+          "content": [
+            {
+              "nodeType": "text",
+              "value": "Against enemy shooting, casualty removal should be divided as equally as possible between the different models within the unit. In combat, casualties should be removed from among the majority of the models that make up the fighting rank. In either case, available models are brought forward from rear ranks to fill any gaps, as chosen by the controlling player.",
+              "marks": [],
+              "data": {}
+            }
+          ],
+          "data": {}
+        }
+      ]
+    },
+    "ruleType": [
+      {
+        "metadata": {
+          "tags": [],
+          "concepts": []
+        },
+        "sys": {
+          "space": {
+            "sys": {
+              "type": "Link",
+              "linkType": "Space",
+              "id": "0v8db9sevlqj"
+            }
+          },
+          "id": "F47U30w0j5320cdHEb9jEJ",
+          "type": "Entry",
+          "createdAt": "2024-01-16T15:16:31.863Z",
+          "updatedAt": "2024-01-21T16:50:18.800Z",
+          "environment": {
+            "sys": {
+              "id": "master",
+              "type": "Link",
+              "linkType": "Environment"
+            }
+          },
+          "publishedVersion": 3,
+          "revision": 2,
+          "contentType": {
+            "sys": {
+              "type": "Link",
+              "linkType": "ContentType",
+              "id": "ruleType"
+            }
+          },
+          "locale": "en-US"
+        },
+        "fields": {
+          "name": "Special Rules",
+          "slug": "special-rules",
+          "pageReference": 165,
+          "order": 160,
+          "body": {
+            "nodeType": "document",
+            "data": {},
+            "content": [
+              {
+                "nodeType": "paragraph",
+                "data": {},
+                "content": [
+                  {
+                    "nodeType": "text",
+                    "value": "A game of Warhammer: the Old World is packed with fantastic creatures and skilled warriors with abilities so incredible and varied that the basic rules cannot possibly cover them all. For such circumstances we have special rules – uncommon rules to govern uncommon circumstances.",
+                    "marks": [],
+                    "data": {}
+                  }
+                ]
+              }
+            ]
+          },
+          "bodyIndex": "A game of Warhammer: the Old World is packed with fantastic creatures and skilled warriors with abilities so incredible and varied that the basic rules cannot possibly cover them all. For such circumstances we have special rules – uncommon rules to govern uncommon circumstances."
+        }
+      }
+    ],
+    "association": [
+      {
+        "metadata": {
+          "tags": [],
+          "concepts": []
+        },
+        "sys": {
+          "space": {
+            "sys": {
+              "type": "Link",
+              "linkType": "Space",
+              "id": "0v8db9sevlqj"
+            }
+          },
+          "id": "1ajj5ld8tacvR3LPTz6t5S",
+          "type": "Entry",
+          "createdAt": "2024-01-14T21:10:21.561Z",
+          "updatedAt": "2024-02-18T20:25:22.109Z",
+          "environment": {
+            "sys": {
+              "id": "master",
+              "type": "Link",
+              "linkType": "Environment"
+            }
+          },
+          "publishedVersion": 9,
+          "revision": 5,
+          "contentType": {
+            "sys": {
+              "type": "Link",
+              "linkType": "ContentType",
+              "id": "association"
+            }
+          },
+          "locale": "en-US"
+        },
+        "fields": {
+          "abbreviation": "RB",
+          "name": "Rulebook",
+          "slug": "rulebook",
+          "order": 10
+        }
+      }
+    ],
+    "bodyIndex": "Units with this special rule may include models of the same type that are equipped differently to one another, and/or models of different types that fight together in a single unit. If necessary, the army list entry for such units will be accompanied by a brief explanation of the unit's composition. Different Weapons The fighting rank of a Motley Crew may contain models that are armed with different weapons. In such cases, the controlling player must roll different batches of dice for the different models, making it clear to their opponent which model's attacks they represent and where they are being directed. These attacks are made in the Initiative order of the individual models, as usual. Different Armour Models within a Motley Crew may have different armour values. In combat, use the armour value of the majority of the models in the fighting rank. Against enemy shooting, use the armour value of the majority of the models in the unit. Casualty Removal Against enemy shooting, casualty removal should be divided as equally as possible between the different models within the unit. In combat, casualties should be removed from among the majority of the models that make up the fighting rank. In either case, available models are brought forward from rear ranks to fill any gaps, as chosen by the controlling player."
+  }
+}
