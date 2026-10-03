@@ -90,6 +90,46 @@ def linked_rule_names(node: Node, *, as_displayed: bool = False) -> list[str]:
     return names
 
 
+def linked_weapon_names(node: Node) -> list[str]:
+    """Name the weapons linked under `node`: the entries whose page embeds a profile.
+
+    Returns:
+        The names in document order, deduplicated.
+    """
+    names: list[str] = []
+
+    def walk(n: Node) -> None:
+        target = _link_target(n)
+        if target is not None and _embeds_profile(target):
+            name = target.get("fields", {}).get("name")
+            if name and name not in names:
+                names.append(name)
+        for child in n.get("content", []):
+            walk(child)
+
+    walk(node)
+    return names
+
+
+def _embeds_profile(entry: Node) -> bool:
+    body = entry.get("fields", {}).get("body", {}).get("content", [])
+    return any(block.get("nodeType") == "embedded-entry-block" for block in body)
+
+
+def list_items(doc: Node) -> list[Node]:
+    """The bullet items of a document's top-level lists.
+
+    Returns:
+        The items in document order.
+    """
+    return [
+        item
+        for block in doc.get("content", [])
+        if block.get("nodeType") in ("unordered-list", "ordered-list")
+        for item in block.get("content", [])
+    ]
+
+
 @dataclass
 class OptionLine:
     """One bullet line of an options document."""

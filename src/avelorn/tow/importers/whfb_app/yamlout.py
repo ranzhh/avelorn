@@ -1,7 +1,7 @@
 """Serialize imported models to YAML in the hand-authored style used under data/.
 
 Profiles are emitted as one flow mapping per line (mirroring the printed
-stat line), defaults and empty fields are omitted, and "-" stands in for
+stat line, unwrapped however long), defaults and empty fields are omitted, and "-" stands in for
 not-applicable stats, as in the source material.
 """
 
@@ -69,7 +69,7 @@ def unit_to_yaml(unit: Unit, source_url: str | None = None) -> str:
         doc["special_rules"] = _references(unit.special_rules)
     if unit.options:
         doc["options"] = [_option_row(o) for o in unit.options]
-    return _dump(doc, source_url)
+    return _dump(doc, source_url, width=_UNWRAPPED)
 
 
 def weapon_to_yaml(weapon: Weapon, source_url: str | None = None) -> str:
@@ -132,8 +132,11 @@ def rule_to_yaml(rule: Rule, source_url: str | None = None) -> str:
     return _dump(doc, source_url)
 
 
-def _dump(doc: dict, source_url: str | None) -> str:
-    text = yaml.dump(doc, Dumper=_Dumper, sort_keys=False, allow_unicode=True, width=120)
+_UNWRAPPED = 1000
+
+
+def _dump(doc: dict, source_url: str | None, width: int = 120) -> str:
+    text = yaml.dump(doc, Dumper=_Dumper, sort_keys=False, allow_unicode=True, width=width)
     # Pad flow-mapping braces ({ name: ... }) to match the hand-authored style.
     text = re.sub(r"^(\s*- )\{(.*)\}$", r"\1{ \2 }", text, flags=re.M)
     if source_url:

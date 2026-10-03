@@ -92,7 +92,9 @@ def parse_unit(entry: Node, references: RuleReferences) -> ImportResult:
         unit_size=_parse_unit_size(slug, _require(fields, slug, "unitSize", object)),
         troop_type=_parse_troop_type(slug, fields, warnings),
         base_size=_parse_base_size(slug, fields.get("baseSize"), warnings),
-        profiles=_with_champions(profiles, options),
+        profiles=_with_mount_weapons(
+            slug, _with_champions(profiles, options), fields.get("equipment"), warnings
+        ),
         # Equipment is prose, so display text is unusable ("thrusting
         # spears"): use canonical entry names. The special-rules field is a
         # bare list whose display text is the rule name as printed, which
@@ -114,6 +116,31 @@ def _with_champions(profiles: list[Profile], options: list[UnitOption]) -> list[
     champions = {option.profile for option in options if option.profile is not None}
     return [
         row.model_copy(update={"role": ProfileRole.CHAMPION}) if row.name in champions else row
+        for row in profiles
+    ]
+
+
+def _with_mount_weapons(
+    slug: str, profiles: list[Profile], doc: Node | None, warnings: list[str]
+) -> list[Profile]:
+    """Give the mount row the weapons its own equipment line prints.
+
+    A mounted datasheet prints its equipment one line per part, the mount's
+    last ("Barded Elven Steeds: Hooves (counts as a hand weapon) and barding").
+
+    Returns:
+        The rows, the mount row listing its weapons.
+    """
+    mounts = [row for row in profiles if row.role is ProfileRole.MOUNT]
+    if not mounts:
+        return profiles
+    lines = [] if doc is None else richtext.list_items(doc)
+    if len(mounts) != 1 or len(lines) != 2:
+        warnings.append(f"{slug}: equipment is not one line per part; mount weapons not read")
+        return profiles
+    weapons = richtext.linked_weapon_names(lines[-1])
+    return [
+        row.model_copy(update={"equipment": weapons}) if row is mounts[0] else row
         for row in profiles
     ]
 

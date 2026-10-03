@@ -1,0 +1,1030 @@
+{
+  "data": {},
+  "content": [
+    {
+      "data": {},
+      "content": [
+        {
+          "data": {},
+          "content": [
+            {
+              "data": {},
+              "content": [
+                {
+                  "data": {},
+                  "marks": [
+                    {
+                      "type": "bold"
+                    }
+                  ],
+                  "value": "Dragon Princes:",
+                  "nodeType": "text"
+                },
+                {
+                  "data": {},
+                  "marks": [],
+                  "value": " ",
+                  "nodeType": "text"
+                },
+                {
+                  "data": {
+                    "target": {
+                      "metadata": {
+                        "tags": [],
+                        "concepts": []
+                      },
+                      "sys": {
+                        "space": {
+                          "sys": {
+                            "type": "Link",
+                            "linkType": "Space",
+                            "id": "0v8db9sevlqj"
+                          }
+                        },
+                        "id": "1nSt99qo8L06tu33OybPEh",
+                        "type": "Entry",
+                        "createdAt": "2024-01-26T20:25:36.116Z",
+                        "updatedAt": "2024-03-19T15:43:53.952Z",
+                        "environment": {
+                          "sys": {
+                            "id": "master",
+                            "type": "Link",
+                            "linkType": "Environment"
+                          }
+                        },
+                        "publishedVersion": 12,
+                        "revision": 6,
+                        "contentType": {
+                          "sys": {
+                            "type": "Link",
+                            "linkType": "ContentType",
+                            "id": "rule"
+                          }
+                        },
+                        "locale": "en-US"
+                      },
+                      "fields": {
+                        "name": "Hand Weapon",
+                        "slug": "hand-weapon",
+                        "pageReference": 213,
+                        "order": 40,
+                        "body": {
+                          "data": {},
+                          "content": [
+                            {
+                              "data": {},
+                              "content": [
+                                {
+                                  "data": {},
+                                  "marks": [],
+                                  "value": "Even the most poorly prepared warrior will arm themselves with a hand weapon, such as a simple sword or axe. It may even be that the model's natural weapons, such as teeth and claws, fulfil this role. Regardless of the form it takes, almost every model, even a cavalry mount, is considered to be armed with a hand weapon with the following profile:",
+                                  "nodeType": "text"
+                                }
+                              ],
+                              "nodeType": "paragraph"
+                            },
+                            {
+                              "data": {
+                                "target": {
+                                  "sys": {
+                                    "id": "PuaVRM5dzU1FffzQvcdwD",
+                                    "type": "Link",
+                                    "linkType": "Entry"
+                                  }
+                                }
+                              },
+                              "content": [],
+                              "nodeType": "embedded-entry-block"
+                            },
+                            {
+                              "data": {},
+                              "content": [
+                                {
+                                  "data": {},
+                                  "marks": [
+                                    {
+                                      "type": "italic"
+                                    },
+                                    {
+                                      "type": "bold"
+                                    }
+                                  ],
+                                  "value": "Notes:",
+                                  "nodeType": "text"
+                                },
+                                {
+                                  "data": {},
+                                  "marks": [
+                                    {
+                                      "type": "italic"
+                                    }
+                                  ],
+                                  "value": " Unless specified otherwise, all models are assumed to be equipped with a hand weapon.",
+                                  "nodeType": "text"
+                                }
+                              ],
+                              "nodeType": "paragraph"
+                            }
+                          ],
+                          "nodeType": "document"
+                        },
+                        "relatedLinks": [
+                          {
+                            "sys": {
+                              "type": "Link",
+                              "linkType": "Entry",
+                              "id": "d1Znp84u876eCI72Odde7o"
+                            }
+                          }
+                        ],
+                        "ruleType": [
+                          {
+                            "sys": {
+                              "type": "Link",
+                              "linkType": "Entry",
+                              "id": "O6zJvMBw9RBlwd298TLnhX"
+                            }
+                          }
+                        ],
+                        "association": [
+                          {
+                            "sys": {
+                              "type": "Link",
+                              "linkType": "Entry",
+                              "id": "1ajj5ld8tacvR3LPTz6t5S"
+                            }
+                          }
+                        ],
+                        "bodyIndex": "Even the most poorly prepared warrior will arm themselves with a hand weapon, such as a simple sword or axe. It may even be that the model's natural weapons, such as teeth and claws, fulfil this role. Regardless of the form it takes, almost every model, even a cavalry mount, is considered to be armed with a hand weapon with the following profile: - Notes: Unless specified otherwise, all models are assumed to be equipped with a hand weapon."
+                      }
+                    }
+                  },
+                  "content": [
+                    {
+                      "data": {},
+                      "marks": [],
+                      "value": "Hand weapons",
+                      "nodeType": "text"
+                    }
+                  ],
+                  "nodeType": "entry-hyperlink"
+                },
+                {
+                  "data": {},
+                  "marks": [],
+                  "value": ", ",
+                  "nodeType": "text"
+                },
+                {
+                  "data": {
+                    "target": {
+                      "metadata": {
+                        "tags": [],
+                        "concepts": []
+                      },
+                      "sys": {
+                        "space": {
+                          "sys": {
+                            "type": "Link",
+                            "linkType": "Space",
+                            "id": "0v8db9sevlqj"
+                          }
+                        },
+                        "id": "L4S88Np5JNOcIb6U2E5v0b",
+                        "type": "Entry",
+                        "createdAt": "2024-01-26T20:25:39.482Z",
+                        "updatedAt": "2025-06-25T18:47:20.907Z",
+                        "environment": {
+                          "sys": {
+                            "id": "master",
+                            "type": "Link",
+                            "linkType": "Environment"
+                          }
+                        },
+                        "publishedVersion": 15,
+                        "revision": 6,
+                        "contentType": {
+                          "sys": {
+                            "type": "Link",
+                            "linkType": "ContentType",
+                            "id": "rule"
+                          }
+                        },
+                        "locale": "en-US"
+                      },
+                      "fields": {
+                        "name": "Lance",
+                        "slug": "lance",
+                        "pageReference": 215,
+                        "order": 120,
+                        "description": {
+                          "data": {},
+                          "content": [
+                            {
+                              "data": {},
+                              "content": [
+                                {
+                                  "data": {},
+                                  "marks": [],
+                                  "value": "A lance is a long, heavy spear, wielded to devastating effect by charging cavalry. Couched under the arm of its wielder, the brutal point of a lance is driven into the foe with the full weight and momentum of the charge. Such a devastating weapon can make short work of even the toughest of enemies, which is just as well because few lances survive the first shock of impact!",
+                                  "nodeType": "text"
+                                }
+                              ],
+                              "nodeType": "paragraph"
+                            }
+                          ],
+                          "nodeType": "document"
+                        },
+                        "body": {
+                          "nodeType": "document",
+                          "data": {},
+                          "content": [
+                            {
+                              "nodeType": "embedded-entry-block",
+                              "data": {
+                                "target": {
+                                  "sys": {
+                                    "id": "66NSkGpDgLPB6LCieRHU1R",
+                                    "type": "Link",
+                                    "linkType": "Entry"
+                                  }
+                                }
+                              },
+                              "content": []
+                            },
+                            {
+                              "nodeType": "paragraph",
+                              "data": {},
+                              "content": [
+                                {
+                                  "nodeType": "text",
+                                  "value": "Notes:",
+                                  "marks": [
+                                    {
+                                      "type": "italic"
+                                    },
+                                    {
+                                      "type": "bold"
+                                    }
+                                  ],
+                                  "data": {}
+                                },
+                                {
+                                  "nodeType": "text",
+                                  "value": " Models whose troop type is ",
+                                  "marks": [
+                                    {
+                                      "type": "italic"
+                                    }
+                                  ],
+                                  "data": {}
+                                },
+                                {
+                                  "nodeType": "entry-hyperlink",
+                                  "data": {
+                                    "target": {
+                                      "sys": {
+                                        "id": "zo6P4U71y2k0fkcS51d2f8",
+                                        "type": "Link",
+                                        "linkType": "Entry"
+                                      }
+                                    }
+                                  },
+                                  "content": [
+                                    {
+                                      "nodeType": "text",
+                                      "value": "cavalry",
+                                      "marks": [
+                                        {
+                                          "type": "italic"
+                                        }
+                                      ],
+                                      "data": {}
+                                    }
+                                  ]
+                                },
+                                {
+                                  "nodeType": "text",
+                                  "value": " or ",
+                                  "marks": [
+                                    {
+                                      "type": "italic"
+                                    }
+                                  ],
+                                  "data": {}
+                                },
+                                {
+                                  "nodeType": "entry-hyperlink",
+                                  "data": {
+                                    "target": {
+                                      "sys": {
+                                        "id": "b7l5Xyli1C3kHpPTskO5Pb",
+                                        "type": "Link",
+                                        "linkType": "Entry"
+                                      }
+                                    }
+                                  },
+                                  "content": [
+                                    {
+                                      "nodeType": "text",
+                                      "value": "monster",
+                                      "marks": [
+                                        {
+                                          "type": "italic"
+                                        }
+                                      ],
+                                      "data": {}
+                                    }
+                                  ]
+                                },
+                                {
+                                  "nodeType": "text",
+                                  "value": " only. A lance can only be used during a turn in which the wielder charged, and its Strength and Armour Piercing modifiers apply only against enemy models the wielder charged that turn.",
+                                  "marks": [
+                                    {
+                                      "type": "italic"
+                                    }
+                                  ],
+                                  "data": {}
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        "relatedLinks": [
+                          {
+                            "sys": {
+                              "type": "Link",
+                              "linkType": "Entry",
+                              "id": "d1Znp84u876eCI72Odde7o"
+                            }
+                          }
+                        ],
+                        "ruleType": [
+                          {
+                            "sys": {
+                              "type": "Link",
+                              "linkType": "Entry",
+                              "id": "O6zJvMBw9RBlwd298TLnhX"
+                            }
+                          }
+                        ],
+                        "association": [
+                          {
+                            "sys": {
+                              "type": "Link",
+                              "linkType": "Entry",
+                              "id": "1ajj5ld8tacvR3LPTz6t5S"
+                            }
+                          }
+                        ],
+                        "bodyIndex": "Armour Bane (1) Notes: Models whose troop type is cavalry or monster only. A lance can only be used during a turn in which the wielder charged, and its Strength and Armour Piercing modifiers apply only against enemy models the wielder charged that turn."
+                      }
+                    }
+                  },
+                  "content": [
+                    {
+                      "data": {},
+                      "marks": [],
+                      "value": "lances",
+                      "nodeType": "text"
+                    }
+                  ],
+                  "nodeType": "entry-hyperlink"
+                },
+                {
+                  "data": {},
+                  "marks": [],
+                  "value": ", ",
+                  "nodeType": "text"
+                },
+                {
+                  "data": {
+                    "target": {
+                      "metadata": {
+                        "tags": [],
+                        "concepts": []
+                      },
+                      "sys": {
+                        "space": {
+                          "sys": {
+                            "type": "Link",
+                            "linkType": "Space",
+                            "id": "0v8db9sevlqj"
+                          }
+                        },
+                        "id": "8huea8UyXjc7foE2X16c01",
+                        "type": "Entry",
+                        "createdAt": "2024-01-26T20:25:52.129Z",
+                        "updatedAt": "2024-01-26T20:33:02.085Z",
+                        "environment": {
+                          "sys": {
+                            "id": "master",
+                            "type": "Link",
+                            "linkType": "Environment"
+                          }
+                        },
+                        "publishedVersion": 3,
+                        "revision": 2,
+                        "contentType": {
+                          "sys": {
+                            "type": "Link",
+                            "linkType": "ContentType",
+                            "id": "rule"
+                          }
+                        },
+                        "locale": "en-US"
+                      },
+                      "fields": {
+                        "name": "Full Plate Armour",
+                        "slug": "full-plate-armour",
+                        "pageReference": 220,
+                        "order": 400,
+                        "body": {
+                          "data": {},
+                          "content": [
+                            {
+                              "data": {},
+                              "content": [
+                                {
+                                  "data": {},
+                                  "marks": [
+                                    {
+                                      "type": "bold"
+                                    }
+                                  ],
+                                  "value": "Armour Value: 4+",
+                                  "nodeType": "text"
+                                }
+                              ],
+                              "nodeType": "paragraph"
+                            },
+                            {
+                              "data": {},
+                              "content": [
+                                {
+                                  "data": {},
+                                  "marks": [],
+                                  "value": "Those warriors that can encase themselves from head to foot in plate armour layered upon mail of chain and padded undersuits are said to wear full plate, whereas some creatures are protected by skin as hard as steel and scales as tough as jewels.",
+                                  "nodeType": "text"
+                                }
+                              ],
+                              "nodeType": "paragraph"
+                            }
+                          ],
+                          "nodeType": "document"
+                        },
+                        "relatedLinks": [
+                          {
+                            "sys": {
+                              "type": "Link",
+                              "linkType": "Entry",
+                              "id": "Qm9I33oG8VJs16aw5Uid9t"
+                            }
+                          }
+                        ],
+                        "ruleType": [
+                          {
+                            "sys": {
+                              "type": "Link",
+                              "linkType": "Entry",
+                              "id": "O6zJvMBw9RBlwd298TLnhX"
+                            }
+                          }
+                        ],
+                        "association": [
+                          {
+                            "sys": {
+                              "type": "Link",
+                              "linkType": "Entry",
+                              "id": "1ajj5ld8tacvR3LPTz6t5S"
+                            }
+                          }
+                        ],
+                        "bodyIndex": "Armour Value: 4+ Those warriors that can encase themselves from head to foot in plate armour layered upon mail of chain and padded undersuits are said to wear full plate, whereas some creatures are protected by skin as hard as steel and scales as tough as jewels."
+                      }
+                    }
+                  },
+                  "content": [
+                    {
+                      "data": {},
+                      "marks": [],
+                      "value": "full plate armour",
+                      "nodeType": "text"
+                    }
+                  ],
+                  "nodeType": "entry-hyperlink"
+                },
+                {
+                  "data": {},
+                  "marks": [],
+                  "value": " and ",
+                  "nodeType": "text"
+                },
+                {
+                  "data": {
+                    "target": {
+                      "metadata": {
+                        "tags": [],
+                        "concepts": []
+                      },
+                      "sys": {
+                        "space": {
+                          "sys": {
+                            "type": "Link",
+                            "linkType": "Space",
+                            "id": "0v8db9sevlqj"
+                          }
+                        },
+                        "id": "cDL0I070360O079HeNTfZ8",
+                        "type": "Entry",
+                        "createdAt": "2024-01-26T20:25:54.260Z",
+                        "updatedAt": "2024-02-14T20:38:45.761Z",
+                        "environment": {
+                          "sys": {
+                            "id": "master",
+                            "type": "Link",
+                            "linkType": "Environment"
+                          }
+                        },
+                        "publishedVersion": 5,
+                        "revision": 3,
+                        "contentType": {
+                          "sys": {
+                            "type": "Link",
+                            "linkType": "ContentType",
+                            "id": "rule"
+                          }
+                        },
+                        "locale": "en-US"
+                      },
+                      "fields": {
+                        "name": "Shield",
+                        "slug": "shield",
+                        "pageReference": 221,
+                        "order": 450,
+                        "body": {
+                          "nodeType": "document",
+                          "data": {},
+                          "content": [
+                            {
+                              "nodeType": "paragraph",
+                              "data": {},
+                              "content": [
+                                {
+                                  "nodeType": "text",
+                                  "value": "A shield may be a simple wooden board, or it may be an ornate and finely decorated thing – layers of wood, leather and resin trimmed and faced with beaten metal and finished with carefully painted symbols and heraldry. Whatever form it takes, shields are carried by warriors of all races.",
+                                  "marks": [],
+                                  "data": {}
+                                }
+                              ]
+                            },
+                            {
+                              "nodeType": "paragraph",
+                              "data": {},
+                              "content": [
+                                {
+                                  "nodeType": "text",
+                                  "value": "A model that carries a shield improves its ",
+                                  "marks": [],
+                                  "data": {}
+                                },
+                                {
+                                  "nodeType": "entry-hyperlink",
+                                  "data": {
+                                    "target": {
+                                      "sys": {
+                                        "id": "Qm9I33oG8VJs16aw5Uid9t",
+                                        "type": "Link",
+                                        "linkType": "Entry"
+                                      }
+                                    }
+                                  },
+                                  "content": [
+                                    {
+                                      "nodeType": "text",
+                                      "value": "armour value",
+                                      "marks": [],
+                                      "data": {}
+                                    }
+                                  ]
+                                },
+                                {
+                                  "nodeType": "text",
+                                  "value": " by 1. For example, a model equipped with light armour has an armour value of 6+. Should that model also carry a shield, its armour value would be improved by 1 by lowering the target number from 6+ to 5+.",
+                                  "marks": [],
+                                  "data": {}
+                                }
+                              ]
+                            },
+                            {
+                              "nodeType": "paragraph",
+                              "data": {},
+                              "content": [
+                                {
+                                  "nodeType": "text",
+                                  "value": "Note that if a model uses a weapon that has the Requires Two Hands special rule in combat, it cannot also use a shield.",
+                                  "marks": [
+                                    {
+                                      "type": "italic"
+                                    }
+                                  ],
+                                  "data": {}
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        "relatedLinks": [
+                          {
+                            "sys": {
+                              "type": "Link",
+                              "linkType": "Entry",
+                              "id": "JG2T69b5W6z96sP4am2seo"
+                            }
+                          }
+                        ],
+                        "ruleType": [
+                          {
+                            "sys": {
+                              "type": "Link",
+                              "linkType": "Entry",
+                              "id": "O6zJvMBw9RBlwd298TLnhX"
+                            }
+                          }
+                        ],
+                        "association": [
+                          {
+                            "sys": {
+                              "type": "Link",
+                              "linkType": "Entry",
+                              "id": "1ajj5ld8tacvR3LPTz6t5S"
+                            }
+                          }
+                        ],
+                        "bodyIndex": "A shield may be a simple wooden board, or it may be an ornate and finely decorated thing – layers of wood, leather and resin trimmed and faced with beaten metal and finished with carefully painted symbols and heraldry. Whatever form it takes, shields are carried by warriors of all races. A model that carries a shield improves its armour value by 1. For example, a model equipped with light armour has an armour value of 6+. Should that model also carry a shield, its armour value would be improved by 1 by lowering the target number from 6+ to 5+. Note that if a model uses a weapon that has the Requires Two Hands special rule in combat, it cannot also use a shield."
+                      }
+                    }
+                  },
+                  "content": [
+                    {
+                      "data": {},
+                      "marks": [],
+                      "value": "shields",
+                      "nodeType": "text"
+                    }
+                  ],
+                  "nodeType": "entry-hyperlink"
+                },
+                {
+                  "data": {},
+                  "marks": [],
+                  "value": "",
+                  "nodeType": "text"
+                }
+              ],
+              "nodeType": "paragraph"
+            }
+          ],
+          "nodeType": "list-item"
+        },
+        {
+          "data": {},
+          "content": [
+            {
+              "data": {},
+              "content": [
+                {
+                  "data": {},
+                  "marks": [
+                    {
+                      "type": "bold"
+                    }
+                  ],
+                  "value": "Barded Elven Steeds:",
+                  "nodeType": "text"
+                },
+                {
+                  "data": {},
+                  "marks": [],
+                  "value": " Hooves (counts as a ",
+                  "nodeType": "text"
+                },
+                {
+                  "data": {
+                    "target": {
+                      "metadata": {
+                        "tags": [],
+                        "concepts": []
+                      },
+                      "sys": {
+                        "space": {
+                          "sys": {
+                            "type": "Link",
+                            "linkType": "Space",
+                            "id": "0v8db9sevlqj"
+                          }
+                        },
+                        "id": "1nSt99qo8L06tu33OybPEh",
+                        "type": "Entry",
+                        "createdAt": "2024-01-26T20:25:36.116Z",
+                        "updatedAt": "2024-03-19T15:43:53.952Z",
+                        "environment": {
+                          "sys": {
+                            "id": "master",
+                            "type": "Link",
+                            "linkType": "Environment"
+                          }
+                        },
+                        "publishedVersion": 12,
+                        "revision": 6,
+                        "contentType": {
+                          "sys": {
+                            "type": "Link",
+                            "linkType": "ContentType",
+                            "id": "rule"
+                          }
+                        },
+                        "locale": "en-US"
+                      },
+                      "fields": {
+                        "name": "Hand Weapon",
+                        "slug": "hand-weapon",
+                        "pageReference": 213,
+                        "order": 40,
+                        "body": {
+                          "data": {},
+                          "content": [
+                            {
+                              "data": {},
+                              "content": [
+                                {
+                                  "data": {},
+                                  "marks": [],
+                                  "value": "Even the most poorly prepared warrior will arm themselves with a hand weapon, such as a simple sword or axe. It may even be that the model's natural weapons, such as teeth and claws, fulfil this role. Regardless of the form it takes, almost every model, even a cavalry mount, is considered to be armed with a hand weapon with the following profile:",
+                                  "nodeType": "text"
+                                }
+                              ],
+                              "nodeType": "paragraph"
+                            },
+                            {
+                              "data": {
+                                "target": {
+                                  "sys": {
+                                    "id": "PuaVRM5dzU1FffzQvcdwD",
+                                    "type": "Link",
+                                    "linkType": "Entry"
+                                  }
+                                }
+                              },
+                              "content": [],
+                              "nodeType": "embedded-entry-block"
+                            },
+                            {
+                              "data": {},
+                              "content": [
+                                {
+                                  "data": {},
+                                  "marks": [
+                                    {
+                                      "type": "italic"
+                                    },
+                                    {
+                                      "type": "bold"
+                                    }
+                                  ],
+                                  "value": "Notes:",
+                                  "nodeType": "text"
+                                },
+                                {
+                                  "data": {},
+                                  "marks": [
+                                    {
+                                      "type": "italic"
+                                    }
+                                  ],
+                                  "value": " Unless specified otherwise, all models are assumed to be equipped with a hand weapon.",
+                                  "nodeType": "text"
+                                }
+                              ],
+                              "nodeType": "paragraph"
+                            }
+                          ],
+                          "nodeType": "document"
+                        },
+                        "relatedLinks": [
+                          {
+                            "sys": {
+                              "type": "Link",
+                              "linkType": "Entry",
+                              "id": "d1Znp84u876eCI72Odde7o"
+                            }
+                          }
+                        ],
+                        "ruleType": [
+                          {
+                            "sys": {
+                              "type": "Link",
+                              "linkType": "Entry",
+                              "id": "O6zJvMBw9RBlwd298TLnhX"
+                            }
+                          }
+                        ],
+                        "association": [
+                          {
+                            "sys": {
+                              "type": "Link",
+                              "linkType": "Entry",
+                              "id": "1ajj5ld8tacvR3LPTz6t5S"
+                            }
+                          }
+                        ],
+                        "bodyIndex": "Even the most poorly prepared warrior will arm themselves with a hand weapon, such as a simple sword or axe. It may even be that the model's natural weapons, such as teeth and claws, fulfil this role. Regardless of the form it takes, almost every model, even a cavalry mount, is considered to be armed with a hand weapon with the following profile: - Notes: Unless specified otherwise, all models are assumed to be equipped with a hand weapon."
+                      }
+                    }
+                  },
+                  "content": [
+                    {
+                      "data": {},
+                      "marks": [],
+                      "value": "hand weapon",
+                      "nodeType": "text"
+                    }
+                  ],
+                  "nodeType": "entry-hyperlink"
+                },
+                {
+                  "data": {},
+                  "marks": [],
+                  "value": ") and ",
+                  "nodeType": "text"
+                },
+                {
+                  "data": {
+                    "target": {
+                      "metadata": {
+                        "tags": [],
+                        "concepts": []
+                      },
+                      "sys": {
+                        "space": {
+                          "sys": {
+                            "type": "Link",
+                            "linkType": "Space",
+                            "id": "0v8db9sevlqj"
+                          }
+                        },
+                        "id": "731a965f8JuBxUV1jy4TcE",
+                        "type": "Entry",
+                        "createdAt": "2024-01-26T20:25:54.754Z",
+                        "updatedAt": "2024-02-14T20:39:54.077Z",
+                        "environment": {
+                          "sys": {
+                            "id": "master",
+                            "type": "Link",
+                            "linkType": "Environment"
+                          }
+                        },
+                        "publishedVersion": 5,
+                        "revision": 3,
+                        "contentType": {
+                          "sys": {
+                            "type": "Link",
+                            "linkType": "ContentType",
+                            "id": "rule"
+                          }
+                        },
+                        "locale": "en-US"
+                      },
+                      "fields": {
+                        "name": "Barding",
+                        "slug": "barding",
+                        "pageReference": 221,
+                        "order": 460,
+                        "body": {
+                          "nodeType": "document",
+                          "data": {},
+                          "content": [
+                            {
+                              "nodeType": "paragraph",
+                              "data": {},
+                              "content": [
+                                {
+                                  "nodeType": "text",
+                                  "value": "Barding is the name given to the armour worn by a mount. This can take many forms, from heavy cloth draperies, to formed and fitted armour plates. Barding is seen often on the mounts of cavalry, but only rarely upon monsters ridden by characters (it is a challenge to tailor a suit of barding to an unwilling gryphon!).",
+                                  "marks": [],
+                                  "data": {}
+                                }
+                              ]
+                            },
+                            {
+                              "nodeType": "paragraph",
+                              "data": {},
+                              "content": [
+                                {
+                                  "nodeType": "text",
+                                  "value": "A model that rides a barded mount improves its ",
+                                  "marks": [],
+                                  "data": {}
+                                },
+                                {
+                                  "nodeType": "entry-hyperlink",
+                                  "data": {
+                                    "target": {
+                                      "sys": {
+                                        "id": "Qm9I33oG8VJs16aw5Uid9t",
+                                        "type": "Link",
+                                        "linkType": "Entry"
+                                      }
+                                    }
+                                  },
+                                  "content": [
+                                    {
+                                      "nodeType": "text",
+                                      "value": "armour value",
+                                      "marks": [],
+                                      "data": {}
+                                    }
+                                  ]
+                                },
+                                {
+                                  "nodeType": "text",
+                                  "value": " by 1. For example, a cavalry model equipped with heavy armour has an armour value of 5+. Should that model's mount be barded, its armour value would be improved by 1 by lowering the target number from 5+ to 4+.",
+                                  "marks": [],
+                                  "data": {}
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        "relatedLinks": [
+                          {
+                            "sys": {
+                              "type": "Link",
+                              "linkType": "Entry",
+                              "id": "JG2T69b5W6z96sP4am2seo"
+                            }
+                          }
+                        ],
+                        "ruleType": [
+                          {
+                            "sys": {
+                              "type": "Link",
+                              "linkType": "Entry",
+                              "id": "O6zJvMBw9RBlwd298TLnhX"
+                            }
+                          }
+                        ],
+                        "association": [
+                          {
+                            "sys": {
+                              "type": "Link",
+                              "linkType": "Entry",
+                              "id": "1ajj5ld8tacvR3LPTz6t5S"
+                            }
+                          }
+                        ],
+                        "bodyIndex": "Barding is the name given to the armour worn by a mount. This can take many forms, from heavy cloth draperies, to formed and fitted armour plates. Barding is seen often on the mounts of cavalry, but only rarely upon monsters ridden by characters (it is a challenge to tailor a suit of barding to an unwilling gryphon!). A model that rides a barded mount improves its armour value by 1. For example, a cavalry model equipped with heavy armour has an armour value of 5+. Should that model's mount be barded, its armour value would be improved by 1 by lowering the target number from 5+ to 4+."
+                      }
+                    }
+                  },
+                  "content": [
+                    {
+                      "data": {},
+                      "marks": [],
+                      "value": "barding",
+                      "nodeType": "text"
+                    }
+                  ],
+                  "nodeType": "entry-hyperlink"
+                },
+                {
+                  "data": {},
+                  "marks": [],
+                  "value": "",
+                  "nodeType": "text"
+                }
+              ],
+              "nodeType": "paragraph"
+            }
+          ],
+          "nodeType": "list-item"
+        }
+      ],
+      "nodeType": "unordered-list"
+    },
+    {
+      "data": {},
+      "content": [
+        {
+          "data": {},
+          "marks": [],
+          "value": "",
+          "nodeType": "text"
+        }
+      ],
+      "nodeType": "paragraph"
+    }
+  ],
+  "nodeType": "document"
+}
