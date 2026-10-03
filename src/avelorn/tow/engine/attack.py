@@ -105,8 +105,9 @@ class AttackRoll(Roll):
 
     Subclasses own their printed semantics — what a natural 6 does against
     a target above 6 (``confirm``), and whether a die is thrown at all.
-    A :class:`RollState` target takes no die (face 0), so face-triggered
-    rules cannot fire there; every thrown die is :func:`~avelorn.tow.kernels.d6`.
+    A roll decided without a die (a :class:`RollState` target, or a save
+    past 6+) lands as natural 0, which no natural-face rule can name;
+    every thrown die is :func:`~avelorn.tow.kernels.d6`.
     """
 
     target: RollTarget

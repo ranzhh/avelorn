@@ -1,6 +1,7 @@
 """The rulebook's dice mechanics as pure functions of plain values.
 
-Shared by both engines; no game objects and no special rules.
+Meant for both engines; legacy calls them today. No game objects and no
+special rules.
 
 Sources (tow.whfb.app): the-shooting-phase/roll-to-hit-shooting,
 the-shooting-phase/roll-to-wound-shooting, the-shooting-phase/7-to-hit,
@@ -129,11 +130,7 @@ def armour_save_target(armour_value: int | None, armour_piercing: int = 0) -> in
 
 
 class Die(NamedTuple):
-    """One die as it lands: its natural face and whether it succeeded.
-
-    ``natural`` is 0 for a roll decided without a die (an automatic or
-    impossible roll), which no natural-face rule can name.
-    """
+    """One die as it lands: its natural face and whether it succeeded."""
 
     natural: int
     success: bool
