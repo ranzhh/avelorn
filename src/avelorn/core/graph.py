@@ -161,6 +161,9 @@ class Step[Out: Hashable](ABC):
     def shown(self) -> tuple[Reading, ...]:
         return tuple(self.readings)
 
+    def reads(self) -> frozenset[Key]:
+        return frozenset(key for reading in self.shown() for key in reading.reads)
+
     def arguments(self, world: World) -> tuple[Any, ...]:
         return tuple(world.of(source) for source in self.inputs)
 
@@ -179,7 +182,7 @@ class Step[Out: Hashable](ABC):
         program.take(self, path)
         if self.writes is None:
             visible.append(self)
-        reads = tuple(key for reading in self.shown() for key in reading.reads)
+        reads = self.reads()
         for source in reads:
             if isinstance(source, Step) and source not in visible:
                 raise GraphError(f"{path} shows {source.name}, which is not in scope")
@@ -189,32 +192,31 @@ class Step[Out: Hashable](ABC):
 
     def collect(self, program: "Program") -> None:
         program.steps.append(self)
+        program.readings[self] = self.shown()
 
+    # Returns what must be held before the step runs.
     def liveness(
         self, after: frozenset[Key], live: dict["Item", frozenset[Key]]
     ) -> frozenset[Key]:
-        """Record what this step's edge keeps, given what is read after it.
-
-        The edge keeps the step's own output and what its readings read.
-
-        Returns:
-            What must be held before the step runs.
-        """
-        kept = after | {self.key} | {key for reading in self.shown() for key in reading.reads}
-        live[self] = kept
-        return (kept - {self.key}) | set(self.inputs)
+        live[self] = after
+        return ((after | self.reads()) - {self.key}) | set(self.inputs)
 
     def run(self, lane: "Lane") -> None:
-        kept = lane.program.live[self]
+        after = lane.program.live[self]
+        held = after | self.reads()
 
         def advance(world: World) -> Distribution[World]:
             def attach(value: Out) -> World:
-                return world.holding(self.key, value).keeping(kept)
+                return world.holding(self.key, value).keeping(held)
 
             return self.outcomes(world, lane).map(attach)
 
-        lane.joint = lane.joint.bind(advance)
-        lane.edges[self] = Edge(lane.joint, lane.count)
+        def onward(world: World) -> World:
+            return world.keeping(after)
+
+        edge = lane.joint.bind(advance)
+        lane.edges[self] = Edge(edge, lane.count)
+        lane.joint = edge if held <= after else edge.map(onward)
 
     def detail(self, edge: Edge) -> dict[str, Any]:
         return {}
@@ -278,7 +280,7 @@ class Decision[Out: Hashable](Step[Out]):
         return Distribution.pure(lane.choices[self])
 
     def collect(self, program: "Program") -> None:
-        program.steps.append(self)
+        super().collect(program)
         program.decisions.append(self)
 
     def detail(self, edge: Edge) -> dict[str, Any]:
@@ -453,6 +455,7 @@ class Program:
     decisions: list[Decision[Any]] = field(default_factory=list)
     rules: list[RuleNode] = field(default_factory=list)
     states: list[State[Any]] = field(default_factory=list)
+    readings: dict[Step[Any], tuple[Reading, ...]] = field(default_factory=dict)
     # What each step's edge, and each group's exit, keeps of a world.
     live: dict[Item, frozenset[Key]] = field(default_factory=dict)
     entry: frozenset[Key] = frozenset()
@@ -493,6 +496,9 @@ class Program:
     def evaluate(
         self, choices: Mapping[Decision[Any], Any] = MappingProxyType({})
     ) -> tuple["Lane", ...]:
+        for step in self.steps:
+            if step.shown() != self.readings[step]:
+                raise GraphError(f"{self.paths[step]} was shown a reading after build")
         for decision, choice in choices.items():
             if decision not in self.decisions:
                 raise GraphError(f"{decision.name} is not a decision in {self.name}")
@@ -526,6 +532,8 @@ class Lane:
     edges: dict[Step[Any], Edge] = field(default_factory=dict)
 
     def read[T: Hashable](self, step: Step[Any], projection: Projection[T]) -> Distribution[T]:
+        if projection not in self.program.readings[step]:
+            raise GraphError(f"{projection.label} is not a reading of {step.name}")
         return self.edges[step].read(projection)
 
     def to_view(self) -> dict[str, Any]:

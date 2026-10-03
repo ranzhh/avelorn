@@ -57,11 +57,13 @@ def _six(face: int) -> int:
 
 def test_a_roll_edge_carries_its_own_distribution() -> None:
     flip = Roll[int](name="flip", side=Side.THIS_MODEL, kernel=_coin, target=Scalar("target", 1))
+    face = flip.output("face", Monoid(0))
+    flip.show(face)
     program = Program.build("coin", _SIDES, (flip,))
 
     (lane,) = program.evaluate()
 
-    assert lane.read(flip, flip.output("face", Monoid(0))).mass == {0: _HALF, 1: _HALF}
+    assert lane.read(flip, face).mass == {0: _HALF, 1: _HALF}
 
 
 def test_a_path_is_the_step_place_in_the_block_tree() -> None:
@@ -79,6 +81,8 @@ def test_a_path_is_the_step_place_in_the_block_tree() -> None:
 
 _certain_shots = Measurement[int](name="shots", side=Side.THIS_MODEL, kernel=_three)
 _certain_die = Roll[int](name="roll", side=Side.THIS_MODEL, kernel=_d6, target=Scalar("t", 6))
+_certain_sixes = Projection("sixes", (_certain_die,), _six, Monoid(0))
+_certain_die.show(_certain_sixes)
 _certain = Program.build(
     "certain",
     _SIDES,
@@ -88,7 +92,7 @@ _certain = Program.build(
 
 def test_a_reading_stacks_a_certain_count() -> None:
     (lane,) = _certain.evaluate()
-    stacked = lane.read(_certain_die, Projection("sixes", (_certain_die,), _six, Monoid(0)))
+    stacked = lane.read(_certain_die, _certain_sixes)
 
     assert stacked.mass == {
         0: Fraction(125, 216),
@@ -106,6 +110,8 @@ _open_shots = Roll[int](
     name="shots", side=Side.THIS_MODEL, kernel=_two_or_three, target=Scalar("t", 1)
 )
 _open_die = Roll[int](name="roll", side=Side.THIS_MODEL, kernel=_d6, target=Scalar("t", 6))
+_open_sixes = Projection("sixes", (_open_die,), _six, Monoid(0))
+_open_die.show(_open_sixes)
 _open = Program.build(
     "open",
     _SIDES,
@@ -115,7 +121,7 @@ _open = Program.build(
 
 def test_a_reading_stacks_an_uncertain_count() -> None:
     (lane,) = _open.evaluate()
-    stacked = lane.read(_open_die, Projection("sixes", (_open_die,), _six, Monoid(0)))
+    stacked = lane.read(_open_die, _open_sixes)
 
     assert stacked.mass == {
         0: Fraction(275, 432),
@@ -185,8 +191,10 @@ _hit_and_wound = Projection(
     "hit and wound", (_hit, _wound), _both, Monoid[tuple[int | bool, ...]](())
 )
 _hits = _hit.output("hit", Monoid(0))
+_wounds = _wound.output("wound", Monoid(False))
 _wound.show(_hit_and_wound)
 _wound.show(_hits)
+_wound.show(_wounds)
 _coupled = Program.build(
     "coupled",
     _SIDES,
@@ -198,7 +206,7 @@ def test_a_reading_over_a_pair_keeps_the_coupling() -> None:
     (lane,) = _coupled.evaluate()
     joint = lane.read(_wound, _hit_and_wound)
     hits = lane.read(_wound, _hits)
-    wounds = lane.read(_wound, _wound.output("wound", Monoid(False)))
+    wounds = lane.read(_wound, _wounds)
 
     assert joint.mass == {
         (1, True): Fraction(1, 6),
@@ -225,13 +233,15 @@ def test_a_step_reads_an_enclosing_block() -> None:
         kernel=_strong,
         target=Scalar("t", 4),
     )
+    face = wound.output("face", Monoid(0))
+    wound.show(face)
     program = Program.build(
         "volley",
         _SIDES,
         (attacks, strength, Repeat(name="attack", times=attacks, items=(wound,))),
     )
     (lane,) = program.evaluate()
-    faces = lane.read(wound, wound.output("face", Monoid(0)))
+    faces = lane.read(wound, face)
 
     assert faces.mass == {face: _SIXTH for face in range(3, 9)}
 
@@ -275,6 +285,33 @@ def test_a_group_cannot_run_a_count_out_of_scope() -> None:
 
     with pytest.raises(GraphError, match="runs shots times, which is not in scope"):
         Program.build("volley", _SIDES, (Repeat(name="attack", times=hidden, items=(hit,)),))
+
+
+def test_an_unread_output_dies_at_its_own_edge() -> None:
+    unread = Measurement[int](name="unread", side=Side.THIS_MODEL, kernel=_d6)
+    shown = Measurement[int](name="shown", side=Side.THIS_MODEL, kernel=_d6)
+    shown.show(shown.output("face", Monoid(0)))
+    (lane,) = Program.build("dice", _SIDES, (unread, shown)).evaluate()
+
+    assert len(lane.edges[unread].joint.mass) == 1
+    assert len(lane.edges[shown].joint.mass) == 6
+
+
+def test_only_a_declared_reading_can_be_read() -> None:
+    flip = Measurement[int](name="flip", side=Side.THIS_MODEL, kernel=_coin)
+    (lane,) = Program.build("coin", _SIDES, (flip,)).evaluate()
+
+    with pytest.raises(GraphError, match="face is not a reading of flip"):
+        lane.read(flip, flip.output("face", Monoid(0)))
+
+
+def test_a_reading_shown_after_build_is_refused() -> None:
+    flip = Measurement[int](name="flip", side=Side.THIS_MODEL, kernel=_coin)
+    program = Program.build("coin", _SIDES, (flip,))
+    flip.show(flip.output("face", Monoid(0)))
+
+    with pytest.raises(GraphError, match="coin/flip was shown a reading after build"):
+        program.evaluate()
 
 
 def _no_inputs() -> Distribution[int]:
@@ -366,16 +403,18 @@ def test_a_slot_keeps_its_locals_and_its_state_writes() -> None:
     after = Consequence[tuple[int, int]](
         name="after", side=Side.THE_ENEMY, inputs=(models, hit), kernel=_pair
     )
+    pair = after.output("after", Monoid((0, 0)))
+    after.show(pair)
     program = Program.build("round", _SIDES, (Slot(name="shooting", items=(hit, remove)), after))
     (lane,) = program.evaluate()
 
-    assert lane.read(after, after.output("after", Monoid((0, 0)))).mass == {
+    assert lane.read(after, pair).mass == {
         (5, 0): _HALF,
         (4, 1): _HALF,
     }
 
 
-def test_a_lane_keeps_its_state_writes_and_drops_its_locals() -> None:
+def test_a_lane_keeps_its_state_writes() -> None:
     models = State[int]("models", 5)
     reaction = Decision[str](name="declare-reaction", side=Side.THE_ENEMY, options=("hold",))
     hit = Measurement[int](name="hit", side=Side.THIS_MODEL, kernel=_coin)
@@ -387,6 +426,8 @@ def test_a_lane_keeps_its_state_writes_and_drops_its_locals() -> None:
         writes=models,
     )
     after = Consequence[int](name="after", side=Side.THE_ENEMY, inputs=(models,), kernel=_toll)
+    left = after.output("models", Monoid(0))
+    after.show(left)
     program = Program.build(
         "charge",
         _SIDES,
@@ -394,9 +435,7 @@ def test_a_lane_keeps_its_state_writes_and_drops_its_locals() -> None:
     )
     (lane,) = program.evaluate()
 
-    assert lane.read(after, after.output("models", Monoid(0))).mass == {5: _HALF, 4: _HALF}
-    with pytest.raises(GraphError, match="hit is not held in this world"):
-        lane.read(after, hit.output("hit", Monoid(0)))
+    assert lane.read(after, left).mass == {5: _HALF, 4: _HALF}
 
 
 def test_a_group_cannot_write_state() -> None:
@@ -486,41 +525,43 @@ def _ground(reaction: str) -> Distribution[int]:
     return Distribution.pure(0 if reaction == "hold" else 6)
 
 
-def _fight() -> tuple[Program, Decision[str], Consequence[int]]:
+def _fight() -> tuple[Program, Decision[str], Consequence[int], Projection[int]]:
     reaction = Decision[str](
         name="declare-reaction", side=Side.THE_ENEMY, options=("hold", "flee")
     )
     given = Consequence[int](
         name="ground-given", side=Side.THE_ENEMY, inputs=(reaction,), kernel=_ground
     )
+    ground = given.output("ground", Monoid(0))
+    given.show(ground)
     program = Program.build(
         "charge",
         _SIDES,
         (reaction, Lanes(name="reaction", decision=reaction, items=(given,))),
     )
-    return program, reaction, given
+    return program, reaction, given, ground
 
 
 def test_an_open_decision_splits_the_program_into_lanes() -> None:
-    program, reaction, given = _fight()
+    program, reaction, given, ground = _fight()
     lanes = program.evaluate()
-    ground = [lane.read(given, given.output("ground", Monoid(0))).mass for lane in lanes]
+    given_up = [lane.read(given, ground).mass for lane in lanes]
 
     assert len(lanes) == 2
-    assert ground == [{0: 1}, {6: 1}]
+    assert given_up == [{0: 1}, {6: 1}]
     assert [lane.choices[reaction] for lane in lanes] == ["hold", "flee"]
 
 
 def test_a_fixed_decision_leaves_one_lane() -> None:
-    program, reaction, given = _fight()
+    program, reaction, given, ground = _fight()
     (lane,) = program.evaluate(choices={reaction: "flee"})
 
-    assert lane.read(given, given.output("ground", Monoid(0))).mass == {6: 1}
+    assert lane.read(given, ground).mass == {6: 1}
     assert lane.to_view()["lanes"] == [{"decision": "charge/declare-reaction", "outcome": "flee"}]
 
 
 def test_an_unknown_decision_is_rejected() -> None:
-    program, _, _ = _fight()
+    program, _, _, _ = _fight()
     stray = Decision[str](name="stray", side=Side.THIS_MODEL, options=("yes",))
 
     with pytest.raises(GraphError, match="stray is not a decision in charge"):
@@ -528,14 +569,14 @@ def test_an_unknown_decision_is_rejected() -> None:
 
 
 def test_an_invalid_decision_choice_is_rejected() -> None:
-    program, reaction, _ = _fight()
+    program, reaction, _, _ = _fight()
 
     with pytest.raises(GraphError, match="'charge' is not an option for declare-reaction"):
         program.evaluate(choices={reaction: "charge"})
 
 
 def test_a_rule_cannot_land_on_a_step_the_program_lacks() -> None:
-    program, reaction, given = _fight()
+    program, _, _, _ = _fight()
     stray = Measurement[int](name="stray", side=Side.THIS_MODEL, kernel=_three)
 
     with pytest.raises(GraphError, match="lands on stray, which is not declared"):
