@@ -190,6 +190,6 @@ def _inert(option: UnitOption) -> bool:
         option.adds_equipment,
         option.removes_equipment,
     )
-    if option.applies_to is not None:
-        return True
-    return option.points_budget is None and not any(folds)
+    if option.points_budget is not None:
+        return False
+    return option.applies_to is not None or not any(folds)
