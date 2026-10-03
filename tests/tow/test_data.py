@@ -130,6 +130,22 @@ def test_printed_equipment_is_spelled_as_its_entries() -> None:
     assert offences == []
 
 
+def test_every_equipment_name_resolves() -> None:
+    """Every weapon or armour a datasheet names is a filed entry."""
+    equipment = {item.name for item in (*REPO.weapons.values(), *REPO.armoury.values())}
+    unfiled = sorted(
+        (unit.id, name)
+        for unit in REPO.units.values()
+        for name in (
+            *unit.equipment,
+            *(name for row in unit.profiles for name in row.equipment),
+            *(name for o in unit.options for name in (*o.adds_equipment, *o.removes_equipment)),
+        )
+        if name not in equipment
+    )
+    assert unfiled == []
+
+
 @pytest.mark.parametrize(
     ("path", "printed", "written", "refusal"),
     [
