@@ -1,0 +1,49 @@
+name: Commit messages
+
+# Conventional Commits, checked by the hooks in .pre-commit-config.yaml: each
+# commit as the local commit-msg hook checks it, and the PR title strictly,
+# since squash merges make the title the commit on dev. Its own workflow so
+# that editing a title re-runs this and not the test suite.
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+jobs:
+  conventional:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - run: uv sync --locked
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - name: PR title
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          printf '%s\n' "$TITLE" > pr-title.txt
+          uv run pre-commit run pr-title --hook-stage manual --files pr-title.txt
+
+      - name: Commits
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          status=0
+          for sha in $(git rev-list "$BASE..$HEAD"); do
+            git log -1 --format='commit %h: %s' "$sha"
+            git log -1 --format=%B "$sha" > "$RUNNER_TEMP/message"
+            uv run pre-commit run conventional-pre-commit --hook-stage commit-msg \
+              --commit-msg-filename "$RUNNER_TEMP/message" || status=1
+          done
+          exit $status
