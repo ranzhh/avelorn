@@ -1,0 +1,13 @@
+facts:
+  - fact: standing
+    type: standing
+    per_side: true
+  - fact: models-at-start-of-phase
+    type: int
+    per_side: true
+  - fact: battle-strength
+    type: int
+    per_side: true
+  - fact: moved
+    type: bool
+    per_side: true
