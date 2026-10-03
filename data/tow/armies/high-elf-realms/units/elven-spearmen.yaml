@@ -17,11 +17,11 @@ equipment:
   - Light Armour
   - Shield
 special_rules:
-  - Close Order
-  - Elven Reflexes
-  - Martial Prowess
-  - Regimental Unit
-  - Valour of Ages
+  - close-order
+  - elven-reflexes
+  - martial-prowess
+  - regimental-unit
+  - valour-of-ages
 options:
   - name: Sentinel
     kind: champion
@@ -35,13 +35,13 @@ options:
   - name: Shieldwall
     kind: special_rule
     points: 10
-    adds_rules: [Shieldwall]
+    adds_rules: [shieldwall]
   - name: Veteran
     kind: special_rule
     points: 1
     per_model: true
-    adds_rules: [Veteran]
-    removes_rules: [Valour of Ages]
+    adds_rules: [veteran]
+    removes_rules: [valour-of-ages]
     limit: 0-1 unit per 1000 points
   - name: Magic standard
     kind: magic_standard

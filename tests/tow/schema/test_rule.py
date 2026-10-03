@@ -7,6 +7,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from avelorn.core.loading import load_yaml
 from avelorn.tow.data import rule_paths
+from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import (
     Add,
     AmountParameter,
@@ -131,13 +132,13 @@ def test_grant_effect_parses_and_discriminates_by_its_key() -> None:
     from avelorn.tow.schema.rule import GrantEffect
 
     effect = _EFFECT.validate_python(
-        {"grants": "Armour Bane (1)", "when": {"wielding": {"type": "bow"}}}
+        {"grants": {"rule": "armour-bane", "X": 1}, "when": {"wielding": {"type": "bow"}}}
     )
     assert isinstance(effect, GrantEffect)
-    assert effect.grants == "Armour Bane (1)"
+    assert effect.grants == RuleRef(rule="armour-bane", X=1)
     assert effect.when is not None and effect.when.wielding is not None
-    with pytest.raises(ValidationError):  # a grant is not a modifier
-        _EFFECT.validate_python({"grants": "Armour Bane (1)", "add": {"to-hit": -1}})
+    with pytest.raises(ValidationError):
+        _EFFECT.validate_python({"grants": "armour-bane", "add": {"to-hit": -1}})
 
 
 def test_rule_level_when_folds_into_each_effect() -> None:
@@ -153,7 +154,7 @@ def test_rule_level_when_folds_into_each_effect() -> None:
             "name": "Doctored",
             "paragraphs": ["…"],
             "when": {"wielding": {"type": "bow"}},
-            "effects": [{"add": {"armour-piercing": 1}}, {"grants": "Armour Bane (1)"}],
+            "effects": [{"add": {"armour-piercing": 1}}, {"grants": "armour-bane"}],
         }
     )
     for effect in rule.effects:

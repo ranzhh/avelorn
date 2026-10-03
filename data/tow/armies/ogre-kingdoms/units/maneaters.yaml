@@ -15,11 +15,11 @@ equipment:
   - Hand Weapon
   - Light Armour
 special_rules:
-  - Close Order
-  - Fear
-  - Impact Hits (1)
-  - Motley Crew
-  - Ogre Charge
+  - close-order
+  - fear
+  - { rule: impact-hits, X: 1 }
+  - motley-crew
+  - ogre-charge
 options:
   - name: Two Hand Weapons/Additional Hand Weapon
     kind: other

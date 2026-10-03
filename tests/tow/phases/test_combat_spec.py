@@ -41,6 +41,7 @@ from avelorn.tow.phases.combat import (
     combat_result,
     strike_unit,
 )
+from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import (
     HitsEffect,
     ModifierEffect,
@@ -114,7 +115,7 @@ class _Field:
             name="Doctored Blade",
             profiles=[
                 WeaponProfile.model_validate(
-                    {"R": "Combat", "S": "S", "AP": "-", "special_rules": [MULTIPLIER.name]}
+                    {"R": "Combat", "S": "S", "AP": "-", "special_rules": [MULTIPLIER.id]}
                 )
             ],
         )
@@ -150,7 +151,10 @@ class _Field:
                 "id": f"u{len(self._units)}",
                 "name": f"u{len(self._units)}",
                 "equipment": equipment,
-                "special_rules": [*self._base.special_rules, *rules],
+                "special_rules": [
+                    *self._base.special_rules,
+                    *(RuleRef(rule=self._repo.rules.by_name(name).id) for name in rules),
+                ],
             },
         )
         unit.profiles[0].characteristics[C.WOUNDS] = wounds

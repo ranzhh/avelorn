@@ -1,12 +1,10 @@
 """Compile rule effects into attack modifiers.
 
-Printed rule names on units and weapons resolve against the rule
-entries under ``data/tow/rules/``; a resolved rule's effects compile
-into :class:`~avelorn.tow.engine.attack.Modifier` records the dice walk
-interprets. Resolution honours the convention the rules themselves print:
-a bracketed number after the name ("Armour Bane (1)") is the parameter
-of the rule filed under the "(X)" placeholder ("the amount shown in
-brackets after the name of this special rule").
+Rule references on units and weapons bind against the rule entries
+under ``data/tow/rules/`` (:func:`~avelorn.tow.schema.rule.bind`, X
+substituted); a bound rule's effects compile into
+:class:`~avelorn.tow.engine.attack.Modifier` records the dice walk
+interprets.
 
 Every modifier compiles through one path: evaluate its engagement
 condition, look up the roll its kind changes — each kind's meaning is
@@ -28,7 +26,6 @@ third bucket, claimed by whoever resolves that seat too.
 
 import logging
 from collections.abc import Collection, Mapping, Sequence
-from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from fractions import Fraction
@@ -37,7 +34,6 @@ from typing import get_args
 from pydantic.fields import FieldInfo
 
 from avelorn.core.distribution import Distribution
-from avelorn.core.registry import Registry, UnknownNameError
 from avelorn.tow.engine.attack import (
     AttackProfile,
     Modifier,
@@ -47,6 +43,7 @@ from avelorn.tow.engine.attack import (
 )
 from avelorn.tow.engine.attack import Outcome as AttackOutcome
 from avelorn.tow.schema.psychology import Outcome
+from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import (
     Add,
     AttackKind,
@@ -73,7 +70,6 @@ from avelorn.tow.schema.rule import (
     Seam,
     VolleyEffect,
     WoundMultiplierEffect,
-    printed_base,
     seam_of,
 )
 from avelorn.tow.schema.stage import Dice, Side, Stage
@@ -234,46 +230,6 @@ def _as_context(context: GateContext | None) -> GateContext:
     return context if context is not None else GateContext()
 
 
-def printed_rule(printed: str, rules: Registry[Rule]) -> Rule | None:
-    """Resolve a rule reference to its catalogued item.
-
-    A slug or an exact name returns the entry itself. Otherwise the name less
-    its bracket finds the entry, and the bracket binds as the entry declares
-    its X ("Armour Bane (1)", "Extra Attacks (+1)"): a copy named as printed,
-    X substituted into its effects. A name the registry does not know, or a
-    bracket that does not bind, is not an error here but the answer -- the
-    rule is not modelled yet -- so unfactored reporting takes over.
-
-    Returns:
-        The rule as printed, or None if nothing binds.
-    """
-    entry = filed_rule(printed, rules)
-    if entry is None or printed in (entry.id, entry.name):
-        return entry
-    try:
-        return entry.bound(entry.read(printed).x)
-    except ValueError:
-        return None
-
-
-def filed_rule(printed: str, rules: Registry[Rule]) -> Rule | None:
-    """Find the entry a rule reference is filed under, binding nothing.
-
-    A slug or an exact name, else the entry whose name less its bracket is the
-    printed name less its own. For presentation and coverage; the engine
-    resolves with :func:`printed_rule`.
-
-    Returns:
-        The entry as filed, or None if the corpus holds none.
-    """
-    if printed in rules:
-        return rules[printed]
-    with suppress(UnknownNameError):
-        return rules.by_name(printed)
-    base = printed_base(printed)
-    return next((rule for rule in rules.values() if rule.base == base), None)
-
-
 class _Disposition(Enum):
     """Where a compiled effect — and so its rule — lands: in the math, or why not.
 
@@ -333,13 +289,13 @@ def compile_rules(
     conditions: "GateContext | None" = None,
     *,
     seat: Side = Side.ATTACKER,
-    grants: "Mapping[str, Rule] | None" = None,
+    grants: "Mapping[RuleRef, Rule] | None" = None,
 ) -> CompiledRules:
     """Compile printed rule names into modifier records.
 
-    ``resolved`` maps printed names to their rules as printed — built at
-    the muster boundary (a loadout's ``weapon_rules``) or from a registry
-    scan; a name absent from it is not modelled. ``conditions`` is the
+    ``resolved`` maps display names to their bound rules — a loadout's
+    rules by name, or a phase's rules in force; a name absent from it is
+    not modelled. ``conditions`` is the
     evaluated :class:`GateContext` (or None for all-unknown). ``seat`` is
     the side of the attack the rules' bearer occupies in the walk being
     compiled — the attacker's rules compile at ``ATTACKER``, the target's
@@ -347,13 +303,12 @@ def compile_rules(
     its quantity's owner side (flipped by the effect's printed ``enemy``
     subject) matches the seat; one for the other seat is *inapplicable*
     here — the same rule compiles from its proper seat in the walks where
-    it matters. ``grants`` maps the printed names of rules *conferred* by a
-    grant effect to their resolved entries (a loadout's ``granted_rules``) —
-    the lookup a :class:`~avelorn.tow.schema.rule.GrantEffect` expands
-    through; a granted name absent from it is unfactored, like any
-    unmodelled rule. A rule whose gate needs an unknown fact is unfactored
-    and reported; a rule whose gate evaluates False is factored, honoured by
-    not applying — no modifier, no note.
+    it matters. ``grants`` maps the references of rules *conferred* by a
+    grant effect to their bound entries (a loadout's ``bound``) — the lookup
+    a :class:`~avelorn.tow.schema.rule.GrantEffect` expands through; a
+    granted reference absent from it is unfactored. A rule whose gate needs
+    an unknown fact is unfactored and reported; a rule whose gate evaluates
+    False is factored, honoured by not applying — no modifier, no note.
 
     Whether the walk owns an effect at all is decided from the effect alone,
     before any gate: a rule speaking to another seam is reported the same
@@ -394,7 +349,7 @@ def factored_notes(
     rules: Sequence[Rule],
     factored: Collection[str],
     source: str,
-    granted: "Mapping[str, Rule] | None" = None,
+    granted: "Mapping[RuleRef, Rule] | None" = None,
 ) -> list[str]:
     """The authored ``notes`` of the factored rules that carry them.
 
@@ -405,7 +360,7 @@ def factored_notes(
     qualifies, never composed as prose in the engine.
 
     ``granted`` extends the sweep to conferred rules (a loadout's
-    ``granted_rules``): a factored rule's grants are looked up and their own
+    ``bound``): a factored rule's grants are looked up and their own
     notes relayed too, so a caveat authored on a grant-only entry (Enemy
     Fire (Skirmishers)'s Unit Strength scope) is not silenced by living
     outside the unit's printed list. The granting rule's factoring is the
@@ -491,7 +446,7 @@ def outcome_substitutions(
 def _compile(
     rule: Rule,
     context: GateContext,
-    grants: "Mapping[str, Rule] | None" = None,
+    grants: "Mapping[RuleRef, Rule] | None" = None,
     seat: Side = Side.ATTACKER,
 ) -> _Verdict:
     # All-or-nothing per rule: one effect the walk cannot honour leaves the
@@ -545,7 +500,7 @@ _ROLLS: Mapping[Quantity, _Roll] = {
 def _compile_effect(
     effect: RuleEffect,
     context: GateContext,
-    grants: "Mapping[str, Rule] | None" = None,
+    grants: "Mapping[RuleRef, Rule] | None" = None,
     seat: Side = Side.ATTACKER,
 ) -> _Verdict:
     # One effect, top to bottom, structural first: what this walk can never
@@ -660,7 +615,7 @@ def _blow_transform(effect: BlowEffect) -> Transform:
 def _compile_grant(
     effect: GrantEffect,
     context: GateContext,
-    grants: "Mapping[str, Rule] | None",
+    grants: "Mapping[RuleRef, Rule] | None",
     seat: Side = Side.ATTACKER,
 ) -> _Verdict:
     # A grant confers a named rule under its own *outer* gate: evaluate that gate,
@@ -1122,16 +1077,12 @@ class EffectiveMarks:
     unit_factored: tuple[str, ...] = ()
 
 
-def attack_marks(
-    profile_rules: Sequence[str],
-    weapon_rules: Mapping[str, Rule],
-    rules: Sequence[Rule],
-) -> EffectiveMarks:
+def attack_marks(in_use: Sequence[Rule], rules: Sequence[Rule]) -> EffectiveMarks:
     """Read what the attacks a striker makes *are*: Magical, Flaming.
 
     The fact producer behind the incoming-attack gates (Lion Cloak's
     non-magical armour bonus, a ward's flame gate): mark effects are
-    consumed from the profile in use's resolved entries and from the
+    consumed from the profile in use's bound rules (``in_use``) and from the
     striker's unit rules, and the consumed rule names come back for the
     caller to claim out of the notes. A mark carrying a ``when`` is not
     consumable here — the attack's own facts are what is being built — so
@@ -1140,7 +1091,6 @@ def attack_marks(
     Returns:
         The marks with the consumed rule names, per source.
     """
-    in_use = [weapon_rules[name] for name in profile_rules if name in weapon_rules]
     magical = flaming = False
     weapon_factored: list[str] = []
     unit_factored: list[str] = []

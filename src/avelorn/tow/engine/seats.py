@@ -34,9 +34,9 @@ from avelorn.tow.engine.rules import (
     effective_ward_target,
 )
 from avelorn.tow.schema.armour import Armour
+from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.stage import Side
-from avelorn.tow.schema.weapon import WeaponProfile
 
 
 @dataclass(frozen=True)
@@ -72,23 +72,22 @@ class Offence:
     @classmethod
     def resolve(
         cls,
-        profile: WeaponProfile,
+        in_use: Sequence[Rule],
         *,
-        weapon_rules: Mapping[str, Rule],
         rules: Sequence[Rule],
-        grants: Mapping[str, Rule],
+        grants: Mapping[RuleRef, Rule],
         conditions: "GateContext | None" = None,
     ) -> "Offence":
-        """Resolve an attacker's seat: its weapon profile and unit rules, gated.
+        """Resolve an attacker's seat: its weapon profile's rules and unit rules, gated.
 
         Returns:
             The seat, compiled under the attacker's ``conditions``.
         """
-        weapon_compiled = compile_rules(profile.special_rules, weapon_rules, conditions)
+        weapon_index = {rule.name: rule for rule in in_use}
+        weapon_compiled = compile_rules(list(weapon_index), weapon_index, conditions)
         index = {rule.name: rule for rule in rules}
         unit_compiled = compile_rules(list(index), index, conditions, grants=grants)
-        in_use = [weapon_rules[name] for name in profile.special_rules if name in weapon_rules]
-        marks = attack_marks(profile.special_rules, weapon_rules, rules)
+        marks = attack_marks(in_use, rules)
         return cls(
             modifiers=(*weapon_compiled.modifiers, *unit_compiled.modifiers),
             transforms=(*weapon_compiled.transforms, *unit_compiled.transforms),
@@ -135,7 +134,7 @@ class Defence:
         *,
         armour: Sequence[Armour],
         rules: Sequence[Rule],
-        grants: Mapping[str, Rule],
+        grants: Mapping[RuleRef, Rule],
         incoming: "GateContext | None" = None,
         weapon_rules_in_use: Sequence[Rule] = (),
     ) -> "Defence":

@@ -28,11 +28,12 @@ from pathlib import Path
 from avelorn.core.loading import load_yaml
 from avelorn.core.logging import configure_logging
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.importers.whfb_app.canon import canonical_unit, canonical_weapon
+from avelorn.tow.importers.whfb_app.canon import canonical_unit
 from avelorn.tow.importers.whfb_app.client import BASE_URL, WhfbAppClient, WhfbAppError
 from avelorn.tow.importers.whfb_app.equipment import parse_armour, parse_weapon
 from avelorn.tow.importers.whfb_app.parse import UnsupportedUnit, WhfbParseError, parse_unit
 from avelorn.tow.importers.whfb_app.preserve import with_hand_authored
+from avelorn.tow.importers.whfb_app.references import RuleReferences
 from avelorn.tow.importers.whfb_app.rules import parse_special_rule
 from avelorn.tow.importers.whfb_app.yamlout import (
     armour_to_yaml,
@@ -114,20 +115,44 @@ def main(argv: list[str] | None = None) -> int:
 _SOURCE_RE = re.compile(r"\A# Source: (\S+)")
 
 
-def _corpus_names(data_dir: Path) -> tuple[set[str], set[str]]:
-    """The canonical names an import's references are spelt against.
+def _equipment_names(data_dir: Path) -> set[str]:
+    """The canonical names an import's equipment references are spelt against.
 
     Loaded fresh from ``data_dir`` so an import canonicalises against the
     corpus as it stands — including whatever this run already wrote.
 
     Returns:
-        The equipment names (weapons and armour together) and the rule
-        entry names.
+        The weapon and armour names together.
     """
     corpus = TOWRepository(data_dir=data_dir)
-    equipment = {item.name for item in (*corpus.weapons.values(), *corpus.armoury.values())}
-    rules = {rule.name for rule in corpus.rules.values()}
-    return equipment, rules
+    return {item.name for item in (*corpus.weapons.values(), *corpus.armoury.values())}
+
+
+def _references(data_dir: Path, client: WhfbAppClient | None = None) -> RuleReferences:
+    """The corpus's rules as an import resolves printed rule names against them.
+
+    With a ``client``, a rule no entry answers to is fetched from the site as
+    a text-only stub, which :func:`_write_stubs` writes; without one it fails
+    the import.
+
+    Returns:
+        The resolver, over the rules ``data_dir`` holds now.
+    """
+    rules = TOWRepository(data_dir=data_dir).rules.values()
+    if client is None:
+        return RuleReferences(rules)
+    return RuleReferences(rules, lambda slug: parse_special_rule(client.rule_entry(slug)).rule)
+
+
+def _write_stubs(references: RuleReferences, data_dir: Path, dry_run: bool) -> None:
+    for stub in references.stubs:
+        text = rule_to_yaml(stub, source_url=f"{BASE_URL}/special-rules/{stub.id}")
+        if dry_run:
+            print(text)
+            continue
+        path = data_dir / "tow" / "rules" / f"{stub.id}.yaml"
+        path.write_text(text)
+        logger.warning("wrote text-only stub %s; declare its parameter if it prints one", path)
 
 
 def _data_files(paths: Sequence[Path]) -> list[Path]:
@@ -163,21 +188,18 @@ def _rerender(
     kind = path.parent.name
     slug = url.rsplit("/", 1)[-1]
     if kind == "units":
-        result = parse_unit(client.unit_entry(slug))
-        equipment, rules = _corpus_names(data_dir)
-        unit, fixes = canonical_unit(result.unit, equipment=equipment, rules=rules)
+        result = parse_unit(client.unit_entry(slug), _references(data_dir))
+        unit, fixes = canonical_unit(result.unit, equipment=_equipment_names(data_dir))
         held = unit_to_yaml(load_yaml(path, Unit), source_url=url)
         return held, unit_to_yaml(unit, source_url=url), [*result.warnings, *fixes]
     if kind == "weapons":
-        result = parse_weapon(client.weapons_of_war_entry(slug))
-        _, rules = _corpus_names(data_dir)
-        fresh, fixes = canonical_weapon(result.weapon, rules=rules)
-        weapon, merge_warnings = with_hand_authored(fresh, path)
+        result = parse_weapon(client.weapons_of_war_entry(slug), _references(data_dir))
+        weapon, merge_warnings = with_hand_authored(result.weapon, path)
         held = weapon_to_yaml(load_yaml(path, Weapon), source_url=url)
         return (
             held,
             weapon_to_yaml(weapon, source_url=url),
-            [*result.warnings, *fixes, *merge_warnings],
+            [*result.warnings, *merge_warnings],
         )
     if kind == "armour":
         armour = parse_armour(client.weapons_of_war_entry(slug))
@@ -272,14 +294,11 @@ def _import_equipment(
     subdir = "weapons" if kind == "weapon" else "armour"
     path = data_dir / "tow" / subdir / f"{slug}.yaml"
     url = f"{BASE_URL}/weapons-of-war/{slug}"
+    references = _references(data_dir, client)
     try:
         if kind == "weapon":
-            result = parse_weapon(entry)
-            _, rules = _corpus_names(data_dir)
-            fresh, fixes = canonical_weapon(result.weapon, rules=rules)
-            for fix in fixes:
-                logger.info("%s: %s", slug, fix)
-            weapon, merge_warnings = with_hand_authored(fresh, path)
+            result = parse_weapon(entry, references)
+            weapon, merge_warnings = with_hand_authored(result.weapon, path)
             text = weapon_to_yaml(weapon, source_url=url)
         else:
             result = parse_armour(entry)
@@ -288,6 +307,8 @@ def _import_equipment(
     except WhfbParseError:
         logger.exception("%s: parse failed", slug)
         return False
+    finally:
+        _write_stubs(references, data_dir, dry_run)
     for warning in (*result.warnings, *merge_warnings):
         logger.warning("%s: %s", slug, warning)
     if dry_run:
@@ -332,7 +353,7 @@ def _import_unit(
     if army is None:
         army = _resolve_army(client, entry)
         logger.info("%s: army resolved to %r", slug, army)
-    return _write_unit(entry, army, data_dir, dry_run)
+    return _write_unit(client, entry, army, data_dir, dry_run)
 
 
 def _import_army(client: WhfbAppClient, army: str, data_dir: Path, dry_run: bool) -> bool:
@@ -342,24 +363,28 @@ def _import_army(client: WhfbAppClient, army: str, data_dir: Path, dry_run: bool
         return False
     ok = True
     for slug in slugs:
-        ok = _write_unit(client.unit_entry(slug), army, data_dir, dry_run) and ok
+        ok = _write_unit(client, client.unit_entry(slug), army, data_dir, dry_run) and ok
     return ok
 
 
-def _write_unit(entry: dict, army: str, data_dir: Path, dry_run: bool) -> bool:
+def _write_unit(
+    client: WhfbAppClient, entry: dict, army: str, data_dir: Path, dry_run: bool
+) -> bool:
     slug = entry["fields"]["slug"]
+    references = _references(data_dir, client)
     try:
-        result = parse_unit(entry)
+        result = parse_unit(entry, references)
     except UnsupportedUnit as err:
         logger.warning("%s: skipped (%s)", slug, err)
         return True
     except WhfbParseError:
         logger.exception("%s: parse failed", slug)
         return False
+    finally:
+        _write_stubs(references, data_dir, dry_run)
     for warning in result.warnings:
         logger.warning("%s: %s", slug, warning)
-    equipment, rules = _corpus_names(data_dir)
-    unit, fixes = canonical_unit(result.unit, equipment=equipment, rules=rules)
+    unit, fixes = canonical_unit(result.unit, equipment=_equipment_names(data_dir))
     for fix in fixes:
         logger.info("%s: %s", slug, fix)
     text = unit_to_yaml(unit, source_url=f"{BASE_URL}/unit/{slug}")

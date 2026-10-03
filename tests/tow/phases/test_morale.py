@@ -15,6 +15,7 @@ from avelorn.tow.phases.combat import (
 )
 from avelorn.tow.phases.shooting import ShootingResult, make_panic_tests
 from avelorn.tow.schema.psychology import PanicCause
+from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import RerollEffect, Rule
 from avelorn.tow.schema.stage import Stage
 
@@ -310,7 +311,9 @@ def test_shieldwall_gives_ground_where_it_would_fall_back_on_the_turn_it_was_cha
     no_wall_unit = REPO.units["ironbreakers"].model_copy(
         update={
             "special_rules": [
-                r for r in REPO.units["ironbreakers"].special_rules if r != "Shieldwall"
+                r
+                for r in REPO.units["ironbreakers"].special_rules
+                if r != RuleRef(rule="shieldwall")
             ]
         }
     )

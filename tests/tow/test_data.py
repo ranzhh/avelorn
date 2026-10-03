@@ -101,50 +101,80 @@ def test_a_datasheet_filed_under_two_armies_names_both(tmp_path: Path) -> None:
     assert shared.fielded_by["elven-archers"] == ("high-elf-realms", "wood-elf-realms")
 
 
-def test_printed_references_are_spelled_as_their_entries() -> None:
-    """A reference that is a loose variant of an existing entry is a data error.
+def test_printed_equipment_is_spelled_as_its_entries() -> None:
+    """An equipment reference that is a loose variant of an existing entry is a data error.
 
-    The engine resolves printed names exactly, on purpose; the importer
-    canonicalises what it writes against the corpus as it stands. What
-    neither can catch is time: an entry imported *after* the files that
-    reference it leaves those files spelling it as the site did. This is
-    where that fails loudly — a reference matching an entry up to case or a
-    trailing plural "s" without matching it exactly names the file to
-    re-import. A reference matching nothing is not an offence: its entry may
-    simply not exist yet, which the coverage and unfactored reports own.
+    The engine resolves printed equipment names exactly, on purpose; the
+    importer canonicalises what it writes against the corpus as it stands.
+    What neither can catch is time: an entry imported *after* the files that
+    reference it leaves those files spelling it as the site did. This is where
+    that fails loudly, naming the file to re-import. A name matching nothing
+    is not an offence: its entry may simply not exist yet.
     """
     from avelorn.tow.importers.whfb_app.canon import canonical
-    from avelorn.tow.schema.rule import GrantEffect
 
     equipment = {item.name for item in (*REPO.weapons.values(), *REPO.armoury.values())}
-    rules = {rule.name for rule in REPO.rules.values()}
-
-    references: list[tuple[str, str, set[str]]] = []
+    references: list[tuple[str, str]] = []
     for unit in REPO.units.values():
-        for name in unit.equipment:
-            references.append((unit.id, name, equipment))
-        for name in unit.special_rules:
-            references.append((unit.id, name, rules))
+        references.extend((unit.id, name) for name in unit.equipment)
         for option in unit.options:
-            for name in (*option.adds_equipment, *option.removes_equipment):
-                references.append((unit.id, name, equipment))
-            for name in (*option.adds_rules, *option.removes_rules):
-                references.append((unit.id, name, rules))
-    for weapon in REPO.weapons.values():
-        for profile in weapon.profiles:
-            for name in profile.special_rules:
-                references.append((weapon.id, name, rules))
-    for troop_type in REPO.troop_types.values():
-        for name in troop_type.special_rules:
-            references.append((troop_type.id, name, rules))
-    for rule in REPO.rules.values():
-        for effect in rule.effects:
-            if isinstance(effect, GrantEffect):
-                references.append((rule.id, effect.grants, rules))
+            references.extend(
+                (unit.id, name) for name in (*option.adds_equipment, *option.removes_equipment)
+            )
 
     offences = [
         f"{owner}: {name!r} should be spelled {found!r}"
-        for owner, name, names in references
-        if name not in names and (found := canonical(name, names)) is not None
+        for owner, name in references
+        if name not in equipment and (found := canonical(name, equipment)) is not None
     ]
     assert offences == []
+
+
+@pytest.mark.parametrize(
+    ("path", "printed", "written", "refusal"),
+    [
+        (
+            "armies/dwarfen-mountain-holds/units/ironbreakers.yaml",
+            "- stubborn",
+            "- stubbornness",
+            "unit ironbreakers: stubbornness: no rule entry 'stubbornness'",
+        ),
+        (
+            "armies/dwarfen-mountain-holds/units/ironbreakers.yaml",
+            "- { rule: magic-resistance, X: 1 }",
+            "- magic-resistance",
+            "unit ironbreakers: magic-resistance: X missing; magic-resistance expects an amount",
+        ),
+        (
+            "armies/dwarfen-mountain-holds/units/ironbreakers.yaml",
+            "- stubborn",
+            "- { rule: stubborn, X: 1 }",
+            r"unit ironbreakers: \{rule: stubborn, X: 1\}: X 1 given, but stubborn declares no X",
+        ),
+        (
+            "weapons/brace-of-ogre-pistols.yaml",
+            "{rule: armour-bane, X: 1}",
+            "{rule: armour-bane, X: D3}",
+            r"weapon brace-of-ogre-pistols: \{rule: armour-bane, X: D3\}: X 'D3' is not an amount",
+        ),
+        (
+            "armies/dwarfen-mountain-holds/units/ironbreakers.yaml",
+            "- { rule: hatred, X: orcs-and-goblins }",
+            "- { rule: hatred, X: skaven }",
+            "unit ironbreakers: .*: X 'skaven' is not a selector: one of all-enemies",
+        ),
+    ],
+    ids=["no-rule", "x-missing", "x-extra", "x-unparsable", "selector-unknown"],
+)
+def test_a_reference_that_does_not_bind_fails_the_load(
+    tmp_path: Path, path: str, printed: str, written: str, refusal: str
+) -> None:
+    """The load names the entry, the reference, and the X its rule expects."""
+    data = tmp_path / "data"
+    shutil.copytree(DATA_DIR, data)
+    held = data / "tow" / path
+    assert printed in held.read_text()
+    held.write_text(held.read_text().replace(printed, written, 1))
+    corpus = TOWRepository(data_dir=data)
+    with pytest.raises(ValueError, match=refusal):
+        _ = corpus.units, corpus.weapons

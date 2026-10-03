@@ -11,9 +11,11 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Protocol
 
 from pydantic import ValidationError
 
+from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.unit import (
     BaseSize,
     OptionKind,
@@ -28,10 +30,19 @@ from avelorn.tow.schema.unit import (
 from . import richtext
 from .richtext import Node, OptionLine
 
+if TYPE_CHECKING:
+    from .references import RuleReferences
+
 _STAT_KEYS = ("M", "WS", "BS", "S", "T", "W", "I", "A", "Ld")
 
 # Troop types the unit schema cannot represent yet.
 _UNSUPPORTED_TROOP_TYPES = {"Character", "Named Character"}
+
+
+class Refer(Protocol):
+    """Resolve a printed rule name, or failing that one of its aliases, to a reference."""
+
+    def __call__(self, printed: str, *aliases: str) -> RuleRef: ...
 
 
 class WhfbParseError(Exception):
@@ -50,8 +61,8 @@ class ImportResult:
     warnings: list[str]
 
 
-def parse_unit(entry: Node) -> ImportResult:
-    """Parse a whfb.app `armyListEntry` into a Unit.
+def parse_unit(entry: Node, references: RuleReferences) -> ImportResult:
+    """Parse a whfb.app `armyListEntry` into a Unit, its rule names resolved.
 
     Returns:
         The unit and the warnings raised while mapping it.
@@ -68,6 +79,7 @@ def parse_unit(entry: Node) -> ImportResult:
     # The options grammar reads a line's subject against the printed
     # profiles, so the rows are parsed before the options that name them.
     profiles = _parse_profiles(slug, _require(fields, slug, "unitProfile", list))
+    refer = references.at(f"unit {slug}")
 
     unit = Unit(
         id=slug,
@@ -83,8 +95,8 @@ def parse_unit(entry: Node) -> ImportResult:
         # can differ from the linked entry ("Detachment" links to the
         # "Detachment Special Rules" section).
         equipment=_rule_list(slug, "equipment", fields, warnings),
-        special_rules=_rule_list(slug, "specialRules", fields, warnings, as_displayed=True),
-        options=_parse_options(slug, fields.get("options"), profiles, warnings),
+        special_rules=_special_rules(slug, fields, refer, warnings),
+        options=_parse_options(slug, fields.get("options"), profiles, refer, warnings),
     )
     return ImportResult(unit=unit, warnings=warnings)
 
@@ -167,7 +179,7 @@ def _is_mount(row: Node) -> bool:
     )
 
 
-def _slugified(text: str) -> str:
+def slugified(text: str) -> str:
     """Slugify a name the way the site builds entry slugs.
 
     Returns:
@@ -198,7 +210,7 @@ def _rule_list(
         # page ("Repeater bolt thrower" -> "Bolt Throwers") and deserves a
         # human look.
         for display, name in richtext.linked_rules(doc):
-            if display and not _slugified(display).startswith(_slugified(name)):
+            if display and not slugified(display).startswith(slugified(name)):
                 warnings.append(
                     f"{slug}: {key} displayed as {display!r} "
                     f"but linked entry is {name!r}; kept {name!r}"
@@ -210,6 +222,20 @@ def _rule_list(
     if leftover:
         warnings.append(f"{slug}: {key} has text not covered by linked rules: {leftover!r}")
     return names
+
+
+def _special_rules(slug: str, fields: Node, refer: Refer, warnings: list[str]) -> list[RuleRef]:
+    """Resolve the special-rules field's names, each aliased by the entry its link targets.
+
+    Returns:
+        One reference per printed name, in document order.
+    """
+    doc = fields.get("specialRules")
+    if doc is None:
+        return []
+    printed = _rule_list(slug, "specialRules", fields, warnings, as_displayed=True)
+    targets = {display or name: name for display, name in richtext.linked_rules(doc)}
+    return [refer(name, targets[name]) for name in printed]
 
 
 # --- options grammar ---------------------------------------------------
@@ -279,7 +305,7 @@ class OptionGroup:
 
 
 def _parse_options(
-    slug: str, doc: Node | None, profiles: list[Profile], warnings: list[str]
+    slug: str, doc: Node | None, profiles: list[Profile], refer: Refer, warnings: list[str]
 ) -> list[UnitOption]:
     if doc is None:
         return []
@@ -290,7 +316,7 @@ def _parse_options(
     options: list[UnitOption] = []
     for header, children in richtext.option_lines(doc):
         if not children:
-            _append_option(options, slug, header, OptionGroup(), printed, warnings)
+            _append_option(options, slug, header, OptionGroup(), printed, refer, warnings)
             continue
         group = _parse_group(slug, header.text, printed, warnings)
         # "0-1 unit may replace the Vanguard special rule with: Scouts /
@@ -303,7 +329,7 @@ def _parse_options(
                 "thing, so they are mutually exclusive; exclusivity not recorded"
             )
         for child in children:
-            _append_option(options, slug, child, group, printed, warnings)
+            _append_option(options, slug, child, group, printed, refer, warnings)
     return options
 
 
@@ -313,10 +339,11 @@ def _append_option(
     line: OptionLine,
     group: OptionGroup,
     printed: set[str],
+    refer: Refer,
     warnings: list[str],
 ) -> None:
     try:
-        options.append(_parse_option_line(slug, line, group, printed, warnings))
+        options.append(_parse_option_line(slug, line, group, printed, refer, warnings))
     except ValidationError:
         # e.g. a verbatim-fallback line with no parseable cost, which the
         # schema's points-xor-budget rule rejects. Dropping it silently
@@ -374,7 +401,12 @@ def _capitalized(name: str) -> str:
 
 
 def _parse_option_line(
-    slug: str, line: OptionLine, group: OptionGroup, printed: set[str], warnings: list[str]
+    slug: str,
+    line: OptionLine,
+    group: OptionGroup,
+    printed: set[str],
+    refer: Refer,
+    warnings: list[str],
 ) -> UnitOption:
     text = line.text
     if text.endswith(" Or:"):
@@ -420,12 +452,12 @@ def _parse_option_line(
             applies_to=stated.applies_to or group.applies_to,
         )
 
-    option = _matched_option(slug, body, points, per_model, scope, line.rules, warnings)
+    option = _matched_option(slug, body, points, per_model, scope, line.rules, refer, warnings)
     if option is None and group.verb:
         # The header stated the action for the whole group, so this line is
         # a bare name: "take" + "Great Weapon".
         option = _matched_option(
-            slug, f"{group.verb} {body}", points, per_model, scope, line.rules, warnings
+            slug, f"{group.verb} {body}", points, per_model, scope, line.rules, refer, warnings
         )
     if option is not None:
         return option
@@ -462,6 +494,7 @@ def _matched_option(
     per_model: bool,
     scope: OptionGroup,
     linked: list[str],
+    refer: Refer,
     warnings: list[str],
 ) -> UnitOption | None:
     """Match one option line against the printed forms the grammar knows.
@@ -485,8 +518,8 @@ def _matched_option(
             kind=OptionKind.SPECIAL_RULE,
             points=points,
             per_model=per_model,
-            adds_rules=[m.group(2)],
-            removes_rules=[m.group(1)],
+            adds_rules=[refer(m.group(2))],
+            removes_rules=[refer(m.group(1))],
             applies_to=scope.applies_to,
             limit=scope.limit,
         )
@@ -496,7 +529,7 @@ def _matched_option(
             kind=OptionKind.SPECIAL_RULE,
             points=points,
             per_model=per_model,
-            adds_rules=[m.group(1)],
+            adds_rules=[refer(m.group(1))],
             applies_to=scope.applies_to,
             limit=scope.limit,
         )

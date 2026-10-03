@@ -15,13 +15,13 @@ equipment:
   - Wicked Claws
   - Heavy Armour
 special_rules:
-  - Blessings of Asuryan
-  - Close Order
-  - Fear
-  - Flaming Attacks
-  - Fly (10)
-  - From The Ashes
-  - Large Target
-  - Stomp Attacks (2)
-  - Swiftstride
-  - Wake of Fire
+  - blessings-of-asuryan
+  - close-order
+  - fear
+  - flaming-attacks
+  - { rule: fly, X: 10 }
+  - from-the-ashes
+  - large-target
+  - { rule: stomp-attacks, X: 2 }
+  - swiftstride
+  - wake-of-fire

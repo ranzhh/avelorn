@@ -6,7 +6,7 @@ unit_strength: 1
 models_per_rank: 4
 max_rank_bonus: 2
 special_rules:
-  - Steady in the Ranks
-  - Press of Battle
-  - Massed Infantry
-  - Parry
+  - steady-in-the-ranks
+  - press-of-battle
+  - massed-infantry
+  - parry

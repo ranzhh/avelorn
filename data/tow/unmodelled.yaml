@@ -1,160 +1,157 @@
 # What the corpus prints that the engine does not read, each with why.
 # `avelorn coverage` lists the gaps; tests/tow/test_coverage.py fails on a gap
-# missing here and on an entry no gap needs. Subjects: the printed rule name for
-# rule kinds, <unit>/<row> for profile rows, the weapon or armour slug for
+# missing here and on an entry no gap needs. Subjects: the rule's slug for a
+# rule without effects, <unit>/<row> for profile rows, the weapon or armour slug for
 # printed notes, <unit>/<option> for options, and the option kind for a command
 # model (champion, standard_bearer, musician).
 
 # rule-without-effects: an entry holds the printed text, and nothing folds it.
 
 - kind: rule-without-effects
-  subject: Ambushers
+  subject: ambushers
   reason: Held in reserve and arriving from a table edge; deployment is not modelled.
 - kind: rule-without-effects
-  subject: Breath Weapon
+  subject: breath-weapon
   reason: A flame-template attack once per round; templates are not modelled.
 - kind: rule-without-effects
-  subject: Champions of Chrace
+  subject: champions-of-chrace
   reason: Challenges and Look Out, Sir! for joined characters; neither is modelled.
 - kind: rule-without-effects
-  subject: Chariot Runners
+  subject: chariot-runners
   reason: Line of sight and movement around friendly chariots; neither is modelled.
 - kind: rule-without-effects
-  subject: Chracian Warriors
+  subject: chracian-warriors
   reason: Limits which characters may join; characters joining units are not modelled.
 - kind: rule-without-effects
-  subject: Close Order
+  subject: close-order
   reason: Formations are not modelled; every unit fights as a ranked block and the Close Order +1 combat result is not scored.
   issue: 28
 - kind: rule-without-effects
-  subject: Counter Charge
+  subject: counter-charge
   reason: A charge reaction; only Hold and Stand & Shoot are modelled.
   issue: 29
 - kind: rule-without-effects
-  subject: Detachment
+  subject: detachment
   reason: Detachments are not modelled.
   issue: 30
 - kind: rule-without-effects
-  subject: Drilled
+  subject: drilled
   reason: Free redress and marching near the enemy; movement manoeuvres are not modelled.
 - kind: rule-without-effects
-  subject: Dwarf Crafted
+  subject: dwarf-crafted
   reason: Not authored yet; it waives the fixed -1 To Hit of a Stand & Shoot.
 - kind: rule-without-effects
-  subject: Evasive
+  subject: evasive
   reason: Fleeing when targeted by shooting; reactions to being shot are not modelled.
 - kind: rule-without-effects
-  subject: Extra Attacks (+1)
+  subject: extra-attacks
   reason: Not authored yet; even authored, the Attacks count reads unit rules only, never a weapon profile's.
 - kind: rule-without-effects
-  subject: Fast Cavalry
+  subject: fast-cavalry
   reason: Quick Turn after marching; movement is not modelled.
 - kind: rule-without-effects
-  subject: Fear
+  subject: fear
   reason: Psychology; Fear tests (refused charges, -1 To Hit on a failed test) are not modelled.
 - kind: rule-without-effects
-  subject: Feigned Flight
+  subject: feigned-flight
   reason: Rallying after a Flee reaction; Flee reactions and rallying are not modelled.
   issue: 29
 - kind: rule-without-effects
-  subject: Fire & Flee
+  subject: fire-and-flee
   reason: A charge reaction; Flee reactions are not modelled.
   issue: 29
 - kind: rule-without-effects
-  subject: First Charge
+  subject: first-charge
   reason: Makes the charge target Disrupted; Disruption is not modelled.
 - kind: rule-without-effects
-  subject: Fly (10)
+  subject: fly
   reason: Flying movement; movement is not modelled.
 - kind: rule-without-effects
-  subject: Fly (9)
-  reason: Flying movement; movement is not modelled.
-- kind: rule-without-effects
-  subject: From The Ashes
+  subject: from-the-ashes
   reason: Hits or rebirth when the model loses its last Wound; nothing triggers on a model's removal.
 - kind: rule-without-effects
-  subject: Hatred (Orcs & Goblins)
+  subject: hatred
   reason: Hated enemies are named by race; the foe gate has no race to match.
 - kind: rule-without-effects
-  subject: Ignores Cover
+  subject: ignores-cover
   reason: Cover modifiers; terrain is not modelled.
 - kind: rule-without-effects
-  subject: Immune to Psychology
+  subject: immune-to-psychology
   reason: Psychology; Fear and Terror tests are not modelled, and no effect can force a Panic test passed.
 - kind: rule-without-effects
-  subject: Impetuous
+  subject: impetuous
   reason: Forced charge declarations; declaring charges is not modelled.
 - kind: rule-without-effects
-  subject: Ithilmar Armour
+  subject: ithilmar-armour
   reason: Dangerous Terrain re-rolls and Wizards wearing armour; terrain and magic are not modelled.
 - kind: rule-without-effects
-  subject: Ithilmar Barding
+  subject: ithilmar-barding
   reason: Dangerous Terrain re-rolls and Wizards wearing armour; terrain and magic are not modelled.
 - kind: rule-without-effects
-  subject: King's Guard
+  subject: kings-guard
   reason: Challenges once the General joins; challenges and joined characters are not modelled.
 - kind: rule-without-effects
-  subject: Large Target
+  subject: large-target
   reason: Cover and line of sight are not modelled, and no effect adds the shooting rank a foe gains against it.
 - kind: rule-without-effects
-  subject: Magic Resistance (-1)
+  subject: magic-resistance
   reason: It modifies enemy Casting rolls; magic is not modelled.
 - kind: rule-without-effects
-  subject: Motley Crew
+  subject: motley-crew
   reason: Models armed and armoured differently in one unit; a fielded unit has one loadout.
 - kind: rule-without-effects
-  subject: Move Through Cover
+  subject: move-through-cover
   reason: Difficult and dangerous terrain; terrain is not modelled.
 - kind: rule-without-effects
-  subject: Multiple Shots (2)
+  subject: multiple-shots
   reason: Firing X shots at a further -1 To Hit; no quantity counts shots per model.
 - kind: rule-without-effects
-  subject: Naval Discipline
+  subject: naval-discipline
   reason: Stand & Shoot at any distance and a free redress; the Stand & Shoot distance limit and manoeuvres are not modelled.
   issue: 29
 - kind: rule-without-effects
-  subject: Ogre Charge
+  subject: ogre-charge
   reason: Impact Hits AP improved by the Rank Bonus; no effect amount reads the Rank Bonus.
 - kind: rule-without-effects
-  subject: Open Order
+  subject: open-order
   reason: Formations are not modelled; every unit fights as a ranked block.
   issue: 28
 - kind: rule-without-effects
-  subject: Quick Shot
+  subject: quick-shot
   reason: Not authored yet for the Moving and Shooting -1; the Stand & Shoot distance limit it waives is not enforced.
 - kind: rule-without-effects
-  subject: Regimental Unit
+  subject: regimental-unit
   reason: May be accompanied by detachments; detachments are not modelled.
   issue: 30
 - kind: rule-without-effects
-  subject: Resolute
+  subject: resolute
   reason: Modifies Flee and Pursuit rolls; neither roll is modelled.
 - kind: rule-without-effects
-  subject: Scouts
+  subject: scouts
   reason: Deploying late and far forward; deployment is not modelled.
 - kind: rule-without-effects
-  subject: Sons of Caledor
+  subject: sons-of-caledor
   reason: Limits which characters may join; characters joining units are not modelled.
 - kind: rule-without-effects
-  subject: Steady in the Ranks
+  subject: steady-in-the-ranks
   reason: Resists Disruption from flank and rear charges; Disruption is not modelled.
 - kind: rule-without-effects
-  subject: Swiftstride
+  subject: swiftstride
   reason: Charge range and Charge, Flee and Pursuit rolls; none is modelled.
 - kind: rule-without-effects
-  subject: Vanguard
+  subject: vanguard
   reason: A move after deployment; deployment is not modelled.
 - kind: rule-without-effects
-  subject: Venerable
+  subject: venerable
   reason: Panic re-rolls for friendly units within 6"; no rule reaches a friendly unit.
 - kind: rule-without-effects
-  subject: Wake of Fire
+  subject: wake-of-fire
   reason: Hits on a unit flown over; movement is not modelled.
 - kind: rule-without-effects
-  subject: Warriors of Nagarythe
+  subject: warriors-of-nagarythe
   reason: Limits which characters may join; characters joining units are not modelled.
 - kind: rule-without-effects
-  subject: Warriors of the White Tower
+  subject: warriors-of-the-white-tower
   reason: Limits which characters may join; characters joining units are not modelled.
 
 # profile-row-unread: a champion fights as the rank and file; only its

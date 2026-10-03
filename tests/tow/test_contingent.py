@@ -15,6 +15,7 @@ from avelorn.tow.contingent import (
 )
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.muster import Complement
+from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import ModifierEffect
 from avelorn.tow.schema.unit import Characteristic, TroopType, Unit
 
@@ -49,8 +50,8 @@ def test_field_a_complement_carries_size_and_loadout(spearmen_unit: Unit) -> Non
 
     assert contingent.models == 18
     # The chosen option's rule is what the engine reads, not the printed profile.
-    assert "Shieldwall" in contingent.unit.special_rules
-    assert "Shieldwall" not in spearmen_unit.special_rules
+    assert RuleRef(rule="shieldwall") in contingent.unit.special_rules
+    assert RuleRef(rule="shieldwall") not in spearmen_unit.special_rules
 
 
 def test_field_a_complement_without_options_matches_the_datasheet(spearmen_unit: Unit) -> None:
@@ -157,18 +158,19 @@ def test_field_resolves_equipment_into_the_loadout(spearmen_unit: Unit) -> None:
     assert contingent.loadout == Loadout(
         weapons=(REPO.weapons["hand-weapon"], REPO.weapons["thrusting-spear"]),
         armour=(REPO.armoury["light-armour"], REPO.armoury["shield"]),
-        rules=(
+        own=(
             REPO.rules["close-order"],
             REPO.rules["elven-reflexes"],
             REPO.rules["martial-prowess"],
             REPO.rules["regimental-unit"],
             REPO.rules["valour-of-ages"],
+        ),
+        conferred=(
             REPO.rules["press-of-battle"],
             REPO.rules["massed-infantry"],
             REPO.rules["parry"],
         ),
-        unresolved_rules=(),
-        weapon_rules={"fight-in-extra-rank": REPO.rules["fight-in-extra-rank"]},
+        bound={RuleRef(rule="fight-in-extra-rank"): REPO.rules["fight-in-extra-rank"]},
     )
 
 
@@ -268,23 +270,25 @@ def test_default_repository_is_a_cached_singleton() -> None:
     assert default_repository() is default_repository()
 
 
-def test_field_tolerates_rules_without_entries(spearmen_unit: Unit) -> None:
-    """A special rule with no entry is carried printed, not lost.
-
-    Option-granted rules resolve on the same terms: Shieldwall resolves to its
-    entry, while a name with no entry joins the printed remainder.
-    """
-    doctored = spearmen_unit.model_copy(update={"special_rules": ["Unprinted Rule"]})
-    mustered = Complement(unit=doctored, size=10, options=["Shieldwall"])
-    contingent = Contingent.field(mustered, data=REPO)
-    assert contingent.loadout is not None
-    assert [rule.id for rule in contingent.loadout.rules] == [
-        "shieldwall",
-        "press-of-battle",  # conferred by the Regular Infantry troop type
-        "massed-infantry",  # also conferred by the troop type
-        "parry",  # also conferred by the troop type
+def test_field_binds_option_granted_rules_beside_the_conferred(spearmen_unit: Unit) -> None:
+    """A rule a chosen option adds is the unit's own; the troop type's stay apart."""
+    bare = spearmen_unit.model_copy(update={"special_rules": []})
+    contingent = Contingent.field(
+        Complement(unit=bare, size=10, options=["Shieldwall"]), data=REPO
+    )
+    assert [rule.id for rule in contingent.loadout.own] == ["shieldwall"]
+    assert [rule.id for rule in contingent.loadout.conferred] == [
+        "press-of-battle",
+        "massed-infantry",
+        "parry",
     ]
-    assert contingent.loadout.unresolved_rules == ("Unprinted Rule",)
+
+
+def test_field_refuses_a_reference_to_no_rule(spearmen_unit: Unit) -> None:
+    """A reference no entry answers to fails the deploy, never rides along."""
+    doctored = spearmen_unit.model_copy(update={"special_rules": [RuleRef(rule="unprinted-rule")]})
+    with pytest.raises(ValueError, match="no rule entry 'unprinted-rule'"):
+        Contingent.field(doctored, 10, data=REPO)
 
 
 def test_field_substitutes_rule_parameters_as_printed(spearmen_unit: Unit) -> None:
@@ -295,7 +299,9 @@ def test_field_substitutes_rule_parameters_as_printed(spearmen_unit: Unit) -> No
     substituted into its effects, symmetric with the weapons and armour
     beside it.
     """
-    doctored = spearmen_unit.model_copy(update={"special_rules": ["Armour Bane (2)"]})
+    doctored = spearmen_unit.model_copy(
+        update={"special_rules": [RuleRef(rule="armour-bane", X=2)]}
+    )
     contingent = Contingent.field(
         Complement(unit=doctored, size=10),
         data=REPO,
@@ -317,30 +323,29 @@ def test_loadout_answers_the_weapon_choice_by_printed_name(spearmen_unit: Unit) 
 
 
 def test_loadout_resolves_the_carried_weapons_rules(spearmen_unit: Unit) -> None:
-    """Weapon-rule names with entries resolve into the loadout's index.
+    """A carried weapon's rule references bind into the loadout.
 
-    The archers' longbow prints Armour Bane (1) and Volley Fire, and both
-    now resolve as printed — the parameterised name through its "(X)"
-    entry, Volley Fire through its own.
+    The archers' longbow prints Armour Bane (1) and Volley Fire; the first
+    binds its X, named as printed.
     """
     archers = Contingent.field(
         REPO.units["elven-archers"],
         10,
         data=REPO,
     )
-    index = archers.loadout.weapon_rules
-    assert set(index) == {"Armour Bane (1)", "Volley Fire"}
-    assert index["Armour Bane (1)"].name == "Armour Bane (1)"
+    bane = RuleRef(rule="armour-bane", X=1)
+    assert set(archers.loadout.bound) == {bane, RuleRef(rule="volley-fire")}
+    assert archers.loadout.bound[bane].name == "Armour Bane (1)"
 
 
 def test_thrusting_spear_resolves_fight_in_extra_rank(spearmen_unit: Unit) -> None:
-    """The spear's rule slug resolves into the weapon-rule index.
+    """The spear's rule reference binds into the loadout.
 
     It carries the supporting-ranks effect the melee count reads; a spear-armed
     contingent resolves it onto its loadout the way any weapon rule resolves.
     """
     fielded = Contingent.field(spearmen_unit, 10, data=REPO)
-    rule = fielded.loadout.weapon_rules["fight-in-extra-rank"]
+    rule = fielded.loadout.bound[RuleRef(rule="fight-in-extra-rank")]
     assert rule is REPO.rules["fight-in-extra-rank"]
     effect = rule.effects[0]
     assert isinstance(effect, ModifierEffect)
@@ -454,15 +459,15 @@ def test_infantry_troop_types_confer_their_special_rules() -> None:
     any one datasheet.
     """
     assert REPO.troop_types["regular-infantry"].special_rules == (
-        "Press of Battle",
-        "Massed Infantry",
-        "Parry",
+        RuleRef(rule="press-of-battle"),
+        RuleRef(rule="massed-infantry"),
+        RuleRef(rule="parry"),
     )
     assert REPO.troop_types["heavy-infantry"].special_rules == (
-        "Steady in the Ranks",
-        "Press of Battle",
-        "Massed Infantry",
-        "Parry",
+        RuleRef(rule="steady-in-the-ranks"),
+        RuleRef(rule="press-of-battle"),
+        RuleRef(rule="massed-infantry"),
+        RuleRef(rule="parry"),
     )
 
 

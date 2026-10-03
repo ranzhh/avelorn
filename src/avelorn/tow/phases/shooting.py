@@ -366,11 +366,7 @@ def shoot_unit(
     # on the volley not being a Stand & Shoot reaction, both always known),
     # so it fires or is honoured with no extra shots, and is claimed out of
     # the weapon-rule notes below.
-    in_use = [
-        attacker.loadout.weapon_rules[name]
-        for name in profile.special_rules
-        if name in attacker.loadout.weapon_rules
-    ]
+    in_use = attacker.loadout.profile_rules(profile)
     volley = effective_volley(in_use, conditions)
     # Multiple Wounds (X): what each unsaved wound is worth lands on the
     # casualty fold, never on the dice, so the multiplier is read here from
@@ -398,10 +394,9 @@ def shoot_unit(
     # attacker's seat's to say (Parry stays inert here: it gates on close
     # combat). The same two resolutions a melee strike makes.
     offence = Offence.resolve(
-        profile,
-        weapon_rules=attacker.loadout.weapon_rules,
+        in_use,
         rules=attacker.loadout.rules,
-        grants=attacker.loadout.granted_rules,
+        grants=attacker.loadout.bound,
         conditions=conditions,
     )
     incoming = GateContext(
@@ -417,7 +412,7 @@ def shoot_unit(
     defence = Defence.resolve(
         armour=defender.loadout.armour,
         rules=defender.loadout.rules,
-        grants=defender.loadout.granted_rules,
+        grants=defender.loadout.bound,
         incoming=incoming,
         weapon_rules_in_use=defender.in_hand_rules(),
     )
@@ -429,14 +424,12 @@ def shoot_unit(
 
     notes: list[str] = []
     notes.extend(
-        f"special rule not factored: {rule} ({shooter.name})"
-        for rule in shooter.special_rules
-        if rule not in claimed
+        f"special rule not factored: {rule.name} ({shooter.name})"
+        for rule in attacker.loadout.own
+        if rule.name not in claimed
     )
     notes.extend(
-        factored_notes(
-            attacker.loadout.rules, claimed, shooter.name, attacker.loadout.granted_rules
-        )
+        factored_notes(attacker.loadout.rules, claimed, shooter.name, attacker.loadout.bound)
     )
     defender_claimed = {
         *defence.armour.factored,
@@ -445,13 +438,13 @@ def shoot_unit(
         *defence.factored,
     }
     notes.extend(
-        f"special rule not factored: {rule} ({target.name})"
-        for rule in target.special_rules
-        if rule not in defender_claimed
+        f"special rule not factored: {rule.name} ({target.name})"
+        for rule in defender.loadout.own
+        if rule.name not in defender_claimed
     )
     notes.extend(
         factored_notes(
-            defender.loadout.rules, defender_claimed, target.name, defender.loadout.granted_rules
+            defender.loadout.rules, defender_claimed, target.name, defender.loadout.bound
         )
     )
     # A weapon rule the walk cannot factor may be the re-roll seam's instead (a

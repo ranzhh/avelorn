@@ -10,6 +10,7 @@ from avelorn.tow.importers.whfb_app.yamlout import (
     weapon_to_yaml,
 )
 from avelorn.tow.schema.armour import Armour
+from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.unit import OptionKind, UnitOption
 from avelorn.tow.schema.weapon import Weapon
@@ -30,8 +31,8 @@ def test_option_row_writes_every_field_of_the_schema() -> None:
         applies_to="Ironbeard",
         points=15,
         per_model=True,
-        adds_rules=["Drilled"],
-        removes_rules=["Valour of Ages"],
+        adds_rules=[RuleRef(rule="drilled")],
+        removes_rules=[RuleRef(rule="valour-of-ages")],
         adds_equipment=["Cinderblast Bombs"],
         removes_equipment=["Shield"],
         limit="0-1 unit per 1000 points",

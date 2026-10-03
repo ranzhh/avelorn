@@ -34,10 +34,10 @@ from avelorn.tow.engine.rules import (
     effective_supporting_ranks,
     effective_ward_target,
     effective_wound_multiplier,
-    printed_rule,
 )
 from avelorn.tow.phases.shooting import shoot_unit
 from avelorn.tow.schema.phase import Phase
+from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import (
     Add,
     AmountParameter,
@@ -57,6 +57,7 @@ from avelorn.tow.schema.rule import (
     RuleEffect,
     When,
     WoundMultiplierEffect,
+    bind,
 )
 from avelorn.tow.schema.stage import Side, Stage
 from avelorn.tow.schema.unit import Characteristic, TroopType, Unit
@@ -83,24 +84,18 @@ def _one_rule(effect: RuleEffect) -> dict[str, Rule]:
     return {rule.name: rule}
 
 
-def test_printed_rule_exact_name_is_the_entry_itself() -> None:
-    """A printed name matching an entry name returns that entry, unchanged."""
-    assert printed_rule("Stubborn", REPO.rules) is REPO.rules["stubborn"]
+def test_a_reference_without_x_binds_the_entry_itself() -> None:
+    """A slug alone binds its entry, unchanged."""
+    assert bind(RuleRef(rule="stubborn"), REPO.rules) is REPO.rules["stubborn"]
 
 
-def test_rule_slug_resolves_the_catalogued_entry() -> None:
-    """A corpus slug addresses its rule item without carrying display text."""
-    assert printed_rule("fight-in-extra-rank", REPO.rules) is REPO.rules["fight-in-extra-rank"]
-
-
-def test_printed_rule_substitutes_the_parameter() -> None:
-    """A bracketed number matches the (X) entry, returned as printed.
+def test_binding_substitutes_the_parameter() -> None:
+    """A reference's X binds the entry, named as printed.
 
     The copy carries the printed name and the parameter substituted into
     its effects — the rule as the unit prints it, not as it is filed.
     """
-    rule = printed_rule("Armour Bane (1)", REPO.rules)
-    assert rule is not None
+    rule = bind(RuleRef(rule="armour-bane", X=1), REPO.rules)
     assert rule.id == "armour-bane"
     assert rule.name == "Armour Bane (1)"
     effect = rule.effects[0]
@@ -112,7 +107,7 @@ def test_printed_rule_substitutes_the_parameter() -> None:
     assert filed.add == {"armour-piercing": "X"}
 
 
-def test_printed_rule_substitutes_under_a_printed_bound() -> None:
+def test_binding_substitutes_under_a_printed_bound() -> None:
     """A bracketed parameter binds inside a bounded amount, where "X" sits a level down.
 
     No printed rule prints both a parameter and a bound today, but the
@@ -128,18 +123,19 @@ def test_printed_rule_substitutes_under_a_printed_bound() -> None:
     )
     rules: Registry[Rule] = Registry([entry], kind="rule")
 
-    bound = printed_rule("Doctored (2)", rules)
-    assert bound is not None
+    bound = bind(RuleRef(rule="doctored", X=2), rules)
     effect = bound.effects[0]
     assert isinstance(effect, ModifierEffect)
     assert effect.added(Characteristic.STRENGTH) == Add(2, None, 1)
 
-    assert printed_rule("Doctored (D3)", rules) is None
+    with pytest.raises(ValueError, match="is not an amount"):
+        bind(RuleRef(rule="doctored", X="D3"), rules)
 
 
-def test_printed_rule_unknown_name() -> None:
-    """A name matching nothing resolves to None."""
-    assert printed_rule("Unprinted Rule", REPO.rules) is None
+def test_a_reference_to_no_rule_fails_loudly() -> None:
+    """A slug no entry carries is an error, never a quiet miss."""
+    with pytest.raises(ValueError, match="no rule entry 'unprinted-rule'"):
+        bind(RuleRef(rule="unprinted-rule"), REPO.rules)
 
 
 def test_compile_armour_bane_from_data_reproduces_the_golden() -> None:
@@ -149,7 +145,9 @@ def test_compile_armour_bane_from_data_reproduces_the_golden() -> None:
     to 6+, so p = 2/3 * (2/6 * 2/3 + 1/6 * 5/6) = 13/54 — previously
     proven by a hand-written test double, now driven by the rule file.
     """
-    index = _fielded(REPO.units["elven-archers"], 1).loadout.weapon_rules
+    longbow = REPO.weapons["longbow"].profiles[0]
+    in_use = _fielded(REPO.units["elven-archers"], 1).loadout.profile_rules(longbow)
+    index = {rule.name: rule for rule in in_use}
     compiled = compile_rules(["Armour Bane (1)"], index)
     assert compiled.factored == ("Armour Bane (1)",)
     transforms = compiled.modifiers
@@ -398,7 +396,7 @@ def test_compile_grant_confers_the_named_rule_and_stacks() -> None:
     sisters = _fielded(REPO.units["sisters-of-avelorn"], 5).wielding("Bow of Avelorn")
     bow = GateContext(wielding=WeaponFacts(type=WeaponType.BOW))
     index = {rule.name: rule for rule in sisters.loadout.rules}
-    compiled = compile_rules(["Arrows of Isha"], index, bow, grants=sisters.loadout.granted_rules)
+    compiled = compile_rules(["Arrows of Isha"], index, bow, grants=sisters.loadout.bound)
     assert compiled.factored == ("Arrows of Isha",)
     save_moves = [
         (m.move, m.trigger) for m in compiled.modifiers if m.lands_on is Stage.MAKE_ARMOUR_SAVES
@@ -418,7 +416,7 @@ def test_compile_grant_unfactored_when_the_bow_gate_is_unknown() -> None:
     sisters = _fielded(REPO.units["sisters-of-avelorn"], 5).wielding("Bow of Avelorn")
     index = {rule.name: rule for rule in sisters.loadout.rules}
     compiled = compile_rules(
-        ["Arrows of Isha"], index, GateContext(), grants=sisters.loadout.granted_rules
+        ["Arrows of Isha"], index, GateContext(), grants=sisters.loadout.bound
     )
     assert compiled.unfactored == ("Arrows of Isha",)
     assert compiled.modifiers == ()
@@ -509,8 +507,7 @@ def test_armour_bane_two_leaves_no_save_at_all() -> None:
     number. Hit 3+, wound 4+, save 5+:
     p = 2/3 * (2/6 * 4/6 + 1/6 * 1) = 7/27.
     """
-    bane = printed_rule("Armour Bane (2)", REPO.rules)
-    assert bane is not None
+    bane = bind(RuleRef(rule="armour-bane", X=2), REPO.rules)
     compiled = compile_rules(["Armour Bane (2)"], {bane.name: bane})
     assert compiled.factored == ("Armour Bane (2)",)
     transforms = compiled.modifiers
@@ -1244,19 +1241,16 @@ def test_attack_marks_read_the_profile_in_use_and_the_unit_rules_alike() -> None
     mark carries it onto any weapon it swings. The consumed names come back
     per source, so each claims its own namespace's note.
     """
-    magical = REPO.rules["magical-attacks"]
-    weapon_rules = {"Magical Attacks": magical}
-
-    by_weapon = attack_marks(["Magical Attacks"], weapon_rules, [])
+    by_weapon = attack_marks([REPO.rules["magical-attacks"]], [])
     assert by_weapon.magical and not by_weapon.flaming
     assert by_weapon.weapon_factored == ("Magical Attacks",)
     assert by_weapon.unit_factored == ()
 
-    by_unit = attack_marks([], {}, [REPO.rules["flaming-attacks"]])
+    by_unit = attack_marks([], [REPO.rules["flaming-attacks"]])
     assert by_unit.flaming and not by_unit.magical
     assert by_unit.unit_factored == ("Flaming Attacks",)
 
-    unmarked = attack_marks([], {}, [REPO.rules["stubborn"]])
+    unmarked = attack_marks([], [REPO.rules["stubborn"]])
     assert not unmarked.magical and not unmarked.flaming
 
 
@@ -1268,7 +1262,7 @@ def test_a_gated_attack_mark_is_left_unconsumed() -> None:
         paragraphs=["…"],
         effects=[AttackMarkEffect(attack=AttackMarks(magical=True), when=When(combat=True))],
     )
-    marks = attack_marks([], {}, [gated])
+    marks = attack_marks([], [gated])
     assert not marks.magical
     assert marks.unit_factored == ()
 
@@ -1367,21 +1361,20 @@ def test_deflect_shots_wards_only_a_non_magical_shooting_attack() -> None:
 # --- automatic hits: Stomp Attacks / Impact Hits, from the real entries ---
 
 
-def test_printed_rule_substitutes_a_dice_parameter() -> None:
+def test_binding_substitutes_a_dice_parameter() -> None:
     """A bracketed dice quantity binds the (X) entry's parameter as dice.
 
     "Impact Hits (D6)" resolves against "Impact Hits (X)" with the count a
     :class:`DiceQuantity`, not a number — the seam folds it as its exact
     distribution. "Stomp Attacks (D3+1)" carries the flat addend.
     """
-    rule = printed_rule("Impact Hits (D6)", REPO.rules)
-    assert rule is not None and rule.name == "Impact Hits (D6)"
+    rule = bind(RuleRef(rule="impact-hits", X="D6"), REPO.rules)
+    assert rule.name == "Impact Hits (D6)"
     effect = rule.effects[0]
     assert isinstance(effect, HitsEffect)
     assert effect.hits == DiceQuantity(sides=6)
 
-    stomp = printed_rule("Stomp Attacks (D3+1)", REPO.rules)
-    assert stomp is not None
+    stomp = bind(RuleRef(rule="stomp-attacks", X="D3+1"), REPO.rules)
     flat = stomp.effects[0]
     assert isinstance(flat, HitsEffect)
     assert flat.hits == DiceQuantity(sides=3, plus=1)
@@ -1389,8 +1382,7 @@ def test_printed_rule_substitutes_a_dice_parameter() -> None:
 
 def test_effective_automatic_hits_fixed_count_is_certain() -> None:
     """Stomp Attacks (2) in combat: exactly two hits per model, no dice."""
-    rule = printed_rule("Stomp Attacks (2)", REPO.rules)
-    assert rule is not None
+    rule = bind(RuleRef(rule="stomp-attacks", X=2), REPO.rules)
     fold = effective_automatic_hits([rule], HitOrder.LAST, GateContext(combat=CombatFacts()))
     assert fold.factored == ("Stomp Attacks (2)",)
     assert fold.per_model.mass == {2: 1}
@@ -1403,8 +1395,7 @@ def test_effective_automatic_hits_folds_the_dice_exactly() -> None:
     factored, no hits — and the read at the other order leaves the rule to
     its own order's read, in neither name list.
     """
-    rule = printed_rule("Impact Hits (D6)", REPO.rules)
-    assert rule is not None
+    rule = bind(RuleRef(rule="impact-hits", X="D6"), REPO.rules)
     charging = GateContext(movement=MovementFacts(moved=True, charge=ChargeEvent(distance=6)))
     fold = effective_automatic_hits([rule], HitOrder.FIRST, charging)
     assert fold.factored == ("Impact Hits (D6)",)
@@ -1429,22 +1420,21 @@ def test_effective_automatic_hits_unbound_parameter_is_unfactored() -> None:
     assert fold.per_model.mass == {0: 1}
 
 
-def test_printed_rule_substitutes_a_dice_multiplier() -> None:
+def test_binding_substitutes_a_dice_multiplier() -> None:
     """A dice parameter binds the multiplier; a numeric-only amount stays unbound."""
-    rule = printed_rule("Multiple Wounds (D3)", REPO.rules)
-    assert rule is not None
+    rule = bind(RuleRef(rule="multiple-wounds", X="D3"), REPO.rules)
     assert rule.name == "Multiple Wounds (D3)"
     effect = rule.effects[0]
     assert isinstance(effect, WoundMultiplierEffect)
     assert effect.multiplies == DiceQuantity(sides=3)
-    assert printed_rule("Armour Bane (D3)", REPO.rules) is None
+    with pytest.raises(ValueError, match="is not an amount"):
+        bind(RuleRef(rule="armour-bane", X="D3"), REPO.rules)
 
 
 def test_effective_wound_multiplier_reads_the_printed_value() -> None:
     """The casualty seam's fold: a constant is certain, a D3 uniform, a bare X unfactored."""
-    two = printed_rule("Multiple Wounds (2)", REPO.rules)
-    d3 = printed_rule("Multiple Wounds (D3)", REPO.rules)
-    assert two is not None and d3 is not None
+    two = bind(RuleRef(rule="multiple-wounds", X=2), REPO.rules)
+    d3 = bind(RuleRef(rule="multiple-wounds", X="D3"), REPO.rules)
 
     constant = effective_wound_multiplier([two])
     assert constant.wounds == Distribution.pure(2)

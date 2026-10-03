@@ -14,9 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, RootModel, model_validator
 class GapKind(StrEnum):
     """How a piece of the corpus fails to reach the maths."""
 
-    RULE_WITHOUT_ENTRY = "rule-without-entry"
     RULE_WITHOUT_EFFECTS = "rule-without-effects"
-    PARAMETER_UNBOUND = "parameter-unbound"
     PROFILE_ROW_UNREAD = "profile-row-unread"
     PRINTED_NOTES = "printed-notes"
     INERT_OPTION = "inert-option"
@@ -25,8 +23,8 @@ class GapKind(StrEnum):
 class Acknowledgement(BaseModel):
     """One gap, known and left open, with why.
 
-    ``subject`` is how the gap is addressed: the printed rule name for the rule
-    kinds (one entry covers every place printing it), ``<unit>/<row>`` for a
+    ``subject`` is how the gap is addressed: the rule's slug for a rule without
+    effects (one entry covers every place referencing it), ``<unit>/<row>`` for a
     profile row, the weapon or armour slug for printed notes, and
     ``<unit>/<option>`` for an option.
     """

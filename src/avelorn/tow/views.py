@@ -11,11 +11,10 @@ unit's profiles and options at once makes a listing grow with the corpus rather
 than with its length. Reading one entry answers everything else. A rule's view is
 the schema type itself (:class:`~avelorn.tow.schema.rule.Rule`) -- nothing to
 project, so projecting it would only create something to drift. A datasheet's is
-:class:`UnitDetail`, the schema type but for one field: the rule names it prints
-arrive resolved, each carrying the entry it addresses. That much has to be
-projected, because a printed name does not become a slug by slugifying it --
-"Impact Hits (D3)" is filed under ``impact-hits`` -- and a caller left to derive
-it would derive it wrong more often than right.
+:class:`UnitDetail`, the schema type but for two fields: its equipment and its
+rule references arrive resolved, each carrying the name it prints and the entry
+it addresses. A rule's name is the rule's own, X substituted -- ``{rule:
+impact-hits, X: D3}`` prints "Impact Hits (D3)" -- so a caller never renders it.
 
 What the corpus prints and the engine never reads is not a view of one entry
 but a report over all of them: :mod:`avelorn.tow.coverage`.
@@ -30,13 +29,13 @@ from pydantic import BaseModel, ConfigDict
 from avelorn.core.distribution import Probability
 from avelorn.core.registry import Registry
 from avelorn.tow.contingent import Contingent
-from avelorn.tow.coverage import Site, printed_rules
+from avelorn.tow.coverage import Site, rule_references
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.engine.rules import filed_rule
 from avelorn.tow.muster import Complement
 from avelorn.tow.phases.combat import BreakResult, CombatResult, FightResult, SideBreak
 from avelorn.tow.phases.shooting import PanicResult, ShootingResult
 from avelorn.tow.schema.armour import Armour
+from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.unit import TroopType, Unit, UnitSize
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile, WeaponType
@@ -94,14 +93,11 @@ class Reference(BaseModel):
     """A name as an entry prints it, and the entry it resolves to.
 
     ``slug`` addresses the entry and ``kind`` says which registry holds it, so a
-    caller can follow the name without knowing how one finds its file -- for a
-    rule, the entry :func:`~avelorn.tow.engine.rules.filed_rule` finds, the
-    "(X)" or "(+X)" template for a parameterised name ("Impact Hits (D3)" is
-    filed under ``impact-hits``).
+    caller can follow the name without knowing how one finds its file. A rule's
+    name is the rule's display name with the reference's X substituted.
 
-    Both are ``None`` together, and that says the corpus prints this name with
-    no entry behind it: the gap :func:`~avelorn.tow.coverage.coverage` reports
-    over the whole corpus, said here on the entry that prints it.
+    Both are ``None`` together only for equipment the corpus prints with no
+    entry behind it; a rule reference always binds, or the corpus fails to load.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -111,17 +107,14 @@ class Reference(BaseModel):
     slug: str | None
 
     @classmethod
-    def rule(cls, printed: str, rules: Registry[Rule]) -> "Reference":
+    def rule(cls, reference: RuleRef, rules: Registry[Rule]) -> "Reference":
         """Resolve one rule reference for presentation.
 
         Returns:
-            The printed name, carrying the entry it addresses or nothing.
+            The name it prints, carrying the entry it addresses.
         """
-        entry = filed_rule(printed, rules)
-        if entry is None:
-            return cls(name=printed, kind=None, slug=None)
-        name = entry.name if printed == entry.id else printed
-        return cls(name=name, kind=Kind.RULE, slug=entry.id)
+        name = rules[reference.rule].display(reference.x)
+        return cls(name=name, kind=Kind.RULE, slug=reference.rule)
 
     @classmethod
     def equipment(
@@ -147,9 +140,9 @@ class UnitDetail(Unit):
     """A datasheet as reading one shows it: the entry, every printed name resolved.
 
     Everything :class:`~avelorn.tow.schema.unit.Unit` prints, except that its
-    equipment and its special rules arrive as :class:`Reference` rather than as
-    bare strings. Resolving on the way out is what keeps a caller from
-    re-deriving it: a printed name does not become a slug by slugifying it.
+    equipment and its special rules arrive as :class:`Reference`. Resolving on
+    the way out is what keeps a caller from re-deriving it: a printed name does
+    not become a slug by slugifying it, nor a reference a name by reading it.
     """
 
     equipment: list[Reference]
@@ -169,13 +162,13 @@ class UnitDetail(Unit):
                     Reference.equipment(name, data.weapons, data.armoury)
                     for name in unit.equipment
                 ],
-                "special_rules": [Reference.rule(name, data.rules) for name in unit.special_rules],
+                "special_rules": [Reference.rule(ref, data.rules) for ref in unit.special_rules],
             }
         )
 
 
 class ProfileDetail(WeaponProfile):
-    """One weapon profile, its printed rule names resolved."""
+    """One weapon profile, its rule references resolved."""
 
     special_rules: list[Reference]
 
@@ -192,7 +185,7 @@ class WeaponDetail(Weapon):
 
     @classmethod
     def of(cls, weapon: Weapon, rules: Registry[Rule]) -> "WeaponDetail":
-        """Resolve a weapon's printed rule names, profile by profile.
+        """Resolve a weapon's rule references, profile by profile.
 
         Returns:
             The detail view of ``weapon``.
@@ -200,7 +193,7 @@ class WeaponDetail(Weapon):
         printed = weapon.model_dump(by_alias=True)
         for profile, resolved in zip(printed["profiles"], weapon.profiles, strict=True):
             profile["special_rules"] = [
-                Reference.rule(name, rules).model_dump() for name in resolved.special_rules
+                Reference.rule(ref, rules).model_dump() for ref in resolved.special_rules
             ]
         return cls.model_validate(printed)
 
@@ -327,7 +320,7 @@ class MusteredUnit(BaseModel):
 
         Args:
             complement: The sized and equipped datasheet.
-            rules: The registry its printed rule names resolve against.
+            rules: The registry its rule references resolve against.
             frontage: The formation width in files; the troop type's default
                 when omitted.
 
@@ -354,7 +347,7 @@ class MusteredUnit(BaseModel):
                 )
                 for weapon in formed.loadout.weapons
             ],
-            special_rules=[Reference.rule(name, rules) for name in complement.special_rules],
+            special_rules=[Reference.rule(ref, rules) for ref in complement.special_rules],
         )
 
 
@@ -599,9 +592,9 @@ class RuleSummary(BaseModel):
     """A rule entry as a listing shows it: what it is, and whether it reaches the maths.
 
     ``factors`` says whether the entry carries effects; a text-only entry does
-    not. ``references`` counts the places printing it -- units, options, troop
-    types, weapons, and other rules' grants, in any spelling that resolves to
-    it -- so a listing sorts by what would matter most to model next.
+    not. ``references`` counts the places referencing it -- units, options, troop
+    types, weapons, and other rules' grants, whatever their X -- so a listing
+    sorts by what would matter most to model next.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -635,9 +628,8 @@ def rule_summaries(data: TOWRepository) -> list[RuleSummary]:
         One summary per entry.
     """
     printed_by: dict[str, set[Site]] = defaultdict(set)
-    for name, site in printed_rules(data):
-        if (rule := filed_rule(name, data.rules)) is not None:
-            printed_by[rule.id].add(site)
+    for reference, site in rule_references(data):
+        printed_by[reference.rule].add(site)
     return [
         RuleSummary.of(rule, len(printed_by[slug])) for slug, rule in sorted(data.rules.items())
     ]

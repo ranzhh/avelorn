@@ -975,7 +975,7 @@ class GrantEffect(GatedEffect):
     forbids the others' keys).
     """
 
-    grants: str  # the printed name of the rule conferred, e.g. "Armour Bane (1)"
+    grants: RuleRef
 
 
 def _as_outcome(value: object) -> "Outcome":

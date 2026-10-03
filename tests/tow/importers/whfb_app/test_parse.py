@@ -6,6 +6,7 @@ strings directly — no fixture payloads.
 
 import pytest
 
+from avelorn.tow.data import TOWRepository
 from avelorn.tow.importers.whfb_app.parse import (
     OptionGroup,
     UnsupportedUnit,
@@ -16,10 +17,14 @@ from avelorn.tow.importers.whfb_app.parse import (
     _parse_option_line,
     _parse_troop_type,
     _parse_unit_size,
-    _slugified,
+    slugified,
 )
+from avelorn.tow.importers.whfb_app.references import RuleReferences
 from avelorn.tow.importers.whfb_app.richtext import OptionLine
+from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.unit import BaseSize, OptionKind, TroopType, UnitOption, UnitSize
+
+REFER = RuleReferences(TOWRepository().rules.values()).at("unit some-unit")
 
 
 def _line(text: str, rules: list[str] | None = None) -> OptionLine:
@@ -34,7 +39,7 @@ def _option(
 ) -> tuple[UnitOption, list[str]]:
     warnings: list[str] = []
     option = _parse_option_line(
-        "some-unit", _line(text, rules), group or OptionGroup(), printed or set(), warnings
+        "some-unit", _line(text, rules), group or OptionGroup(), printed or set(), REFER, warnings
     )
     return option, warnings
 
@@ -74,7 +79,7 @@ def test_unit_size_rejects_unknown_forms(printed: str) -> None:
 )
 def test_slugified_matches_site_slugs(text: str, slug: str) -> None:
     """Slugs lowercase the name and collapse non-alphanumeric runs."""
-    assert _slugified(text) == slug
+    assert slugified(text) == slug
 
 
 def test_base_size_parses_a_single_footprint() -> None:
@@ -194,8 +199,8 @@ def test_free_is_a_cost_of_zero_not_an_absent_cost() -> None:
         name="Scouts",
         kind=OptionKind.SPECIAL_RULE,
         points=0,
-        adds_rules=["Scouts"],
-        removes_rules=["Vanguard"],
+        adds_rules=[RuleRef(rule="scouts")],
+        removes_rules=[RuleRef(rule="vanguard")],
         limit="0-1 unit",
     )
     assert warnings == []
@@ -334,7 +339,7 @@ def test_line_states_its_own_availability_limit() -> None:
         kind=OptionKind.SPECIAL_RULE,
         points=1,
         per_model=True,
-        adds_rules=["Drilled"],
+        adds_rules=[RuleRef(rule="drilled")],
         limit="0-1 unit per 1000 points",
     )
     assert warnings == []
@@ -369,12 +374,15 @@ def test_unknown_upgrade_role_degrades_to_other() -> None:
 
 
 def test_rule_add_line() -> None:
-    """A "have the X special rule" line adds the rule by its printed name."""
+    """A "have the X special rule" line adds the rule its printed name resolves to."""
     option, warnings = _option(
         "The entire unit may have the Shieldwall special rule (+10 points per unit)"
     )
     assert option == UnitOption(
-        name="Shieldwall", kind=OptionKind.SPECIAL_RULE, points=10, adds_rules=["Shieldwall"]
+        name="Shieldwall",
+        kind=OptionKind.SPECIAL_RULE,
+        points=10,
+        adds_rules=[RuleRef(rule="shieldwall")],
     )
     assert warnings == []
 
@@ -389,8 +397,8 @@ def test_rule_swap_line_charges_per_model() -> None:
         kind=OptionKind.SPECIAL_RULE,
         points=1,
         per_model=True,
-        adds_rules=["Veteran"],
-        removes_rules=["Valour of Ages"],
+        adds_rules=[RuleRef(rule="veteran")],
+        removes_rules=[RuleRef(rule="valour-of-ages")],
     )
     assert warnings == []
 
@@ -485,7 +493,13 @@ def test_unrepresentable_line_is_dropped_loudly() -> None:
     options: list[UnitOption] = []
     warnings: list[str] = []
     _append_option(
-        options, "some-unit", _line("Fight with unusual valour"), OptionGroup(), set(), warnings
+        options,
+        "some-unit",
+        _line("Fight with unusual valour"),
+        OptionGroup(),
+        set(),
+        REFER,
+        warnings,
     )
     assert options == []
     assert any("DROPPED" in w for w in warnings)
