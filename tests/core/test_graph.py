@@ -26,6 +26,8 @@ from avelorn.core.graph import (
     Side,
     Slot,
     State,
+    Step,
+    Tally,
     Verdict,
     World,
 )
@@ -474,7 +476,7 @@ def test_a_repeat_holds_inside_only_what_its_inside_reads() -> None:
     attack = Repeat(name="attack", times=shots, items=(roll,))
     (lane,) = Program.build("volley", _SIDES, (outer, shots, attack, later)).evaluate()
 
-    assert len(lane.edges[roll].joint.mass) == 6
+    assert len(lane.edges[roll].stacks.mass) == 2
 
 
 def test_a_repeat_exit_drops_what_only_its_inside_read() -> None:
@@ -571,6 +573,250 @@ def test_six_casualty_removals_keep_one_world_per_standing() -> None:
 
     assert len(lane.edges[last].joint.mass) == 23
     assert lane.read(last, left).mass[22] == Fraction(1, 6**6)
+
+
+def _band() -> Distribution[str]:
+    return Distribution({"close": _HALF, "long": _HALF})
+
+
+def _two() -> Distribution[int]:
+    return Distribution.pure(2)
+
+
+def _hits_only_close(band: str) -> Distribution[int]:
+    return Distribution.pure(1 if band == "close" else 0)
+
+
+def test_a_group_stacks_its_attacks_per_outer_world() -> None:
+    band = Measurement[str](name="range", side=Side.THIS_MODEL, kernel=_band)
+    shots = Measurement[int](name="shots", side=Side.THIS_MODEL, kernel=_two)
+    hit = Roll[int](
+        name="roll-to-hit",
+        side=Side.THIS_MODEL,
+        inputs=(band,),
+        kernel=_hits_only_close,
+        target=Scalar("to hit", 4),
+    )
+    hits = hit.output("hits", Monoid(0))
+    hit.show(hits)
+    attack = Repeat(name="attack", times=shots, items=(hit,))
+    (lane,) = Program.build("volley", _SIDES, (band, shots, attack)).evaluate()
+
+    assert lane.read(hit, hits).mass == {0: _HALF, 2: _HALF}
+
+
+def _charged() -> Distribution[bool]:
+    return Distribution({True: _HALF, False: _HALF})
+
+
+def _attackers(charged: bool) -> Distribution[int]:
+    return Distribution.pure(2 if charged else 0)
+
+
+def _hit_if_charged(charged: bool) -> Distribution[int]:
+    if not charged:
+        return Distribution.pure(0)
+    return Distribution({1: Fraction(5, 6), 0: _SIXTH})
+
+
+def _left_after(models: int, wounds: int) -> Distribution[int]:
+    return Distribution.pure(max(models - wounds, 0))
+
+
+def _charged_and_models(charged: bool, models: int) -> tuple[bool, int]:
+    return (charged, models)
+
+
+def test_remove_casualties_reads_the_tally_of_its_own_world() -> None:
+    """Uncharged, nobody attacks; charged, two attackers hit on 5/6 each.
+
+    Two hits: 1/2 * (5/6)^2 = 25/72. One hit: 1/2 * 2 * 5/6 * 1/6 = 5/36.
+    No hit: 1/2 + 1/2 * (1/6)^2 = 37/72.
+    """
+    models = State[int]("models")
+    charged = Measurement[bool](name="charged", side=Side.THIS_MODEL, kernel=_charged)
+    attackers = Measurement[int](
+        name="attackers", side=Side.THIS_MODEL, inputs=(charged,), kernel=_attackers
+    )
+    hit = Roll[int](
+        name="roll-to-hit",
+        side=Side.THIS_MODEL,
+        inputs=(charged,),
+        kernel=_hit_if_charged,
+        target=Scalar("to hit", 2),
+    )
+    hits = hit.output("hits", Monoid(0))
+    hit.show(hits)
+    attack = Repeat(name="attack", times=attackers, items=(hit,))
+    tally = Tally[int]("hits", {attack: hits})
+    remove = Consequence[int](
+        name="remove-casualties",
+        side=Side.THE_ENEMY,
+        inputs=(models, tally),
+        kernel=_left_after,
+        writes=models,
+    )
+    left = Projection("models", (models,), _same, Monoid(0))
+    standing = Projection[tuple[bool, int]](
+        "charged and models", (charged, models), _charged_and_models, Monoid((False, 0))
+    )
+    remove.show(left)
+    remove.show(standing)
+    program = Program.build("fight", _SIDES, (charged, attackers, attack, remove))
+    (lane,) = program.evaluate(state={models: 5})
+
+    assert lane.read(hit, hits).mass == {
+        0: Fraction(37, 72),
+        1: Fraction(5, 36),
+        2: Fraction(25, 72),
+    }
+    assert lane.read(remove, left).mass == {
+        5: Fraction(37, 72),
+        4: Fraction(5, 36),
+        3: Fraction(25, 72),
+    }
+    assert lane.read(remove, standing).mass == {
+        (False, 5): _HALF,
+        (True, 5): Fraction(1, 72),
+        (True, 4): Fraction(5, 36),
+        (True, 3): Fraction(25, 72),
+    }
+
+
+def test_a_tally_sums_every_group_it_counts() -> None:
+    models = State[int]("models")
+    charged = Measurement[bool](name="charged", side=Side.THIS_MODEL, kernel=_charged)
+    once = Measurement[int](name="once", side=Side.THIS_MODEL, kernel=_one)
+    rider = Measurement[int](
+        name="rider-hit", side=Side.THIS_MODEL, inputs=(charged,), kernel=_hits_on_the_charge
+    )
+    mount = Measurement[int](
+        name="mount-hit", side=Side.THIS_MODEL, inputs=(charged,), kernel=_hits_on_the_charge
+    )
+    riders = Repeat(name="riders", times=once, items=(rider,))
+    mounts = Repeat(name="mounts", times=once, items=(mount,))
+    hits = Tally[int](
+        "hits",
+        {mounts: mount.output("hits", Monoid(0)), riders: rider.output("hits", Monoid(0))},
+    )
+    remove = Consequence[int](
+        name="remove-casualties",
+        side=Side.THE_ENEMY,
+        inputs=(models, hits),
+        kernel=_left_after,
+        writes=models,
+    )
+    left = Projection("models", (models,), _same, Monoid(0))
+    remove.show(left)
+    slot = Slot(name="initiative-4", items=(riders, mounts, remove))
+    (lane,) = Program.build("fight", _SIDES, (charged, once, slot)).evaluate(state={models: 5})
+
+    assert lane.read(remove, left).mass == {5: _HALF, 3: _HALF}
+
+
+def _hits_on_the_charge(charged: bool) -> Distribution[int]:
+    return Distribution.pure(int(charged))
+
+
+def test_a_tally_of_a_group_out_of_scope_is_refused() -> None:
+    reaction = Decision[str](name="declare-reaction", side=Side.THE_ENEMY, options=("hold",))
+    once = Measurement[int](name="once", side=Side.THIS_MODEL, kernel=_one)
+    hit = Measurement[int](name="hit", side=Side.THIS_MODEL, kernel=_coin)
+    attack = Repeat(name="attack", times=once, items=(hit,))
+    hits = Tally[int]("hits", {attack: hit.output("hits", Monoid(0))})
+    remove = Consequence[int](
+        name="remove-casualties", side=Side.THE_ENEMY, inputs=(hits,), kernel=_toll
+    )
+
+    with pytest.raises(GraphError, match="tallies attack, which is not in scope"):
+        Program.build(
+            "charge",
+            _SIDES,
+            (reaction, once, Lanes(name="reaction", decision=reaction, items=(attack,)), remove),
+        )
+
+
+type _Counts = dict[Repeat, Projection[Any]]
+
+
+def _no_group(attack: Repeat, hit: Step[int], other: Repeat, miss: Step[int]) -> _Counts:
+    return {}
+
+
+def _groups_in_two_slots(
+    attack: Repeat, hit: Step[int], other: Repeat, miss: Step[int]
+) -> _Counts:
+    return {attack: hit.output("hits", Monoid(0)), other: miss.output("hits", Monoid(0))}
+
+
+def _mixed_aggregations(attack: Repeat, hit: Step[int], other: Repeat, miss: Step[int]) -> _Counts:
+    return {attack: hit.output("hits", Monoid(0)), other: miss.output("hits", Monoid(0, max))}
+
+
+def _a_projection_outside_its_group(
+    attack: Repeat, hit: Step[int], other: Repeat, miss: Step[int]
+) -> _Counts:
+    return {other: hit.output("hits", Monoid(0))}
+
+
+@pytest.mark.parametrize(
+    ("counts", "same_slot", "refusal"),
+    [
+        (_no_group, True, "hits counts no group"),
+        (_groups_in_two_slots, False, "hits sums groups from fight/i4, fight/i5"),
+        (_mixed_aggregations, True, "hits sums its groups with different aggregations"),
+        (_a_projection_outside_its_group, True, "hits counts hit, outside other"),
+    ],
+    ids=["no-group", "groups-in-two-slots", "mixed-aggregations", "projection-outside-group"],
+)
+def test_a_tally_that_cannot_be_summed_is_refused(
+    counts: Callable[[Repeat, Step[int], Repeat, Step[int]], _Counts],
+    same_slot: bool,
+    refusal: str,
+) -> None:
+    once = Measurement[int](name="once", side=Side.THIS_MODEL, kernel=_one)
+    hit = Measurement[int](name="hit", side=Side.THIS_MODEL, kernel=_coin)
+    miss = Measurement[int](name="miss", side=Side.THIS_MODEL, kernel=_coin)
+    attack = Repeat(name="attack", times=once, items=(hit,))
+    other = Repeat(name="other", times=once, items=(miss,))
+    hits = Tally[int]("hits", counts(attack, hit, other, miss))
+    remove = Consequence[int](
+        name="remove-casualties", side=Side.THE_ENEMY, inputs=(hits,), kernel=_toll
+    )
+    slots = (
+        (Slot(name="i5", items=(attack, other, remove)),)
+        if same_slot
+        else (Slot(name="i5", items=(attack,)), Slot(name="i4", items=(other, remove)))
+    )
+
+    with pytest.raises(GraphError, match=re.escape(refusal)):
+        Program.build("fight", _SIDES, (once, *slots))
+
+
+def test_a_group_feeds_only_one_tally() -> None:
+    once = Measurement[int](name="once", side=Side.THIS_MODEL, kernel=_one)
+    hit = Measurement[int](name="hit", side=Side.THIS_MODEL, kernel=_coin)
+    attack = Repeat(name="attack", times=once, items=(hit,))
+    hits = Tally[int]("hits", {attack: hit.output("hits", Monoid(0))})
+    wounds = Tally[int]("wounds", {attack: hit.output("wounds", Monoid(0))})
+    remove = Consequence[int](
+        name="remove-casualties", side=Side.THE_ENEMY, inputs=(hits,), kernel=_toll
+    )
+    result = Consequence[int](
+        name="combat-result", side=Side.THE_ENEMY, inputs=(wounds,), kernel=_toll
+    )
+
+    with pytest.raises(GraphError, match="attack is tallied by hits already"):
+        Program.build("fight", _SIDES, (once, attack, remove, result))
+
+
+def test_a_repeat_inside_a_repeat_is_refused() -> None:
+    once = Measurement[int](name="once", side=Side.THIS_MODEL, kernel=_one)
+    hit = Measurement[int](name="hit", side=Side.THIS_MODEL, kernel=_coin)
+    inner = Repeat(name="inner", times=once, items=(hit,))
+
+    with pytest.raises(GraphError, match="fight/outer/inner repeats inside fight/outer"):
+        Program.build("fight", _SIDES, (once, Repeat(name="outer", times=once, items=(inner,))))
 
 
 def test_two_steps_cannot_share_a_path() -> None:

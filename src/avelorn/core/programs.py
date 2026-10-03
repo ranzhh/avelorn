@@ -16,6 +16,7 @@ from avelorn.core.graph import (
     Scalar,
     Sequence,
     Side,
+    Tally,
     Verdict,
 )
 
@@ -47,8 +48,8 @@ def volley_program() -> dict[str, object]:
     def wound(hit: int) -> Distribution[int]:
         return Distribution.pure(int(hit >= 4))
 
-    def casualties(range_band: str, target_models: int) -> Distribution[int]:
-        return Distribution.pure(int(range_band == "close" and target_models > 0))
+    def casualties(target_models: int, wounds: int) -> Distribution[int]:
+        return Distribution.pure(min(target_models, wounds))
 
     def panic(removed: int) -> Distribution[str]:
         return Distribution.pure("flight" if removed else "holds")
@@ -92,10 +93,12 @@ def volley_program() -> dict[str, object]:
         kernel=wound,
         target=Scalar("to wound", 4),
     )
+    attack = Repeat(name="attack", times=shots, items=(hit, wound_roll))
+    wounds = Tally[int]("wounds", {attack: wound_roll.output("wounds", Monoid(0))})
     remove = Consequence[int](
         name="remove-casualties",
         side=Side.THE_ENEMY,
-        inputs=(range_band, target_models),
+        inputs=(target_models, wounds),
         kernel=casualties,
     )
     flight = Consequence[str](
@@ -138,7 +141,7 @@ def volley_program() -> dict[str, object]:
             ),
             Sequence(
                 name="volley",
-                items=(Repeat(name="attack", times=shots, items=(hit, wound_roll)),),
+                items=(attack,),
             ),
             Sequence(name="result", items=(remove, flight)),
         ),
