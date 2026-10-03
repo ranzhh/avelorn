@@ -48,6 +48,8 @@ from avelorn.tow.engine.rules import (
 from avelorn.tow.engine.seats import Defence, Offence
 from avelorn.tow.kernels import (
     armour_save_target,
+    falls_back_in_good_order,
+    heavy_casualties,
     hit_probability,
     leadership_test,
     save_probability,
@@ -570,12 +572,11 @@ def make_panic_tests(
     for killed, mass in enumerate(result.casualties):
         if killed == size:
             destroyed += mass
-        elif killed * 4 > size:  # "more than a quarter (25%)"
+        elif heavy_casualties(size - killed, size):
             tested += mass
             holds += mass * p_pass
-            remaining = size - killed
             failed = mass * (1 - p_pass)
-            if remaining * 2 > battle:  # "more than half (50%) ... still remain"
+            if falls_back_in_good_order(size - killed, battle):
                 falls_back += failed
             else:
                 flees += failed

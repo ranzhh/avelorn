@@ -1,0 +1,7 @@
+facts:
+  - fact: standing
+    type: standing
+    per: side
+  - fact: moved
+    type: bool
+    per: side

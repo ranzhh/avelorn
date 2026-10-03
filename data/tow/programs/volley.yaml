@@ -1,0 +1,26 @@
+program: volley
+sequence: shooting
+inputs:
+  - {known: fielded, of: attacker, type: fielded}
+  - {known: fielded, of: target, type: fielded}
+  - {known: distance, type: int}
+  - {known: who-can-shoot, type: bool}
+  - {known: line-of-sight, type: bool}
+  - {fact: standing, of: attacker}
+  - {fact: standing, of: target}
+  - {known: models-at-start-of-phase, of: target, type: int}
+  - {known: battle-strength, of: target, type: int}
+items:
+  - {step: check-range, readings: [band]}
+  - {step: how-many-shots, readings: [shots]}
+  - group: attack
+    times: how-many-shots
+    items:
+      - {step: roll-to-hit, readings: [hits]}
+      - {step: roll-to-wound, readings: [wounds]}
+      - {step: make-armour-saves, readings: [saves]}
+      - {step: ward-saves, readings: [saves, unsaved]}
+  - {step: remove-casualties, tallies: [attack], readings: [unsaved, models, wounds-lost]}
+  - {step: heavy-casualties, sequence: panic, readings: [tested]}
+  - {step: make-panic-tests, readings: [test]}
+  - {step: fall-back-or-flee, readings: [retreat]}
