@@ -47,10 +47,11 @@ class Loadout:
 
     The two halves miss differently, by design. Equipment coverage is
     complete, so an unresolvable equipment name fails the deploy. A rule
-    name with no entry rides along printed, in :attr:`unresolved_rules`,
-    and keeps feeding the "not factored" notes rather than silently
-    vanishing, as a text-only entry does; a weapon-rule name absent from
-    :attr:`weapon_rules` compiles to unfactored the same way.
+    name with no entry rides along printed, in :attr:`unresolved_rules`;
+    a weapon-rule name absent from :attr:`weapon_rules` compiles to
+    unfactored. The "not factored" notes come from the printed names no
+    compiled effect claims, so a missing entry and a text-only one report
+    alike.
     """
 
     weapons: tuple[Weapon, ...]
@@ -861,8 +862,7 @@ def _resolve_loadout(
     unresolved: list[str] = []
     # The unit's own printed rules, then the rules its troop type confers
     # (Press of Battle, ...): both resolve the same way — an entry joins the
-    # loadout, a name without one rides along printed and feeds the "not
-    # factored" notes.
+    # loadout, a name without one rides along printed.
     troop_type = unit.troop_type_profile
     conferred = troop_type.special_rules if troop_type is not None else ()
     for printed in (*unit.special_rules, *conferred):
