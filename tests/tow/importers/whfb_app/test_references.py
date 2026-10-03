@@ -64,12 +64,12 @@ def test_an_unknown_rule_is_fetched_as_a_text_only_stub() -> None:
     """A name no entry answers to is read from the site, and kept for the import to write."""
     references = RuleReferences(
         REPO.rules.values(),
-        lambda slug: Rule(id=slug, name="Poisoned Attacks", paragraphs=["…"]),
+        lambda slug: Rule(id=slug, name="Look-out Gnoblar", paragraphs=["…"]),
     )
     for _ in range(2):
-        reference = references.resolve("Poisoned Attacks", "unit maneaters")
-        assert reference == RuleRef(rule="poisoned-attacks")
-    assert [stub.id for stub in references.stubs] == ["poisoned-attacks"]
+        reference = references.resolve("Look-out Gnoblar", "unit maneaters")
+        assert reference == RuleRef(rule="look-out-gnoblar")
+    assert [stub.id for stub in references.stubs] == ["look-out-gnoblar"]
 
 
 def test_an_unknown_rule_printing_an_x_is_stubbed_with_its_x_as_printed() -> None:
@@ -90,8 +90,8 @@ def test_an_unknown_rule_printing_an_x_is_stubbed_with_its_x_as_printed() -> Non
 
 def test_an_unknown_rule_without_the_site_fails_the_import() -> None:
     """With nothing to fetch it from, the import names the rule to import first."""
-    with pytest.raises(WhfbParseError, match="no rule entry; import rule poisoned-attacks"):
-        RuleReferences(REPO.rules.values()).resolve("Poisoned Attacks", "unit maneaters")
+    with pytest.raises(WhfbParseError, match="no rule entry; import rule look-out-gnoblar"):
+        RuleReferences(REPO.rules.values()).resolve("Look-out Gnoblar", "unit maneaters")
 
 
 def test_a_fetched_page_the_corpus_already_holds_fails_the_import() -> None:
