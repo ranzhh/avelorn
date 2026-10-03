@@ -1,0 +1,83 @@
+# Source: https://tow.whfb.app/unit/maneaters
+id: maneaters
+name: Maneaters
+points: 54
+unit_size:
+  min: 2
+troop_type: Monstrous Infantry
+base_size:
+  width_mm: 40
+  depth_mm: 40
+profiles:
+  - { name: Maneater, M: 6, WS: 4, BS: 4, S: 5, T: 4, W: 3, I: 3, A: 4, Ld: 8 }
+  - { name: Maneater Captain, M: 6, WS: 4, BS: 4, S: 5, T: 4, W: 3, I: 3, A: 5, Ld: 8 }
+equipment:
+  - Hand Weapon
+  - Light Armour
+special_rules:
+  - Close Order
+  - Fear
+  - Impact Hits (1)
+  - Motley Crew
+  - Ogre Charge
+options:
+  - name: Two Hand Weapons/Additional Hand Weapon
+    kind: other
+    points: 3
+    per_model: true
+    limit: 'Any model in the unit may take one of the following:'
+  - name: Ironfist
+    kind: other
+    points: 4
+    per_model: true
+    limit: 'Any model in the unit may take one of the following:'
+  - name: Great Weapon
+    kind: other
+    points: 4
+    per_model: true
+    limit: 'Any model in the unit may take one of the following:'
+  - name: Ogre Pistol
+    kind: other
+    points: 6
+    per_model: true
+    limit: 'Any model in the unit may take one of the following:'
+  - name: Brace of Ogre Pistols
+    kind: other
+    points: 12
+    per_model: true
+    limit: 'Any model in the unit may take one of the following:'
+  - name: Any model in the unit may replace Light Armour with Heavy Armour
+    kind: other
+    points: 3
+    per_model: true
+  - name: Maneater Captain
+    kind: champion
+    points: 7
+  - name: Standard Bearer
+    kind: standard_bearer
+    points: 7
+  - name: Bellower (musician)
+    kind: other
+    points: 7
+  - name: Maneater Captain magic items
+    kind: other
+    points_budget: 50
+  - name: A standard bearer may have the Look-out Gnoblar special rule
+    kind: other
+    points: 5
+  - name: Magic standard
+    kind: magic_standard
+    points_budget: 50
+    limit: 0-1 unit per 1000 points
+  - name: Immune to Psychology
+    kind: other
+    points: 0
+  - name: Poisoned Attacks
+    kind: other
+    points: 0
+  - name: Stubborn
+    kind: other
+    points: 0
+  - name: Vanguard
+    kind: other
+    points: 0
