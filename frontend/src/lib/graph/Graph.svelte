@@ -1,7 +1,7 @@
 <script lang="ts">
 	import Readings from './Readings.svelte';
 	import { FRAME, MARGIN, caption, fitted, layout, moved, type Moves, type Point } from './layout';
-	import type { Program, Side, StepKind, Verdict } from '$lib/graph/types';
+	import type { Judged, Program, Side, StepKind, Verdict } from '$lib/graph/types';
 
 	let { program }: { program: Program } = $props();
 
@@ -52,6 +52,15 @@
 	const signed = (move: number) => (move > 0 ? `+${move}` : `${move}`);
 	const is = (kind: Pick['kind'], id: string) => selected?.kind === kind && selected.id === id;
 	const percent = (p: number) => `${Math.round(p * 100)}%`;
+	const leading = (verdicts: Judged[]) =>
+		verdicts.reduce<Judged | undefined>(
+			(best, each) => (best && best.p >= each.p ? best : each),
+			undefined
+		)?.verdict ?? '';
+	const shares = (verdicts: Judged[]) =>
+		verdicts.length === 1
+			? verdicts[0].verdict
+			: verdicts.map((each) => `${each.verdict} ${percent(each.p)}`).join(' · ') || 'no verdict';
 
 	function toggle(path: string) {
 		folded = { ...folded, [path]: !collapsed.includes(path) };
@@ -149,7 +158,7 @@
 					{/each}
 					{#each drawn.landings as landing}
 						<line
-							class="landing {landing.verdict}"
+							class="landing {leading(landing.verdicts)}"
 							class:on={is('rule', landing.rule)}
 							x1={landing.start.x}
 							y1={landing.start.y}
@@ -270,12 +279,12 @@
 
 				{#each drawn.landings as landing}
 					<span
-						class="verdict {landing.verdict}"
+						class="verdict {leading(landing.verdicts)}"
 						style="left: {(landing.start.x + landing.end.x) / 2}px; top: {(landing.start.y +
 							landing.end.y) /
 							2}px"
 					>
-						{landing.verdict}
+						{shares(landing.verdicts)}
 					</span>
 				{/each}
 			</div>
@@ -370,7 +379,7 @@
 			{#each rule.landings as landing}
 				<div class="field">
 					<span>{printed(last(landing.at))}</span>
-					<span class="verdict {landing.verdict}">{landing.verdict}</span>
+					<span class="verdict {leading(landing.verdicts)}">{shares(landing.verdicts)}</span>
 				</div>
 			{/each}
 		{:else}

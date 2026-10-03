@@ -39,5 +39,5 @@ def test_the_volley_graph_has_steps_blocks_readings_and_rules() -> None:
     ]
     assert program["nodes"][7]["edge"]["readings"][0]["label"] == "hits"
     assert program["rules"][0]["landings"] == [
-        {"at": "volley/pre-volley/shots", "verdict": "held"},
+        {"at": "volley/pre-volley/shots", "verdicts": []},
     ]

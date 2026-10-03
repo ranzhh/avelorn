@@ -95,9 +95,14 @@ export interface Body {
 
 export type Block = Sequence | Repeat | Slot | Body;
 
+export interface Judged {
+	verdict: Verdict;
+	p: number;
+}
+
 export interface Landing {
 	at: string;
-	verdict: Verdict;
+	verdicts: Judged[];
 }
 
 export interface Rule {

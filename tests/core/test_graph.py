@@ -893,7 +893,7 @@ def test_a_rule_cannot_land_on_a_step_the_program_lacks() -> None:
                 rule="hatred",
                 name="Hatred",
                 bearer=Bearer.THIS_MODEL,
-                landings=(Landing(stray, Verdict.HELD),),
+                landings=(Landing(stray),),
             )
         )
 
@@ -1233,7 +1233,7 @@ _volley.attach(
         rule="volley-fire",
         name="Volley Fire",
         bearer=Bearer.THIS_MODEL,
-        landings=(Landing(_to_hit, Verdict.APPLIED), Landing(_aftermath, Verdict.APPLIED)),
+        landings=(Landing(_to_hit), Landing(_aftermath)),
     )
 )
 _volley.attach(RuleNode(rule="stubborn", name="Stubborn", bearer=Bearer.CORE))
@@ -1244,12 +1244,12 @@ def _view() -> dict[str, Any]:
     return lane.to_view()
 
 
-def test_a_rule_node_lists_its_landings() -> None:
+def test_a_rule_node_reads_its_verdicts_from_the_lane() -> None:
     rules = _view()["rules"]
 
     assert rules[0]["landings"] == [
-        {"at": "volley/attack/roll-to-hit", "verdict": "applied"},
-        {"at": "volley/aftermath", "verdict": "applied"},
+        {"at": "volley/attack/roll-to-hit", "verdicts": []},
+        {"at": "volley/aftermath", "verdicts": [{"verdict": "applied", "p": 1.0}]},
     ]
     assert rules[1] == {"rule": "stubborn", "name": "Stubborn", "bearer": "core", "landings": []}
 
@@ -1320,6 +1320,8 @@ def test_the_view_matches_the_front_end_types() -> None:
         assert set(rule) == declared["Rule"]
         for landing in rule["landings"]:
             assert set(landing) == declared["Landing"]
+            for verdict in landing["verdicts"]:
+                assert set(verdict) == declared["Judged"]
     for lane in view["lanes"]:
         assert set(lane) == declared["Lane"]
 

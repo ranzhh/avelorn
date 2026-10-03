@@ -712,10 +712,17 @@ class Body(Block):
 @dataclass(frozen=True)
 class Landing:
     at: Step[Any]
-    verdict: Verdict
 
-    def view(self, paths: Mapping[Any, str]) -> dict[str, Any]:
-        return {"at": paths[self.at], "verdict": self.verdict.value}
+    def view(self, paths: Mapping[Any, str], rule: str, lane: "Lane") -> dict[str, Any]:
+        read = lane.verdicts(rule, self.at).mass
+        return {
+            "at": paths[self.at],
+            "verdicts": [
+                {"verdict": verdict.value, "p": float(read[verdict])}
+                for verdict in Verdict
+                if verdict in read
+            ],
+        }
 
 
 @dataclass(frozen=True)
@@ -725,12 +732,12 @@ class RuleNode:
     bearer: Bearer
     landings: tuple[Landing, ...] = ()
 
-    def view(self, paths: Mapping[Any, str]) -> dict[str, Any]:
+    def view(self, paths: Mapping[Any, str], lane: "Lane") -> dict[str, Any]:
         return {
             "rule": self.rule,
             "name": self.name,
             "bearer": self.bearer.value,
-            "landings": [landing.view(paths) for landing in self.landings],
+            "landings": [landing.view(paths, self.rule, lane) for landing in self.landings],
         }
 
 
@@ -875,7 +882,7 @@ class Lane:
             "sides": {side.value: label for side, label in self.program.sides.items()},
             "nodes": [step.view(paths, self) for step in self.program.steps],
             "blocks": [block.view(paths) for block in self.program.blocks],
-            "rules": [rule.view(paths) for rule in self.program.rules],
+            "rules": [rule.view(paths, self) for rule in self.program.rules],
             "lanes": [
                 {"decision": paths[decision], "outcome": str(outcome)}
                 for decision, outcome in self.choices.items()

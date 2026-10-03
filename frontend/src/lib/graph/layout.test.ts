@@ -88,7 +88,7 @@ const program: Program = {
 			rule: 'r1',
 			name: 'R1',
 			bearer: 'this-model',
-			landings: [{ at: 'p/g/b', verdict: 'applied' }]
+			landings: [{ at: 'p/g/b', verdicts: [{ verdict: 'applied', p: 1 }] }]
 		},
 		{ rule: 'r2', name: 'R2', bearer: 'core', landings: [] }
 	],
@@ -165,7 +165,10 @@ describe('the program the tests draw', () => {
 		for (const roll of rolls) {
 			for (const modifier of roll.modifiers) {
 				const rule = program.rules.find((candidate) => candidate.rule === modifier.rule);
-				expect(rule?.landings).toContainEqual({ at: roll.path, verdict: 'applied' });
+				expect(rule?.landings).toContainEqual({
+					at: roll.path,
+					verdicts: [{ verdict: 'applied', p: 1 }]
+				});
 			}
 		}
 	});
