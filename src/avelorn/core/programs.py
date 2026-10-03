@@ -17,7 +17,6 @@ from avelorn.core.graph import (
     Sequence,
     Side,
     Tally,
-    Verdict,
 )
 
 
@@ -151,7 +150,7 @@ def volley_program() -> dict[str, object]:
             rule="volley-fire",
             name="Volley Fire (mock metadata only)",
             bearer=Bearer.THIS_MODEL,
-            landings=(Landing(shots, Verdict.HELD),),
+            landings=(Landing(shots),),
         )
     )
 
