@@ -10,7 +10,7 @@ display name to the site's slug by lowercasing and hyphenating
 ("Swordmasters of Hoeth" -> `swordmasters-of-hoeth`).
 
 One unit per run. The deliverable is a PR whose description lists only what is
-unmodelled and why.
+unmodelled and why: the ledger entries it adds to `data/tow/unmodelled.yaml`.
 
 ## Work in your own checkout
 
@@ -30,8 +30,15 @@ Run everything with `uv run` from your own root, never another checkout's.
 
 ## Survey before you touch anything
 
-Read what the unit needs before importing, so a blocker is found in one pass
-rather than four:
+Run `uv run avelorn coverage` first and read it. It is every gap between the
+corpus and the engine -- printed rules with no entry, parameters that do not
+bind, profile rows nothing reads, printed notes, options that change nothing --
+each with the ledger's reason it stays open. That is what the engine leaves
+out; a rule the unit prints that is not listed there, and has an entry under
+`data/tow/rules/`, already reaches the maths.
+
+Then read what the unit needs before importing, so a blocker is found in one
+pass rather than four:
 
 ```python
 from avelorn.tow.importers.whfb_app.client import WhfbAppClient
@@ -72,9 +79,12 @@ reporting (a war machine's profile, say -- #3).
 Read every importer warning. A dropped or misread option is data loss: #33 for
 prose option lines, #5 for either/or groups.
 
-## Then judge each rule with no entry
+## Then judge each new gap
 
-For each, read the printed text -- `WhfbAppClient().rule_entry(slug)["fields"]["bodyIndex"]`
+Run `uv run avelorn coverage` again: the import's gaps are listed first, as
+UNACKNOWLEDGED. Each one gets modelled or acknowledged; nothing is left bare.
+
+For a rule with no entry, read the printed text -- `WhfbAppClient().rule_entry(slug)["fields"]["bodyIndex"]`
 is the plain prose -- and decide.
 
 **If it folds into something the engine models, author it.** Import the entry,
@@ -103,19 +113,15 @@ earns its place it is a line or three (`parry.yaml`, `killing-blow.yaml`).
 **If it cannot fold, do not create a file at all.** No entry means the rule
 rides along printed and reports `special rule not factored`, which is the
 honest state. A file with `notes:` and no `effects:` produces the same warning
-and only looks authored. `data/tow/rules/killing-blow.yaml` is the one
-legitimate effect-less entry: real text the vocabulary cannot express.
+and only looks authored, and `test_every_rule_entry_carries_effects` refuses it.
 
-Modelled: the attack dice walk (to-hit, to-wound, armour and ward saves),
-casualty distributions, panic tests, break tests, charges with Stand & Shoot,
-Initiative order, fighting ranks and rank bonus, combat result.
-
-Not modelled, so the rule gets no file: terrain, deployment and reserves,
-formations (#28), challenges, psychology such as Fear, the magic phase and
-casting rolls, multi-unit combats, and **granting a ward save -- no quantity,
-seam or unit-level target exists for one (#131)**. Denying a save has no word
-either, and no gate reads the target's troop type, which is why Killing Blow
-and Cleaving Blow cannot be expressed even approximately.
+**Acknowledge every gap you leave open** in `data/tow/unmodelled.yaml`:
+`kind`, `subject`, a `reason`, and the `issue` where one covers it. The reason
+must be true and short -- say which mechanic is missing (psychology, terrain,
+deployment, challenges, magic, ...) or which shape the vocabulary lacks, having
+read the printed text. Reuse the wording of an entry blocked the same way. A
+note may be "descriptive; nothing to model" only when it is. The ledger's
+reasons are the reference for what the engine leaves out; there is no other list.
 
 ## Prove it works
 
@@ -127,7 +133,8 @@ Tests are not enough. Field the unit through `TOWGame.load_data()` and:
    `unit.model_copy(update={"special_rules": [...]})`, resolve again, and show
    the number moving. An effect that changes nothing was not authored, it was
    typed.
-3. `make lint` clean and `make test` passing. Paste both.
+3. `make lint` clean and `make test` passing -- `tests/tow/test_coverage.py`
+   fails on an unacknowledged gap or a stale ledger entry. Paste both.
 
 Add a test only for an effect you authored, next to its seam's existing tests
 (`tests/tow/phases/test_morale.py` has the panic-re-roll precedent). Do not add
@@ -138,17 +145,19 @@ someone models it.
 
 Plain, factual commit messages; do not imitate a repo PR-title voice.
 
-The PR description carries **only a list of what is unmodelled and why**, naming
-the blocking issue where one exists. No change summary, no test plan, no list of
-what you did. Cite: #3 war machines, #5 exclusive options, #10 Character troop
-type, #28 formations, #33 option prose, #34 combined profiles, #46 champion
-profiles, #131 ward saves, #144 mount pricing, #145 non-integer characteristics.
+The PR description carries **only a list of what is unmodelled and why**: the
+ledger entries the PR adds, with their issues. No change summary, no test plan,
+no list of what you did. Cite: #3 war machines, #5 exclusive options, #10
+Character troop type, #17 equipment legality, #28 formations, #29 charge
+reactions, #30 detachments, #31 magic items, #33 option prose, #34 combined
+profiles, #46 champion profiles, #144 mount pricing, #145 non-integer
+characteristics.
 
 If something is genuinely blocking and no issue covers it, say so in your report
 rather than filing one yourself.
 
 ## Report
 
-The PR URL; which rules you authored effects for and which you left without
-files, with the reason for each; the before/after numbers proving each authored
-effect fires; and anything that surprised you.
+The PR URL; which rules you authored effects for, and the ledger entries you
+added; the before/after numbers proving each authored effect fires; and
+anything that surprised you.

@@ -21,6 +21,14 @@ def test_a_refused_question_exits_two_and_says_so_on_stderr(
     assert "error: no unit 'wood-elves'" in captured.err
 
 
+def test_coverage_exits_zero_while_the_ledger_matches_the_corpus(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The committed ledger acknowledges every gap, so the report succeeds."""
+    assert main(["coverage"]) == 0
+    assert "!!" not in capsys.readouterr().out
+
+
 def test_a_command_is_required() -> None:
     """`avelorn` with nothing to do is a parse error, not an empty success."""
     with pytest.raises(SystemExit):

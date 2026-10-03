@@ -32,7 +32,7 @@ options:
     kind: champion
     points: 5
   - name: 'Or: Upgrade one model to a Bosun (champion)'
-    kind: other
+    kind: champion
     points: 5
   - name: Standard Bearer
     kind: standard_bearer

@@ -82,15 +82,20 @@ def test_the_rule_listing_carries_the_same_fields_on_both() -> None:
     assert len(listed) - 1 == len(served)
 
 
-def test_the_unmodelled_report_names_the_same_rules_on_both() -> None:
-    """Both surfaces total the same honesty, down to who prints each rule."""
-    served = CLIENT.get("/rules/unmodelled").json()
-    printed = "\n".join(commands.list_unmodelled(REPO))
-    for rule in served:
-        assert rule["name"] in printed
-        for slug in (*rule["units"], *rule["weapons"]):
-            assert slug in printed
-    assert f"{len(served)} printed rules have no entry" in printed
+def test_the_coverage_report_names_the_same_gaps_on_both() -> None:
+    """Both surfaces report the same gaps, down to where each occurs and why."""
+    served = CLIENT.get("/coverage").json()
+    printed = "\n".join(commands.show_coverage(REPO))
+    for gap in served["gaps"]:
+        assert gap["subject"] in printed
+        assert (gap["reason"] or "!! UNACKNOWLEDGED") in printed
+        if gap["issue"] is not None:
+            assert f"#{gap['issue']}" in printed
+        for site in gap["sites"]:
+            assert site["id"] in printed
+    for entry in served["stale"]:
+        assert entry["subject"] in printed
+    assert f"{len(served['gaps'])} gaps:" in printed
 
 
 def test_show_rule_covers_every_field_the_detail_endpoint_serves() -> None:

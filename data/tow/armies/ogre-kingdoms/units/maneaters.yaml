@@ -57,7 +57,7 @@ options:
     kind: standard_bearer
     points: 7
   - name: Bellower (musician)
-    kind: other
+    kind: musician
     points: 7
   - name: Maneater Captain magic items
     kind: other
