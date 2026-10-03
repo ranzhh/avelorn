@@ -20,7 +20,7 @@ from avelorn.tow.schema.rule import PrintedParameter, Rule, prints_x
 from .parse import WhfbParseError
 from .richtext import Node, text_of
 
-_CONTAINER_BLOCKS = frozenset({"document", "unordered-list", "ordered-list", "list-item"})
+_CONTAINER_BLOCKS = frozenset({"document", "unordered-list", "list-item"})
 _TEXT_BLOCKS = frozenset({"paragraph", *(f"heading-{level}" for level in range(1, 7))})
 
 
