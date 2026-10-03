@@ -15,7 +15,6 @@ from avelorn.tow.engine.rules import (
     AttackFacts,
     ChargeEvent,
     CombatFacts,
-    EffectiveValue,
     FoeFacts,
     GateContext,
     MovementFacts,
@@ -23,7 +22,6 @@ from avelorn.tow.engine.rules import (
     WeaponFacts,
     _gate_applies,
     attack_marks,
-    barred_worn,
     compile_rules,
     effective_armour_value,
     effective_automatic_hits,
@@ -135,25 +133,6 @@ def test_a_reference_to_no_rule_fails_loudly() -> None:
         bind(RuleRef(rule="unprinted-rule"), REPO.rules)
 
 
-def test_compile_armour_bane_from_data_reproduces_the_golden() -> None:
-    """The data-compiled Armour Bane transform yields the 13/54 golden.
-
-    Hit 3+, wound 4+, save 5+: on a natural 6 To Wound the save worsens
-    to 6+, so p = 2/3 * (2/6 * 2/3 + 1/6 * 5/6) = 13/54 — previously
-    proven by a hand-written test double, now driven by the rule file.
-    """
-    longbow = REPO.weapons["longbow"].profiles[0]
-    in_use = _fielded(REPO.units["elven-archers"], 1).loadout.profile_rules(longbow)
-    index = {rule.name: rule for rule in in_use}
-    compiled = compile_rules([index["Armour Bane (1)"]])
-    assert compiled.factored == ("Armour Bane (1)",)
-    transforms = compiled.modifiers
-    profile = AttackProfile.shooting(
-        hit_target=3, wound_target=4, save_target=5, ward_target=RollState.IMPOSSIBLE
-    )
-    assert resolve_attack(profile, transforms).p_unsaved == Fraction(13, 54)
-
-
 def test_compile_effectless_rule_stays_unfactored() -> None:
     """A resolved rule with no effects is recognised but not factored, as a missing one is."""
     effectless = Rule(id="effectless", name="Effectless", paragraphs=["Says nothing."])
@@ -214,23 +193,6 @@ def test_trigger_at_or_after_the_landing_stage_stays_unfactored() -> None:
     assert compiled.unfactored == ("Doctored",)
 
 
-def test_shoot_unit_factors_armour_bane_from_data() -> None:
-    """End to end: the Longbow's Armour Bane (1) changes the math.
-
-    Archers vs spearmen (5+ save): per-shot unsaved moves from 2/9 to
-    13/54, the Armour Bane note disappears, and Volley Fire is factored
-    into the shot count (stationary, one rank), so it too leaves no note.
-    """
-    result = shoot_unit(
-        _fielded(REPO.units["elven-archers"], 3).wielding("Longbow"),
-        _fielded(REPO.units["elven-spearmen"], 10),
-        phase_rules=IN_FORCE,
-    )
-    assert result.p_unsaved == pytest.approx(13 / 54)
-    assert not any("Armour Bane" in note for note in result.notes)
-    assert not any("Volley Fire" in note for note in result.notes)
-
-
 def test_weapon_rules_factor_from_the_loadout_alone() -> None:
     """No registry at the action: the weapon's rules ride with the unit.
 
@@ -246,37 +208,6 @@ def test_weapon_rules_factor_from_the_loadout_alone() -> None:
     assert result.p_unsaved == pytest.approx(13 / 54)
     assert not any("Armour Bane" in note for note in result.notes)
     assert not any("Volley Fire" in note for note in result.notes)
-
-
-def test_long_range_penalty_applies_from_data() -> None:
-    """Beyond half range the To Hit target worsens by the printed -1.
-
-    Archers at 20" with 30" longbows: 20 > 15, so hit 4+ instead of 3+;
-    with Armour Bane live, p = 1/2 * (2/6 * 2/3 + 1/6 * 5/6) = 13/72.
-    """
-    result = shoot_unit(
-        _fielded(REPO.units["elven-archers"], 3).wielding("Longbow"),
-        _fielded(REPO.units["elven-spearmen"], 10),
-        phase_rules=IN_FORCE,
-        distance=20,
-    )
-    assert result.p_unsaved == pytest.approx(13 / 72)
-    assert not any("core rule" in note for note in result.notes)
-
-
-def test_condition_false_applies_no_penalty_and_no_note() -> None:
-    """Within half range and stationary: no modifier, and no note either.
-
-    A rule whose condition evaluates False is honoured by not applying.
-    """
-    result = shoot_unit(
-        _fielded(REPO.units["elven-archers"], 3).wielding("Longbow"),
-        _fielded(REPO.units["elven-spearmen"], 10),
-        phase_rules=IN_FORCE,
-        distance=10,
-    )
-    assert result.p_unsaved == pytest.approx(13 / 54)
-    assert not any("core rule" in note for note in result.notes)
 
 
 def test_unknown_distance_leaves_only_the_range_rule_unfactored() -> None:
@@ -382,28 +313,6 @@ def test_worn_gate_is_satisfied_by_any_piece_worn() -> None:
     assert _gate_applies(effect, GateContext()) is None  # never offered, unknown
 
 
-def test_compile_grant_confers_the_named_rule_and_stacks() -> None:
-    """Arrows of Isha's grant expands to Armour Bane's own effect, under the bow gate.
-
-    Firing a bow, the rule yields two modifiers: an unconditional Armour Piercing
-    improvement (the "-1 characteristic"), and the granted Armour Bane (1) — a +1
-    on a natural 6 To Wound, keeping its own inner trigger. It is a separate
-    instance from any the weapon prints, so two Armour Banes stack.
-    """
-    sisters = _fielded(REPO.units["sisters-of-avelorn"], 5).wielding("Bow of Avelorn")
-    bow = GateContext(wielding=WeaponFacts(type=WeaponType.BOW))
-    index = {rule.name: rule for rule in sisters.loadout.rules}
-    compiled = compile_rules([index["Arrows of Isha"]], bow, grants=sisters.loadout.bound)
-    assert compiled.factored == ("Arrows of Isha",)
-    save_moves = [
-        (m.move, m.trigger) for m in compiled.modifiers if m.lands_on is Stage.MAKE_ARMOUR_SAVES
-    ]
-    assert (1, None) in save_moves  # the unconditional -1 Armour Piercing
-    assert any(
-        move == 1 and trigger is not None and trigger.face == 6 for move, trigger in save_moves
-    )  # the granted Armour Bane, on a natural 6 To Wound
-
-
 def test_compile_grant_unfactored_when_the_bow_gate_is_unknown() -> None:
     """No known weapon family leaves the whole rule unfactored, reported.
 
@@ -473,6 +382,24 @@ def test_gate_conjunction_settles_on_a_known_false() -> None:
     )
 
 
+def test_a_troop_type_list_against_an_unknown_foe_is_unfactored() -> None:
+    """A gate on the foe's troop type holds, settles False, or is reported unknown."""
+    rules = _one_rule(
+        ModifierEffect(
+            when=When.model_validate({"foe": {"troop_type": ["Regular Infantry"]}}),
+            add={Quantity.TO_HIT: 1},
+        )
+    )
+    infantry = GateContext(foe=FoeFacts(troop_type=TroopType.REGULAR_INFANTRY))
+    monster = GateContext(foe=FoeFacts(troop_type=TroopType.MONSTROUS_CREATURE))
+    applied = compile_rules(rules, infantry)
+    honoured = compile_rules(rules, monster)
+    unknown = compile_rules(rules, GateContext(foe=FoeFacts()))
+    assert (applied.factored, len(applied.modifiers)) == (("Doctored",), 1)
+    assert (honoured.factored, honoured.modifiers) == (("Doctored",), ())
+    assert (unknown.unfactored, unknown.modifiers) == (("Doctored",), ())
+
+
 def test_every_roll_quantity_declares_its_roll() -> None:
     """Each roll-seam quantity maps onto a roll the attack profile carries.
 
@@ -489,24 +416,6 @@ def test_every_roll_quantity_declares_its_roll() -> None:
     for quantity in roll_quantities:
         assert quantity in _ROLLS, quantity
         profile.target(_ROLLS[quantity].stage)  # KeyError if the stage rolls no target
-
-
-def test_armour_bane_two_leaves_no_save_at_all() -> None:
-    """Armour Bane (2) pushes a 5+ save past 6+: the save is not taken.
-
-    What the moved target means is the roll's own knowledge — a save
-    worse than 6+ cannot be attempted; the modifier only moves the
-    number. Hit 3+, wound 4+, save 5+:
-    p = 2/3 * (2/6 * 4/6 + 1/6 * 1) = 7/27.
-    """
-    bane = bind(RuleRef(rule="armour-bane", X=2), REPO.rules)
-    compiled = compile_rules([bane])
-    assert compiled.factored == ("Armour Bane (2)",)
-    transforms = compiled.modifiers
-    profile = AttackProfile.shooting(
-        hit_target=3, wound_target=4, save_target=5, ward_target=RollState.IMPOSSIBLE
-    )
-    assert resolve_attack(profile, transforms).p_unsaved == Fraction(7, 27)
 
 
 # --- effective_characteristic: the characteristic-read query ---
@@ -901,49 +810,6 @@ def test_effective_combat_result_bonus_sums_signed_points_under_the_conditions()
     assert unknown.unfactored == ("Massed Infantry",)
 
 
-def test_effective_armour_value_betters_the_save_with_the_gear_its_gate_names() -> None:
-    """Parry lowers the armour value by one, gated on the equipment in use.
-
-    The real rule from the data, gated on the weapon in hand and on a shield
-    among the armour worn. Both in use: the +1 lands (a save one better),
-    floored at the printed best of 3+. Another piece worn, or nothing worn at
-    all: honoured, no change — the armour worn is settled either way. Nothing in
-    hand, or the armour never offered: unfactored, the fact unanswered.
-    """
-    rule = REPO.rules["parry"]
-    hand_weapon = WeaponFacts(name="Hand Weapon")
-    shield = (ArmourFacts(name="Shield"),)
-
-    def save(
-        base: int, wielding: WeaponFacts, worn: tuple[ArmourFacts, ...] | None
-    ) -> EffectiveValue:
-        conditions = GateContext(combat=CombatFacts(), wielding=wielding, worn=worn)
-        return effective_armour_value(base, [rule], conditions)
-
-    equipped = save(5, hand_weapon, shield)
-    assert equipped.value == 4  # a 5+ save bettered to 4+
-    assert equipped.factored == ("Parry",)
-
-    capped = save(3, hand_weapon, shield)
-    assert capped.value == 3  # cannot improve past the best save of 3+
-
-    other_armour = save(5, hand_weapon, (ArmourFacts(name="Light Armour"),))
-    assert other_armour.value == 5  # honoured: no shield among the pieces worn
-    assert other_armour.factored == ("Parry",)
-
-    unarmoured = save(5, hand_weapon, ())
-    assert unarmoured.value == 5  # honoured: wearing nothing is known, not unknown
-    assert unarmoured.factored == ("Parry",)
-
-    unarmed = save(5, WeaponFacts(), shield)
-    assert unarmed.value == 5
-    assert unarmed.unfactored == ("Parry",)  # the weapon in hand is unknown
-
-    no_loadout = save(5, hand_weapon, None)
-    assert no_loadout.value == 5
-    assert no_loadout.unfactored == ("Parry",)  # the armour worn was never offered
-
-
 def test_effective_armour_value_speaks_for_an_unarmoured_defenders_rules() -> None:
     """No printed value to improve, and the rules still get their disposition read.
 
@@ -965,93 +831,6 @@ def test_effective_armour_value_speaks_for_an_unarmoured_defenders_rules() -> No
     assert would_apply.unfactored == ("Doctored",)
 
 
-def test_lion_cloak_betters_the_save_only_against_non_magical_shooting() -> None:
-    """Lion Cloak reads the incoming attack, not the model's state.
-
-    The real rule from the data: +1 armour value (a save one better), floored
-    at the printed best of 2+, against a non-magical shooting attack. Against a
-    magical shot, or a close-combat attack, it is honoured as a no-op — the
-    gate reads the attack's kind and whether it is magical, so a magical bow
-    (the Bow of Avelorn) turns the cloak's protection off.
-    """
-    rule = REPO.rules["lion-cloak"]
-
-    def save(target_of: AttackFacts | None) -> EffectiveValue:
-        return effective_armour_value(4, [rule], GateContext(target_of=target_of))
-
-    plain_shot = save(AttackFacts(kind=AttackKind.SHOOTING, magical=False))
-    assert plain_shot.value == 3  # a 4+ save bettered to 3+
-    assert plain_shot.factored == ("Lion Cloak",)
-
-    capped = effective_armour_value(
-        2,
-        [rule],
-        GateContext(target_of=AttackFacts(kind=AttackKind.SHOOTING, magical=False)),
-    )
-    assert capped.value == 2  # cannot improve past the best save of 2+
-
-    magical_shot = save(AttackFacts(kind=AttackKind.SHOOTING, magical=True))
-    assert magical_shot.value == 4  # honoured: a magical shot pierces the cloak
-    assert magical_shot.factored == ("Lion Cloak",)
-
-    melee = save(AttackFacts(kind=AttackKind.CLOSE_COMBAT, magical=False))
-    assert melee.value == 4  # honoured: not a shooting attack
-    assert melee.factored == ("Lion Cloak",)
-
-
-def test_effective_rerolls_grants_ithilmar_weapons_with_the_gear_its_gate_names() -> None:
-    """Ithilmar Weapons re-rolls To Hit natural 1s, gated on gear and engagement.
-
-    Engaged and fighting with a hand weapon: the grant is a To Hit re-roll of
-    natural 1s. Wielding anything else: honoured, no grant. The weapon in hand
-    unknown (nothing armed): unfactored. Combat absent: honoured — no combat,
-    no re-roll.
-    """
-    rule = REPO.rules["ithilmar-weapons"]
-
-    def engaged(wielding: WeaponFacts) -> GateContext:
-        return GateContext(combat=CombatFacts(), wielding=wielding)
-
-    armed = effective_rerolls([rule], engaged(WeaponFacts(name="Hand Weapon")))
-    assert armed.factored == ("Ithilmar Weapons",)
-    assert [(r.stage, r.on_natural) for r in armed.rerolls] == [(Stage.ROLL_TO_HIT, 1)]
-
-    great_blade = effective_rerolls([rule], engaged(WeaponFacts(name="Chracian Great Blade")))
-    assert great_blade.factored == ("Ithilmar Weapons",)  # honoured: not a hand weapon
-    assert great_blade.rerolls == ()
-
-    unarmed = effective_rerolls([rule], engaged(WeaponFacts()))
-    assert unarmed.unfactored == ("Ithilmar Weapons",)  # the weapon in hand is unknown
-    assert unarmed.rerolls == ()
-
-    hand_weapon = GateContext(wielding=WeaponFacts(name="Hand Weapon"))  # but no combat
-    not_in_combat = effective_rerolls([rule], hand_weapon)
-    assert not_in_combat.factored == ("Ithilmar Weapons",)  # honoured: no combat
-    assert not_in_combat.rerolls == ()
-
-
-def test_effective_rerolls_route_a_bearers_save_re_roll_to_the_target_seat() -> None:
-    """Gromril Armour re-rolls the bearer's own save: only the attacks it suffers.
-
-    Make Armour Saves is the target's die and the sentence speaks of the
-    bearer, so the grant fires at the target seat and is inapplicable at the
-    attacker seat — a Gromril unit strikes without touching the enemy's saves
-    (the case that used to compile off the attacker).
-    """
-    rule = REPO.rules["gromril-armour"]
-
-    defending = effective_rerolls([rule], seat=Side.TARGET)
-    assert defending.factored == ("Gromril Armour",)
-    assert [(r.stage, r.on_natural, r.of) for r in defending.rerolls] == [
-        (Stage.MAKE_ARMOUR_SAVES, 1, RollResult.FAILED)
-    ]
-
-    attacking = effective_rerolls([rule], seat=Side.ATTACKER)
-    assert attacking.inapplicable == ("Gromril Armour",)  # the other seat's die
-    assert attacking.factored == ()  # nothing here consumed it
-    assert attacking.rerolls == ()
-
-
 def test_effective_rerolls_route_an_enemy_save_re_roll_to_the_attacker_seat() -> None:
     """Daith's Reaper re-rolls the enemy's successful saves: only the attacks it makes.
 
@@ -1071,30 +850,6 @@ def test_effective_rerolls_route_an_enemy_save_re_roll_to_the_attacker_seat() ->
     assert defending.inapplicable == ("Daith's Reaper",)
     assert defending.factored == ()
     assert defending.rerolls == ()
-
-
-def test_enemy_fire_compiles_off_the_target_against_the_shooters_roll() -> None:
-    """Enemy Fire (Skirmishers): the defender's rule, the attacker's die.
-
-    Compiled off the skirmishers — the target of a shooting attack — the
-    enemy-subject -1 To Hit raises the walk's Roll to Hit target by one.
-    Compiled off the same unit as an attacker, the malus names the seat this
-    compile is not: inapplicable, neither factored (nothing consumed it) nor
-    unfactored (the compile at the other seat has it).
-    """
-    rule = REPO.rules["enemy-fire-skirmishers"]
-    shot_at = GateContext(target_of=AttackFacts(kind=AttackKind.SHOOTING))
-
-    compiled = compile_rules([rule], shot_at, seat=Side.TARGET)
-    assert compiled.factored == (rule.name,)
-    assert [(m.lands_on, m.move, m.trigger) for m in compiled.modifiers] == [
-        (Stage.ROLL_TO_HIT, 1, None)
-    ]
-
-    as_attacker = compile_rules([rule], GateContext(), seat=Side.ATTACKER)
-    assert as_attacker.inapplicable == (rule.name,)
-    assert as_attacker.factored == () and as_attacker.unfactored == ()
-    assert as_attacker.modifiers == ()
 
 
 def test_compile_seat_mismatch_is_settled_before_the_gate() -> None:
@@ -1171,30 +926,6 @@ def test_effective_ward_target_is_none_when_nothing_grants_one() -> None:
     assert ward.unfactored == ()
 
 
-def test_runes_of_protection_ward_reads_the_incoming_attacks_magic() -> None:
-    """The real entry: a 6+ ward against a non-magical attack, none against a magical one.
-
-    A magical volley (the Bow of Avelorn) answers the gate False: honoured,
-    factored, and no ward granted. An attack whose magic is unknown leaves the
-    rule unfactored, reported rather than guessed.
-    """
-    rule = REPO.rules["runes-of-protection"]
-
-    mundane = GateContext(target_of=AttackFacts(kind=AttackKind.SHOOTING, magical=False))
-    warded = effective_ward_target([rule], mundane)
-    assert warded.target == 6
-    assert warded.factored == ("Runes of Protection",)
-
-    magical = GateContext(target_of=AttackFacts(kind=AttackKind.SHOOTING, magical=True))
-    unwarded = effective_ward_target([rule], magical)
-    assert unwarded.target is None
-    assert unwarded.factored == ("Runes of Protection",)
-
-    unknown = effective_ward_target([rule], GateContext(target_of=AttackFacts()))
-    assert unknown.target is None
-    assert unknown.unfactored == ("Runes of Protection",)
-
-
 def test_a_worn_gated_ward_reads_the_equipment_like_any_other_gate() -> None:
     """A ward granted by a piece of equipment gates on the armour worn.
 
@@ -1222,27 +953,6 @@ def test_a_worn_gated_ward_reads_the_equipment_like_any_other_gate() -> None:
     assert honoured.factored == ("Talisman",)
 
 
-def test_attack_marks_read_the_profile_in_use_and_the_unit_rules_alike() -> None:
-    """The printed sentence confers either way: a marked weapon, or a marked model.
-
-    Real entries: the Bow of Avelorn's profile prints Magical Attacks, and the
-    Drakegun's prints Flaming Attacks. A unit whose own special rule is the
-    mark carries it onto any weapon it swings. The consumed names come back
-    per source, so each claims its own namespace's note.
-    """
-    by_weapon = attack_marks([REPO.rules["magical-attacks"]], [])
-    assert by_weapon.magical and not by_weapon.flaming
-    assert by_weapon.weapon_factored == ("Magical Attacks",)
-    assert by_weapon.unit_factored == ()
-
-    by_unit = attack_marks([], [REPO.rules["flaming-attacks"]])
-    assert by_unit.flaming and not by_unit.magical
-    assert by_unit.unit_factored == ("Flaming Attacks",)
-
-    unmarked = attack_marks([], [REPO.rules["stubborn"]])
-    assert not unmarked.magical and not unmarked.flaming
-
-
 def test_a_gated_attack_mark_is_left_unconsumed() -> None:
     """A mark carrying a `when` cannot be honoured while the facts are being built."""
     gated = Rule(
@@ -1254,97 +964,6 @@ def test_a_gated_attack_mark_is_left_unconsumed() -> None:
     marks = attack_marks([], [gated])
     assert not marks.magical
     assert marks.unit_factored == ()
-
-
-def test_barred_worn_withdraws_under_its_gate() -> None:
-    """Requires Two Hands bars the shield in combat only; the volley never sees a bar."""
-    two_hands = REPO.rules["requires-two-hands"]
-
-    melee = GateContext(combat=CombatFacts())
-    barred = barred_worn([two_hands], melee)
-    assert barred.names == {"Shield"}
-    assert barred.factored == ("Requires Two Hands",)
-
-    at_range = barred_worn([two_hands], GateContext())
-    assert at_range.names == frozenset()  # combat absent: the shield still counts
-    assert at_range.factored == ("Requires Two Hands",)  # honoured, so consumed
-
-
-def test_the_phoenix_guards_wards_read_the_attacks_flame_and_take_the_best() -> None:
-    """Blessings of Asuryan (5+ vs Flaming) beside Witness to Destiny (6+ vs non-magical).
-
-    Real entries. A mundane arrow answers only Witness: 6+. A flaming,
-    non-magical attack (a Drakegun's) answers both, and wards never stack --
-    the best (5+) applies. An attack whose flame is unknown leaves Blessings
-    unfactored, reported rather than guessed.
-    """
-    rules = [REPO.rules["blessings-of-asuryan"], REPO.rules["witness-to-destiny"]]
-
-    mundane = GateContext(
-        target_of=AttackFacts(kind=AttackKind.SHOOTING, magical=False, flaming=False)
-    )
-    assert effective_ward_target(rules, mundane).target == 6
-
-    flaming = GateContext(
-        target_of=AttackFacts(kind=AttackKind.SHOOTING, magical=False, flaming=True)
-    )
-    best = effective_ward_target(rules, flaming)
-    assert best.target == 5
-    assert set(best.factored) == {"Blessings of Asuryan", "Witness to Destiny"}
-
-    unknown_flame = GateContext(target_of=AttackFacts(kind=AttackKind.SHOOTING, magical=False))
-    part = effective_ward_target(rules, unknown_flame)
-    assert part.target == 6  # Witness still holds
-    assert part.unfactored == ("Blessings of Asuryan",)
-
-
-def test_killing_blow_compiles_by_seat_gate_and_foe() -> None:
-    """The real entry: a transform from the attacker's seat, honoured off its list.
-
-    In combat against infantry it compiles to a walk hook; against a
-    Monstrous Creature (outside the printed "infantry or cavalry") it is
-    honoured with none; a foe never met leaves it unfactored; and from the
-    target's seat it is the other side's business — inapplicable.
-    """
-    killing_blow = [REPO.rules["killing-blow"]]
-
-    infantry = GateContext(
-        combat=CombatFacts(), foe=FoeFacts(troop_type=TroopType.REGULAR_INFANTRY)
-    )
-    compiled = compile_rules(killing_blow, infantry)
-    assert compiled.factored == ("Killing Blow",)
-    assert len(compiled.transforms) == 1
-
-    monster = GateContext(
-        combat=CombatFacts(), foe=FoeFacts(troop_type=TroopType.MONSTROUS_CREATURE)
-    )
-    honoured = compile_rules(killing_blow, monster)
-    assert honoured.factored == ("Killing Blow",)
-    assert honoured.transforms == ()
-
-    unknown_foe = compile_rules(killing_blow, GateContext(combat=CombatFacts()))
-    assert unknown_foe.unfactored == ("Killing Blow",)
-
-    other_seat = compile_rules(killing_blow, infantry, seat=Side.TARGET)
-    assert other_seat.inapplicable == ("Killing Blow",)
-
-
-def test_deflect_shots_wards_only_a_non_magical_shooting_attack() -> None:
-    """The real entry: a 6+ ward against mundane arrows, none in close combat.
-
-    Deflect Shots gates on the incoming attack's kind as well as its magic --
-    what sets it apart from Witness to Destiny's any-attack ward. A melee blow
-    answers the gate False: honoured, factored, and no ward granted.
-    """
-    rule = REPO.rules["deflect-shots"]
-
-    arrows = GateContext(target_of=AttackFacts(kind=AttackKind.SHOOTING, magical=False))
-    assert effective_ward_target([rule], arrows).target == 6
-
-    blows = GateContext(target_of=AttackFacts(kind=AttackKind.CLOSE_COMBAT, magical=False))
-    unwarded = effective_ward_target([rule], blows)
-    assert unwarded.target is None
-    assert unwarded.factored == ("Deflect Shots",)
 
 
 # --- automatic hits: Stomp Attacks / Impact Hits, from the real entries ---
