@@ -9,8 +9,8 @@ base_size:
   width_mm: 25
   depth_mm: 25
 profiles:
-  - { name: Phoenix Guard, M: 5, WS: 5, BS: 4, S: 3, T: 3, W: 1, I: 5, A: 1, Ld: 9 }
-  - { name: Keeper of the Flame, M: 5, WS: 5, BS: 4, S: 3, T: 3, W: 1, I: 5, A: 2, Ld: 9 }
+  - { name: Phoenix Guard, role: rank-and-file, M: 5, WS: 5, BS: 4, S: 3, T: 3, W: 1, I: 5, A: 1, Ld: 9 }
+  - { name: Keeper of the Flame, role: champion, M: 5, WS: 5, BS: 4, S: 3, T: 3, W: 1, I: 5, A: 2, Ld: 9 }
 equipment:
   - Hand Weapon
   - Ceremonial Halberd
@@ -26,21 +26,29 @@ special_rules:
 options:
   - name: Keeper of the Flame
     kind: champion
+    scope: unit
+    profile: Keeper of the Flame
     points: 7
   - name: Standard Bearer
     kind: standard_bearer
+    scope: unit
     points: 7
   - name: Musician
     kind: musician
+    scope: unit
     points: 7
   - name: Drilled
     kind: special_rule
+    scope: unit
     points: 1
     per_model: true
     adds_rules: [drilled]
   - name: Magic standard
     kind: magic_standard
+    scope: unit
     points_budget: 100
   - name: Keeper of the Flame magic items
     kind: other
+    scope: model
+    applies_to: Keeper of the Flame
     points_budget: 25

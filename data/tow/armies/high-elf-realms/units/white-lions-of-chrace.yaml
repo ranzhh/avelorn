@@ -9,8 +9,8 @@ base_size:
   width_mm: 25
   depth_mm: 25
 profiles:
-  - { name: White Lion, M: 5, WS: 5, BS: 4, S: 4, T: 3, W: 1, I: 5, A: 1, Ld: 8 }
-  - { name: Guardian, M: 5, WS: 5, BS: 4, S: 4, T: 3, W: 1, I: 5, A: 2, Ld: 8 }
+  - { name: White Lion, role: rank-and-file, M: 5, WS: 5, BS: 4, S: 4, T: 3, W: 1, I: 5, A: 1, Ld: 8 }
+  - { name: Guardian, role: champion, M: 5, WS: 5, BS: 4, S: 4, T: 3, W: 1, I: 5, A: 2, Ld: 8 }
 equipment:
   - Hand Weapon
   - Chracian Great Blade
@@ -28,22 +28,30 @@ special_rules:
 options:
   - name: Guardian
     kind: champion
+    scope: unit
+    profile: Guardian
     points: 6
   - name: Standard Bearer
     kind: standard_bearer
+    scope: unit
     points: 6
   - name: Musician
     kind: musician
+    scope: unit
     points: 6
   - name: Veteran
     kind: special_rule
+    scope: unit
     points: 1
     per_model: true
     adds_rules: [veteran]
     removes_rules: [valour-of-ages]
   - name: Magic standard
     kind: magic_standard
+    scope: unit
     points_budget: 50
   - name: Guardian magic items
     kind: other
+    scope: model
+    applies_to: Guardian
     points_budget: 25

@@ -1,7 +1,8 @@
 """Import-time canonicalisation: references rewritten to the corpus's spelling."""
 
+from avelorn.tow.data import TOWRepository
 from avelorn.tow.importers.whfb_app.canon import canonical, canonical_unit
-from avelorn.tow.schema.unit import Unit
+from avelorn.tow.schema.unit import ProfileRole, Unit
 
 NAMES = ["Shortbow", "Fight In Extra Rank", "Cinderblast Bombs", "Armour Bane (X)"]
 
@@ -28,6 +29,7 @@ def test_canonical_unit_rewrites_the_references_and_reports_each_fix() -> None:
             "profiles": [
                 {
                     "name": "Rider",
+                    "role": "rank-and-file",
                     "M": 9,
                     "WS": 4,
                     "BS": 4,
@@ -44,6 +46,7 @@ def test_canonical_unit_rewrites_the_references_and_reports_each_fix() -> None:
                 {
                     "name": "Shortbows",
                     "kind": "equipment",
+                    "scope": "unit",
                     "points": 1,
                     "per_model": True,
                     "adds_equipment": ["Shortbows"],
@@ -57,3 +60,19 @@ def test_canonical_unit_rewrites_the_references_and_reports_each_fix() -> None:
     assert fixed.options[0].removes_equipment == ["Cavalry Spear"]
     assert fixed.options[0].name == "Shortbows"  # a label, not a reference
     assert fixes == ["reference 'Shortbows' canonicalised to 'Shortbow'"]
+
+
+def test_canonical_unit_rewrites_a_mount_row() -> None:
+    """A mount row's weapons are references too."""
+    princes = TOWRepository().units["dragon-princes"]
+    loose = [
+        row.model_copy(update={"equipment": ["hand weapons"]})
+        if row.role is ProfileRole.MOUNT
+        else row
+        for row in princes.profiles
+    ]
+    fixed, _ = canonical_unit(
+        princes.model_copy(update={"profiles": loose}), equipment=["Hand Weapon", "Barding"]
+    )
+    assert fixed.mount is not None
+    assert fixed.mount.equipment == ["Hand Weapon"]

@@ -46,10 +46,10 @@ def canonical(reference: str, names: Iterable[str]) -> str | None:
 def canonical_unit(unit: Unit, *, equipment: Iterable[str]) -> tuple[Unit, list[str]]:
     """This datasheet with its equipment references spelt as the corpus files them.
 
-    The base list and each option's adds and removes canonicalise against the
-    weapon and armour names. Option display names stay as printed -- they are
-    labels, not references. Rule references resolve as they are parsed
-    (:mod:`~avelorn.tow.importers.whfb_app.references`).
+    The base list, each mount row's list and each option's adds and removes
+    canonicalise against the weapon and armour names. Option display names
+    stay as printed -- they are labels, not references. Rule references
+    resolve as they are parsed (:mod:`~avelorn.tow.importers.whfb_app.references`).
 
     Returns:
         The rewritten datasheet and one report line per fix, empty when
@@ -76,5 +76,10 @@ def canonical_unit(unit: Unit, *, equipment: Iterable[str]) -> tuple[Unit, list[
         )
         for option in unit.options
     ]
-    rewritten = unit.model_copy(update={"equipment": fixed(unit.equipment), "options": options})
+    profiles = [
+        row.model_copy(update={"equipment": fixed(row.equipment)}) for row in unit.profiles
+    ]
+    rewritten = unit.model_copy(
+        update={"equipment": fixed(unit.equipment), "profiles": profiles, "options": options}
+    )
     return rewritten, fixes

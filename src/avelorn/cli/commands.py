@@ -73,8 +73,6 @@ def show_unit(data: TOWRepository, slug: str) -> list[str]:
     """
     unit = _unit(data, slug)
     rows = [["", *(characteristic.value for characteristic in Characteristic)]]
-    # A non-default role (the mount row) is data the API serves, so the
-    # terminal names it too rather than leaving it to the shape of the dashes.
     rows.extend(
         [
             profile.name

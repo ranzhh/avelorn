@@ -9,9 +9,9 @@ base_size:
   width_mm: 30
   depth_mm: 60
 profiles:
-  - { name: Dragon Prince, M: '-', WS: 5, BS: 4, S: 3, T: 3, W: 1, I: 5, A: 2, Ld: 9 }
-  - { name: Drakemaster, M: '-', WS: 5, BS: 4, S: 3, T: 3, W: 1, I: 5, A: 3, Ld: 9 }
-  - { name: Barded Elven Steed, role: mount, M: 8, WS: 3, BS: '-', S: 3, T: '-', W: '-', I: 4, A: 1, Ld: '-' }
+  - { name: Dragon Prince, role: rank-and-file, M: '-', WS: 5, BS: 4, S: 3, T: 3, W: 1, I: 5, A: 2, Ld: 9 }
+  - { name: Drakemaster, role: champion, M: '-', WS: 5, BS: 4, S: 3, T: 3, W: 1, I: 5, A: 3, Ld: 9 }
+  - { name: Barded Elven Steed, role: mount, M: 8, WS: 3, BS: '-', S: 3, T: '-', W: '-', I: 4, A: 1, Ld: '-', equipment: [Hand Weapon] }
 equipment:
   - Hand Weapon
   - Lance
@@ -34,13 +34,19 @@ special_rules:
 options:
   - name: Drakemaster
     kind: champion
+    scope: unit
+    profile: Drakemaster
     points: 7
   - name: Standard Bearer
     kind: standard_bearer
+    scope: unit
     points: 7
   - name: Musician
     kind: musician
+    scope: unit
     points: 7
   - name: Drakemaster magic items
     kind: other
+    scope: model
+    applies_to: Drakemaster
     points_budget: 50

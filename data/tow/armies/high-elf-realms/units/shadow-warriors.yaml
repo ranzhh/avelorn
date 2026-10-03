@@ -9,8 +9,8 @@ base_size:
   width_mm: 25
   depth_mm: 25
 profiles:
-  - { name: Shadow Warrior, M: 5, WS: 5, BS: 5, S: 3, T: 3, W: 1, I: 5, A: 1, Ld: 8 }
-  - { name: Shadow-walker, M: 5, WS: 5, BS: 6, S: 3, T: 3, W: 1, I: 5, A: 1, Ld: 8 }
+  - { name: Shadow Warrior, role: rank-and-file, M: 5, WS: 5, BS: 5, S: 3, T: 3, W: 1, I: 5, A: 1, Ld: 8 }
+  - { name: Shadow-walker, role: champion, M: 5, WS: 5, BS: 6, S: 3, T: 3, W: 1, I: 5, A: 1, Ld: 8 }
 equipment:
   - Hand Weapon
   - Longbow
@@ -28,24 +28,31 @@ special_rules:
 options:
   - name: Shadow-walker
     kind: champion
+    scope: unit
+    profile: Shadow-walker
     points: 6
   - name: Shadow-walker magic items
     kind: other
+    scope: model
+    applies_to: Shadow-walker
     points_budget: 25
   - name: Ambushers
     kind: special_rule
+    scope: unit
     points: 1
     per_model: true
     adds_rules: [ambushers]
     limit: '0-1 unit in your army may:'
   - name: Chariot Runners
     kind: special_rule
+    scope: unit
     points: 1
     per_model: true
     adds_rules: [chariot-runners]
     limit: '0-1 unit in your army may:'
   - name: Feigned Flight
     kind: special_rule
+    scope: unit
     points: 1
     per_model: true
     adds_rules: [feigned-flight]

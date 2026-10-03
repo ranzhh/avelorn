@@ -9,9 +9,9 @@ base_size:
   width_mm: 30
   depth_mm: 60
 profiles:
-  - { name: Ellyrian Reaver, M: '-', WS: 4, BS: 4, S: 3, T: 3, W: 1, I: 4, A: 1, Ld: 8 }
-  - { name: Harbinger, M: '-', WS: 4, BS: 5, S: 3, T: 3, W: 1, I: 4, A: 2, Ld: 8 }
-  - { name: Elven Steed, role: mount, M: 9, WS: 3, BS: '-', S: 3, T: '-', W: '-', I: 4, A: 1, Ld: '-' }
+  - { name: Ellyrian Reaver, role: rank-and-file, M: '-', WS: 4, BS: 4, S: 3, T: 3, W: 1, I: 4, A: 1, Ld: 8 }
+  - { name: Harbinger, role: champion, M: '-', WS: 4, BS: 5, S: 3, T: 3, W: 1, I: 4, A: 2, Ld: 8 }
+  - { name: Elven Steed, role: mount, M: 9, WS: 3, BS: '-', S: 3, T: '-', W: '-', I: 4, A: 1, Ld: '-', equipment: [Hand Weapon] }
 equipment:
   - Hand Weapon
   - Cavalry Spear
@@ -25,40 +25,51 @@ special_rules:
 options:
   - name: Shortbow
     kind: equipment
+    scope: unit
     points: 2
     per_model: true
     adds_equipment: [Shortbow]
   - name: Shortbows
     kind: equipment
+    scope: unit
     points: 1
     per_model: true
     adds_equipment: [Shortbow]
     removes_equipment: [Cavalry Spear]
   - name: Harbinger
     kind: champion
+    scope: unit
+    profile: Harbinger
     points: 8
   - name: Standard Bearer
     kind: standard_bearer
+    scope: unit
     points: 6
   - name: Musician
     kind: musician
+    scope: unit
     points: 6
   - name: Harbinger magic items
     kind: other
+    scope: model
+    applies_to: Harbinger
     points_budget: 25
   - name: Scouts
     kind: special_rule
+    scope: unit
     points: 2
     per_model: true
     adds_rules: [scouts]
     limit: 0-1 unit per 1000 points
   - name: Skirmish Formation
     kind: special_rule
+    scope: unit
     points: 1
     per_model: true
     adds_rules: [skirmish-formation]
     limit: 0-1 unit per 1000 points
   - name: Magic standard
     kind: magic_standard
+    scope: unit
     points_budget: 25
     limit: 0-1 unit per 1000 points

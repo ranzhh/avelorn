@@ -19,6 +19,7 @@ from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.unit import (
     BaseSize,
     OptionKind,
+    OptionScope,
     Profile,
     ProfileRole,
     TroopType,
@@ -80,7 +81,13 @@ def parse_unit(entry: Node, references: RuleReferences) -> ImportResult:
     # profiles, so the rows are parsed before the options that name them.
     profiles = _parse_profiles(slug, _require(fields, slug, "unitProfile", list))
     refer = references.at(f"unit {slug}")
+    options = _parse_options(
+        slug, fields.get("options"), profiles, _as_displayed(fields, refer), warnings
+    )
 
+    profiles, equipment = _parse_equipment(
+        slug, fields, _with_champions(profiles, options), warnings
+    )
     unit = Unit(
         id=slug,
         name=_require(fields, slug, "name", str),
@@ -89,18 +96,59 @@ def parse_unit(entry: Node, references: RuleReferences) -> ImportResult:
         troop_type=_parse_troop_type(slug, fields, warnings),
         base_size=_parse_base_size(slug, fields.get("baseSize"), warnings),
         profiles=profiles,
-        # Equipment is prose, so display text is unusable ("thrusting
-        # spears"): use canonical entry names. The special-rules field is a
-        # bare list whose display text is the rule name as printed, which
-        # can differ from the linked entry ("Detachment" links to the
-        # "Detachment Special Rules" section).
-        equipment=_rule_list(slug, "equipment", fields, warnings),
+        equipment=equipment,
         special_rules=_special_rules(slug, fields, refer, warnings),
-        options=_parse_options(
-            slug, fields.get("options"), profiles, _as_displayed(fields, refer), warnings
-        ),
+        options=options,
     )
     return ImportResult(unit=unit, warnings=warnings)
+
+
+def _with_champions(profiles: list[Profile], options: list[UnitOption]) -> list[Profile]:
+    """Tag the rows the champion options name as champions.
+
+    Returns:
+        The rows, each named champion row with the champion role.
+    """
+    champions = {option.profile for option in options if option.profile is not None}
+    return [
+        row.model_copy(update={"role": ProfileRole.CHAMPION}) if row.name in champions else row
+        for row in profiles
+    ]
+
+
+def _parse_equipment(
+    slug: str, fields: Node, profiles: list[Profile], warnings: list[str]
+) -> tuple[list[Profile], list[str]]:
+    """Read the equipment field into the mount row's weapons and the unit's list.
+
+    The field is prose, so each item is read as its linked entry's name
+    ("thrusting spears" links to Thrusting Spear). A mounted datasheet prints
+    one line per part, the mount's last ("Barded Elven Steeds: Hooves (counts
+    as a hand weapon) and barding"). The mount's weapons go to its row alone;
+    its armour stays in the unit's list.
+
+    Returns:
+        The rows, the mount row listing its weapons, and the unit's equipment.
+    """
+    equipment = _rule_list(slug, "equipment", fields, warnings)
+    mounts = [row for row in profiles if row.role is ProfileRole.MOUNT]
+    if not mounts:
+        return profiles, equipment
+    doc = fields.get("equipment")
+    lines = [] if doc is None else richtext.list_items(doc)
+    if len(mounts) != 1 or len(lines) != 2:
+        warnings.append(f"{slug}: equipment is not one line per part; mount weapons not read")
+        return profiles, equipment
+    rider, mount = lines
+    weapons = richtext.linked_weapon_names(mount)
+    if not weapons:
+        warnings.append(f"{slug}: the mount's equipment line names no weapon")
+    carried = richtext.linked_rule_names(rider)
+    rows = [
+        row.model_copy(update={"equipment": weapons}) if row is mounts[0] else row
+        for row in profiles
+    ]
+    return rows, [name for name in equipment if name in carried or name not in weapons]
 
 
 def _as_displayed(fields: Node, refer: Refer) -> Refer:
@@ -179,8 +227,7 @@ def _parse_profiles(slug: str, raw_profiles: object) -> list[Profile]:
         if not isinstance(row, dict):
             raise WhfbParseError(f"{slug}: malformed profile row {row!r}")
         data = {"name": row.get("Name", "")} | {k: row.get(k, "-") for k in _STAT_KEYS}
-        if _is_mount(data):
-            data["role"] = ProfileRole.MOUNT
+        data["role"] = ProfileRole.MOUNT if _is_mount(data) else ProfileRole.RANK_AND_FILE
         profiles.append(Profile.model_validate(data))
     return profiles
 
@@ -278,7 +325,8 @@ _CROSS_REF_RE = re.compile(r"\s*\(see\s+[^)]+\)", re.I)
 # the verb its children omit: "The entire unit may take any of the following:".
 _HEADER_RE = re.compile(
     r"^(?P<subject>.+?)\s+may"
-    r"(?:\s+(?P<verb>.+?)(?:\s+(?P<quantifier>any|one)\s+of the following)?)?:?$",
+    r"(?:\s+(?P<verb>.+?)(?:\s+(?P<quantifier>any|one|\d+-\d+)\s+of the following"
+    r"(?:\s+(?P<rules>special rules))?)?)?:?$",
     re.I,
 )
 _LINE_SUBJECT_RE = re.compile(r"^(?P<subject>.+?)\s+may\s+(?P<body>.+)$", re.I)
@@ -290,6 +338,7 @@ _SUBJECT_LIMIT_RE = re.compile(
 # army rather than a ratio to its size.
 _SUBJECT_COUNT_RE = re.compile(r"^(\d+-\d+)\s+units?(?:\s+of\s+.+?)?$", re.I)
 _SUBJECT_MODEL_RE = re.compile(r"^an?\s+(.+)$", re.I)
+_SUBJECT_ANY_MODEL_RE = re.compile(r"^any model in the unit$", re.I)
 _UPGRADE_RE = re.compile(r"^upgrade one model to an?\s+(.+)$", re.I)
 _RULE_ADD_RE = re.compile(r"^have the\s+(.+?)\s+special rule$", re.I)
 _RULE_SWAP_RE = re.compile(r"^replace the\s+(.+?)\s+special rule with\s+(.+)$", re.I)
@@ -316,11 +365,17 @@ class OptionGroup:
         verb: The verb the header carries on its children's behalf, for a
             header that states the action once ("The entire unit may take
             any of the following:") and leaves each child a bare name.
+        scope: Who takes the options: the unit, or models of it ("Any
+            model in the unit may ...").
+        rules: The children are special rules named bare ("Any unit may
+            have 0-2 of the following special rules:").
     """
 
     limit: str | None = None
     applies_to: str | None = None
     verb: str | None = None
+    scope: OptionScope = OptionScope.UNIT
+    rules: bool = False
 
 
 def _parse_options(
@@ -383,8 +438,10 @@ def _parse_subject(subject: str, printed: set[str]) -> OptionGroup | None:
         return OptionGroup(limit=f"{m.group(1)} unit per {m.group(2).replace(',', '')} points")
     if m := _SUBJECT_COUNT_RE.fullmatch(subject):
         return OptionGroup(limit=f"{m.group(1)} unit")
+    if _SUBJECT_ANY_MODEL_RE.fullmatch(subject):
+        return OptionGroup(scope=OptionScope.MODEL)
     if (m := _SUBJECT_MODEL_RE.fullmatch(subject)) and m.group(1) in printed:
-        return OptionGroup(applies_to=m.group(1))
+        return OptionGroup(applies_to=m.group(1), scope=OptionScope.MODEL)
     return None
 
 
@@ -393,18 +450,20 @@ def _parse_group(slug: str, header: str, printed: set[str], warnings: list[str])
 
     Returns:
         The header's restriction, the model it names, and the verb it
-        carries for its children. An unrecognised header is kept verbatim
-        as the limit rather than dropped.
+        carries for its children. A header capping how many of its options
+        a model or unit takes, or one outside the grammar, is kept verbatim
+        as the limit.
     """
     if (m := _HEADER_RE.fullmatch(header)) and (
         group := _parse_subject(m.group("subject"), printed)
     ) is not None:
-        if (m.group("quantifier") or "").lower() == "one":
-            warnings.append(
-                f"{slug}: options under {header!r} are mutually exclusive; "
-                "exclusivity not recorded"
-            )
+        quantifier = (m.group("quantifier") or "").lower()
+        if quantifier == "one" or quantifier[:1].isdigit():
+            cap = "mutually exclusive" if quantifier == "one" else f"capped at {quantifier}"
+            warnings.append(f"{slug}: options under {header!r} are {cap}; header kept as limit")
+            group.limit = header
         group.verb = m.group("verb")
+        group.rules = m.group("rules") is not None
         return group
     # Unrecognised restriction: keep it verbatim rather than dropping it.
     warnings.append(f"{slug}: unrecognised option group header {header!r}; kept as limit")
@@ -428,9 +487,9 @@ def _parse_option_line(
     warnings: list[str],
 ) -> UnitOption:
     text = line.text
-    if text.endswith(" Or:"):
+    if text.endswith(" Or:") or text.startswith("Or: "):
         # Mutually exclusive alternatives; the schema cannot express that yet.
-        text = text.removesuffix(" Or:")
+        text = text.removesuffix(" Or:").removeprefix("Or: ")
         warnings.append(
             f"{slug}: option {text!r} is part of an either/or choice; exclusivity not recorded"
         )
@@ -453,6 +512,8 @@ def _parse_option_line(
         return UnitOption(
             name=f"{_capitalized(m.group(1))} magic items",
             kind=OptionKind.OTHER,
+            scope=OptionScope.MODEL,
+            applies_to=m.group(1) if m.group(1) in printed else None,
             points_budget=_int(m.group(2)),
             limit=group.limit,
         )
@@ -464,19 +525,29 @@ def _parse_option_line(
         stated := _parse_subject(m.group("subject"), printed)
     ) is not None:
         body = m.group("body")
-        # What the line states about itself wins; what it leaves unsaid
-        # still comes from the group it sits under.
+        applies_to = stated.applies_to or group.applies_to
         scope = OptionGroup(
             limit=stated.limit or group.limit,
-            applies_to=stated.applies_to or group.applies_to,
+            applies_to=applies_to,
+            scope=OptionScope.MODEL if applies_to else stated.scope,
         )
 
-    option = _matched_option(slug, body, points, per_model, scope, line.rules, refer, warnings)
+    option = _matched_option(
+        slug, body, points, per_model, scope, line.rules, printed, refer, warnings
+    )
     if option is None and group.verb:
         # The header stated the action for the whole group, so this line is
         # a bare name: "take" + "Great Weapon".
         option = _matched_option(
-            slug, f"{group.verb} {body}", points, per_model, scope, line.rules, refer, warnings
+            slug,
+            f"{group.verb} the {body} special rule" if group.rules else f"{group.verb} {body}",
+            points,
+            per_model,
+            scope,
+            line.rules,
+            printed,
+            refer,
+            warnings,
         )
     if option is not None:
         return option
@@ -485,6 +556,7 @@ def _parse_option_line(
     return UnitOption(
         name=text,
         kind=OptionKind.OTHER,
+        scope=scope.scope,
         applies_to=scope.applies_to,
         points=points,
         per_model=per_model,
@@ -513,6 +585,7 @@ def _matched_option(
     per_model: bool,
     scope: OptionGroup,
     linked: list[str],
+    printed: set[str],
     refer: Refer,
     warnings: list[str],
 ) -> UnitOption | None:
@@ -525,16 +598,18 @@ def _matched_option(
         return UnitOption(
             name="Magic standard",
             kind=OptionKind.MAGIC_STANDARD,
+            scope=scope.scope,
             points_budget=_int(m.group(1)),
             applies_to=scope.applies_to,
             limit=scope.limit,
         )
     if m := _UPGRADE_RE.fullmatch(body):
-        return _upgrade_option(slug, m.group(1), points, per_model, scope, warnings)
+        return _upgrade_option(slug, m.group(1), points, per_model, scope, printed, warnings)
     if m := _RULE_SWAP_RE.fullmatch(body):
         return UnitOption(
             name=m.group(2),
             kind=OptionKind.SPECIAL_RULE,
+            scope=scope.scope,
             points=points,
             per_model=per_model,
             adds_rules=[refer(m.group(2))],
@@ -546,6 +621,7 @@ def _matched_option(
         return UnitOption(
             name=m.group(1),
             kind=OptionKind.SPECIAL_RULE,
+            scope=scope.scope,
             points=points,
             per_model=per_model,
             adds_rules=[refer(m.group(1))],
@@ -556,6 +632,7 @@ def _matched_option(
         return UnitOption(
             name=m.group(1),
             kind=OptionKind.EQUIPMENT,
+            scope=scope.scope,
             points=points,
             per_model=per_model,
             adds_equipment=_equipment_names(m.group(1), linked),
@@ -570,6 +647,7 @@ def _matched_option(
         return UnitOption(
             name=gained,
             kind=OptionKind.EQUIPMENT,
+            scope=scope.scope,
             points=points,
             per_model=per_model,
             adds_equipment=_equipment_names(gained, linked),
@@ -586,6 +664,7 @@ def _upgrade_option(
     points: int | None,
     per_model: bool,
     scope: OptionGroup,
+    printed: set[str],
     warnings: list[str],
 ) -> UnitOption:
     name = raw_name
@@ -604,9 +683,13 @@ def _upgrade_option(
             f"{slug}: upgrade target {raw_name!r} has no known role; kind set to other"
         )
         kind = OptionKind.OTHER
+    if kind is OptionKind.CHAMPION and name not in printed:
+        raise WhfbParseError(f"{slug}: champion {name!r} has no profile row")
     return UnitOption(
         name=_capitalized(name),
         kind=kind,
+        scope=scope.scope,
+        profile=name if kind is OptionKind.CHAMPION else None,
         applies_to=scope.applies_to,
         points=points,
         per_model=per_model,

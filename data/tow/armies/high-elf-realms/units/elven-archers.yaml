@@ -9,8 +9,8 @@ base_size:
   width_mm: 25
   depth_mm: 25
 profiles:
-  - { name: Elven Archer, M: 5, WS: 4, BS: 4, S: 3, T: 3, W: 1, I: 4, A: 1, Ld: 8 }
-  - { name: Sentinel, M: 5, WS: 4, BS: 5, S: 3, T: 3, W: 1, I: 4, A: 1, Ld: 8 }
+  - { name: Elven Archer, role: rank-and-file, M: 5, WS: 4, BS: 4, S: 3, T: 3, W: 1, I: 4, A: 1, Ld: 8 }
+  - { name: Sentinel, role: champion, M: 5, WS: 4, BS: 5, S: 3, T: 3, W: 1, I: 4, A: 1, Ld: 8 }
 equipment:
   - Hand Weapon
   - Longbow
@@ -22,20 +22,26 @@ special_rules:
 options:
   - name: Sentinel
     kind: champion
+    scope: unit
+    profile: Sentinel
     points: 5
   - name: Standard Bearer
     kind: standard_bearer
+    scope: unit
     points: 5
   - name: Musician
     kind: musician
+    scope: unit
     points: 5
   - name: Light Armour
     kind: equipment
+    scope: unit
     points: 1
     per_model: true
     adds_equipment: [Light Armour]
   - name: Veteran
     kind: special_rule
+    scope: unit
     points: 1
     per_model: true
     adds_rules: [veteran]
@@ -43,5 +49,6 @@ options:
     limit: 0-1 unit per 1000 points
   - name: Magic standard
     kind: magic_standard
+    scope: unit
     points_budget: 25
     limit: 0-1 unit per 1000 points

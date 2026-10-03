@@ -9,8 +9,8 @@ base_size:
   width_mm: 25
   depth_mm: 25
 profiles:
-  - { name: Longbeard, M: 3, WS: 5, BS: 3, S: 4, T: 4, W: 1, I: 2, A: 1, Ld: 9 }
-  - { name: Elder, M: 3, WS: 5, BS: 3, S: 4, T: 4, W: 1, I: 2, A: 2, Ld: 9 }
+  - { name: Longbeard, role: rank-and-file, M: 3, WS: 5, BS: 3, S: 4, T: 4, W: 1, I: 2, A: 1, Ld: 9 }
+  - { name: Elder, role: champion, M: 3, WS: 5, BS: 3, S: 4, T: 4, W: 1, I: 2, A: 2, Ld: 9 }
 equipment:
   - Hand Weapon
   - Heavy Armour
@@ -26,25 +26,32 @@ special_rules:
 options:
   - name: Great Weapon
     kind: equipment
+    scope: unit
     points: 1
     per_model: true
     adds_equipment: [Great Weapon]
   - name: Shield
     kind: equipment
+    scope: unit
     points: 1
     per_model: true
     adds_equipment: [Shield]
   - name: Elder
     kind: champion
+    scope: unit
+    profile: Elder
     points: 6
   - name: Standard Bearer
     kind: standard_bearer
+    scope: unit
     points: 6
   - name: Musician
     kind: musician
+    scope: unit
     points: 6
   - name: Drilled
     kind: special_rule
+    scope: unit
     points: 1
     per_model: true
     adds_rules: [drilled]

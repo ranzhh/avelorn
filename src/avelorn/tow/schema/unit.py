@@ -75,15 +75,18 @@ class Profile(BaseModel):
     so the vocabulary is declared once, on :class:`Characteristic`.
 
     ``role`` says which part of the model the row describes
-    (:class:`ProfileRole`); it defaults to rank-and-file, which is what a
-    single-row datasheet prints.
+    (:class:`ProfileRole`). Every row states it.
+
+    A mount row lists its own weapons in ``equipment``. The unit's list
+    holds the other rows' equipment and the mount's armour, such as barding.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     name: str
-    role: ProfileRole = ProfileRole.RANK_AND_FILE
+    role: ProfileRole
     characteristics: dict[Characteristic, Stat]
+    equipment: list[str] = Field(default_factory=list)
 
     @model_validator(mode="before")
     @classmethod
@@ -100,6 +103,12 @@ class Profile(BaseModel):
         missing = [c.value for c in Characteristic if c not in self.characteristics]
         if missing:
             raise ValueError(f"profile row is missing characteristics: {missing}")
+        return self
+
+    @model_validator(mode="after")
+    def _only_a_mount_lists_equipment(self) -> Self:
+        if self.equipment and self.role is not ProfileRole.MOUNT:
+            raise ValueError(f"{self.name}: only a mount row lists equipment")
         return self
 
     def __getitem__(self, characteristic: Characteristic) -> int | None:
@@ -173,18 +182,30 @@ class OptionKind(StrEnum):
     OTHER = "other"
 
 
+class OptionScope(StrEnum):
+    """Who takes an option: the whole unit, or models of it."""
+
+    UNIT = "unit"
+    MODEL = "model"
+
+
 class UnitOption(BaseModel):
     """A purchasable upgrade.
 
     Exactly one cost shape applies: a flat `points` cost (per unit, or per
     model when `per_model` is set) or a `points_budget` to spend up to
     (e.g. magic standards).
+
+    `scope` says who takes the option, as the printed line's subject does.
+    A champion option names its profile row in `profile`.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     name: str
     kind: OptionKind = OptionKind.OTHER
+    scope: OptionScope
+    profile: str | None = None
     # The model the option attaches to, named as its profile row prints it
     # ("An Ironbeard may take Cinderblast Bombs" -> "Ironbeard"). None is
     # the whole unit. The Unit validator checks the name against the
@@ -208,6 +229,21 @@ class UnitOption(BaseModel):
             raise ValueError("exactly one of points or points_budget must be set")
         if self.per_model and self.points is None:
             raise ValueError("per_model applies to points, not points_budget")
+        return self
+
+    @model_validator(mode="after")
+    def _champion_names_its_row(self) -> Self:
+        if (self.kind is OptionKind.CHAMPION) != (self.profile is not None):
+            raise ValueError(
+                f"{self.name}: only a champion option names a profile row, "
+                "and every champion option must"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _named_model_takes_model_scope(self) -> Self:
+        if self.applies_to is not None and self.scope is not OptionScope.MODEL:
+            raise ValueError(f"{self.name}: an option for {self.applies_to} must have model scope")
         return self
 
 
@@ -249,6 +285,25 @@ class Unit(BaseModel):
             raise ValueError(f"options attach to models with no profile: {unknown}")
         return self
 
+    @model_validator(mode="after")
+    def _one_rank_and_file_row(self) -> Self:
+        roles = [p.role for p in self.profiles]
+        if (count := roles.count(ProfileRole.RANK_AND_FILE)) != 1:
+            raise ValueError(f"{self.name}: needs one rank-and-file row, has {count}")
+        if (count := roles.count(ProfileRole.MOUNT)) > 1:
+            raise ValueError(f"{self.name}: may have one mount row, has {count}")
+        return self
+
+    @model_validator(mode="after")
+    def _champion_options_name_champion_rows(self) -> Self:
+        champions = {p.name for p in self.profiles if p.role is ProfileRole.CHAMPION}
+        named = {option.profile for option in self.options if option.profile is not None}
+        if unknown := sorted(named - champions):
+            raise ValueError(f"champion options name no champion row: {unknown}")
+        if unnamed := sorted(champions - named):
+            raise ValueError(f"no option names the champion rows: {unnamed}")
+        return self
+
     @property
     def rank_and_file(self) -> TroopTypeProfile:
         """The troop type's data, resolved — how this unit ranks up.
@@ -284,15 +339,9 @@ class Unit(BaseModel):
         rows are other parts of the unit, reached by their own accessors.
 
         Returns:
-            The first rank-and-file profile row.
-
-        Raises:
-            ValueError: no row is rank-and-file -- a malformed datasheet.
+            The rank-and-file profile row.
         """
-        row = next((p for p in self.profiles if p.role is ProfileRole.RANK_AND_FILE), None)
-        if row is None:
-            raise ValueError(f"{self.name}: no rank-and-file profile row")
-        return row
+        return next(p for p in self.profiles if p.role is ProfileRole.RANK_AND_FILE)
 
     @property
     def mount(self) -> Profile | None:

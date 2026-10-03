@@ -9,8 +9,8 @@ base_size:
   width_mm: 25
   depth_mm: 25
 profiles:
-  - { name: Dwarf Warrior, M: 3, WS: 4, BS: 3, S: 3, T: 4, W: 1, I: 2, A: 1, Ld: 9 }
-  - { name: Veteran, M: 3, WS: 4, BS: 3, S: 3, T: 4, W: 1, I: 2, A: 2, Ld: 9 }
+  - { name: Dwarf Warrior, role: rank-and-file, M: 3, WS: 4, BS: 3, S: 3, T: 4, W: 1, I: 2, A: 1, Ld: 9 }
+  - { name: Veteran, role: champion, M: 3, WS: 4, BS: 3, S: 3, T: 4, W: 1, I: 2, A: 2, Ld: 9 }
 equipment:
   - Hand Weapon
   - Heavy Armour
@@ -23,31 +23,39 @@ special_rules:
 options:
   - name: Great Weapon
     kind: equipment
+    scope: unit
     points: 1
     per_model: true
     adds_equipment: [Great Weapon]
   - name: Shield
     kind: equipment
+    scope: unit
     points: 1
     per_model: true
     adds_equipment: [Shield]
   - name: Veteran
     kind: champion
+    scope: unit
+    profile: Veteran
     points: 5
   - name: Standard Bearer
     kind: standard_bearer
+    scope: unit
     points: 5
   - name: Musician
     kind: musician
+    scope: unit
     points: 5
   - name: Drilled
     kind: special_rule
+    scope: unit
     points: 1
     per_model: true
     adds_rules: [drilled]
     limit: 0-1 unit per 1000 points
   - name: Veteran
     kind: special_rule
+    scope: unit
     points: 1
     per_model: true
     adds_rules: [veteran]

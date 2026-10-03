@@ -6,7 +6,7 @@ from pydantic import ValidationError
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.muster import Complement
 from avelorn.tow.schema.reference import RuleRef
-from avelorn.tow.schema.unit import OptionKind, Unit, UnitOption
+from avelorn.tow.schema.unit import OptionKind, OptionScope, Unit, UnitOption
 
 REPO = TOWRepository()
 
@@ -70,6 +70,7 @@ def test_complement_rejects_an_option_that_removes_an_absent_rule(spearmen_unit:
     stale = UnitOption(
         name="Stale swap",
         kind=OptionKind.SPECIAL_RULE,
+        scope=OptionScope.UNIT,
         points=0,
         removes_rules=[RuleRef(rule="absent-rule")],
     )
@@ -93,6 +94,7 @@ def spearmen_with_a_sentinel_option(spearmen_unit: Unit) -> Unit:
     scoped = UnitOption(
         name="Ithilmar Blade",
         kind=OptionKind.EQUIPMENT,
+        scope=OptionScope.MODEL,
         applies_to="Sentinel",
         points=5,
         adds_equipment=["Ithilmar Blade"],

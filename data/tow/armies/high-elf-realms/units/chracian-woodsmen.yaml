@@ -9,8 +9,8 @@ base_size:
   width_mm: 25
   depth_mm: 25
 profiles:
-  - { name: Chracian Woodsman, M: 5, WS: 4, BS: 4, S: 4, T: 3, W: 1, I: 4, A: 1, Ld: 8 }
-  - { name: Chracian Captain, M: 5, WS: 4, BS: 4, S: 4, T: 3, W: 1, I: 4, A: 2, Ld: 8 }
+  - { name: Chracian Woodsman, role: rank-and-file, M: 5, WS: 4, BS: 4, S: 4, T: 3, W: 1, I: 4, A: 1, Ld: 8 }
+  - { name: Chracian Captain, role: champion, M: 5, WS: 4, BS: 4, S: 4, T: 3, W: 1, I: 4, A: 2, Ld: 8 }
 equipment:
   - Hand Weapon
   - Chracian Great Blade
@@ -24,37 +24,46 @@ special_rules:
 options:
   - name: Warbow
     kind: equipment
+    scope: unit
     points: 1
     per_model: true
     adds_equipment: [Warbow]
   - name: Heavy Armour
     kind: equipment
+    scope: unit
     points: 1
     per_model: true
     adds_equipment: [Heavy Armour]
     removes_equipment: [Light Armour]
   - name: Chracian Captain
     kind: champion
+    scope: unit
+    profile: Chracian Captain
     points: 7
   - name: Standard Bearer
     kind: standard_bearer
+    scope: unit
     points: 7
   - name: Musician
     kind: musician
+    scope: unit
     points: 7
   - name: Lion Cloak
     kind: special_rule
+    scope: unit
     points: 1
     per_model: true
     adds_rules: [lion-cloak]
   - name: Scouts
     kind: special_rule
+    scope: unit
     points: 0
     adds_rules: [scouts]
     removes_rules: [vanguard]
     limit: 0-1 unit
   - name: Ambushers
     kind: special_rule
+    scope: unit
     points: 1
     per_model: true
     adds_rules: [ambushers]

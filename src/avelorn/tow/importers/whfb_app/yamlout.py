@@ -1,7 +1,7 @@
 """Serialize imported models to YAML in the hand-authored style used under data/.
 
 Profiles are emitted as one flow mapping per line (mirroring the printed
-stat line), defaults and empty fields are omitted, and "-" stands in for
+stat line, unwrapped however long), defaults and empty fields are omitted, and "-" stands in for
 not-applicable stats, as in the source material.
 """
 
@@ -15,7 +15,7 @@ import yaml
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import Rule
-from avelorn.tow.schema.unit import Characteristic, Profile, ProfileRole, Unit, UnitOption
+from avelorn.tow.schema.unit import Characteristic, Profile, Unit, UnitOption
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile
 
 
@@ -69,7 +69,7 @@ def unit_to_yaml(unit: Unit, source_url: str | None = None) -> str:
         doc["special_rules"] = _references(unit.special_rules)
     if unit.options:
         doc["options"] = [_option_row(o) for o in unit.options]
-    return _dump(doc, source_url)
+    return _dump(doc, source_url, width=_UNWRAPPED)
 
 
 def weapon_to_yaml(weapon: Weapon, source_url: str | None = None) -> str:
@@ -132,8 +132,11 @@ def rule_to_yaml(rule: Rule, source_url: str | None = None) -> str:
     return _dump(doc, source_url)
 
 
-def _dump(doc: dict, source_url: str | None) -> str:
-    text = yaml.dump(doc, Dumper=_Dumper, sort_keys=False, allow_unicode=True, width=120)
+_UNWRAPPED = 1000
+
+
+def _dump(doc: dict, source_url: str | None, width: int = 120) -> str:
+    text = yaml.dump(doc, Dumper=_Dumper, sort_keys=False, allow_unicode=True, width=width)
     # Pad flow-mapping braces ({ name: ... }) to match the hand-authored style.
     text = re.sub(r"^(\s*- )\{(.*)\}$", r"\1{ \2 }", text, flags=re.M)
     if source_url:
@@ -146,14 +149,12 @@ def _references(references: Iterable[RuleRef]) -> list[str | _FlowMap]:
 
 
 def _profile_row(profile: Profile) -> _FlowMap:
-    row: dict = {"name": profile.name}
-    # Written only when it is not the default, so a plain infantry datasheet
-    # reads as it always did.
-    if profile.role is not ProfileRole.RANK_AND_FILE:
-        row["role"] = profile.role.value
+    row: dict = {"name": profile.name, "role": profile.role.value}
     for characteristic in Characteristic:
         value = profile[characteristic]
         row[characteristic.value] = "-" if value is None else value
+    if profile.equipment:
+        row["equipment"] = _FlowList(profile.equipment)
     return _FlowMap(row)
 
 
@@ -174,7 +175,9 @@ def _option_row(option: UnitOption) -> dict:
     # Written key by key to keep the printed reading order rather than the
     # model's; a drift guard in the tests fails if a field is added to
     # UnitOption and not written here.
-    row: dict = {"name": option.name, "kind": option.kind.value}
+    row: dict = {"name": option.name, "kind": option.kind.value, "scope": option.scope.value}
+    if option.profile is not None:
+        row["profile"] = option.profile
     if option.applies_to is not None:
         row["applies_to"] = option.applies_to
     if option.points is not None:

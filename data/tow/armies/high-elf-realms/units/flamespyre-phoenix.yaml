@@ -10,7 +10,7 @@ base_size:
   width_mm: 50
   depth_mm: 100
 profiles:
-  - { name: Flamespyre Phoenix, M: 2, WS: 5, BS: 0, S: 5, T: 5, W: 5, I: 4, A: 3, Ld: 7 }
+  - { name: Flamespyre Phoenix, role: rank-and-file, M: 2, WS: 5, BS: 0, S: 5, T: 5, W: 5, I: 4, A: 3, Ld: 7 }
 equipment:
   - Wicked Claws
   - Heavy Armour

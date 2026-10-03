@@ -23,7 +23,14 @@ from avelorn.tow.importers.whfb_app.parse import (
 from avelorn.tow.importers.whfb_app.references import RuleReferences
 from avelorn.tow.importers.whfb_app.richtext import OptionLine
 from avelorn.tow.schema.reference import RuleRef
-from avelorn.tow.schema.unit import BaseSize, OptionKind, TroopType, UnitOption, UnitSize
+from avelorn.tow.schema.unit import (
+    BaseSize,
+    OptionKind,
+    OptionScope,
+    TroopType,
+    UnitOption,
+    UnitSize,
+)
 
 REFER = RuleReferences(TOWRepository().rules.values()).at("unit some-unit")
 
@@ -199,6 +206,7 @@ def test_free_is_a_cost_of_zero_not_an_absent_cost() -> None:
     assert option == UnitOption(
         name="Scouts",
         kind=OptionKind.SPECIAL_RULE,
+        scope=OptionScope.UNIT,
         points=0,
         adds_rules=[RuleRef(rule="scouts")],
         removes_rules=[RuleRef(rule="vanguard")],
@@ -207,10 +215,12 @@ def test_free_is_a_cost_of_zero_not_an_absent_cost() -> None:
     assert warnings == []
 
 
-def test_exclusive_group_header_warns_about_lost_exclusivity() -> None:
-    """A "one of the following" group is a choice the schema cannot express yet."""
-    group, warnings = _group("The entire unit may take one of the following:")
+def test_exclusive_group_header_is_kept_as_limit() -> None:
+    """A "one of the following" group keeps its header, as the schema has no choice yet."""
+    header = "The entire unit may take one of the following:"
+    group, warnings = _group(header)
     assert group.verb == "take"
+    assert group.limit == header
     assert any("mutually exclusive" in w for w in warnings)
 
 
@@ -223,6 +233,7 @@ def test_bare_line_takes_the_verb_from_its_header() -> None:
     assert option == UnitOption(
         name="Great Weapon",
         kind=OptionKind.EQUIPMENT,
+        scope=OptionScope.UNIT,
         points=1,
         per_model=True,
         adds_equipment=["Great Weapon"],
@@ -293,6 +304,7 @@ def test_line_attaches_the_option_to_the_model_it_names() -> None:
     assert option == UnitOption(
         name="Cinderblast Bombs",
         kind=OptionKind.EQUIPMENT,
+        scope=OptionScope.MODEL,
         applies_to="Ironbeard",
         points=15,
         adds_equipment=["Cinderblast Bombs"],
@@ -313,21 +325,83 @@ def test_subject_is_only_a_model_when_the_unit_prints_its_profile() -> None:
 def test_group_header_attaches_its_children_to_the_model() -> None:
     """A header naming a model scopes every option nested under it."""
     printed = {"Ironbreaker", "Ironbeard"}
-    group, warnings = _group(
-        "An Ironbeard may replace their Shield with one of the following:", printed
+    header = "An Ironbeard may replace their Shield with one of the following:"
+    group, warnings = _group(header, printed)
+    assert group == OptionGroup(
+        limit=header,
+        applies_to="Ironbeard",
+        verb="replace their Shield with",
+        scope=OptionScope.MODEL,
     )
-    assert group == OptionGroup(applies_to="Ironbeard", verb="replace their Shield with")
     assert any("mutually exclusive" in w for w in warnings)
 
     option, _ = _option("Brace of Drakefire Pistols (+10 points)", group, printed)
     assert option == UnitOption(
         name="Brace of Drakefire Pistols",
         kind=OptionKind.EQUIPMENT,
+        scope=OptionScope.MODEL,
         applies_to="Ironbeard",
         points=10,
         adds_equipment=["Brace of Drakefire Pistols"],
         removes_equipment=["Shield"],
+        limit=header,
     )
+
+
+def test_any_model_in_the_unit_takes_a_weapon_for_itself() -> None:
+    """The Maneaters' weapons are bought by models of the unit, named bare under the header."""
+    header = "Any model in the unit may take one of the following:"
+    group, warnings = _group(header)
+    assert group == OptionGroup(limit=header, verb="take", scope=OptionScope.MODEL)
+    assert any("mutually exclusive" in w for w in warnings)
+
+    option, warnings = _option("Ogre Pistol (+6 points per model)", group)
+    assert option == UnitOption(
+        name="Ogre Pistol",
+        kind=OptionKind.EQUIPMENT,
+        scope=OptionScope.MODEL,
+        points=6,
+        per_model=True,
+        adds_equipment=["Ogre Pistol"],
+        limit=header,
+    )
+    assert warnings == []
+
+
+def test_any_model_in_the_unit_swaps_its_armour() -> None:
+    """A line stating its own model subject swaps the armour of the models that buy it."""
+    option, warnings = _option(
+        "Any model in the unit may replace Light Armour with Heavy Armour (+3 points per model)"
+    )
+    assert option == UnitOption(
+        name="Heavy Armour",
+        kind=OptionKind.EQUIPMENT,
+        scope=OptionScope.MODEL,
+        points=3,
+        per_model=True,
+        adds_equipment=["Heavy Armour"],
+        removes_equipment=["Light Armour"],
+    )
+    assert warnings == []
+
+
+def test_bare_rule_under_a_special_rules_header_adds_that_rule() -> None:
+    """The Maneaters' free rules are named bare under a capped header."""
+    header = "Any unit may have 0-2 of the following special rules:"
+    group, warnings = _group(header)
+    assert group == OptionGroup(limit=header, verb="have", rules=True)
+    assert any("capped at 0-2" in w for w in warnings)
+
+    option, warnings = _option("Poisoned Attacks (Free)", group, rules=["Poisoned Attacks"])
+    assert option == UnitOption(
+        name="Poisoned Attacks",
+        kind=OptionKind.SPECIAL_RULE,
+        scope=OptionScope.UNIT,
+        points=0,
+        adds_rules=[RuleRef(rule="poisoned-attacks")],
+        limit=header,
+    )
+    assert warnings == []
 
 
 def test_line_states_its_own_availability_limit() -> None:
@@ -338,6 +412,7 @@ def test_line_states_its_own_availability_limit() -> None:
     assert option == UnitOption(
         name="Drilled",
         kind=OptionKind.SPECIAL_RULE,
+        scope=OptionScope.UNIT,
         points=1,
         per_model=True,
         adds_rules=[RuleRef(rule="drilled")],
@@ -346,14 +421,63 @@ def test_line_states_its_own_availability_limit() -> None:
     assert warnings == []
 
 
+def test_line_limit_under_a_model_header_keeps_the_model() -> None:
+    """A line stating only a limit stays the option of the model its header names."""
+    group = OptionGroup(applies_to="Ironbeard", scope=OptionScope.MODEL)
+    option, _ = _option(
+        "0-1 unit per 1,000 points may have the Drilled special rule (+5 points)",
+        group,
+        printed={"Ironbreaker", "Ironbeard"},
+    )
+    assert option == UnitOption(
+        name="Drilled",
+        kind=OptionKind.SPECIAL_RULE,
+        scope=OptionScope.MODEL,
+        applies_to="Ironbeard",
+        points=5,
+        adds_rules=[RuleRef(rule="drilled")],
+        limit="0-1 unit per 1000 points",
+    )
+
+
 # --- option lines -----------------------------------------------------------
 
 
 def test_champion_upgrade_line() -> None:
     """The champion shape: named role, flat per-unit cost."""
-    option, warnings = _option("Upgrade one model to a Sentinel (champion) (+5 points per unit)")
-    assert option == UnitOption(name="Sentinel", kind=OptionKind.CHAMPION, points=5)
+    option, warnings = _option(
+        "Upgrade one model to a Sentinel (champion) (+5 points per unit)", printed={"Sentinel"}
+    )
+    assert option == UnitOption(
+        name="Sentinel",
+        kind=OptionKind.CHAMPION,
+        scope=OptionScope.UNIT,
+        profile="Sentinel",
+        points=5,
+    )
     assert warnings == []
+
+
+def test_an_alternative_champion_names_its_own_row() -> None:
+    """Ship's Company prints the Bosun as an "Or:" to the Midshipman; the Bosun names its row."""
+    option, warnings = _option(
+        "Or: Upgrade one model to a Bosun (champion) (+5 points per unit)",
+        printed={"Ship's Company", "Midshipman", "Bosun"},
+    )
+    assert option == UnitOption(
+        name="Bosun",
+        kind=OptionKind.CHAMPION,
+        scope=OptionScope.UNIT,
+        profile="Bosun",
+        points=5,
+    )
+    assert any("either/or" in w for w in warnings)
+
+
+def test_a_champion_without_a_row_fails_the_import() -> None:
+    """A champion the datasheet prints no row for cannot name its profile."""
+    with pytest.raises(WhfbParseError, match="champion 'Sentinel' has no profile row"):
+        _option("Upgrade one model to a Sentinel (champion) (+5 points per unit)")
 
 
 def test_command_upgrades_take_printed_names() -> None:
@@ -382,6 +506,7 @@ def test_rule_add_line() -> None:
     assert option == UnitOption(
         name="Shieldwall",
         kind=OptionKind.SPECIAL_RULE,
+        scope=OptionScope.UNIT,
         points=10,
         adds_rules=[RuleRef(rule="shieldwall")],
     )
@@ -421,6 +546,7 @@ def test_rule_swap_line_charges_per_model() -> None:
     assert option == UnitOption(
         name="Veteran",
         kind=OptionKind.SPECIAL_RULE,
+        scope=OptionScope.UNIT,
         points=1,
         per_model=True,
         adds_rules=[RuleRef(rule="veteran")],
@@ -435,6 +561,7 @@ def test_take_line_adds_equipment() -> None:
     assert option == UnitOption(
         name="Shields",
         kind=OptionKind.EQUIPMENT,
+        scope=OptionScope.UNIT,
         points=1,
         per_model=True,
         adds_equipment=["Shields"],
@@ -448,6 +575,7 @@ def test_equipment_swap_line() -> None:
     assert option == UnitOption(
         name="Shortbows",
         kind=OptionKind.EQUIPMENT,
+        scope=OptionScope.UNIT,
         points=2,
         per_model=True,
         adds_equipment=["Shortbows"],
@@ -465,6 +593,7 @@ def test_equipment_swap_line_gaining_two_entries() -> None:
     assert option == UnitOption(
         name="Thrusting Spear and Shield",
         kind=OptionKind.EQUIPMENT,
+        scope=OptionScope.UNIT,
         points=0,
         adds_equipment=["Thrusting Spear", "Shield"],
         removes_equipment=["Warbow"],
@@ -476,16 +605,26 @@ def test_magic_standard_line_is_a_budget() -> None:
     """The magic standard is a spend-up-to budget, not a flat cost."""
     option, warnings = _option("Purchase a magic standard worth up to 50 points")
     assert option == UnitOption(
-        name="Magic standard", kind=OptionKind.MAGIC_STANDARD, points_budget=50
+        name="Magic standard",
+        kind=OptionKind.MAGIC_STANDARD,
+        scope=OptionScope.UNIT,
+        points_budget=50,
     )
     assert warnings == []
 
 
 def test_magic_items_line_names_the_bearer() -> None:
     """A character's magic-item allowance keeps who it belongs to."""
-    option, warnings = _option("A High Helm may purchase magic items up to a total of 25 points")
+    option, warnings = _option(
+        "A High Helm may purchase magic items up to a total of 25 points",
+        printed={"Silver Helm", "High Helm"},
+    )
     assert option == UnitOption(
-        name="High Helm magic items", kind=OptionKind.OTHER, points_budget=25
+        name="High Helm magic items",
+        kind=OptionKind.OTHER,
+        scope=OptionScope.MODEL,
+        applies_to="High Helm",
+        points_budget=25,
     )
     assert warnings == []
 
@@ -510,7 +649,9 @@ def test_either_or_suffix_warns_about_lost_exclusivity() -> None:
 def test_unrecognised_line_is_kept_verbatim_as_other() -> None:
     """A line outside the grammar survives as kind: other, with a warning."""
     option, warnings = _option("March in perfect silence (+5 points per unit)")
-    assert option == UnitOption(name="March in perfect silence", kind=OptionKind.OTHER, points=5)
+    assert option == UnitOption(
+        name="March in perfect silence", kind=OptionKind.OTHER, scope=OptionScope.UNIT, points=5
+    )
     assert any("kept verbatim" in w for w in warnings)
 
 

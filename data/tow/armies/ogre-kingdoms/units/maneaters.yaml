@@ -9,8 +9,8 @@ base_size:
   width_mm: 40
   depth_mm: 40
 profiles:
-  - { name: Maneater, M: 6, WS: 4, BS: 4, S: 5, T: 4, W: 3, I: 3, A: 4, Ld: 8 }
-  - { name: Maneater Captain, M: 6, WS: 4, BS: 4, S: 5, T: 4, W: 3, I: 3, A: 5, Ld: 8 }
+  - { name: Maneater, role: rank-and-file, M: 6, WS: 4, BS: 4, S: 5, T: 4, W: 3, I: 3, A: 4, Ld: 8 }
+  - { name: Maneater Captain, role: champion, M: 6, WS: 4, BS: 4, S: 5, T: 4, W: 3, I: 3, A: 5, Ld: 8 }
 equipment:
   - Hand Weapon
   - Light Armour
@@ -22,62 +22,95 @@ special_rules:
   - ogre-charge
 options:
   - name: Two Hand Weapons/Additional Hand Weapon
-    kind: other
+    kind: equipment
+    scope: model
     points: 3
     per_model: true
+    adds_equipment: [Two Hand Weapons/Additional Hand Weapon]
     limit: 'Any model in the unit may take one of the following:'
   - name: Ironfist
-    kind: other
+    kind: equipment
+    scope: model
     points: 4
     per_model: true
+    adds_equipment: [Ironfist]
     limit: 'Any model in the unit may take one of the following:'
   - name: Great Weapon
-    kind: other
+    kind: equipment
+    scope: model
     points: 4
     per_model: true
+    adds_equipment: [Great Weapon]
     limit: 'Any model in the unit may take one of the following:'
   - name: Ogre Pistol
-    kind: other
+    kind: equipment
+    scope: model
     points: 6
     per_model: true
+    adds_equipment: [Ogre Pistol]
     limit: 'Any model in the unit may take one of the following:'
   - name: Brace of Ogre Pistols
-    kind: other
+    kind: equipment
+    scope: model
     points: 12
     per_model: true
+    adds_equipment: [Brace of Ogre Pistols]
     limit: 'Any model in the unit may take one of the following:'
-  - name: Any model in the unit may replace Light Armour with Heavy Armour
-    kind: other
+  - name: Heavy Armour
+    kind: equipment
+    scope: model
     points: 3
     per_model: true
+    adds_equipment: [Heavy Armour]
+    removes_equipment: [Light Armour]
   - name: Maneater Captain
     kind: champion
+    scope: unit
+    profile: Maneater Captain
     points: 7
   - name: Standard Bearer
     kind: standard_bearer
+    scope: unit
     points: 7
   - name: Bellower (musician)
     kind: musician
+    scope: unit
     points: 7
   - name: Maneater Captain magic items
     kind: other
+    scope: model
+    applies_to: Maneater Captain
     points_budget: 50
   - name: A standard bearer may have the Look-out Gnoblar special rule
     kind: other
+    scope: unit
     points: 5
   - name: Magic standard
     kind: magic_standard
+    scope: unit
     points_budget: 50
     limit: 0-1 unit per 1000 points
   - name: Immune to Psychology
-    kind: other
+    kind: special_rule
+    scope: unit
     points: 0
+    adds_rules: [immune-to-psychology]
+    limit: 'Any unit may have 0-2 of the following special rules:'
   - name: Poisoned Attacks
-    kind: other
+    kind: special_rule
+    scope: unit
     points: 0
+    adds_rules: [poisoned-attacks]
+    limit: 'Any unit may have 0-2 of the following special rules:'
   - name: Stubborn
-    kind: other
+    kind: special_rule
+    scope: unit
     points: 0
+    adds_rules: [stubborn]
+    limit: 'Any unit may have 0-2 of the following special rules:'
   - name: Vanguard
-    kind: other
+    kind: special_rule
+    scope: unit
     points: 0
+    adds_rules: [vanguard]
+    limit: 'Any unit may have 0-2 of the following special rules:'
