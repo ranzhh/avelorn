@@ -450,22 +450,18 @@ def _parse_group(slug: str, header: str, printed: set[str], warnings: list[str])
 
     Returns:
         The header's restriction, the model it names, and the verb it
-        carries for its children. An unrecognised header is kept verbatim
-        as the limit rather than dropped.
+        carries for its children. A header capping how many of its options
+        a model or unit takes, or one outside the grammar, is kept verbatim
+        as the limit.
     """
     if (m := _HEADER_RE.fullmatch(header)) and (
         group := _parse_subject(m.group("subject"), printed)
     ) is not None:
         quantifier = (m.group("quantifier") or "").lower()
-        if quantifier == "one":
-            warnings.append(
-                f"{slug}: options under {header!r} are mutually exclusive; "
-                "exclusivity not recorded"
-            )
-        elif quantifier[:1].isdigit():
-            warnings.append(
-                f"{slug}: options under {header!r} are capped at {quantifier}; cap not recorded"
-            )
+        if quantifier == "one" or quantifier[:1].isdigit():
+            cap = "mutually exclusive" if quantifier == "one" else f"capped at {quantifier}"
+            warnings.append(f"{slug}: options under {header!r} are {cap}; header kept as limit")
+            group.limit = header
         group.verb = m.group("verb")
         group.rules = m.group("rules") is not None
         return group

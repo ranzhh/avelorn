@@ -215,10 +215,12 @@ def test_free_is_a_cost_of_zero_not_an_absent_cost() -> None:
     assert warnings == []
 
 
-def test_exclusive_group_header_warns_about_lost_exclusivity() -> None:
-    """A "one of the following" group is a choice the schema cannot express yet."""
-    group, warnings = _group("The entire unit may take one of the following:")
+def test_exclusive_group_header_is_kept_as_limit() -> None:
+    """A "one of the following" group keeps its header, as the schema has no choice yet."""
+    header = "The entire unit may take one of the following:"
+    group, warnings = _group(header)
     assert group.verb == "take"
+    assert group.limit == header
     assert any("mutually exclusive" in w for w in warnings)
 
 
@@ -323,11 +325,13 @@ def test_subject_is_only_a_model_when_the_unit_prints_its_profile() -> None:
 def test_group_header_attaches_its_children_to_the_model() -> None:
     """A header naming a model scopes every option nested under it."""
     printed = {"Ironbreaker", "Ironbeard"}
-    group, warnings = _group(
-        "An Ironbeard may replace their Shield with one of the following:", printed
-    )
+    header = "An Ironbeard may replace their Shield with one of the following:"
+    group, warnings = _group(header, printed)
     assert group == OptionGroup(
-        applies_to="Ironbeard", verb="replace their Shield with", scope=OptionScope.MODEL
+        limit=header,
+        applies_to="Ironbeard",
+        verb="replace their Shield with",
+        scope=OptionScope.MODEL,
     )
     assert any("mutually exclusive" in w for w in warnings)
 
@@ -340,13 +344,15 @@ def test_group_header_attaches_its_children_to_the_model() -> None:
         points=10,
         adds_equipment=["Brace of Drakefire Pistols"],
         removes_equipment=["Shield"],
+        limit=header,
     )
 
 
 def test_any_model_in_the_unit_takes_a_weapon_for_itself() -> None:
     """The Maneaters' weapons are bought by models of the unit, named bare under the header."""
-    group, warnings = _group("Any model in the unit may take one of the following:")
-    assert group == OptionGroup(verb="take", scope=OptionScope.MODEL)
+    header = "Any model in the unit may take one of the following:"
+    group, warnings = _group(header)
+    assert group == OptionGroup(limit=header, verb="take", scope=OptionScope.MODEL)
     assert any("mutually exclusive" in w for w in warnings)
 
     option, warnings = _option("Ogre Pistol (+6 points per model)", group)
@@ -357,6 +363,7 @@ def test_any_model_in_the_unit_takes_a_weapon_for_itself() -> None:
         points=6,
         per_model=True,
         adds_equipment=["Ogre Pistol"],
+        limit=header,
     )
     assert warnings == []
 
@@ -380,8 +387,9 @@ def test_any_model_in_the_unit_swaps_its_armour() -> None:
 
 def test_bare_rule_under_a_special_rules_header_adds_that_rule() -> None:
     """The Maneaters' free rules are named bare under a capped header."""
-    group, warnings = _group("Any unit may have 0-2 of the following special rules:")
-    assert group == OptionGroup(verb="have", rules=True)
+    header = "Any unit may have 0-2 of the following special rules:"
+    group, warnings = _group(header)
+    assert group == OptionGroup(limit=header, verb="have", rules=True)
     assert any("capped at 0-2" in w for w in warnings)
 
     option, warnings = _option("Poisoned Attacks (Free)", group, rules=["Poisoned Attacks"])
@@ -391,6 +399,7 @@ def test_bare_rule_under_a_special_rules_header_adds_that_rule() -> None:
         scope=OptionScope.UNIT,
         points=0,
         adds_rules=[RuleRef(rule="poisoned-attacks")],
+        limit=header,
     )
     assert warnings == []
 
