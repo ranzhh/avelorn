@@ -24,13 +24,12 @@ from enum import StrEnum
 from fractions import Fraction
 from typing import ClassVar
 
+from avelorn.core.distribution import Distribution
+from avelorn.tow.kernels import Confirm, Die, d6, success
 from avelorn.tow.schema.rule import NaturalRoll, RollResult
 from avelorn.tow.schema.stage import Stage
 
 logger = logging.getLogger(__name__)
-
-_FACE = Fraction(1, 6)
-_FACES = range(1, 7)
 
 
 class Outcome(StrEnum):
@@ -104,48 +103,32 @@ class Roll:
 class AttackRoll(Roll):
     """One roll of the printed attack sequence: its stage, its target, its die.
 
-    Subclasses own their printed semantics — everything the die means
-    beyond its face. :meth:`branches` enumerates the roll exactly,
-    ``(probability, natural face, success)`` per branch, probabilities
-    summing to 1. A :class:`RollState` target takes no die (face 0), so
-    face-triggered rules cannot fire there; every rolled die clamps at
-    2+ — a natural 1 always fails, regardless of modifiers (the rulebook
-    states it per roll, e.g. "Rolls of a Natural 1", p.140).
+    Subclasses own their printed semantics — what a natural 6 does against
+    a target above 6 (``confirm``), and whether a die is thrown at all.
+    A :class:`RollState` target takes no die (face 0), so face-triggered
+    rules cannot fire there; every thrown die is :func:`~avelorn.tow.kernels.d6`.
     """
 
     target: RollTarget
+    confirm: ClassVar[Confirm] = Confirm.NEVER
 
-    def branches(self) -> Iterator[tuple[Fraction, int, bool]]:
-        """Enumerate this roll's die, branch by branch.
+    def dice(self, rerolls: frozenset[Die] = frozenset()) -> Distribution[Die]:
+        """This roll's die, with the landed dice in ``rerolls`` re-rolled once.
 
-        Yields:
-            ``(probability, natural face, success)`` per branch.
+        Returns:
+            Each landed die's exact probability.
         """
-        if self.target is RollState.IMPOSSIBLE:
-            yield Fraction(1), 0, False
-            return
-        if self.target is RollState.AUTOMATIC:
-            yield Fraction(1), 0, True
-            return
-        threshold = max(self.target, 2)
-        for face in _FACES:
-            yield _FACE, face, face >= threshold
+        if isinstance(self.target, RollState):
+            return Distribution({Die(0, self.target is RollState.AUTOMATIC): Fraction(1)})
+        return d6(self.target, rerolls, self.confirm)
 
     def chance(self) -> Fraction:
-        """The probability this roll succeeds, summed over its branches.
-
-        The reported per-stage figures (charts) derive from this, so
-        the die's semantics have one declaration.
+        """The probability this roll succeeds.
 
         Returns:
             The exact success probability.
         """
-        return sum((p for p, _, success in self.branches() if success), Fraction(0))
-
-
-# A To Hit target of 7+ resolves as a natural 6 confirmed at this
-# target ("7 to Hit"); 10+ is impossible.
-CONFIRM_TARGETS = {7: 4, 8: 5, 9: 6}
+        return success(self.dice())
 
 
 @dataclass(frozen=True)
@@ -153,30 +136,12 @@ class RollToHitShooting(AttackRoll):
     """The Roll to Hit of shooting: a target of 7+ confirms on a second die.
 
     Its combat peer is :class:`RollToHitCombat`; the rulebook prints
-    them as separate sections (roll-to-hit-shooting).
-
-    The yielded natural face is the first die's — for the confirmation,
-    the 6 that is being confirmed.
+    them as separate sections (roll-to-hit-shooting). The natural face of
+    a confirmed hit is the 6 being confirmed.
     """
 
     stage: ClassVar[Stage] = Stage.ROLL_TO_HIT
-
-    def branches(self) -> Iterator[tuple[Fraction, int, bool]]:
-        """Enumerate the shooting To Hit die, confirming 7+ targets.
-
-        Yields:
-            ``(probability, natural face, success)`` per branch.
-        """
-        if isinstance(self.target, RollState) or self.target <= 6:
-            yield from super().branches()
-            return
-        confirm = CONFIRM_TARGETS.get(self.target)
-        for face in _FACES:
-            if face != 6 or confirm is None:
-                yield _FACE, face, False
-            else:
-                for confirm_face in _FACES:
-                    yield _FACE * _FACE, face, confirm_face >= confirm
+    confirm: ClassVar[Confirm] = Confirm.SECOND_DIE
 
 
 @dataclass(frozen=True)
@@ -189,19 +154,7 @@ class RollToHitCombat(AttackRoll):
     """
 
     stage: ClassVar[Stage] = Stage.ROLL_TO_HIT
-
-    def branches(self) -> Iterator[tuple[Fraction, int, bool]]:
-        """Enumerate the close-combat To Hit die.
-
-        Yields:
-            ``(probability, natural face, success)`` per branch.
-        """
-        if isinstance(self.target, RollState):
-            yield from super().branches()
-            return
-        threshold = max(self.target, 2)
-        for face in _FACES:
-            yield _FACE, face, face == 6 or face >= threshold
+    confirm: ClassVar[Confirm] = Confirm.ALWAYS
 
 
 @dataclass(frozen=True)
@@ -224,16 +177,15 @@ class Save(AttackRoll):
     differs: its 7+ still rolls, and confirms.
     """
 
-    def branches(self) -> Iterator[tuple[Fraction, int, bool]]:
-        """Enumerate the save's die; past 6+ there is nothing to roll.
+    def dice(self, rerolls: frozenset[Die] = frozenset()) -> Distribution[Die]:
+        """The save's die; past 6+ there is nothing to roll.
 
-        Yields:
-            ``(probability, natural face, success)`` per branch.
+        Returns:
+            Each landed die's exact probability.
         """
         if isinstance(self.target, int) and self.target > 6:
-            yield Fraction(1), 0, False
-            return
-        yield from super().branches()
+            return Distribution({Die(0, False): Fraction(1)})
+        return super().dice(rerolls)
 
 
 @dataclass(frozen=True)
@@ -555,7 +507,8 @@ def walk(
         return _before_roll(stage, prof, before, hooked)
 
     def branches(stage: Stage, prof: AttackProfile) -> Iterator[tuple[Fraction, int, bool]]:
-        return _branches(prof.roll(stage), rerolled[stage])
+        for die, p in prof.roll(stage).dice(rerolled[stage]).mass.items():
+            yield Fraction(p), die.natural, die.success
 
     def on_success(stage: Stage, face: int, prof: AttackProfile) -> AttackProfile:
         shown = [m for m in fired[stage] if m.trigger is not None and m.trigger.face == face]
@@ -588,37 +541,21 @@ def walk(
                     )
 
 
-def _rerolls_by_stage(rerolls: Sequence[Reroll]) -> dict[Stage, list[Reroll]]:
-    by_stage: dict[Stage, list[Reroll]] = {stage: [] for stage in Stage}
-    for reroll in rerolls:
-        by_stage[reroll.stage].append(reroll)
-    return by_stage
-
-
-def _branches(roll: AttackRoll, rerolls: Sequence[Reroll]) -> Iterator[tuple[Fraction, int, bool]]:
-    # Enumerate a roll's die, re-rolling each branch a grant covers: its
-    # mass is spread over a fresh roll of the same die, whose branches
-    # stand as thrown (a re-rolled die is never re-rolled again, so a
-    # success re-rolled into a natural 1 stays a miss, and a forced
-    # re-roll of a success cannot itself be re-rolled back). A die no
-    # grant covers stands.
-    for probability, face, success in roll.branches():
-        if not _covered(rerolls, face, success):
-            yield probability, face, success
-            continue
-        for p_again, face_again, success_again in roll.branches():
-            yield probability * p_again, face_again, success_again
-
-
-def _covered(rerolls: Sequence[Reroll], face: int, success: bool) -> bool:
-    # A grant re-rolls this die if its result matches the grant's printed
-    # restriction (failed / successful) and its face is named (or no face
-    # is, covering every matching die at the stage). Face 0 is a rollless
-    # target (a RollState), which shows no die to re-roll.
-    return face != 0 and any(
-        (r.of is RollResult.SUCCESSFUL) == success and r.on_natural in (None, face)
-        for r in rerolls
-    )
+def _rerolls_by_stage(rerolls: Sequence[Reroll]) -> dict[Stage, frozenset[Die]]:
+    # The landed dice each stage's grants cover: a die matching a grant's
+    # printed result (failed / successful) and its face, if it names one.
+    return {
+        stage: frozenset(
+            Die(face, landed)
+            for face in range(1, 7)
+            for landed in (False, True)
+            for r in rerolls
+            if r.stage is stage
+            and (r.of is RollResult.SUCCESSFUL) == landed
+            and r.on_natural in (None, face)
+        )
+        for stage in Stage
+    }
 
 
 def _plan(

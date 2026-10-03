@@ -1,9 +1,15 @@
-"""Chart tests against verbatim rulebook values (tow.whfb.app)."""
+"""Kernel tests against verbatim rulebook values (tow.whfb.app)."""
+
+from fractions import Fraction
 
 import pytest
 
+from avelorn.core.distribution import Distribution
 from avelorn.tow.kernels import (
+    Confirm,
+    Die,
     armour_save_target,
+    d6,
     hit_probability,
     melee_hit_probability,
     melee_hit_target,
@@ -128,3 +134,47 @@ def test_wound_probability() -> None:
     assert wound_probability(4) == pytest.approx(3 / 6)
     assert wound_probability(2) == pytest.approx(5 / 6)
     assert wound_probability(6) == pytest.approx(1 / 6)
+
+
+_SIXTH = Fraction(1, 6)
+
+
+def _misses(*faces: int) -> dict[Die, Fraction]:
+    return {Die(face, False): _SIXTH for face in faces}
+
+
+@pytest.mark.parametrize(
+    ("target", "rerolls", "confirm", "expected"),
+    [
+        # Shooting 7+ to Hit: the natural 6 is confirmed on a second 4+.
+        (
+            7,
+            frozenset(),
+            Confirm.SECOND_DIE,
+            {**_misses(1, 2, 3, 4, 5), Die(6, True): _SIXTH / 2, Die(6, False): _SIXTH / 2},
+        ),
+        # Close-combat To Hit of 9: a natural 6 always hits.
+        (9, frozenset(), Confirm.ALWAYS, {**_misses(1, 2, 3, 4, 5), Die(6, True): _SIXTH}),
+        # A Roll to Wound pushed to 7: the die is thrown and every face fails.
+        (7, frozenset(), Confirm.NEVER, _misses(1, 2, 3, 4, 5, 6)),
+        # A target of 1: the natural 1 still fails.
+        (
+            1,
+            frozenset(),
+            Confirm.NEVER,
+            {**_misses(1), **{Die(f, True): _SIXTH for f in range(2, 7)}},
+        ),
+        # Re-rolled natural 1s at 2+: the fresh 1 stands, it is not re-rolled again.
+        (
+            2,
+            frozenset({Die(1, False)}),
+            Confirm.NEVER,
+            {Die(1, False): _SIXTH**2, **{Die(f, True): _SIXTH + _SIXTH**2 for f in range(2, 7)}},
+        ),
+    ],
+)
+def test_d6_lands_every_face_as_printed(
+    target: int, rerolls: frozenset[Die], confirm: Confirm, expected: dict[Die, Fraction]
+) -> None:
+    """The one die walk keeps each natural face, so face-triggered rules can read it."""
+    assert d6(target, rerolls, confirm) == Distribution(expected)
