@@ -152,14 +152,15 @@
 
 - kind: parameter-unbound
   subject: Extra Attacks (+1)
-  reason: "Signed parameters bind with #230 (PR 3 of DESIGN-GRAPH.md's sequence)."
+  reason: "Signed parameters bind with #230 (PR 3 of DESIGN-GRAPH.md's sequence). Even bound, the Attacks count reads unit rules only, never a weapon profile's."
   issue: 230
 - kind: parameter-unbound
   subject: Hatred (Orcs & Goblins)
   reason: Hated enemies are named by race; the foe gate has no race to match.
+  issue: 230
 - kind: parameter-unbound
   subject: Magic Resistance (-1)
-  reason: "Signed parameters bind with #230 (PR 3 of DESIGN-GRAPH.md's sequence)."
+  reason: "Signed parameters bind with #230 (PR 3 of DESIGN-GRAPH.md's sequence). It modifies enemy Casting rolls; magic is not modelled."
   issue: 230
 
 # profile-row-unread: a champion fights as the rank and file; only its
