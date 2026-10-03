@@ -26,6 +26,7 @@ from avelorn.core.graph import (
     Side,
     Slot,
     State,
+    Tally,
     Verdict,
     World,
 )
@@ -601,6 +602,111 @@ def test_a_group_stacks_its_attacks_per_outer_world() -> None:
     (lane,) = Program.build("volley", _SIDES, (band, shots, attack)).evaluate()
 
     assert lane.read(hit, hits).mass == {0: _HALF, 2: _HALF}
+
+
+def _charged() -> Distribution[bool]:
+    return Distribution({True: _HALF, False: _HALF})
+
+
+def _attackers(charged: bool) -> Distribution[int]:
+    return Distribution.pure(2 if charged else 0)
+
+
+def _hit_if_charged(charged: bool) -> Distribution[int]:
+    if not charged:
+        return Distribution.pure(0)
+    return Distribution({1: Fraction(5, 6), 0: _SIXTH})
+
+
+def _remove_up_to(models: int, wounds: int) -> Distribution[int]:
+    return Distribution.pure(max(models - wounds, 0))
+
+
+def test_remove_casualties_reads_the_tally_of_its_own_world() -> None:
+    """Uncharged, nobody attacks; charged, two attackers hit on 5/6 each.
+
+    Three left: 1/2 * (5/6)^2 = 25/72. Four left: 1/2 * 2 * 5/6 * 1/6 = 5/36.
+    Five left: 1/2 + 1/2 * (1/6)^2 = 37/72.
+    """
+    models = State[int]("models")
+    charged = Measurement[bool](name="charged", side=Side.THIS_MODEL, kernel=_charged)
+    attackers = Measurement[int](
+        name="attackers", side=Side.THIS_MODEL, inputs=(charged,), kernel=_attackers
+    )
+    hit = Roll[int](
+        name="roll-to-hit",
+        side=Side.THIS_MODEL,
+        inputs=(charged,),
+        kernel=_hit_if_charged,
+        target=Scalar("to hit", 2),
+    )
+    attack = Repeat(name="attack", times=attackers, items=(hit,))
+    hits = Tally[int]("hits", {attack: hit.output("hits", Monoid(0))})
+    remove = Consequence[int](
+        name="remove-casualties",
+        side=Side.THE_ENEMY,
+        inputs=(models, hits),
+        kernel=_remove_up_to,
+        writes=models,
+    )
+    left = Projection("models", (models,), _same, Monoid(0))
+    remove.show(left)
+    program = Program.build("fight", _SIDES, (charged, attackers, attack, remove))
+    (lane,) = program.evaluate(state={models: 5})
+
+    assert lane.read(remove, left).mass == {
+        5: Fraction(37, 72),
+        4: Fraction(5, 36),
+        3: Fraction(25, 72),
+    }
+
+
+def _always() -> Distribution[int]:
+    return Distribution.pure(1)
+
+
+def test_a_tally_sums_every_group_it_counts() -> None:
+    models = State[int]("models")
+    once = Measurement[int](name="once", side=Side.THIS_MODEL, kernel=_one)
+    rider = Measurement[int](name="rider-hit", side=Side.THIS_MODEL, kernel=_always)
+    mount = Measurement[int](name="mount-hit", side=Side.THIS_MODEL, kernel=_coin)
+    riders = Repeat(name="riders", times=once, items=(rider,))
+    mounts = Repeat(name="mounts", times=once, items=(mount,))
+    hits = Tally[int](
+        "hits",
+        {riders: rider.output("hits", Monoid(0)), mounts: mount.output("hits", Monoid(0))},
+    )
+    remove = Consequence[int](
+        name="remove-casualties",
+        side=Side.THE_ENEMY,
+        inputs=(models, hits),
+        kernel=_remove_up_to,
+        writes=models,
+    )
+    left = Projection("models", (models,), _same, Monoid(0))
+    remove.show(left)
+    slot = Slot(name="initiative-4", items=(riders, mounts, remove))
+    (lane,) = Program.build("fight", _SIDES, (once, slot)).evaluate(state={models: 5})
+
+    assert lane.read(remove, left).mass == {4: _HALF, 3: _HALF}
+
+
+def test_a_tally_of_a_group_out_of_scope_is_refused() -> None:
+    reaction = Decision[str](name="declare-reaction", side=Side.THE_ENEMY, options=("hold",))
+    once = Measurement[int](name="once", side=Side.THIS_MODEL, kernel=_one)
+    hit = Measurement[int](name="hit", side=Side.THIS_MODEL, kernel=_coin)
+    attack = Repeat(name="attack", times=once, items=(hit,))
+    hits = Tally[int]("hits", {attack: hit.output("hits", Monoid(0))})
+    remove = Consequence[int](
+        name="remove-casualties", side=Side.THE_ENEMY, inputs=(hits,), kernel=_toll
+    )
+
+    with pytest.raises(GraphError, match="tallies attack, which is not in scope"):
+        Program.build(
+            "charge",
+            _SIDES,
+            (reaction, once, Lanes(name="reaction", decision=reaction, items=(attack,)), remove),
+        )
 
 
 def test_a_repeat_inside_a_repeat_is_refused() -> None:

@@ -43,7 +43,15 @@ class State[T: Hashable]:
     name: str
 
 
-type Key = Step[Any] | State[Any]
+@dataclass(frozen=True, eq=False)
+class Tally[T: Hashable]:
+    """What a step outside reads of groups: each group's attacks, projected and summed."""
+
+    name: str
+    counts: Mapping["Repeat", "Projection[T]"]
+
+
+type Key = Step[Any] | State[Any] | Tally[Any]
 
 
 @dataclass(frozen=True)
@@ -52,7 +60,7 @@ class World:
 
     values: frozenset[tuple[Key, Any]] = frozenset()
 
-    def of[T: Hashable](self, key: "Step[T] | State[T]") -> T:
+    def of[T: Hashable](self, key: "Step[T] | State[T] | Tally[T]") -> T:
         for held, value in self.values:
             if held is key:
                 return value
@@ -199,6 +207,8 @@ class Step[Out: Hashable](ABC):
         for key in (*self.inputs, *reads, self.key):
             if isinstance(key, State):
                 program.hold(key)
+            if isinstance(key, Tally):
+                program.count(key, path, visible)
 
     def collect(self, program: "Program") -> None:
         program.steps.append(self)
@@ -380,9 +390,16 @@ class Repeat(Group):
 
     def liveness(self, after: frozenset[Key], program: "Program") -> frozenset[Key]:
         program.live[self] = after
-        inside = super().liveness(frozenset(), program) | {self.times}
+        tally = program.tallies.get(self)
+        counted = frozenset() if tally is None else frozenset(tally.counts[self].reads)
+        inside = super().liveness(counted, program) | {self.times}
         program.entries[self] = inside
+        if tally is not None and self.seeds(tally):
+            after = after - {tally}
         return after | inside
+
+    def seeds(self, tally: Tally[Any]) -> bool:
+        return next(iter(tally.counts)) is self
 
     def run(self, lane: "Lane") -> None:
         program = lane.program
@@ -406,12 +423,36 @@ class Repeat(Group):
                     }
                 )
             )
+        lane.joint = lane.joint.bind(self.exit(program, ran))
+
+    def exit(self, program: "Program", ran: Mapping[World, "Lane"]) -> Kernel[World]:
         after = program.live[self]
+        entry = program.entries[self]
+        tally = program.tallies.get(self)
+        if tally is None:
 
-        def resumed(world: World) -> World:
-            return world.keeping(after)
+            def resumed(world: World) -> Distribution[World]:
+                return Distribution.pure(world.keeping(after))
 
-        lane.joint = lane.joint.map(resumed)
+            return resumed
+        projection = tally.counts[self]
+        aggregation = projection.aggregation
+        stacked = {
+            start: inner.joint.map(projection.of).repeat(start.of(self.times), aggregation)
+            for start, inner in ran.items()
+        }
+        seeds = self.seeds(tally)
+
+        def tallied(world: World) -> Distribution[World]:
+            prior = aggregation.identity if seeds else world.of(tally)
+
+            def summed(count: Hashable) -> World:
+                total = aggregation.operation(prior, count)
+                return world.holding(tally, total).keeping(after)
+
+            return stacked[world.keeping(entry)].map(summed)
+
+        return tallied
 
     def detail(self, paths: Mapping[Any, str]) -> dict[str, Any]:
         return {"times": paths[self.times], "collapsed": self.collapsed}
@@ -479,6 +520,7 @@ class Program:
     live: dict[Item, frozenset[Key]] = field(default_factory=dict)
     inside: dict[Repeat, frozenset[Step[Any]]] = field(default_factory=dict)
     entries: dict[Repeat, frozenset[Key]] = field(default_factory=dict)
+    tallies: dict[Repeat, Tally[Any]] = field(default_factory=dict)
     entry: frozenset[Key] = frozenset()
 
     @classmethod
@@ -507,6 +549,29 @@ class Program:
             raise GraphError(f"{path} is declared twice")
         self.paths[state] = path
         self.states.append(state)
+
+    def count(self, tally: Tally[Any], path: str, visible: list[Item]) -> None:
+        groups = list(tally.counts)
+        if not groups:
+            raise GraphError(f"{tally.name} counts no group")
+        for group in groups:
+            if group not in visible:
+                raise GraphError(f"{path} tallies {group.name}, which is not in scope")
+        if self.tallies.get(groups[0]) is tally:
+            return
+        order = [self.blocks.index(group) for group in groups]
+        if order != sorted(order):
+            raise GraphError(f"{tally.name} lists its groups out of program order")
+        aggregations = {projection.aggregation for projection in tally.counts.values()}
+        if len(aggregations) != 1:
+            raise GraphError(f"{tally.name} sums its groups with different aggregations")
+        for group, projection in tally.counts.items():
+            if group in self.tallies:
+                raise GraphError(f"{group.name} is tallied by {self.tallies[group].name} already")
+            for source in projection.reads:
+                if isinstance(source, Step) and source not in self.inside[group]:
+                    raise GraphError(f"{tally.name} counts {source.name}, outside {group.name}")
+            self.tallies[group] = tally
 
     def attach(self, rule: RuleNode) -> None:
         for landing in rule.landings:
