@@ -30,6 +30,7 @@ from pydantic import BaseModel, ConfigDict
 from avelorn.core.distribution import Probability
 from avelorn.core.registry import Registry
 from avelorn.tow.contingent import Contingent
+from avelorn.tow.coverage import Site, printed_rules
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.engine.rules import printed_rule
 from avelorn.tow.muster import Complement
@@ -596,11 +597,11 @@ class VolleyReport(BaseModel):
 class RuleSummary(BaseModel):
     """A rule entry as a listing shows it: what it is, and whether it reaches the maths.
 
-    ``factors`` is the honest bit. An entry carries effects or it does not, and
-    one that does not is text the engine holds and never applies -- Killing Blow
-    is the standing example, its "no armour save allowed" having no word in the
-    effect vocabulary. ``references`` counts the units and weapons printing it,
-    so a listing sorts by what would matter most to model next.
+    ``factors`` says whether the entry carries effects; every filed entry does
+    (``test_every_rule_entry_carries_effects``). ``references`` counts the
+    places printing it -- units, options, troop types, weapons, and other
+    rules' grants, in any spelling that resolves to it -- so a listing sorts by
+    what would matter most to model next.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -633,33 +634,10 @@ def rule_summaries(data: TOWRepository) -> list[RuleSummary]:
     Returns:
         One summary per entry.
     """
-    units, weapons = _references(data)
+    printed_by: dict[str, set[Site]] = defaultdict(set)
+    for name, site in printed_rules(data):
+        if (rule := printed_rule(name, data.rules)) is not None:
+            printed_by[rule.id].add(site)
     return [
-        RuleSummary.of(rule, len(units[rule.name]) + len(weapons[rule.name]))
-        for _, rule in sorted(data.rules.items())
+        RuleSummary.of(rule, len(printed_by[slug])) for slug, rule in sorted(data.rules.items())
     ]
-
-
-def _references(data: TOWRepository) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
-    """Which units and weapons print each rule name.
-
-    A unit prints its own special rules and those its troop type confers, since
-    both reach the body that fights. A weapon prints the rules on each of its
-    profiles.
-
-    Returns:
-        Rule name to unit slugs, and rule name to weapon slugs.
-    """
-    units: dict[str, set[str]] = defaultdict(set)
-    weapons: dict[str, set[str]] = defaultdict(set)
-    for slug, unit in data.units.items():
-        conferred = (
-            () if unit.troop_type_profile is None else unit.troop_type_profile.special_rules
-        )
-        for name in (*unit.special_rules, *conferred):
-            units[name].add(slug)
-    for slug, weapon in data.weapons.items():
-        for profile in weapon.profiles:
-            for name in profile.special_rules:
-                weapons[name].add(slug)
-    return units, weapons

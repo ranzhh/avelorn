@@ -51,7 +51,7 @@ def test_rules_list_says_which_entries_reach_the_maths() -> None:
     lines = commands.list_rules(REPO)
     assert len(lines) == len(REPO.rules) + 1
     stubborn = next(line for line in lines if line.startswith("stubborn"))
-    assert stubborn.split()[-2:] == ["yes", "3"]  # effects, and three units print it
+    assert stubborn.split()[-2:] == ["yes", "4"]  # effects; three units and an option print it
     # Every entry folds, because one that did not would not be filed at all.
     assert all(line.split()[-2] == "yes" for line in lines[1:])
 
