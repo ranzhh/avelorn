@@ -1,7 +1,7 @@
 facts:
   - fact: standing
     type: standing
-    per_side: true
+    per: side
   - fact: moved
     type: bool
-    per_side: true
+    per: side

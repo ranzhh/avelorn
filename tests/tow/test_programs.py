@@ -41,7 +41,7 @@ def _group_before_its_count(volley: dict[str, Any]) -> None:
     volley["items"][1], volley["items"][2] = volley["items"][2], volley["items"][1]
 
 
-def _per_side_fact_without_a_side(volley: dict[str, Any]) -> None:
+def _fact_without_a_side(volley: dict[str, Any]) -> None:
     volley["inputs"].append({"fact": "moved"})
 
 
@@ -90,9 +90,9 @@ def _known_without_a_type(volley: dict[str, Any]) -> None:
             id="group-before-its-count",
         ),
         pytest.param(
-            _per_side_fact_without_a_side,
-            "volley.yaml: inputs[9]: moved is kept per side, so names its side",
-            id="per-side-fact-without-a-side",
+            _fact_without_a_side,
+            "inputs.9.FactInput.of\n  Field required",
+            id="fact-without-a-side",
         ),
         pytest.param(
             _known_without_a_type,

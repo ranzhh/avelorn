@@ -23,6 +23,12 @@ class FactType(StrEnum):
     FIELDED = "fielded"
 
 
+class Per(StrEnum):
+    """A state fact's key."""
+
+    SIDE = "side"
+
+
 class StateFact(BaseModel):
     """A state fact."""
 
@@ -30,7 +36,7 @@ class StateFact(BaseModel):
 
     fact: str
     type: FactType
-    per_side: bool
+    per: Per
 
 
 class StateFile(BaseModel):
@@ -47,12 +53,12 @@ class FactInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     fact: str
-    of: Side | None = None
+    of: Side
 
     @property
     def name(self) -> str:
-        """The fact's name, prefixed by its side when it has one."""
-        return self.fact if self.of is None else f"{self.of}/{self.fact}"
+        """The fact's name, prefixed by its side."""
+        return f"{self.of}/{self.fact}"
 
 
 class KnownInput(BaseModel):

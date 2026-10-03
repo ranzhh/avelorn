@@ -223,10 +223,6 @@ class _Builder:
             stated = self.facts.get(entry.fact)
             if stated is None:
                 raise self.error(here, f"{entry.fact} is no fact {STATE.name} lists")
-            if stated.per_side and entry.of is None:
-                raise self.error(here, f"{entry.fact} is kept per side, so names its side")
-            if not stated.per_side and entry.of is not None:
-                raise self.error(here, f"{entry.fact} is not kept per side")
             kind = stated.type
         else:
             if entry.known in self.facts:
@@ -371,7 +367,7 @@ class _Builder:
     def write(self, fact: Fact, here: str) -> State[Any]:
         name = fact.full
         stated = self.facts.get(fact.name)
-        if stated is None or stated.per_side != (fact.of is not None):
+        if stated is None or fact.of is None:
             raise self.error(here, f"writes {name}, which {STATE.name} does not list")
         self.written.add(name)
         return self.state(name)
