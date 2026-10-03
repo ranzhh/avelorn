@@ -198,7 +198,8 @@ FIELDED: list[tuple[str, Callable[[], Probability], Attack]] = [
         Attack(SHOOTING, 4, 3, 3, armour_value=4, armour_bane=1),
     ),
     (
-        # The magical Bow of Avelorn: no Lion Cloak, and Arrows of Isha's AP -1.
+        # The magical Bow of Avelorn: no Lion Cloak; its Armour Bane (1) and Arrows of
+        # Isha's make Armour Bane 2, and Arrows of Isha adds AP -1.
         "sisters-v-white-lions",
         lambda: (
             shoot_unit(
@@ -207,7 +208,28 @@ FIELDED: list[tuple[str, Callable[[], Probability], Attack]] = [
                 force_short_range=True,
             ).p_unsaved
         ),
-        Attack(SHOOTING, 5, 3, 3, armour_value=5, armour_piercing=-1, armour_bane=1),
+        Attack(SHOOTING, 5, 3, 3, armour_value=5, armour_piercing=-1, armour_bane=2),
+    ),
+    (
+        # Against 3+ the second Armour Bane counts; a magical attack gets past the runes.
+        "sisters-v-ironbreakers",
+        lambda: (
+            shoot_unit(
+                _fielded("sisters-of-avelorn", 5, "Bow of Avelorn"),
+                _fielded("ironbreakers", 10),
+                force_short_range=True,
+            ).p_unsaved
+        ),
+        Attack(
+            SHOOTING,
+            5,
+            3,
+            4,
+            armour_value=3,
+            armour_piercing=-1,
+            armour_bane=2,
+            save_re_rolls=ONES,
+        ),
     ),
     (
         # Enemy Fire (Skirmishers): -1 To Hit; light armour 6+.
