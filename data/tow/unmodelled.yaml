@@ -318,9 +318,6 @@
   reason: Imported as prose, swapping no armour.
   issue: 33
 - kind: inert-option
-  subject: maneaters/Bellower (musician)
-  reason: A musician imported as kind other; musicians are not modelled.
-- kind: inert-option
   subject: maneaters/Brace of Ogre Pistols
   reason: Imported as prose, adding no weapon; one of an exclusive per-model choice.
   issue: 33
@@ -356,7 +353,3 @@
   subject: maneaters/Vanguard
   reason: Imported as prose, adding no rule; one of "0-2 of the following", a capped choice.
   issue: 33
-- kind: inert-option
-  subject: 'ships-company/Or: Upgrade one model to a Bosun (champion)'
-  reason: The alternative champion, imported as kind other; either/or options are not expressible.
-  issue: 5
