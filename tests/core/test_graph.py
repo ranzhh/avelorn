@@ -346,7 +346,7 @@ def _same(value: int) -> int:
 
 
 def test_a_state_write_replaces_the_fact() -> None:
-    total = State[int]("total", 0)
+    total = State[int]("total")
     first = Consequence[int](
         name="add-three", side=Side.THIS_MODEL, inputs=(total,), kernel=_add_three, writes=total
     )
@@ -355,26 +355,40 @@ def test_a_state_write_replaces_the_fact() -> None:
     )
     sums = Projection("total", (total,), _same, Monoid(0))
     second.show(sums)
-    (lane,) = Program.build("tally", _SIDES, (first, second)).evaluate()
+    (lane,) = Program.build("tally", _SIDES, (first, second)).evaluate(state={total: 0})
 
     assert lane.read(second, sums).mass == {7: 1}
 
 
+def test_a_fact_read_before_it_is_written_must_be_given() -> None:
+    total = State[int]("total")
+    stray = State[int]("stray")
+    add = Consequence[int](
+        name="add-three", side=Side.THIS_MODEL, inputs=(total,), kernel=_add_three, writes=total
+    )
+    program = Program.build("tally", _SIDES, (add,))
+
+    with pytest.raises(GraphError, match="tally reads total before writing it"):
+        program.evaluate()
+    with pytest.raises(GraphError, match="stray is not a state fact of tally"):
+        program.evaluate(state={total: 0, stray: 0})
+
+
 def test_a_state_writing_step_shows_its_own_output() -> None:
-    total = State[int]("total", 0)
+    total = State[int]("total")
     add = Consequence[int](
         name="add-three", side=Side.THIS_MODEL, inputs=(total,), kernel=_add_three, writes=total
     )
     added = add.output("total", Monoid(0))
     add.show(added)
-    (lane,) = Program.build("tally", _SIDES, (add,)).evaluate()
+    (lane,) = Program.build("tally", _SIDES, (add,)).evaluate(state={total: 0})
 
     assert lane.read(add, added).mass == {3: 1}
 
 
 def test_worlds_holding_the_same_values_are_equal_whatever_the_write_order() -> None:
-    fleeing = State[bool]("fleeing", False)
-    models = State[int]("models", 5)
+    fleeing = State[bool]("fleeing")
+    models = State[int]("models")
 
     first = World().holding(fleeing, True).holding(models, 4)
     second = World().holding(models, 4).holding(fleeing, True)
@@ -391,7 +405,7 @@ def _pair(models: int, hit: int) -> Distribution[tuple[int, int]]:
 
 
 def test_a_slot_keeps_its_locals_and_its_state_writes() -> None:
-    models = State[int]("models", 5)
+    models = State[int]("models")
     hit = Measurement[int](name="hit", side=Side.THIS_MODEL, kernel=_coin)
     remove = Consequence[int](
         name="remove-casualties",
@@ -406,7 +420,7 @@ def test_a_slot_keeps_its_locals_and_its_state_writes() -> None:
     pair = after.output("after", Monoid((0, 0)))
     after.show(pair)
     program = Program.build("round", _SIDES, (Slot(name="shooting", items=(hit, remove)), after))
-    (lane,) = program.evaluate()
+    (lane,) = program.evaluate(state={models: 5})
 
     assert lane.read(after, pair).mass == {
         (5, 0): _HALF,
@@ -415,7 +429,7 @@ def test_a_slot_keeps_its_locals_and_its_state_writes() -> None:
 
 
 def test_a_lane_keeps_its_state_writes() -> None:
-    models = State[int]("models", 5)
+    models = State[int]("models")
     reaction = Decision[str](name="declare-reaction", side=Side.THE_ENEMY, options=("hold",))
     hit = Measurement[int](name="hit", side=Side.THIS_MODEL, kernel=_coin)
     remove = Consequence[int](
@@ -433,13 +447,13 @@ def test_a_lane_keeps_its_state_writes() -> None:
         _SIDES,
         (reaction, Lanes(name="reaction", decision=reaction, items=(hit, remove)), after),
     )
-    (lane,) = program.evaluate()
+    (lane,) = program.evaluate(state={models: 5})
 
     assert lane.read(after, left).mass == {5: _HALF, 4: _HALF}
 
 
 def test_a_group_cannot_write_state() -> None:
-    models = State[int]("models", 5)
+    models = State[int]("models")
     shots = Measurement[int](name="shots", side=Side.THIS_MODEL, kernel=_three)
     hit = Measurement[int](name="hit", side=Side.THIS_MODEL, kernel=_coin)
     remove = Consequence[int](
@@ -461,7 +475,7 @@ def _add(total: int, face: int) -> Distribution[int]:
 
 
 def test_a_running_total_holds_only_the_total_between_rolls() -> None:
-    total = State[int]("total", 0)
+    total = State[int]("total")
     items: list[Measurement[int] | Consequence[int]] = []
     for throw in range(1, 5):
         roll = Measurement[int](name=f"roll-{throw}", side=Side.THIS_MODEL, kernel=_d6)
@@ -475,7 +489,7 @@ def test_a_running_total_holds_only_the_total_between_rolls() -> None:
         items += [roll, add]
     sums = Projection("total", (total,), _same, Monoid(0))
     items[-1].show(sums)
-    (lane,) = Program.build("sum", _SIDES, tuple(items)).evaluate()
+    (lane,) = Program.build("sum", _SIDES, tuple(items)).evaluate(state={total: 0})
 
     assert [len(lane.edges[step].joint.mass) for step in items] == [6, 6, 36, 11, 66, 16, 96, 21]
     assert lane.read(items[-1], sums).mass[14] == Fraction(146, 6**4)
@@ -502,12 +516,13 @@ def _round(number: int, models: State[int]) -> tuple[Slot, Consequence[int]]:
 
 
 def test_six_casualty_removals_keep_one_world_per_standing() -> None:
-    models = State[int]("models", 22)
+    models = State[int]("models")
     rounds = [_round(number, models) for number in range(1, 7)]
     last = rounds[-1][1]
     left = Projection("models", (models,), _same, Monoid(0))
     last.show(left)
-    (lane,) = Program.build("attrition", _SIDES, tuple(slot for slot, _ in rounds)).evaluate()
+    program = Program.build("attrition", _SIDES, tuple(slot for slot, _ in rounds))
+    (lane,) = program.evaluate(state={models: 22})
 
     assert len(lane.edges[last].joint.mass) == 23
     assert lane.read(last, left).mass[22] == Fraction(1, 6**6)

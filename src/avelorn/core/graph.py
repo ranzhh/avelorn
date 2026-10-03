@@ -42,7 +42,6 @@ class State[T: Hashable]:
     """A fact about the table that no block owns, such as the models a unit has left."""
 
     name: str
-    initial: T
 
 
 # A step's own output is a local, keyed by the step.
@@ -494,8 +493,19 @@ class Program:
         self.rules.append(rule)
 
     def evaluate(
-        self, choices: Mapping[Decision[Any], Any] = MappingProxyType({})
+        self,
+        choices: Mapping[Decision[Any], Any] = MappingProxyType({}),
+        state: Mapping[State[Any], Hashable] = MappingProxyType({}),
     ) -> tuple["Lane", ...]:
+        for fact in state:
+            if fact not in self.states:
+                raise GraphError(f"{fact.name} is not a state fact of {self.name}")
+        for fact in self.states:
+            if fact in self.entry and fact not in state:
+                raise GraphError(
+                    f"{self.name} reads {fact.name} before writing it, so needs it given"
+                )
+        start = World(frozenset((fact, state[fact]) for fact in self.states if fact in self.entry))
         for step in self.steps:
             if step.shown() != self.readings[step]:
                 raise GraphError(f"{self.paths[step]} was shown a reading after build")
@@ -509,14 +519,11 @@ class Program:
             for decision in self.decisions
         ]
         return tuple(
-            self._lane(dict(zip(self.decisions, taken, strict=True)))
+            self._lane(dict(zip(self.decisions, taken, strict=True)), start)
             for taken in product(*open_options)
         )
 
-    def _lane(self, choices: Mapping[Decision[Any], Any]) -> "Lane":
-        start = World(
-            frozenset((state, state.initial) for state in self.states if state in self.entry)
-        )
+    def _lane(self, choices: Mapping[Decision[Any], Any], start: World) -> "Lane":
         lane = Lane(program=self, choices=choices, joint=Distribution.pure(start))
         for item in self.items:
             item.run(lane)
