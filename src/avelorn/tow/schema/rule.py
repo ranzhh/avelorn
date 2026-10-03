@@ -156,11 +156,6 @@ class AmountParameter(BaseModel):
         return x
 
     def printed(self, x: int | str) -> str:
-        """The text a bracket prints for an X.
-
-        Returns:
-            The number or the dice roll, as printed.
-        """
         return str(x)
 
     @model_validator(mode="after")
@@ -262,11 +257,6 @@ class PrintedParameter(BaseModel):
         return int(printed) if printed.isdigit() else printed
 
     def printed(self, x: int | str) -> str:
-        """The text a bracket prints for an X.
-
-        Returns:
-            The X, as printed.
-        """
         return self.value(x)
 
 

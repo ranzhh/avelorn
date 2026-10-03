@@ -176,7 +176,7 @@ def test_compile_rank_quantity_stays_unfactored_in_the_dice_walk() -> None:
 
 
 def test_compile_parameter_placeholder_without_value_stays_unfactored() -> None:
-    """The X placeholder needs a bracketed number in the printed name."""
+    """The entry as filed, its X unbound, has no amount to compile."""
     rule = REPO.rules["armour-bane"]
     compiled = compile_rules([rule])
     assert rule.effects and compiled.modifiers == ()
@@ -1410,7 +1410,7 @@ def test_effective_automatic_hits_unbound_parameter_is_unfactored() -> None:
 
 
 def test_binding_substitutes_a_dice_multiplier() -> None:
-    """A dice parameter binds the multiplier; a numeric-only amount stays unbound."""
+    """A dice parameter binds the multiplier; a rule taking only a number refuses a roll."""
     rule = bind(RuleRef(rule="multiple-wounds", X="D3"), REPO.rules)
     assert rule.name == "Multiple Wounds (D3)"
     effect = rule.effects[0]

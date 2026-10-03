@@ -30,9 +30,4 @@ class RuleRef(BaseModel):
         return self.rule if self.x is None else {"rule": self.rule, "X": self.x}
 
     def __str__(self) -> str:
-        """The reference as YAML writes it, for an error message.
-
-        Returns:
-            The bare slug, or the ``{rule, X}`` mapping.
-        """
         return self.rule if self.x is None else f"{{rule: {self.rule}, X: {self.x}}}"
