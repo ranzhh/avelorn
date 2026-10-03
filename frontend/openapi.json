@@ -1933,8 +1933,7 @@
             "title": "Name"
           },
           "role": {
-            "$ref": "#/components/schemas/ProfileRole",
-            "default": "rank-and-file"
+            "$ref": "#/components/schemas/ProfileRole"
           },
           "characteristics": {
             "additionalProperties": {
@@ -1958,10 +1957,11 @@
         "type": "object",
         "required": [
           "name",
+          "role",
           "characteristics"
         ],
         "title": "Profile",
-        "description": "One row of a characteristic profile, keyed by the printed abbreviations.\n\nA unit may have several rows, e.g. rank-and-file plus champion. The\nrow is written flat in the printed form ({ name: ..., M: 5, ... });\na validator gathers the abbreviation keys into ``characteristics``,\nso the vocabulary is declared once, on :class:`Characteristic`.\n\n``role`` says which part of the model the row describes\n(:class:`ProfileRole`); it defaults to rank-and-file, which is what a\nsingle-row datasheet prints."
+        "description": "One row of a characteristic profile, keyed by the printed abbreviations.\n\nA unit may have several rows, e.g. rank-and-file plus champion. The\nrow is written flat in the printed form ({ name: ..., M: 5, ... });\na validator gathers the abbreviation keys into ``characteristics``,\nso the vocabulary is declared once, on :class:`Characteristic`.\n\n``role`` says which part of the model the row describes\n(:class:`ProfileRole`). Every row states it."
       },
       "ProfileDetail": {
         "properties": {

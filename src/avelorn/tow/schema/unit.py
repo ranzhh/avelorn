@@ -75,14 +75,13 @@ class Profile(BaseModel):
     so the vocabulary is declared once, on :class:`Characteristic`.
 
     ``role`` says which part of the model the row describes
-    (:class:`ProfileRole`); it defaults to rank-and-file, which is what a
-    single-row datasheet prints.
+    (:class:`ProfileRole`). Every row states it.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     name: str
-    role: ProfileRole = ProfileRole.RANK_AND_FILE
+    role: ProfileRole
     characteristics: dict[Characteristic, Stat]
 
     @model_validator(mode="before")

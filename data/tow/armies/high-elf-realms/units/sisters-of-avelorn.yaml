@@ -9,8 +9,8 @@ base_size:
   width_mm: 25
   depth_mm: 25
 profiles:
-  - { name: Sister of Avelorn, M: 5, WS: 5, BS: 5, S: 3, T: 3, W: 1, I: 5, A: 1, Ld: 8 }
-  - { name: High Sister, M: 5, WS: 5, BS: 6, S: 3, T: 3, W: 1, I: 5, A: 1, Ld: 8 }
+  - { name: Sister of Avelorn, role: rank-and-file, M: 5, WS: 5, BS: 5, S: 3, T: 3, W: 1, I: 5, A: 1, Ld: 8 }
+  - { name: High Sister, role: champion, M: 5, WS: 5, BS: 6, S: 3, T: 3, W: 1, I: 5, A: 1, Ld: 8 }
 equipment:
   - Hand Weapon
   - Bow of Avelorn

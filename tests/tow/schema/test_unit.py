@@ -10,7 +10,6 @@ from avelorn.tow.data import DATA_DIR
 from avelorn.tow.schema.unit import (
     Characteristic,
     Profile,
-    ProfileRole,
     Unit,
     UnitOption,
     UnitSize,
@@ -68,7 +67,7 @@ def test_highest_reads_the_unit_s_highest_value(elven_spearmen: dict) -> None:
 def test_dash_stat_becomes_none() -> None:
     """A "-" characteristic in source material is coerced to None."""
     stats = {"M": 4, "WS": 3, "BS": "-", "S": 3, "T": 3, "W": 1, "I": 3, "A": 1, "Ld": 7}
-    profile = Profile.model_validate({"name": "Crew", **stats})
+    profile = Profile.model_validate({"name": "Crew", "role": "rank-and-file", **stats})
     assert profile[Characteristic.BALLISTIC_SKILL] is None
 
 
@@ -126,18 +125,19 @@ def test_profile_requires_every_characteristic() -> None:
     """A row missing a printed column is a data error."""
     stats = {"M": 4, "WS": 3, "S": 3, "T": 3, "W": 1, "I": 3, "A": 1, "Ld": 7}  # no BS
     with pytest.raises(ValidationError, match="missing characteristics.*BS"):
-        Profile.model_validate({"name": "Crew", **stats})
+        Profile.model_validate({"name": "Crew", "role": "rank-and-file", **stats})
 
 
 def test_profile_rejects_unknown_abbreviation() -> None:
     """A key outside the characteristic vocabulary is a data error."""
     stats = {"M": 4, "WS": 3, "BS": 3, "S": 3, "T": 3, "W": 1, "I": 3, "A": 1, "Ld": 7}
-    with pytest.raises(ValidationError):
-        Profile.model_validate({"name": "Crew", "Sv": 5, **stats})
+    with pytest.raises(ValidationError, match="Sv"):
+        Profile.model_validate({"name": "Crew", "role": "rank-and-file", "Sv": 5, **stats})
 
 
 _RIDER = {
     "name": "Rider",
+    "role": "rank-and-file",
     "M": "-",
     "WS": 4,
     "BS": 4,
@@ -176,10 +176,11 @@ def _ridden() -> Unit:
     )
 
 
-def test_a_row_defaults_to_rank_and_file() -> None:
-    """A single-row datasheet says nothing about roles and means the plain one."""
-    row = Profile.model_validate(_RIDER)
-    assert row.role is ProfileRole.RANK_AND_FILE
+def test_a_row_must_state_its_role() -> None:
+    """A row without a role is refused: nothing guesses which part of the unit it is."""
+    unstated = {key: value for key, value in _RIDER.items() if key != "role"}
+    with pytest.raises(ValidationError, match="role"):
+        Profile.model_validate(unstated)
 
 
 def test_main_is_the_rank_and_file_row() -> None:

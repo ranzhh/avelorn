@@ -9,8 +9,8 @@ base_size:
   width_mm: 25
   depth_mm: 25
 profiles:
-  - { name: Swordmaster, M: 5, WS: 6, BS: 4, S: 3, T: 3, W: 1, I: 6, A: 1, Ld: 8 }
-  - { name: Bladelord, M: 5, WS: 6, BS: 4, S: 3, T: 3, W: 1, I: 6, A: 2, Ld: 8 }
+  - { name: Swordmaster, role: rank-and-file, M: 5, WS: 6, BS: 4, S: 3, T: 3, W: 1, I: 6, A: 1, Ld: 8 }
+  - { name: Bladelord, role: champion, M: 5, WS: 6, BS: 4, S: 3, T: 3, W: 1, I: 6, A: 2, Ld: 8 }
 equipment:
   - Hand Weapon
   - Sword of Hoeth

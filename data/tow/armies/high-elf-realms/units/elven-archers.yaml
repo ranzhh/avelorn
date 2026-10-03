@@ -9,8 +9,8 @@ base_size:
   width_mm: 25
   depth_mm: 25
 profiles:
-  - { name: Elven Archer, M: 5, WS: 4, BS: 4, S: 3, T: 3, W: 1, I: 4, A: 1, Ld: 8 }
-  - { name: Sentinel, M: 5, WS: 4, BS: 5, S: 3, T: 3, W: 1, I: 4, A: 1, Ld: 8 }
+  - { name: Elven Archer, role: rank-and-file, M: 5, WS: 4, BS: 4, S: 3, T: 3, W: 1, I: 4, A: 1, Ld: 8 }
+  - { name: Sentinel, role: champion, M: 5, WS: 4, BS: 5, S: 3, T: 3, W: 1, I: 4, A: 1, Ld: 8 }
 equipment:
   - Hand Weapon
   - Longbow

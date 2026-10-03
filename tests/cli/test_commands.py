@@ -23,8 +23,8 @@ def test_show_prints_every_profile_row() -> None:
     """A datasheet with a champion row prints both rows, under the characteristics."""
     printed = "\n".join(commands.show_unit(REPO, "white-lions-of-chrace"))
     assert "M  WS  BS  S  T  W  I  A  Ld" in printed
-    assert "White Lion  5  5   4   4  3  1  5  1  8" in printed
-    assert "Guardian    5  5   4   4  3  1  5  2  8" in printed
+    assert "White Lion           5  5   4   4  3  1  5  1  8" in printed
+    assert "Guardian (champion)  5  5   4   4  3  1  5  2  8" in printed
 
 
 def test_show_prints_what_the_datasheet_offers() -> None:

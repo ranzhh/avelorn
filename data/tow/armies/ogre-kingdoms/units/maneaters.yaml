@@ -9,8 +9,8 @@ base_size:
   width_mm: 40
   depth_mm: 40
 profiles:
-  - { name: Maneater, M: 6, WS: 4, BS: 4, S: 5, T: 4, W: 3, I: 3, A: 4, Ld: 8 }
-  - { name: Maneater Captain, M: 6, WS: 4, BS: 4, S: 5, T: 4, W: 3, I: 3, A: 5, Ld: 8 }
+  - { name: Maneater, role: rank-and-file, M: 6, WS: 4, BS: 4, S: 5, T: 4, W: 3, I: 3, A: 4, Ld: 8 }
+  - { name: Maneater Captain, role: champion, M: 6, WS: 4, BS: 4, S: 5, T: 4, W: 3, I: 3, A: 5, Ld: 8 }
 equipment:
   - Hand Weapon
   - Light Armour

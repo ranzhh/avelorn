@@ -28,6 +28,7 @@ def test_canonical_unit_rewrites_the_references_and_reports_each_fix() -> None:
             "profiles": [
                 {
                     "name": "Rider",
+                    "role": "rank-and-file",
                     "M": 9,
                     "WS": 4,
                     "BS": 4,

@@ -9,8 +9,8 @@ base_size:
   width_mm: 25
   depth_mm: 25
 profiles:
-  - { name: Phoenix Guard, M: 5, WS: 5, BS: 4, S: 3, T: 3, W: 1, I: 5, A: 1, Ld: 9 }
-  - { name: Keeper of the Flame, M: 5, WS: 5, BS: 4, S: 3, T: 3, W: 1, I: 5, A: 2, Ld: 9 }
+  - { name: Phoenix Guard, role: rank-and-file, M: 5, WS: 5, BS: 4, S: 3, T: 3, W: 1, I: 5, A: 1, Ld: 9 }
+  - { name: Keeper of the Flame, role: champion, M: 5, WS: 5, BS: 4, S: 3, T: 3, W: 1, I: 5, A: 2, Ld: 9 }
 equipment:
   - Hand Weapon
   - Ceremonial Halberd

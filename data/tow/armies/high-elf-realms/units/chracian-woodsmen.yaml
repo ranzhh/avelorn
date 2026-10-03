@@ -9,8 +9,8 @@ base_size:
   width_mm: 25
   depth_mm: 25
 profiles:
-  - { name: Chracian Woodsman, M: 5, WS: 4, BS: 4, S: 4, T: 3, W: 1, I: 4, A: 1, Ld: 8 }
-  - { name: Chracian Captain, M: 5, WS: 4, BS: 4, S: 4, T: 3, W: 1, I: 4, A: 2, Ld: 8 }
+  - { name: Chracian Woodsman, role: rank-and-file, M: 5, WS: 4, BS: 4, S: 4, T: 3, W: 1, I: 4, A: 1, Ld: 8 }
+  - { name: Chracian Captain, role: champion, M: 5, WS: 4, BS: 4, S: 4, T: 3, W: 1, I: 4, A: 2, Ld: 8 }
 equipment:
   - Hand Weapon
   - Chracian Great Blade

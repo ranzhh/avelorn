@@ -1173,6 +1173,7 @@ def _cavalry_unit(*, rider_i: int, mount_i: int) -> Unit:
     # every attack's p_unsaved is 1/2 * 1/2 = 1/4, so the goldens stay small.
     rider = {
         "name": "Rider",
+        "role": "rank-and-file",
         "M": "-",
         "WS": 4,
         "BS": 4,
@@ -1223,6 +1224,7 @@ def _foot_unit(*, initiative: int) -> Unit:
             "profiles": [
                 {
                     "name": "Footman",
+                    "role": "rank-and-file",
                     "M": 5,
                     "WS": 4,
                     "BS": 4,

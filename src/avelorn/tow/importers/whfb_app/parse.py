@@ -179,8 +179,7 @@ def _parse_profiles(slug: str, raw_profiles: object) -> list[Profile]:
         if not isinstance(row, dict):
             raise WhfbParseError(f"{slug}: malformed profile row {row!r}")
         data = {"name": row.get("Name", "")} | {k: row.get(k, "-") for k in _STAT_KEYS}
-        if _is_mount(data):
-            data["role"] = ProfileRole.MOUNT
+        data["role"] = ProfileRole.MOUNT if _is_mount(data) else ProfileRole.RANK_AND_FILE
         profiles.append(Profile.model_validate(data))
     return profiles
 
