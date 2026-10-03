@@ -68,6 +68,11 @@ class Coverage(BaseModel):
     gaps: list[Gap]
     stale: list[Acknowledgement]
 
+    @property
+    def acknowledged(self) -> bool:
+        """Whether the ledger matches the corpus: every gap acknowledged, no entry stale."""
+        return not self.stale and all(gap.reason is not None for gap in self.gaps)
+
 
 # The engine reads no command model, so each kind is one gap across every datasheet.
 _COMMAND = {OptionKind.CHAMPION, OptionKind.STANDARD_BEARER, OptionKind.MUSICIAN}

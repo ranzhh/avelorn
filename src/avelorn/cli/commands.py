@@ -285,7 +285,9 @@ def show_coverage(data: TOWRepository) -> list[str]:
         lines.extend(["", f"{kind}:"])
         for gap in (g for g in report.gaps if g.kind is kind):
             issue = "" if gap.issue is None else f" (#{gap.issue})"
-            lines.append(f"  {gap.subject}  [{_sites(gap)}]")
+            # A subject that already names its entry (a notes slug, <unit>/<row>) needs no sites.
+            named = all(gap.subject.startswith(site.id) for site in gap.sites)
+            lines.append(f"  {gap.subject}" if named else f"  {gap.subject}  [{_sites(gap)}]")
             lines.append(f"      {gap.reason or '!! UNACKNOWLEDGED'}{issue}")
     return lines
 

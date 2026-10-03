@@ -22,6 +22,7 @@ import sys
 
 from avelorn.cli import commands
 from avelorn.core.errors import AvelornError
+from avelorn.tow.coverage import coverage
 from avelorn.tow.data import TOWRepository, default_repository
 
 
@@ -29,8 +30,8 @@ def main(argv: list[str] | None = None) -> int:
     """Run the CLI.
 
     Returns:
-        The process exit code: 0 for an answer, 2 for a question the corpus
-        will not answer.
+        The process exit code: 0 for an answer, 1 for a coverage report the
+        ledger does not match, 2 for a question the corpus will not answer.
     """
     args = _parser().parse_args(argv)
     # The corpus as data, not as a game in play: these commands read the
@@ -49,6 +50,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     for line in lines:
         print(line)
+    # An unacknowledged gap or a stale entry is printed and fails, so a script can gate on it.
+    if args.group == "coverage" and not coverage(data).acknowledged:
+        return 1
     return 0
 
 
