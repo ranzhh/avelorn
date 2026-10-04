@@ -13,6 +13,8 @@ repos:
       # list of supported hooks: https://pre-commit.com/hooks.html
       - id: check-case-conflict # checks for files that would conflict in case-insensitive file systems
       - id: check-docstring-first # checks a common error of defining a docstring after code
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
       - id: check-merge-conflict # checks for files that contain merge conflict strings
       - id: check-toml # checks toml files for parseable syntax
       - id: check-yaml # checks yaml files for parseable syntax
@@ -48,6 +50,12 @@ repos:
         language: system
         types: [python]
         pass_filenames: false
+      - id: uv-lock
+        name: uv lock --check
+        entry: uv lock --check
+        language: system
+        files: ^(pyproject\.toml|uv\.lock)$
+        pass_filenames: false
 
   # prettier and eslint run from frontend/node_modules, so the versions come
   # from package-lock.json — the same one source of truth CI installs from.
@@ -60,6 +68,12 @@ repos:
         language: system
         files: ^frontend/
         pass_filenames: false
+
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.3
+    hooks:
+      - id: codespell
+        args: ["--skip=*.json,uv.lock", "--ignore-words-list=ony"]
 
   # Conventional Commits. Commits allow fixup! and merge commits; the PR title,
   # which becomes the squash commit on dev, does not. CI runs both.
