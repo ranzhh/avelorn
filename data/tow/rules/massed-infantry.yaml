@@ -8,6 +8,7 @@ paragraphs:
     with this rule, that side may claim a bonus of +1 combat result point.
 # In the one-on-one combats modelled today, "one or more units with this rule"
 # is simply the side that carries it.
+needs: [multiple-units-in-combat]
 effects:
   - when:
       facts:

@@ -6,12 +6,12 @@ category: Unusual Formations
 paragraphs:
   - Due to their comparatively small size and ability to make use of all available cover, enemy units shooting at a unit of
     Skirmishers that consists entirely of models with a Unit Strength of 1 suffer a -1 To Hit modifier.
-needs: [parts]
+needs: [own-unit-strength]
 effects:
   - add: {to-hit: -1}
     at: {step: roll-to-hit, by: the-enemy, in: shooting}
     legacy:
       enemy: true
       when: {target_of: {kind: shooting}}
-notes: the Unit Strength 1 restriction is not expressed — the engine fields
-  US-1 infantry only, so it cannot yet fail.
+notes: the Unit Strength 1 restriction is not expressed, so a skirmishing unit
+  of light cavalry gives enemies the -1 To Hit too.

@@ -420,10 +420,13 @@
   reason: Marching is not modelled, so Veteran never re-rolls the Leadership test a marching unit takes near the enemy.
 - kind: missing-mechanic
   subject: multiple-units-in-combat
-  reason: Only a combat of one unit against one is modelled, so Stomp Attacks are never divided between enemy units.
+  reason: Only a combat of one unit against one is modelled, so Stomp Attacks are never divided between enemy units, and Massed Infantry compares the Unit Strength of one unit where the printed rule compares each side's.
+- kind: missing-mechanic
+  subject: own-unit-strength
+  reason: No gate reads the Unit Strength of the bearer's own models, so Enemy Fire (Skirmishers) does not check that every model has a Unit Strength of 1; enemies shooting at Ellyrian Reavers in Skirmish formation, light cavalry of Unit Strength 2, take the -1 To Hit the rule withholds from them.
 - kind: missing-mechanic
   subject: parts
-  reason: A unit is read as one part until the program fields its parts (item 12); Veteran's majority of models is not counted, and Enemy Fire (Skirmishers) does not check that every model has a Unit Strength of 1, so enemies shooting at Ellyrian Reavers in Skirmish formation, light cavalry of Unit Strength 2, take the -1 To Hit the rule withholds from them.
+  reason: A unit is read as one part until the program fields its parts (item 12), so Veteran's majority of models is not counted.
 - kind: missing-mechanic
   subject: psychology-tests
   reason: Fear and Terror tests are not modelled (item 26 adds the slots); Terror's test on a charge target, and Veteran's re-roll of Fear and Terror tests, have no step.
