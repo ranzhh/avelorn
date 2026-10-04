@@ -14,11 +14,6 @@ from avelorn.core.errors import AvelornError
 class GraphError(AvelornError): ...
 
 
-class Side(StrEnum):
-    THIS_MODEL = "this-model"
-    THE_ENEMY = "the-enemy"
-
-
 class Bearer(StrEnum):
     THIS_MODEL = "this-model"
     THE_ENEMY = "the-enemy"
@@ -200,7 +195,7 @@ class Modifier:
 class Step[Out: Hashable](ABC):
     kind: ClassVar[str]
     name: str
-    side: Side
+    side: str
     inputs: tuple[Key, ...] = ()
     kernel: Kernel[Out] | None = None
     readings: list[Reading] = field(default_factory=list)
@@ -294,7 +289,7 @@ class Step[Out: Hashable](ABC):
             "path": paths[self],
             "step": self.name,
             "kind": self.kind,
-            "side": self.side.value,
+            "side": self.side,
             "inputs": [paths[source] for source in needs if isinstance(source, Step)],
             "ran": edge is not None,
             "edge": {"readings": [reading.view(edge) for reading in self.drawn()]},
@@ -769,7 +764,7 @@ class RuleNode:
 @dataclass
 class Program:
     name: str
-    sides: Mapping[Side, str]
+    sides: tuple[str, ...]
     items: tuple[Item, ...]
     paths: dict[Any, str] = field(default_factory=dict)
     steps: list[Step[Any]] = field(default_factory=list)
@@ -792,11 +787,14 @@ class Program:
     entry: frozenset[Key] = frozenset()
 
     @classmethod
-    def build(cls, name: str, sides: Mapping[Side, str], items: tuple[Item, ...]) -> "Program":
+    def build(cls, name: str, sides: tuple[str, ...], items: tuple[Item, ...]) -> "Program":
         program = cls(name=name, sides=sides, items=items)
         visible: list[Item] = []
         for item in items:
             item.declare(program, name, visible)
+        for step in program.steps:
+            if step.side not in sides:
+                raise GraphError(f"{program.paths[step]} acts for {step.side}, no side of {name}")
         program.settle_liveness()
         return program
 
@@ -865,7 +863,7 @@ class Program:
         for landing in rule.landings:
             self.check_landing(rule.rule, landing)
         if rule.may:
-            toggle = May(name=rule.rule, side=Side(rule.bearer.value))
+            toggle = May(name=rule.rule, side=str(rule.bearer))
             toggle.declare(self, f"{self.name}/may", [])
             self.toggles[rule.rule] = toggle
         for landing in rule.landings:
@@ -972,7 +970,7 @@ class Lane:
         paths = self.program.paths
         return {
             "program": self.program.name,
-            "sides": {side.value: label for side, label in self.program.sides.items()},
+            "sides": list(self.program.sides),
             "nodes": [step.view(paths, self) for step in self.program.steps],
             "blocks": [block.view(paths) for block in self.program.blocks],
             "rules": [rule.view(paths, self) for rule in self.program.rules],

@@ -3,9 +3,8 @@
 import pytest
 from pydantic import ValidationError
 
-from avelorn.core.graph import Side as Role
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.schema.effect import Address, Effect, Operation, conflicts
+from avelorn.tow.schema.effect import Address, Effect, Operation, Role, conflicts
 from avelorn.tow.schema.rule import Clause, ModifierEffect
 from avelorn.tow.schema.step import StepSequence
 

@@ -6,13 +6,13 @@ import type { Distribution, Program, Reading, Roll } from './types';
 
 const program: Program = {
 	program: 'p',
-	sides: { 'this-model': 'one', 'the-enemy': 'two' },
+	sides: ['one', 'two'],
 	nodes: [
 		{
 			path: 'p/a',
 			step: 'a',
 			kind: 'measurement',
-			side: 'this-model',
+			side: 'one',
 			ran: true,
 			inputs: [],
 			edge: { readings: [{ label: 'n', value: 2 }] }
@@ -21,7 +21,7 @@ const program: Program = {
 			path: 'p/g/b',
 			step: 'b',
 			kind: 'roll',
-			side: 'this-model',
+			side: 'one',
 			ran: true,
 			inputs: [],
 			target: { label: 't', value: 1 },
@@ -42,7 +42,7 @@ const program: Program = {
 			path: 'p/g/c',
 			step: 'c',
 			kind: 'roll',
-			side: 'the-enemy',
+			side: 'two',
 			ran: true,
 			inputs: ['p/g/b'],
 			target: {
@@ -70,7 +70,7 @@ const program: Program = {
 			path: 'p/d',
 			step: 'd',
 			kind: 'consequence',
-			side: 'the-enemy',
+			side: 'two',
 			ran: true,
 			inputs: ['p/g/c'],
 			edge: {

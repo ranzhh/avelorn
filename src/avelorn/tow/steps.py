@@ -8,7 +8,6 @@ from typing import Any
 
 from avelorn.core.distribution import Distribution, Kernel, Monoid, Probability
 from avelorn.core.graph import Consequence, Key, Measurement, Reading, Roll, State, Step
-from avelorn.core.graph import Side as Holder
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.engine.armour import defender_armour
 from avelorn.tow.kernels import (
@@ -31,8 +30,6 @@ from avelorn.tow.schema.weapon import WeaponProfile
 from avelorn.tow.traits import Profiled
 
 NO_ROLL = "-"
-
-HOLDERS = MappingProxyType({Side.ATTACKER: Holder.THIS_MODEL, Side.TARGET: Holder.THE_ENEMY})
 
 
 @dataclass(frozen=True, eq=False)
@@ -211,7 +208,7 @@ class Spec:
         Raises:
             ValueError: a roll is built with no target.
         """
-        side = HOLDERS[self.side]
+        side = str(self.side)
         match self.kind:
             case Kind.MEASUREMENT:
                 return Measurement(

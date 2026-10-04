@@ -1,5 +1,3 @@
-export type Side = 'this-model' | 'the-enemy';
-
 export type StepKind = 'measurement' | 'decision' | 'roll' | 'consequence';
 
 export type Verdict = 'applied' | 'honoured' | 'held' | 'inapplicable';
@@ -33,7 +31,7 @@ export interface Modifier {
 interface Step {
 	path: string;
 	step: string;
-	side: Side;
+	side: string;
 	inputs: string[];
 	ran: boolean;
 	edge: Edge;
@@ -100,7 +98,7 @@ export interface Landing {
 export interface Rule {
 	rule: string;
 	name: string;
-	bearer: Side | 'core';
+	bearer: 'this-model' | 'the-enemy' | 'core';
 	landings: Landing[];
 }
 
@@ -111,7 +109,7 @@ export interface Lane {
 
 export interface Program {
 	program: string;
-	sides: Record<Side, string>;
+	sides: string[];
 	nodes: Node[];
 	blocks: Block[];
 	rules: Rule[];

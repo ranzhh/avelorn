@@ -38,7 +38,6 @@ from avelorn.tow.schema.program import (
 from avelorn.tow.schema.stage import Side
 from avelorn.tow.schema.unit import Characteristic
 from avelorn.tow.steps import (
-    HOLDERS,
     STEPS,
     Counted,
     Fact,
@@ -400,9 +399,8 @@ def load_program(path: Path, state: Path = STATE) -> Loaded:
     for index, entry in enumerate(file.inputs):
         builder.take(entry, f"inputs[{index}]")
     items = builder.block(file.items, "items", {})
-    sides = {holder: str(side) for side, holder in HOLDERS.items()}
     try:
-        program = Program.build(file.program, sides, items)
+        program = Program.build(file.program, tuple(map(str, Side)), items)
     except GraphError as error:
         raise ProgramError(f"{path.name}: {error}") from error
     for given in builder.inputs.values():

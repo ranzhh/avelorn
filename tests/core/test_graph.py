@@ -26,7 +26,6 @@ from avelorn.core.graph import (
     RuleNode,
     Scalar,
     Sequence,
-    Side,
     Slot,
     State,
     Step,
@@ -38,7 +37,7 @@ from avelorn.core.graph import (
 
 _SIXTH = Fraction(1, 6)
 _HALF = Fraction(1, 2)
-_SIDES = {Side.THIS_MODEL: "the archers", Side.THE_ENEMY: "the spearmen"}
+_SIDES = ("attacker", "target")
 
 
 def _d6() -> Distribution[int]:
@@ -62,7 +61,7 @@ def _six(face: int) -> int:
 
 
 def test_a_roll_edge_carries_its_own_distribution() -> None:
-    flip = Roll[int](name="flip", side=Side.THIS_MODEL, kernel=_coin, target=Scalar("target", 1))
+    flip = Roll[int](name="flip", side="attacker", kernel=_coin, target=Scalar("target", 1))
     face = flip.output("face", Monoid(0))
     flip.show(face)
     program = Program.build("coin", _SIDES, (flip,))
@@ -73,8 +72,8 @@ def test_a_roll_edge_carries_its_own_distribution() -> None:
 
 
 def test_a_path_is_the_step_place_in_the_block_tree() -> None:
-    shots = Measurement[int](name="shots", side=Side.THIS_MODEL, kernel=_three)
-    hit = Roll[int](name="roll-to-hit", side=Side.THIS_MODEL, kernel=_d6, target=Scalar("t", 4))
+    shots = Measurement[int](name="shots", side="attacker", kernel=_three)
+    hit = Roll[int](name="roll-to-hit", side="attacker", kernel=_d6, target=Scalar("t", 4))
     attack = Repeat(name="attack", times=shots, items=(hit,))
     program = Program.build("volley", _SIDES, (shots, attack))
 
@@ -85,8 +84,8 @@ def test_a_path_is_the_step_place_in_the_block_tree() -> None:
     assert program.blocks == [attack]
 
 
-_certain_shots = Measurement[int](name="shots", side=Side.THIS_MODEL, kernel=_three)
-_certain_die = Roll[int](name="roll", side=Side.THIS_MODEL, kernel=_d6, target=Scalar("t", 6))
+_certain_shots = Measurement[int](name="shots", side="attacker", kernel=_three)
+_certain_die = Roll[int](name="roll", side="attacker", kernel=_d6, target=Scalar("t", 6))
 _certain_sixes = Projection("sixes", (_certain_die,), _six, Monoid(0))
 _certain_die.show(_certain_sixes)
 _certain = Program.build(
@@ -112,10 +111,8 @@ def _two_or_three() -> Distribution[int]:
     return Distribution({2: _HALF, 3: _HALF})
 
 
-_open_shots = Roll[int](
-    name="shots", side=Side.THIS_MODEL, kernel=_two_or_three, target=Scalar("t", 1)
-)
-_open_die = Roll[int](name="roll", side=Side.THIS_MODEL, kernel=_d6, target=Scalar("t", 6))
+_open_shots = Roll[int](name="shots", side="attacker", kernel=_two_or_three, target=Scalar("t", 1))
+_open_die = Roll[int](name="roll", side="attacker", kernel=_d6, target=Scalar("t", 6))
 _open_sixes = Projection("sixes", (_open_die,), _six, Monoid(0))
 _open_die.show(_open_sixes)
 _open = Program.build(
@@ -141,10 +138,8 @@ def _none_or_two() -> Distribution[int]:
     return Distribution({0: _HALF, 2: _HALF})
 
 
-_spent_shots = Roll[int](
-    name="shots", side=Side.THIS_MODEL, kernel=_none_or_two, target=Scalar("t", 1)
-)
-_spent_die = Roll[int](name="roll", side=Side.THIS_MODEL, kernel=_d6, target=Scalar("t", 6))
+_spent_shots = Roll[int](name="shots", side="attacker", kernel=_none_or_two, target=Scalar("t", 1))
+_spent_die = Roll[int](name="roll", side="attacker", kernel=_d6, target=Scalar("t", 6))
 _spent_sixes = Projection("sixes", (_spent_die,), _six, Monoid(0))
 _spent_die.show(_spent_sixes)
 _spent = Program.build(
@@ -176,13 +171,11 @@ def _wound_on(hit: int) -> Distribution[bool]:
     return Distribution({True: through, False: 1 - through})
 
 
-_once = Measurement[int](name="attacks", side=Side.THIS_MODEL, kernel=_one)
-_hit = Roll[int](
-    name="roll-to-hit", side=Side.THIS_MODEL, kernel=_one_or_two, target=Scalar("t", 1)
-)
+_once = Measurement[int](name="attacks", side="attacker", kernel=_one)
+_hit = Roll[int](name="roll-to-hit", side="attacker", kernel=_one_or_two, target=Scalar("t", 1))
 _wound = Roll[bool](
     name="roll-to-wound",
-    side=Side.THIS_MODEL,
+    side="attacker",
     inputs=(_hit,),
     kernel=_wound_on,
     target=Scalar("t", 1),
@@ -230,11 +223,11 @@ def _strong(strength: int) -> Distribution[int]:
 
 
 def test_a_step_reads_an_enclosing_block() -> None:
-    attacks = Measurement[int](name="attacks", side=Side.THIS_MODEL, kernel=_one)
-    strength = Measurement[int](name="strength", side=Side.THIS_MODEL, kernel=_three)
+    attacks = Measurement[int](name="attacks", side="attacker", kernel=_one)
+    strength = Measurement[int](name="strength", side="attacker", kernel=_three)
     wound = Roll[int](
         name="roll-to-wound",
-        side=Side.THIS_MODEL,
+        side="attacker",
         inputs=(strength,),
         kernel=_strong,
         target=Scalar("t", 4),
@@ -257,10 +250,10 @@ def _toll(face: int) -> Distribution[int]:
 
 
 def test_a_step_cannot_read_inside_a_nested_block() -> None:
-    shots = Measurement[int](name="shots", side=Side.THIS_MODEL, kernel=_three)
-    hit = Roll[int](name="roll-to-hit", side=Side.THIS_MODEL, kernel=_d6, target=Scalar("t", 4))
+    shots = Measurement[int](name="shots", side="attacker", kernel=_three)
+    hit = Roll[int](name="roll-to-hit", side="attacker", kernel=_d6, target=Scalar("t", 4))
     removed = Consequence[int](
-        name="remove-casualties", side=Side.THE_ENEMY, inputs=(hit,), kernel=_toll
+        name="remove-casualties", side="target", inputs=(hit,), kernel=_toll
     )
 
     with pytest.raises(GraphError, match="roll-to-hit, which is not in scope"):
@@ -272,9 +265,9 @@ def test_a_step_cannot_read_inside_a_nested_block() -> None:
 
 
 def test_a_reading_cannot_show_a_step_out_of_scope() -> None:
-    shots = Measurement[int](name="shots", side=Side.THIS_MODEL, kernel=_three)
-    hit = Roll[int](name="roll-to-hit", side=Side.THIS_MODEL, kernel=_d6, target=Scalar("t", 4))
-    removed = Measurement[int](name="remove-casualties", side=Side.THE_ENEMY, kernel=_three)
+    shots = Measurement[int](name="shots", side="attacker", kernel=_three)
+    hit = Roll[int](name="roll-to-hit", side="attacker", kernel=_d6, target=Scalar("t", 4))
+    removed = Measurement[int](name="remove-casualties", side="target", kernel=_three)
     removed.show(hit.output("hits", Monoid(0)))
 
     with pytest.raises(GraphError, match="shows roll-to-hit, which is not in scope"):
@@ -286,16 +279,16 @@ def test_a_reading_cannot_show_a_step_out_of_scope() -> None:
 
 
 def test_a_group_cannot_run_a_count_out_of_scope() -> None:
-    hidden = Measurement[int](name="shots", side=Side.THIS_MODEL, kernel=_three)
-    hit = Roll[int](name="roll-to-hit", side=Side.THIS_MODEL, kernel=_d6, target=Scalar("t", 4))
+    hidden = Measurement[int](name="shots", side="attacker", kernel=_three)
+    hit = Roll[int](name="roll-to-hit", side="attacker", kernel=_d6, target=Scalar("t", 4))
 
     with pytest.raises(GraphError, match="runs shots times, which is not in scope"):
         Program.build("volley", _SIDES, (Repeat(name="attack", times=hidden, items=(hit,)),))
 
 
 def test_an_unread_output_dies_at_its_own_edge() -> None:
-    unread = Measurement[int](name="unread", side=Side.THIS_MODEL, kernel=_d6)
-    shown = Measurement[int](name="shown", side=Side.THIS_MODEL, kernel=_d6)
+    unread = Measurement[int](name="unread", side="attacker", kernel=_d6)
+    shown = Measurement[int](name="shown", side="attacker", kernel=_d6)
     shown.show(shown.output("face", Monoid(0)))
     (lane,) = Program.build("dice", _SIDES, (unread, shown)).evaluate()
 
@@ -304,7 +297,7 @@ def test_an_unread_output_dies_at_its_own_edge() -> None:
 
 
 def test_only_a_declared_reading_can_be_read() -> None:
-    flip = Measurement[int](name="flip", side=Side.THIS_MODEL, kernel=_coin)
+    flip = Measurement[int](name="flip", side="attacker", kernel=_coin)
     (lane,) = Program.build("coin", _SIDES, (flip,)).evaluate()
 
     with pytest.raises(GraphError, match="face is not a reading of flip"):
@@ -312,7 +305,7 @@ def test_only_a_declared_reading_can_be_read() -> None:
 
 
 def test_a_reading_shown_after_build_is_refused() -> None:
-    flip = Measurement[int](name="flip", side=Side.THIS_MODEL, kernel=_coin)
+    flip = Measurement[int](name="flip", side="attacker", kernel=_coin)
     program = Program.build("coin", _SIDES, (flip,))
     flip.show(flip.output("face", Monoid(0)))
 
@@ -330,9 +323,9 @@ def _two_inputs(first: int, second: int) -> Distribution[int]:
 
 @pytest.mark.parametrize("kernel", [_no_inputs, _two_inputs])
 def test_a_kernel_must_accept_its_inputs(kernel: Callable[..., Distribution[int]]) -> None:
-    source = Measurement[int](name="source", side=Side.THIS_MODEL, kernel=_three)
+    source = Measurement[int](name="source", side="attacker", kernel=_three)
     dependent = Measurement[int](
-        name="dependent", side=Side.THIS_MODEL, inputs=(source,), kernel=kernel
+        name="dependent", side="attacker", inputs=(source,), kernel=kernel
     )
 
     with pytest.raises(GraphError, match="kernel cannot accept 1 positional inputs"):
@@ -354,10 +347,10 @@ def _same(value: int) -> int:
 def test_a_state_write_replaces_the_fact() -> None:
     total = State[int]("total")
     first = Consequence[int](
-        name="add-three", side=Side.THIS_MODEL, inputs=(total,), kernel=_add_three, writes=total
+        name="add-three", side="attacker", inputs=(total,), kernel=_add_three, writes=total
     )
     second = Consequence[int](
-        name="add-four", side=Side.THIS_MODEL, inputs=(total,), kernel=_add_four, writes=total
+        name="add-four", side="attacker", inputs=(total,), kernel=_add_four, writes=total
     )
     sums = Projection("total", (total,), _same, Monoid(0))
     second.show(sums)
@@ -370,7 +363,7 @@ def test_a_fact_read_before_it_is_written_must_be_given() -> None:
     total = State[int]("total")
     stray = State[int]("stray")
     add = Consequence[int](
-        name="add-three", side=Side.THIS_MODEL, inputs=(total,), kernel=_add_three, writes=total
+        name="add-three", side="attacker", inputs=(total,), kernel=_add_three, writes=total
     )
     program = Program.build("tally", _SIDES, (add,))
 
@@ -383,7 +376,7 @@ def test_a_fact_read_before_it_is_written_must_be_given() -> None:
 def test_a_state_writing_step_shows_its_own_output() -> None:
     total = State[int]("total")
     add = Consequence[int](
-        name="add-three", side=Side.THIS_MODEL, inputs=(total,), kernel=_add_three, writes=total
+        name="add-three", side="attacker", inputs=(total,), kernel=_add_three, writes=total
     )
     added = add.output("total", Monoid(0))
     add.show(added)
@@ -412,16 +405,16 @@ def _pair(models: int, hit: int) -> Distribution[tuple[int, int]]:
 
 def test_a_slot_keeps_its_locals_and_its_state_writes() -> None:
     models = State[int]("models")
-    hit = Measurement[int](name="hit", side=Side.THIS_MODEL, kernel=_coin)
+    hit = Measurement[int](name="hit", side="attacker", kernel=_coin)
     remove = Consequence[int](
         name="remove-casualties",
-        side=Side.THE_ENEMY,
+        side="target",
         inputs=(models, hit),
         kernel=_lose,
         writes=models,
     )
     after = Consequence[tuple[int, int]](
-        name="after", side=Side.THE_ENEMY, inputs=(models, hit), kernel=_pair
+        name="after", side="target", inputs=(models, hit), kernel=_pair
     )
     pair = after.output("after", Monoid((0, 0)))
     after.show(pair)
@@ -436,21 +429,21 @@ def test_a_slot_keeps_its_locals_and_its_state_writes() -> None:
 
 def test_a_body_keeps_its_state_writes() -> None:
     models = State[int]("models")
-    hit = Measurement[int](name="hit", side=Side.THIS_MODEL, kernel=_coin)
+    hit = Measurement[int](name="hit", side="attacker", kernel=_coin)
     remove = Consequence[int](
         name="remove-casualties",
-        side=Side.THE_ENEMY,
+        side="target",
         inputs=(models, hit),
         kernel=_lose,
         writes=models,
     )
     reaction = Decision[str](
         name="declare-reaction",
-        side=Side.THE_ENEMY,
+        side="target",
         options={"hold": (hit, remove)},
         otherwise="hold",
     )
-    after = Consequence[int](name="after", side=Side.THE_ENEMY, inputs=(models,), kernel=_toll)
+    after = Consequence[int](name="after", side="target", inputs=(models,), kernel=_toll)
     left = after.output("models", Monoid(0))
     after.show(left)
     program = Program.build("charge", _SIDES, (reaction, after))
@@ -460,22 +453,22 @@ def test_a_body_keeps_its_state_writes() -> None:
 
 
 def test_a_body_local_is_out_of_scope_after_it() -> None:
-    hit = Measurement[int](name="hit", side=Side.THIS_MODEL, kernel=_coin)
+    hit = Measurement[int](name="hit", side="attacker", kernel=_coin)
     reaction = Decision[str](
-        name="declare-reaction", side=Side.THE_ENEMY, options={"hold": (hit,)}, otherwise="hold"
+        name="declare-reaction", side="target", options={"hold": (hit,)}, otherwise="hold"
     )
-    after = Consequence[int](name="after", side=Side.THE_ENEMY, inputs=(hit,), kernel=_toll)
+    after = Consequence[int](name="after", side="target", inputs=(hit,), kernel=_toll)
 
     with pytest.raises(GraphError, match="after inputs hit, which is not in scope"):
         Program.build("charge", _SIDES, (reaction, after))
 
 
 def test_a_repeat_holds_inside_only_what_its_inside_reads() -> None:
-    outer = Measurement[int](name="outer", side=Side.THIS_MODEL, kernel=_d6)
-    shots = Measurement[int](name="shots", side=Side.THIS_MODEL, kernel=_one_or_two)
-    roll = Measurement[int](name="roll", side=Side.THIS_MODEL, kernel=_d6)
+    outer = Measurement[int](name="outer", side="attacker", kernel=_d6)
+    shots = Measurement[int](name="shots", side="attacker", kernel=_one_or_two)
+    roll = Measurement[int](name="roll", side="attacker", kernel=_d6)
     roll.show(roll.output("face", Monoid(0)))
-    later = Consequence[int](name="later", side=Side.THIS_MODEL, inputs=(outer,), kernel=_toll)
+    later = Consequence[int](name="later", side="attacker", inputs=(outer,), kernel=_toll)
     attack = Repeat(name="attack", times=shots, items=(roll,))
     (lane,) = Program.build("volley", _SIDES, (outer, shots, attack, later)).evaluate()
 
@@ -483,8 +476,8 @@ def test_a_repeat_holds_inside_only_what_its_inside_reads() -> None:
 
 
 def test_a_repeat_exit_drops_what_only_its_inside_read() -> None:
-    shots = Measurement[int](name="shots", side=Side.THIS_MODEL, kernel=_one_or_two)
-    roll = Measurement[int](name="roll", side=Side.THIS_MODEL, kernel=_d6)
+    shots = Measurement[int](name="shots", side="attacker", kernel=_one_or_two)
+    roll = Measurement[int](name="roll", side="attacker", kernel=_d6)
     attack = Repeat(name="attack", times=shots, items=(roll,))
     (lane,) = Program.build("volley", _SIDES, (shots, attack)).evaluate()
 
@@ -493,11 +486,11 @@ def test_a_repeat_exit_drops_what_only_its_inside_read() -> None:
 
 def test_a_repeat_cannot_write_state() -> None:
     models = State[int]("models")
-    shots = Measurement[int](name="shots", side=Side.THIS_MODEL, kernel=_three)
-    hit = Measurement[int](name="hit", side=Side.THIS_MODEL, kernel=_coin)
+    shots = Measurement[int](name="shots", side="attacker", kernel=_three)
+    hit = Measurement[int](name="hit", side="attacker", kernel=_coin)
     remove = Consequence[int](
         name="remove-casualties",
-        side=Side.THE_ENEMY,
+        side="target",
         inputs=(models, hit),
         kernel=_lose,
         writes=models,
@@ -517,10 +510,10 @@ def test_a_running_total_holds_only_the_total_between_rolls() -> None:
     total = State[int]("total")
     items: list[Measurement[int] | Consequence[int]] = []
     for throw in range(1, 5):
-        roll = Measurement[int](name=f"roll-{throw}", side=Side.THIS_MODEL, kernel=_d6)
+        roll = Measurement[int](name=f"roll-{throw}", side="attacker", kernel=_d6)
         add = Consequence[int](
             name=f"add-{throw}",
-            side=Side.THIS_MODEL,
+            side="attacker",
             inputs=(total, roll),
             kernel=_add,
             writes=total,
@@ -536,9 +529,9 @@ def test_a_running_total_holds_only_the_total_between_rolls() -> None:
 
 def test_the_view_lists_only_steps_as_inputs() -> None:
     total = State[int]("total")
-    roll = Measurement[int](name="roll", side=Side.THIS_MODEL, kernel=_d6)
+    roll = Measurement[int](name="roll", side="attacker", kernel=_d6)
     add = Consequence[int](
-        name="add", side=Side.THIS_MODEL, inputs=(total, roll), kernel=_add, writes=total
+        name="add", side="attacker", inputs=(total, roll), kernel=_add, writes=total
     )
     (lane,) = Program.build("sum", _SIDES, (roll, add)).evaluate(state={total: 0})
 
@@ -554,10 +547,10 @@ def _remove(models: int, wounds: int) -> Distribution[int]:
 
 
 def _round(number: int, models: State[int]) -> tuple[Slot, Consequence[int]]:
-    wounds = Measurement[int](name="wounds", side=Side.THIS_MODEL, kernel=_up_to_five)
+    wounds = Measurement[int](name="wounds", side="attacker", kernel=_up_to_five)
     removal = Consequence[int](
         name="remove-casualties",
-        side=Side.THE_ENEMY,
+        side="target",
         inputs=(models, wounds),
         kernel=_remove,
         writes=models,
@@ -591,11 +584,11 @@ def _hits_only_close(band: str) -> Distribution[int]:
 
 
 def test_a_group_stacks_its_attacks_per_outer_world() -> None:
-    band = Measurement[str](name="range", side=Side.THIS_MODEL, kernel=_band)
-    shots = Measurement[int](name="shots", side=Side.THIS_MODEL, kernel=_two)
+    band = Measurement[str](name="range", side="attacker", kernel=_band)
+    shots = Measurement[int](name="shots", side="attacker", kernel=_two)
     hit = Roll[int](
         name="roll-to-hit",
-        side=Side.THIS_MODEL,
+        side="attacker",
         inputs=(band,),
         kernel=_hits_only_close,
         target=Scalar("to hit", 4),
@@ -637,13 +630,13 @@ def test_remove_casualties_reads_the_tally_of_its_own_world() -> None:
     No hit: 1/2 + 1/2 * (1/6)^2 = 37/72.
     """
     models = State[int]("models")
-    charged = Measurement[bool](name="charged", side=Side.THIS_MODEL, kernel=_charged)
+    charged = Measurement[bool](name="charged", side="attacker", kernel=_charged)
     attackers = Measurement[int](
-        name="attackers", side=Side.THIS_MODEL, inputs=(charged,), kernel=_attackers
+        name="attackers", side="attacker", inputs=(charged,), kernel=_attackers
     )
     hit = Roll[int](
         name="roll-to-hit",
-        side=Side.THIS_MODEL,
+        side="attacker",
         inputs=(charged,),
         kernel=_hit_if_charged,
         target=Scalar("to hit", 2),
@@ -654,7 +647,7 @@ def test_remove_casualties_reads_the_tally_of_its_own_world() -> None:
     tally = Tally[int]("hits", {attack: hits})
     remove = Consequence[int](
         name="remove-casualties",
-        side=Side.THE_ENEMY,
+        side="target",
         inputs=(models, tally),
         kernel=_left_after,
         writes=models,
@@ -688,13 +681,13 @@ def test_remove_casualties_reads_the_tally_of_its_own_world() -> None:
 
 def test_a_tally_sums_every_group_it_counts() -> None:
     models = State[int]("models")
-    charged = Measurement[bool](name="charged", side=Side.THIS_MODEL, kernel=_charged)
-    once = Measurement[int](name="once", side=Side.THIS_MODEL, kernel=_one)
+    charged = Measurement[bool](name="charged", side="attacker", kernel=_charged)
+    once = Measurement[int](name="once", side="attacker", kernel=_one)
     rider = Measurement[int](
-        name="rider-hit", side=Side.THIS_MODEL, inputs=(charged,), kernel=_hits_on_the_charge
+        name="rider-hit", side="attacker", inputs=(charged,), kernel=_hits_on_the_charge
     )
     mount = Measurement[int](
-        name="mount-hit", side=Side.THIS_MODEL, inputs=(charged,), kernel=_hits_on_the_charge
+        name="mount-hit", side="attacker", inputs=(charged,), kernel=_hits_on_the_charge
     )
     riders = Repeat(name="riders", times=once, items=(rider,))
     mounts = Repeat(name="mounts", times=once, items=(mount,))
@@ -704,7 +697,7 @@ def test_a_tally_sums_every_group_it_counts() -> None:
     )
     remove = Consequence[int](
         name="remove-casualties",
-        side=Side.THE_ENEMY,
+        side="target",
         inputs=(models, hits),
         kernel=_left_after,
         writes=models,
@@ -722,15 +715,15 @@ def _hits_on_the_charge(charged: bool) -> Distribution[int]:
 
 
 def test_a_tally_of_a_group_out_of_scope_is_refused() -> None:
-    once = Measurement[int](name="once", side=Side.THIS_MODEL, kernel=_one)
-    hit = Measurement[int](name="hit", side=Side.THIS_MODEL, kernel=_coin)
+    once = Measurement[int](name="once", side="attacker", kernel=_one)
+    hit = Measurement[int](name="hit", side="attacker", kernel=_coin)
     attack = Repeat(name="attack", times=once, items=(hit,))
     reaction = Decision[str](
-        name="declare-reaction", side=Side.THE_ENEMY, options={"hold": (attack,)}, otherwise="hold"
+        name="declare-reaction", side="target", options={"hold": (attack,)}, otherwise="hold"
     )
     hits = Tally[int]("hits", {attack: hit.output("hits", Monoid(0))})
     remove = Consequence[int](
-        name="remove-casualties", side=Side.THE_ENEMY, inputs=(hits,), kernel=_toll
+        name="remove-casualties", side="target", inputs=(hits,), kernel=_toll
     )
 
     with pytest.raises(GraphError, match="tallies attack, which is not in scope"):
@@ -775,14 +768,14 @@ def test_a_tally_that_cannot_be_summed_is_refused(
     same_slot: bool,
     refusal: str,
 ) -> None:
-    once = Measurement[int](name="once", side=Side.THIS_MODEL, kernel=_one)
-    hit = Measurement[int](name="hit", side=Side.THIS_MODEL, kernel=_coin)
-    miss = Measurement[int](name="miss", side=Side.THIS_MODEL, kernel=_coin)
+    once = Measurement[int](name="once", side="attacker", kernel=_one)
+    hit = Measurement[int](name="hit", side="attacker", kernel=_coin)
+    miss = Measurement[int](name="miss", side="attacker", kernel=_coin)
     attack = Repeat(name="attack", times=once, items=(hit,))
     other = Repeat(name="other", times=once, items=(miss,))
     hits = Tally[int]("hits", counts(attack, hit, other, miss))
     remove = Consequence[int](
-        name="remove-casualties", side=Side.THE_ENEMY, inputs=(hits,), kernel=_toll
+        name="remove-casualties", side="target", inputs=(hits,), kernel=_toll
     )
     slots = (
         (Slot(name="i5", items=(attack, other, remove)),)
@@ -795,34 +788,39 @@ def test_a_tally_that_cannot_be_summed_is_refused(
 
 
 def test_a_group_feeds_only_one_tally() -> None:
-    once = Measurement[int](name="once", side=Side.THIS_MODEL, kernel=_one)
-    hit = Measurement[int](name="hit", side=Side.THIS_MODEL, kernel=_coin)
+    once = Measurement[int](name="once", side="attacker", kernel=_one)
+    hit = Measurement[int](name="hit", side="attacker", kernel=_coin)
     attack = Repeat(name="attack", times=once, items=(hit,))
     hits = Tally[int]("hits", {attack: hit.output("hits", Monoid(0))})
     wounds = Tally[int]("wounds", {attack: hit.output("wounds", Monoid(0))})
     remove = Consequence[int](
-        name="remove-casualties", side=Side.THE_ENEMY, inputs=(hits,), kernel=_toll
+        name="remove-casualties", side="target", inputs=(hits,), kernel=_toll
     )
-    result = Consequence[int](
-        name="combat-result", side=Side.THE_ENEMY, inputs=(wounds,), kernel=_toll
-    )
+    result = Consequence[int](name="combat-result", side="target", inputs=(wounds,), kernel=_toll)
 
     with pytest.raises(GraphError, match="attack is tallied by hits already"):
         Program.build("fight", _SIDES, (once, attack, remove, result))
 
 
 def test_a_repeat_inside_a_repeat_is_refused() -> None:
-    once = Measurement[int](name="once", side=Side.THIS_MODEL, kernel=_one)
-    hit = Measurement[int](name="hit", side=Side.THIS_MODEL, kernel=_coin)
+    once = Measurement[int](name="once", side="attacker", kernel=_one)
+    hit = Measurement[int](name="hit", side="attacker", kernel=_coin)
     inner = Repeat(name="inner", times=once, items=(hit,))
 
     with pytest.raises(GraphError, match="fight/outer/inner repeats inside fight/outer"):
         Program.build("fight", _SIDES, (once, Repeat(name="outer", times=once, items=(inner,))))
 
 
+def test_a_step_acting_for_a_side_the_program_lacks_is_refused() -> None:
+    stray = Measurement[int](name="shots", side="defender", kernel=_three)
+
+    with pytest.raises(GraphError, match="volley/shots acts for defender, no side of volley"):
+        Program.build("volley", _SIDES, (stray,))
+
+
 def test_two_steps_cannot_share_a_path() -> None:
-    first = Measurement[int](name="shots", side=Side.THIS_MODEL, kernel=_three)
-    second = Measurement[int](name="shots", side=Side.THIS_MODEL, kernel=_three)
+    first = Measurement[int](name="shots", side="attacker", kernel=_three)
+    second = Measurement[int](name="shots", side="attacker", kernel=_three)
 
     with pytest.raises(GraphError, match="volley/shots is declared twice"):
         Program.build("volley", _SIDES, (first, second))
@@ -835,12 +833,12 @@ def _ground(reaction: str) -> Distribution[int]:
 def _fight() -> tuple[Program, Decision[str], Consequence[int], Projection[int]]:
     reaction = Decision[str](
         name="declare-reaction",
-        side=Side.THE_ENEMY,
+        side="target",
         options={"hold": (), "flee": ()},
         otherwise="hold",
     )
     given = Consequence[int](
-        name="ground-given", side=Side.THE_ENEMY, inputs=(reaction,), kernel=_ground
+        name="ground-given", side="target", inputs=(reaction,), kernel=_ground
     )
     ground = given.output("ground", Monoid(0))
     given.show(ground)
@@ -868,7 +866,7 @@ def test_a_fixed_decision_leaves_one_lane() -> None:
 
 def test_an_unknown_decision_is_rejected() -> None:
     program, _, _, _ = _fight()
-    stray = Decision[str](name="stray", side=Side.THIS_MODEL, options={"yes": ()}, otherwise="yes")
+    stray = Decision[str](name="stray", side="attacker", options={"yes": ()}, otherwise="yes")
 
     with pytest.raises(GraphError, match="stray is not a decision in charge"):
         program.evaluate(choices={stray: "yes"})
@@ -883,7 +881,7 @@ def test_an_invalid_decision_choice_is_rejected() -> None:
 
 def test_a_rule_cannot_land_on_a_step_the_program_lacks() -> None:
     program, _, _, _ = _fight()
-    stray = Measurement[int](name="stray", side=Side.THIS_MODEL, kernel=_three)
+    stray = Measurement[int](name="stray", side="attacker", kernel=_three)
 
     with pytest.raises(GraphError, match="lands on stray, which is not declared"):
         program.attach(
@@ -929,33 +927,31 @@ type _Reaction = tuple[
 
 def _charge_reaction() -> tuple[_Reaction, Consequence[int], Projection[int], State[int]]:
     chargers = State[int]("chargers")
-    gap = Measurement[int](name="gap", side=Side.THE_ENEMY, kernel=_three_or_nine)
-    movement = Measurement[int](name="movement", side=Side.THIS_MODEL, kernel=_six_inches)
-    who = Eligibility[str](name="who-can-shoot", side=Side.THE_ENEMY, kernel=_a_bow)
+    gap = Measurement[int](name="gap", side="target", kernel=_three_or_nine)
+    movement = Measurement[int](name="movement", side="attacker", kernel=_six_inches)
+    who = Eligibility[str](name="who-can-shoot", side="target", kernel=_a_bow)
     weapons = who.output("weapons", Monoid(frozenset[str]()))
     who.show(weapons)
     volley = Consequence[int](
         name="volley",
-        side=Side.THE_ENEMY,
+        side="target",
         inputs=(who, chargers),
         kernel=_one_falls_if_any_fired,
         writes=chargers,
     )
     instead = Decision[str](
         name="hold-or-flee-instead",
-        side=Side.THE_ENEMY,
+        side="target",
         options={"hold": (), "flee": ()},
         otherwise="hold",
     )
     reactions = Decision[str](
         name="charge-reactions",
-        side=Side.THE_ENEMY,
+        side="target",
         options={"hold": (), "stand-and-shoot": (who, volley, instead), "flee": ()},
         otherwise="hold",
     )
-    charge = Consequence[int](
-        name="charge", side=Side.THIS_MODEL, inputs=(chargers,), kernel=_toll
-    )
+    charge = Consequence[int](name="charge", side="attacker", inputs=(chargers,), kernel=_toll)
     left = charge.output("chargers", Monoid(0))
     charge.show(left)
     program = Program.build("charge", _SIDES, (gap, movement, reactions, charge))
@@ -1039,11 +1035,11 @@ def _stand_and_shoot_when_too_close(
 
 
 def test_a_world_whose_choice_is_forbidden_takes_the_printed_otherwise() -> None:
-    gap = Measurement[int](name="gap", side=Side.THE_ENEMY, kernel=_three_or_nine)
-    movement = Measurement[int](name="movement", side=Side.THIS_MODEL, kernel=_six_inches)
+    gap = Measurement[int](name="gap", side="target", kernel=_three_or_nine)
+    movement = Measurement[int](name="movement", side="attacker", kernel=_six_inches)
     reactions = Decision[str](
         name="charge-reactions",
-        side=Side.THE_ENEMY,
+        side="target",
         options={"stand-and-shoot": (), "flee": (), "hold": ()},
         otherwise="hold",
     )
@@ -1081,10 +1077,10 @@ type _Amends = tuple[tuple[Operation, Callable[[frozenset[str], int], frozenset[
 
 
 def _held(amends: _Amends) -> tuple[Program, Decision[str]]:
-    gap = Measurement[int](name="gap", side=Side.THE_ENEMY, kernel=_three_or_nine)
+    gap = Measurement[int](name="gap", side="target", kernel=_three_or_nine)
     reaction = Decision[str](
         name="charge-reactions",
-        side=Side.THE_ENEMY,
+        side="target",
         options={"hold": (), "flee": ()},
         otherwise="hold",
     )
@@ -1150,10 +1146,10 @@ def _fire_and_flee_when_far(printed: frozenset[str], gap: int) -> frozenset[str]
 def test_a_closed_option_exists_only_where_a_rule_opens_it(
     opened: bool, lanes: list[tuple[str, ...]]
 ) -> None:
-    gap = Measurement[int](name="gap", side=Side.THE_ENEMY, kernel=_three_or_nine)
+    gap = Measurement[int](name="gap", side="target", kernel=_three_or_nine)
     reaction = Decision[str](
         name="charge-reactions",
-        side=Side.THE_ENEMY,
+        side="target",
         options={"hold": (), "flee": (), "fire-and-flee": ()},
         closed=frozenset({"fire-and-flee"}),
         otherwise="hold",
@@ -1184,9 +1180,9 @@ def _a_pistol(printed: frozenset[str]) -> frozenset[str]:
 
 
 def test_a_forbid_wins_over_an_allow_at_an_eligibility() -> None:
-    gap = Measurement[int](name="gap", side=Side.THE_ENEMY, kernel=_three_or_nine)
-    movement = Measurement[int](name="movement", side=Side.THIS_MODEL, kernel=_six_inches)
-    who = Eligibility[str](name="who-can-shoot", side=Side.THE_ENEMY, kernel=_a_bow)
+    gap = Measurement[int](name="gap", side="target", kernel=_three_or_nine)
+    movement = Measurement[int](name="movement", side="attacker", kernel=_six_inches)
+    who = Eligibility[str](name="who-can-shoot", side="target", kernel=_a_bow)
     weapons = who.output("weapons", Monoid(frozenset[str]()))
     who.show(weapons)
     program = Program.build("volley", _SIDES, (gap, movement, who))
@@ -1230,7 +1226,7 @@ def _hold(printed: frozenset[str]) -> frozenset[str]:
 def test_a_rule_the_player_may_decline_applies_only_in_the_lane_that_takes_it() -> None:
     reaction = Decision[str](
         name="charge-reactions",
-        side=Side.THE_ENEMY,
+        side="target",
         options={"hold": (), "flee": ()},
         otherwise="flee",
     )
@@ -1267,10 +1263,8 @@ def test_a_rule_the_player_may_decline_applies_only_in_the_lane_that_takes_it() 
 
 
 def test_a_decision_inside_a_repeat_is_refused() -> None:
-    once = Measurement[int](name="once", side=Side.THIS_MODEL, kernel=_one)
-    weapon = Decision[str](
-        name="weapon", side=Side.THIS_MODEL, options={"hand": ()}, otherwise="hand"
-    )
+    once = Measurement[int](name="once", side="attacker", kernel=_one)
+    weapon = Decision[str](name="weapon", side="attacker", options={"hand": ()}, otherwise="hand")
 
     with pytest.raises(
         GraphError, match="fight/attack/weapon settles options inside fight/attack"
@@ -1281,7 +1275,7 @@ def test_a_decision_inside_a_repeat_is_refused() -> None:
 def test_a_decision_that_writes_state_is_refused() -> None:
     reaction = Decision[str](
         name="charge-reactions",
-        side=Side.THE_ENEMY,
+        side="target",
         options={"hold": ()},
         otherwise="hold",
         writes=State[str]("reaction"),
@@ -1300,11 +1294,11 @@ def _no_printed_set(gap: int) -> frozenset[str]:
 
 
 def _refusal(case: str) -> tuple[Program, Landing]:
-    gap = Measurement[int](name="gap", side=Side.THE_ENEMY, kernel=_three_or_nine)
-    after = Measurement[int](name="after", side=Side.THE_ENEMY, kernel=_three_or_nine)
-    who = Eligibility[str](name="who-can-shoot", side=Side.THE_ENEMY, kernel=_a_bow)
+    gap = Measurement[int](name="gap", side="target", kernel=_three_or_nine)
+    after = Measurement[int](name="after", side="target", kernel=_three_or_nine)
+    who = Eligibility[str](name="who-can-shoot", side="target", kernel=_a_bow)
     reaction = Decision[str](
-        name="charge-reactions", side=Side.THE_ENEMY, options={"hold": ()}, otherwise="hold"
+        name="charge-reactions", side="target", options={"hold": ()}, otherwise="hold"
     )
     program = Program.build("charge", _SIDES, (gap, who, reaction, after))
     landings = {
@@ -1349,9 +1343,9 @@ def test_a_landing_the_step_cannot_take_is_refused_at_attach(case: str, message:
 
 
 def test_a_rule_offering_an_option_the_decision_lacks_is_refused() -> None:
-    gap = Measurement[int](name="gap", side=Side.THE_ENEMY, kernel=_three_or_nine)
+    gap = Measurement[int](name="gap", side="target", kernel=_three_or_nine)
     reaction = Decision[str](
-        name="charge-reactions", side=Side.THE_ENEMY, options={"hold": ()}, otherwise="hold"
+        name="charge-reactions", side="target", options={"hold": ()}, otherwise="hold"
     )
     program = Program.build("charge", _SIDES, (gap, reaction))
     offer = Contribution(operation=Operation.ALLOW, inputs=(gap,), options=_charge_offered)
@@ -1376,24 +1370,24 @@ def _stand_when_close(printed: frozenset[str], range_band: str) -> frozenset[str
     return frozenset({"stand"} if range_band == "close" else ())
 
 
-_shots = Measurement[int](name="shots", side=Side.THIS_MODEL, kernel=_three)
+_shots = Measurement[int](name="shots", side="attacker", kernel=_three)
 _range = Decision[str](
     name="choose-range",
-    side=Side.THIS_MODEL,
+    side="attacker",
     options={"close": (), "long": ()},
     otherwise="close",
 )
 _to_hit = Roll[int](
     name="roll-to-hit",
-    side=Side.THIS_MODEL,
+    side="attacker",
     inputs=(_range,),
     kernel=_hit_on,
     target=Scalar("to hit", 4),
 )
-_casualties = Measurement[int](name="remove-casualties", side=Side.THE_ENEMY, kernel=_one)
+_casualties = Measurement[int](name="remove-casualties", side="target", kernel=_one)
 _aftermath = Decision[str](
     name="aftermath",
-    side=Side.THE_ENEMY,
+    side="target",
     options={"stand": (_casualties,), "flee": ()},
     otherwise="flee",
 )

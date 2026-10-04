@@ -23,7 +23,6 @@ from pydantic import (
     model_validator,
 )
 
-from avelorn.core.graph import Side as Role
 from avelorn.tow.schema.quantity import Quantity
 from avelorn.tow.schema.reference import RuleRef, Slug
 from avelorn.tow.schema.step import BLOCKS, Step, StepKind, StepSequence
@@ -31,6 +30,14 @@ from avelorn.tow.schema.unit import Characteristic, TroopType
 from avelorn.tow.schema.weapon import WeaponType
 
 _STRICT = ConfigDict(extra="forbid", frozen=True)
+
+
+class Role(StrEnum):
+    """Who acts at a step, relative to the model whose rule it is."""
+
+    THIS_MODEL = "this-model"
+    THE_ENEMY = "the-enemy"
+
 
 _OTHER = {Role.THIS_MODEL: Role.THE_ENEMY, Role.THE_ENEMY: Role.THIS_MODEL}
 

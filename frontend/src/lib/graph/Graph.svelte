@@ -1,7 +1,7 @@
 <script lang="ts">
 	import Readings from './Readings.svelte';
 	import { FRAME, MARGIN, caption, fitted, layout, moved, type Moves, type Point } from './layout';
-	import type { Judged, Program, Side, StepKind, Verdict } from '$lib/graph/types';
+	import type { Judged, Program, Rule, StepKind, Verdict } from '$lib/graph/types';
 
 	let { program }: { program: Program } = $props();
 
@@ -34,7 +34,6 @@
 		selected?.kind === 'rule' ? program.rules.find((each) => each.rule === selected!.id) : undefined
 	);
 
-	const SIDES: Side[] = ['this-model', 'the-enemy'];
 	const MARK: Record<StepKind | 'group', string> = {
 		measurement: 'M',
 		decision: 'D',
@@ -48,7 +47,8 @@
 	const printed = (slug: string) => slug.replaceAll('-', ' ');
 	const last = (path: string) => path.slice(path.lastIndexOf('/') + 1);
 	const named = (id: string) => program.rules.find((each) => each.rule === id)?.name ?? id;
-	const bearer = (who: Side | 'core') => (who === 'core' ? 'core rules' : program.sides[who]);
+	const bearer = (who: Rule['bearer']) => (who === 'core' ? 'core rules' : who);
+	const tint = (side: string) => `side-${program.sides.indexOf(side)}`;
 	const signed = (move: number) => (move > 0 ? `+${move}` : `${move}`);
 	const is = (kind: Pick['kind'], id: string) => selected?.kind === kind && selected.id === id;
 	const percent = (p: number) => `${Math.round(p * 100)}%`;
@@ -108,8 +108,8 @@
 		<div class="head">
 			<h1>{program.program}</h1>
 			<div class="cluster sides">
-				{#each SIDES as side}
-					<span class="who {side}"><i></i>{program.sides[side]}</span>
+				{#each program.sides as side}
+					<span class="who {tint(side)}"><i></i>{side}</span>
 				{/each}
 			</div>
 			<div class="cluster legend">
@@ -224,7 +224,7 @@
 					{@const node = placed.node}
 					{@const pick = { kind: 'step', id: placed.path } as const}
 					<div
-						class="card {node.side}"
+						class="card {tint(node.side)}"
 						class:on={is('step', placed.path)}
 						class:held={grip?.id === placed.path}
 						role="button"
@@ -317,7 +317,7 @@
 			</header>
 			<div class="field"><span>kind</span><span>{node.kind}</span></div>
 			<div class="field">
-				<span>side</span><span>{program.sides[node.side]}</span>
+				<span>side</span><span>{node.side}</span>
 			</div>
 			<div class="field"><span>path</span><span class="path">{node.path}</span></div>
 			{#if node.kind === 'roll'}
@@ -424,10 +424,10 @@
 		font-size: 0.65rem;
 		font-style: normal;
 	}
-	.this-model i {
+	.side-0 i {
 		background: #dcecff;
 	}
-	.the-enemy i {
+	.side-1 i {
 		background: #ffe0dc;
 	}
 	.scroll {
@@ -475,10 +475,10 @@
 		align-items: center;
 		gap: 0.35rem;
 	}
-	.card.this-model {
+	.card.side-0 {
 		border-left: 3px solid #3677b8;
 	}
-	.card.the-enemy {
+	.card.side-1 {
 		border-left: 3px solid #b84a3d;
 	}
 	.card.rule {
