@@ -26,6 +26,7 @@ const program: Program = {
 			ran: true,
 			inputs: [],
 			target: { label: 't', value: 1 },
+			printed: { label: 't', value: 2 },
 			changes: [{ rule: 'one/p/r1', text: '+1' }],
 			edge: {
 				readings: [
@@ -53,6 +54,7 @@ const program: Program = {
 					{ value: 2, p: 0.25 }
 				]
 			},
+			printed: null,
 			changes: [],
 			edge: {
 				readings: [

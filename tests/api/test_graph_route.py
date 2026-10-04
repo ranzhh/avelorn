@@ -33,11 +33,18 @@ def test_the_volley_graph_serves_the_volley_program() -> None:
             "collapsed": False,
         }
     ]
+    assert program["nodes"][0]["changes"] == [
+        {"rule": "attacker/elven-archers/volley-fire", "text": "allow half-of-each-rear-rank"}
+    ]
     assert program["nodes"][2]["edge"]["readings"] == [
         {"label": "shots", "outcomes": [{"value": 8, "p": 1.0}]}
     ]
     assert program["nodes"][3]["target"] == {
         "label": "needed",
+        "outcomes": [{"value": "3+", "p": 1.0}],
+    }
+    assert program["nodes"][3]["printed"] == {
+        "label": "printed",
         "outcomes": [{"value": "3+", "p": 1.0}],
     }
     assert [rule["id"] for rule in program["rules"]] == [

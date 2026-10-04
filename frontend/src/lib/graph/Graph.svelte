@@ -328,9 +328,9 @@
 				<span>side</span><span>{node.side}</span>
 			</div>
 			<div class="field"><span>path</span><span class="path">{node.path}</span></div>
-			{#if node.kind === 'roll'}
-				<h2>target</h2>
-				<Readings readings={[node.target]} width={STRIP} />
+			{#if node.kind === 'roll' && node.printed}
+				<h2>printed</h2>
+				<Readings readings={[node.printed]} width={STRIP} />
 			{:else if node.kind === 'decision'}
 				<h2>options</h2>
 				{#each node.options as option}
@@ -346,6 +346,10 @@
 				{/each}
 			{:else}
 				<span class="meta">none</span>
+			{/if}
+			{#if node.kind === 'roll'}
+				<h2>{node.printed ? 'in force' : 'target'}</h2>
+				<Readings readings={[node.target]} width={STRIP} />
 			{/if}
 			<h2>edge out</h2>
 			{#if !node.ran}

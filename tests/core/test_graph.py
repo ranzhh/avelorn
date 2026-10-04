@@ -1059,6 +1059,7 @@ def _charge_reaction() -> tuple[_Reaction, Consequence[int], Projection[int], St
                                 operation=Operation.FORBID,
                                 inputs=(gap, movement),
                                 options=_every_weapon_when_too_close,
+                                text="forbid every weapon",
                             ),
                         ),
                     ),
@@ -1069,6 +1070,7 @@ def _charge_reaction() -> tuple[_Reaction, Consequence[int], Projection[int], St
                                 operation=Operation.FORCE,
                                 inputs=(who,),
                                 options=_hold_once_anyone_fired,
+                                text="force hold",
                             ),
                         ),
                     ),
@@ -1140,6 +1142,7 @@ def test_a_world_whose_choice_is_forbidden_takes_the_printed_otherwise() -> None
         operation=Operation.FORBID,
         inputs=(gap, movement),
         options=_stand_and_shoot_when_too_close,
+        text="forbid stand-and-shoot",
     )
     program.attach(
         (
@@ -1181,7 +1184,7 @@ def _held(amends: _Amends) -> tuple[Program, Decision[str]]:
     )
     program = Program.build("charge", _SIDES, (gap, reaction))
     contributions = tuple(
-        Contribution(operation=operation, inputs=(gap,), options=options)
+        Contribution(operation=operation, inputs=(gap,), options=options, text=str(operation))
         for operation, options in amends
     )
     program.attach(
@@ -1254,7 +1257,10 @@ def test_a_closed_option_exists_only_where_a_rule_opens_it(
     )
     program = Program.build("charge", _SIDES, (gap, reaction))
     opener = Contribution(
-        operation=Operation.ALLOW, inputs=(gap,), options=_fire_and_flee_when_far
+        operation=Operation.ALLOW,
+        inputs=(gap,),
+        options=_fire_and_flee_when_far,
+        text="allow fire-and-flee",
     )
     if opened:
         program.attach(
@@ -1288,9 +1294,12 @@ def test_a_forbid_wins_over_an_allow_at_an_eligibility() -> None:
     who.show(weapons)
     program = Program.build("volley", _SIDES, (gap, movement, who))
     forbid = Contribution(
-        operation=Operation.FORBID, inputs=(gap, movement), options=_pistol_when_too_close
+        operation=Operation.FORBID,
+        inputs=(gap, movement),
+        options=_pistol_when_too_close,
+        text="forbid pistol",
     )
-    allow = Contribution(operation=Operation.ALLOW, options=_a_pistol)
+    allow = Contribution(operation=Operation.ALLOW, options=_a_pistol, text="allow pistol")
     program.attach(
         (
             RuleNode(
@@ -1349,7 +1358,11 @@ def test_a_rule_the_player_may_decline_applies_only_in_the_lane_that_takes_it() 
                 landings=(
                     Landing(
                         reaction,
-                        contributions=(Contribution(operation=Operation.FORCE, options=_hold),),
+                        contributions=(
+                            Contribution(
+                                operation=Operation.FORCE, options=_hold, text="force hold"
+                            ),
+                        ),
                     ),
                 ),
             ),
@@ -1764,7 +1777,16 @@ def _refusal(case: str) -> tuple[Program, tuple[RuleNode, ...]]:
             _node(Landing(aimed, changes=(_Shift(1, reads=(after,)),))),
         ),
         "force-at-an-eligibility": (
-            _node(Landing(who, (Contribution(operation=Operation.FORCE, options=_a_pistol),))),
+            _node(
+                Landing(
+                    who,
+                    (
+                        Contribution(
+                            operation=Operation.FORCE, options=_a_pistol, text="force pistol"
+                        ),
+                    ),
+                )
+            ),
         ),
         "contribution-arity": (
             _node(
@@ -1772,7 +1794,10 @@ def _refusal(case: str) -> tuple[Program, tuple[RuleNode, ...]]:
                     reaction,
                     (
                         Contribution(
-                            operation=Operation.ALLOW, inputs=(gap,), options=_no_printed_set
+                            operation=Operation.ALLOW,
+                            inputs=(gap,),
+                            options=_no_printed_set,
+                            text="allow nothing",
                         ),
                     ),
                 )
@@ -1784,14 +1809,26 @@ def _refusal(case: str) -> tuple[Program, tuple[RuleNode, ...]]:
                     reaction,
                     (
                         Contribution(
-                            operation=Operation.ALLOW, inputs=(after,), options=_charge_offered
+                            operation=Operation.ALLOW,
+                            inputs=(after,),
+                            options=_charge_offered,
+                            text="allow charge",
                         ),
                     ),
                 )
             ),
         ),
         "contribution-on-a-plain-step": (
-            _node(Landing(gap, (Contribution(operation=Operation.ALLOW, options=_a_pistol),))),
+            _node(
+                Landing(
+                    gap,
+                    (
+                        Contribution(
+                            operation=Operation.ALLOW, options=_a_pistol, text="allow pistol"
+                        ),
+                    ),
+                )
+            ),
         ),
         "repeated-id": (_node(), _node()),
         "no-source": (_node(sources=()),),
@@ -1835,7 +1872,9 @@ def test_a_rule_offering_an_option_the_decision_lacks_is_refused() -> None:
         name="charge-reactions", side="target", options={"hold": ()}, otherwise="hold"
     )
     program = Program.build("charge", _SIDES, (gap, reaction))
-    offer = Contribution(operation=Operation.ALLOW, inputs=(gap,), options=_charge_offered)
+    offer = Contribution(
+        operation=Operation.ALLOW, inputs=(gap,), options=_charge_offered, text="allow charge"
+    )
     program.attach(
         (
             RuleNode(
@@ -1919,7 +1958,10 @@ _volley.attach(
                     _aftermath,
                     contributions=(
                         Contribution(
-                            operation=Operation.FORCE, inputs=(_range,), options=_stand_when_close
+                            operation=Operation.FORCE,
+                            inputs=(_range,),
+                            options=_stand_when_close,
+                            text="force stand",
                         ),
                     ),
                 ),

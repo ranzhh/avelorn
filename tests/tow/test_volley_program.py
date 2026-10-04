@@ -1,6 +1,7 @@
 """Volley program."""
 
 from collections.abc import Hashable, Mapping
+from fractions import Fraction
 from itertools import product
 
 import pytest
@@ -334,6 +335,44 @@ def _corpus_volley(
         can_shoot=can_shoot,
         line_of_sight=line_of_sight,
     )
+
+
+def test_ballistic_skill_6_shows_its_chart_target_moved_by_the_rules_in_force() -> None:
+    volley = _volley(
+        _shooter(1, 6, 3, 0),
+        _target(3, 1, None, None),
+        shooters=1,
+        models=1,
+        battle_strength=1,
+        moved=True,
+    )
+
+    hit = volley.at("volley/attack/roll-to-hit")
+    assert (hit.read("printed").mass, hit.read("needed").mass) == (
+        {"2+ then 6+": 1},
+        {"3+ then 6+": 1},
+    )
+
+
+def test_a_save_shows_every_target_armour_bane_leaves_in_force() -> None:
+    sisters = Contingent.deploy("sisters-of-avelorn", 5, data=REPO, frontage=5)
+    spearmen = Contingent.deploy("elven-spearmen", 10, data=REPO)
+    volley = _volley(
+        Fielded.of(sisters, "Bow of Avelorn"),
+        Fielded.of(spearmen),
+        shooters=5,
+        models=10,
+        battle_strength=10,
+    )
+    every_six, no_save_at_all = Fraction(31, 36) ** 5, Fraction(5, 36) ** 5
+
+    saves = volley.at("volley/attack/make-armour-saves")
+    assert saves.read("printed").mass == {"5+": 1}
+    assert saves.read("needed").mass == {
+        "6+": every_six,
+        "6+ or -": 1 - every_six - no_save_at_all,
+        "-": no_save_at_all,
+    }
 
 
 def test_a_part_at_a_step_reads_its_characteristic_as_an_operand() -> None:

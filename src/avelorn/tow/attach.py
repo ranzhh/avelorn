@@ -269,6 +269,7 @@ class _Fielding:
         return Contribution(
             operation=operation,
             options=partial(_named, frozenset(named), gate),
+            text=f"{operation} {', '.join(sorted(named))}",
             inputs=gate.reads,
         )
 

@@ -50,6 +50,7 @@ export interface Decision extends Step {
 export interface Roll extends Step {
 	kind: 'roll';
 	target: Reading;
+	printed: Reading | null;
 }
 
 export interface Consequence extends Step {

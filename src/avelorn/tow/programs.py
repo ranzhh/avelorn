@@ -305,11 +305,13 @@ class _Builder:
         tally = self.tally(spec, entry, here, groups)
         changed = Mark[tuple[Hashable, ...]](spec.name) if CHANGED in spec.reads else None
         inputs = tuple(self.key(read, spec, here, visible, tally, changed) for read in spec.reads)
-        target = None
+        target = printed = None
         if spec.target is not None:
             target = self.projection("needed", spec.target, spec, here, visible, tally, changed)
+        if spec.printed is not None:
+            printed = self.projection("printed", spec.printed, spec, here, visible, tally, changed)
         writes = None if spec.writes is None else self.write(spec.writes, here)
-        step = spec.build(inputs, target, writes, changed)
+        step = spec.build(inputs, target, writes, changed, printed)
         self.specs[step] = spec
         own = {**visible, spec.name: step}
         for name in entry.readings:

@@ -376,6 +376,7 @@ class Step[Out: Hashable](ABC):
     def view(self, paths: Mapping[Any, str], lane: "Lane") -> dict[str, Any]:
         edge = lane.edges.get(self)
         needs = dict.fromkeys(self.needs(lane.program))
+        amendments = lane.program.amending(self)
         changes = lane.program.changes.get(self, ())
         return {
             "path": paths[self],
@@ -385,7 +386,10 @@ class Step[Out: Hashable](ABC):
             "inputs": [paths[source] for source in needs if isinstance(source, Step)],
             "ran": edge is not None,
             "edge": {"readings": [reading.view(edge) for reading in self.drawn()]},
-            "changes": [{"rule": node, **change.view()} for node, change in changes],
+            "changes": [
+                *(each.view() for each in amendments),
+                *({"rule": node, **change.view()} for node, change in changes),
+            ],
             **self.detail(lane, edge),
         }
 
@@ -412,25 +416,31 @@ class Consequence[Out: Hashable](Step[Out]):
 
 @dataclass(frozen=True, eq=False, kw_only=True)
 class Roll[Out: Hashable](Step[Out]):
+    """A step dice settle; ``target`` is the score needed, ``printed`` the score before rules."""
+
     kind = "roll"
     kernel: Kernel[Out]
     target: Reading
+    printed: Reading | None = None
 
     def settled(self, world: World, lane: "Lane") -> Distribution[Settled]:
         changed = self.changing(world, lane)
         return self.kernel(*self.arguments(changed.world)).map(partial(self.entered, changed))
 
     def shown(self) -> tuple[Reading, ...]:
-        return (*self.readings, self.target)
+        printed = () if self.printed is None else (self.printed,)
+        return (*self.readings, self.target, *printed)
 
     def detail(self, lane: "Lane", edge: Edge | None) -> dict[str, Any]:
-        return {"target": self.target.view(edge)}
+        printed = None if self.printed is None else self.printed.view(edge)
+        return {"target": self.target.view(edge), "printed": printed}
 
 
 @dataclass(frozen=True, eq=False, kw_only=True)
 class Contribution[O: Hashable]:
     operation: Operation
     options: Callable[..., frozenset[O]]
+    text: str
     inputs: tuple[Key, ...] = ()
 
     def names(self, printed: frozenset[O], world: World) -> frozenset[O]:
@@ -441,6 +451,9 @@ class Contribution[O: Hashable]:
 class Amendment:
     rule: str
     contribution: Contribution[Any]
+
+    def view(self) -> dict[str, Any]:
+        return {"rule": self.rule, "text": self.contribution.text}
 
 
 @dataclass(frozen=True, eq=False, kw_only=True)
