@@ -113,16 +113,20 @@ class Fielding:
         raise KeyError(f"{self.unit} fields no part {id}")
 
     def sources(self) -> Iterator[tuple[RuleRef, Source]]:
-        """The rules every part of the side carries, with what gives each.
+        """The rules the side carries, with what gives each; every part carries the same.
 
         Yields:
-            The reference, and its source, in the first part's order.
+            The reference, and its source.
+
+        Raises:
+            ValueError: the parts carry different rules.
         """
         first, *rest = self.parts
-        shared = [set(part.sources()) for part in rest]
-        for pair in first.sources():
-            if all(pair in each for each in shared):
-                yield pair
+        carried = set(first.sources())
+        for part in rest:
+            if set(part.sources()) != carried:
+                raise ValueError(f"{self.unit}: {part.id} carries rules {first.id} does not")
+        yield from first.sources()
 
     @property
     def removal(self) -> tuple[tuple[str, int], ...]:
