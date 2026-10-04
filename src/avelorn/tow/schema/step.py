@@ -67,6 +67,11 @@ class Step(StrEnum):
         member.kind = kind
         return member
 
+    @property
+    def rolls(self) -> bool:
+        """Whether a die is rolled at the step."""
+        return self.kind is StepKind.ROLL or self in _ROLLED_WITHIN
+
     WHO_CAN_SHOOT = "who-can-shoot", _SHOOTING, StepKind.MEASUREMENT
     CHECK_LINE_OF_SIGHT = "check-line-of-sight", _SHOOTING, StepKind.MEASUREMENT
     CHECK_RANGE = "check-range", _SHOOTING, StepKind.MEASUREMENT
@@ -144,6 +149,9 @@ class Step(StrEnum):
     FALL_BACK_IN_GOOD_ORDER = "fall-back-in-good-order", _GIVE_GROUND, StepKind.ROLL
     RALLY_FLEEING_UNITS = "rally-fleeing-units", (StepSequence.STRATEGY,), StepKind.ROLL
     END_OF_TURN = "end-of-turn", (StepSequence.TURN,), StepKind.CONSEQUENCE
+
+
+_ROLLED_WITHIN = frozenset({Step.RUNNING_DOWN_THE_FOE})
 
 
 class Block(NamedTuple):

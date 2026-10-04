@@ -354,6 +354,10 @@ class Limit(BaseModel):
 
 _ATTRIBUTES = {Operation.SET: "set_"}
 
+_CHOSEN = frozenset({StepKind.ROLL, StepKind.DECISION})
+
+_SLOTS = frozenset({Step.IMPACT_HITS, Step.STOMP_ATTACKS})
+
 Options = Annotated[tuple[Slug, ...], Field(min_length=1)]
 
 
@@ -524,9 +528,20 @@ class Effect(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def _denies_a_roll(self) -> Self:
-        if self.deny and self.at is not None and self.at.step.kind is not StepKind.ROLL:
-            raise ValueError(f"deny takes away a roll; {self.at.step} is a {self.at.step.kind}")
+    def _fits_its_step(self) -> Self:
+        if self.at is None:
+            return self
+        step = self.at.step
+        if self.deny and step.kind is not StepKind.ROLL:
+            raise ValueError(f"deny takes away a roll; {step} is a {step.kind}")
+        if (self.force is not None or self.substitute is not None) and step.kind not in _CHOSEN:
+            raise ValueError(
+                f"{self.operation} settles a roll or a decision; {step} is a {step.kind}"
+            )
+        if self.reroll is not None and not step.rolls:
+            raise ValueError(f"reroll needs a die; {step} rolls none")
+        if (self.hits is not None or self.fill) and step not in _SLOTS:
+            raise ValueError(f"{self.operation} fills a slot of automatic hits; {step} is no slot")
         return self
 
 
