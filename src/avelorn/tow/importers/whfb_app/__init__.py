@@ -10,7 +10,7 @@ structured data, not scraped HTML:
 - `richtext` walks the Contentful rich-text fields (equipment, special
   rules, options) that link to `rule` entries.
 - `parse` maps an `armyListEntry` payload onto the unit schema. It never
-  guesses silently: unparseable required fields raise, and option lines
+  guesses silently: unparsable required fields raise, and option lines
   that match no known pattern come through as `kind: other` with the raw
   text plus a warning, so the human reviewing the YAML diff sees them.
 - `yamlout` serializes a `Unit` in the hand-authored style used under
