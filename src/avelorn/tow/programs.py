@@ -29,7 +29,7 @@ from avelorn.core.graph import (
 from avelorn.tow.attach import Attachment, attach_rules
 from avelorn.tow.data import DATA_DIR
 from avelorn.tow.fielding import Fielding, Part
-from avelorn.tow.kernels import Standing
+from avelorn.tow.kernels import Standings
 from avelorn.tow.schema.program import (
     FactInput,
     FactType,
@@ -67,7 +67,7 @@ TYPES: Mapping[FactType, type] = MappingProxyType(
     {
         FactType.INT: int,
         FactType.BOOL: bool,
-        FactType.STANDING: Standing,
+        FactType.STANDING: Standings,
     }
 )
 

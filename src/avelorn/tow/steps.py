@@ -25,13 +25,13 @@ from avelorn.tow.kernels import (
     HIGH_BALLISTIC_SKILL,
     UNARMOURED,
     Die,
-    Standing,
+    Standings,
     armour_save_target,
+    back_rank,
     d6,
     falls_back_in_good_order,
     heavy_casualties,
     leadership_test,
-    remove_casualties,
     shooting_hit,
     shooting_hit_target,
     wound_target,
@@ -403,7 +403,7 @@ def who_can_shoot() -> Distribution[frozenset[str]]:
 
 def how_many_shots(
     attacker: Fielding,
-    standing: Standing,
+    standing: Standings,
     ranks: frozenset[str],
     can_shoot: bool,
     in_sight: bool,
@@ -420,9 +420,7 @@ def how_many_shots(
     """
     fired = dict.fromkeys((part.id for part in attacker.parts), 0)
     if can_shoot and in_sight and band is not Band.OUT_OF_RANGE:
-        filled = [
-            part for part, models in attacker.standing(standing.models) for _ in range(models)
-        ]
+        filled = [part for part in attacker.parts for _ in range(standing.of(part.id).models)]
         width = attacker.frontage
         for start in range(0, len(filled), width):
             rank = filled[start : start + width]
@@ -539,19 +537,17 @@ def _unsaved(wound: Die | None, save: Die | None, ward: Die | None) -> int:
 
 
 def _remove_casualties(
-    target: Fielding, standing: Standing, wounds: int
-) -> Distribution[Standing]:
-    return Distribution.pure(
-        remove_casualties(standing, wounds, _printed(target.hit, Characteristic.WOUNDS))
-    )
+    target: Fielding, standing: Standings, wounds: int
+) -> Distribution[Standings]:
+    return Distribution.pure(back_rank(standing, wounds, target.removal))
 
 
-def _heavy_casualties(standing: Standing, at_start_of_phase: int) -> Distribution[bool]:
+def _heavy_casualties(standing: Standings, at_start_of_phase: int) -> Distribution[bool]:
     return Distribution.pure(heavy_casualties(standing.models, at_start_of_phase))
 
 
 def make_panic_tests(
-    target: Fielding, standing: Standing, tested: bool, changed: tuple[Hashable, ...]
+    target: Fielding, standing: Standings, tested: bool, changed: tuple[Hashable, ...]
 ) -> Distribution[Test]:
     """Take the Panic test on the highest Leadership still standing.
 
@@ -563,13 +559,13 @@ def make_panic_tests(
     if not tested:
         return Distribution.pure(Test.NOT_TAKEN)
     rerolled = RerollOn.FAILED in Payloads.of(changed).rerolls()
-    leadership = target.highest(Characteristic.LEADERSHIP, standing.models)
+    leadership = target.highest(Characteristic.LEADERSHIP, standing)
     passes = leadership_test(leadership, rerolled)
     return Distribution({Test.PASSED: passes, Test.FAILED: 1 - passes})
 
 
 def fall_back_or_flee(
-    test: Test, standing: Standing, battle_strength: int
+    test: Test, standing: Standings, battle_strength: int
 ) -> Distribution[Retreat]:
     """Settle a failed Panic test.
 
@@ -589,16 +585,16 @@ def _itself[T](value: T) -> T:
     return value
 
 
-def _models(standing: Standing) -> int:
+def _models(standing: Standings) -> int:
     return standing.models
 
 
-def _wounds_lost(standing: Standing) -> int:
+def _wounds_lost(standing: Standings) -> int:
     return standing.wounds_lost
 
 
-def _leadership(target: Fielding, standing: Standing) -> str:
-    value = target.highest(Characteristic.LEADERSHIP, standing.models)
+def _leadership(target: Fielding, standing: Standings) -> str:
+    value = target.highest(Characteristic.LEADERSHIP, standing)
     return NO_ROLL if value is None else str(value)
 
 

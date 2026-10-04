@@ -348,6 +348,50 @@ def remove_casualties(standing: Standing, wounds: int, wounds_per_model: int) ->
     return Standing(models, taken % wounds_per_model if models else 0)
 
 
+class Standings(NamedTuple):
+    """What is left of each part of a side, in the side's part order."""
+
+    parts: tuple[tuple[str, Standing], ...]
+
+    @property
+    def models(self) -> int:
+        """The side's models still standing."""
+        return sum(standing.models for _, standing in self.parts)
+
+    @property
+    def wounds_lost(self) -> int:
+        """The Wounds lost by the side's damaged models."""
+        return sum(standing.wounds_lost for _, standing in self.parts)
+
+    def of(self, part: str) -> Standing:
+        """One part's standing.
+
+        Returns:
+            The part's standing.
+        """
+        return dict(self.parts)[part]
+
+
+def back_rank(standings: Standings, wounds: int, order: tuple[tuple[str, int], ...]) -> Standings:
+    """Remove casualties part by part in ``order``, each with its Wounds per model.
+
+    Each part takes wounds on its damaged model first, then on its next models,
+    until it falls; the wounds left pass to the next part in ``order``
+    (removing-casualties/removing-casualties-from-units). Wounds left once every
+    part has fallen are lost.
+
+    Returns:
+        Each part's standing once the wounds are removed.
+    """
+    left = dict(standings.parts)
+    for part, wounds_per_model in order:
+        standing = left[part]
+        landed = min(wounds, standing.models * wounds_per_model - standing.wounds_lost)
+        left[part] = remove_casualties(standing, landed, wounds_per_model)
+        wounds -= landed
+    return Standings(tuple((part, left[part]) for part, _ in standings.parts))
+
+
 def heavy_casualties(models: int, at_start_of_phase: int) -> bool:
     """Check for Heavy Casualties.
 

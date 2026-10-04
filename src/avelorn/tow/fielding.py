@@ -7,6 +7,7 @@ from typing import NamedTuple
 from avelorn.core.graph import Source
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.engine.armour import defender_armour
+from avelorn.tow.kernels import Standing, Standings
 from avelorn.tow.schema.reference import RuleRef, slugified
 from avelorn.tow.schema.unit import Characteristic, Profile, ProfileRole
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile
@@ -120,21 +121,46 @@ class Fielding:
         for part in self.parts:
             yield from part.sources()
 
-    def standing(self, models: int) -> tuple[tuple[Part, int], ...]:
-        """Each part's models still standing, casualties taken off the back.
+    @property
+    def removal(self) -> tuple[tuple[str, int], ...]:
+        """Each part with its Wounds per model, in the order casualties come off.
+
+        Casualties come off the back of the placement, and a champion falls last.
+
+        Raises:
+            ValueError: a part prints no Wounds.
+        """
+        rank_and_file = [part for part in self.parts if part.row.role is not ProfileRole.CHAMPION]
+        champions = [part for part in self.parts if part.row.role is ProfileRole.CHAMPION]
+        order = []
+        for part in (*reversed(rank_and_file), *reversed(champions)):
+            wounds = part.characteristic(Characteristic.WOUNDS)
+            if wounds is None:
+                raise ValueError(f"{part.id} prints no Wounds")
+            order.append((part.id, wounds))
+        return tuple(order)
+
+    def standing(self, models: int) -> Standings:
+        """The side with ``models`` standing, the rest taken off as casualties fall.
 
         Returns:
-            Each part with its standing models, in placement order.
-        """
-        lost = sum(part.count for part in self.parts) - models
-        left: list[tuple[Part, int]] = []
-        for part in reversed(self.parts):
-            taken = min(lost, part.count)
-            lost -= taken
-            left.append((part, part.count - taken))
-        return tuple(reversed(left))
+            Each part's standing.
 
-    def highest(self, c: Characteristic, models: int) -> int | None:
+        Raises:
+            ValueError: more models stand than the side fields.
+        """
+        fielded = sum(part.count for part in self.parts)
+        if models > fielded:
+            raise ValueError(f"{self.unit} fields {fielded} models, not {models}")
+        counts = {part.id: part.count for part in self.parts}
+        lost = fielded - models
+        for part, _ in self.removal:
+            taken = min(lost, counts[part])
+            counts[part] -= taken
+            lost -= taken
+        return Standings(tuple((part.id, Standing(counts[part.id], 0)) for part in self.parts))
+
+    def highest(self, c: Characteristic, standings: Standings) -> int | None:
         """The highest value of a characteristic among the parts still standing.
 
         Returns:
@@ -142,8 +168,8 @@ class Fielding:
         """
         values = [
             value
-            for part, count in self.standing(models)
-            if count and (value := part.characteristic(c)) is not None
+            for part in self.parts
+            if standings.of(part.id).models and (value := part.characteristic(c)) is not None
         ]
         return max(values, default=None)
 

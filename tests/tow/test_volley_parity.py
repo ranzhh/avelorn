@@ -11,7 +11,6 @@ from avelorn.tow.coverage import fieldings
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.fielding import Fielding
 from avelorn.tow.game import TOWGame
-from avelorn.tow.kernels import Standing
 from avelorn.tow.phases.shooting import make_panic_tests, shoot_unit
 from avelorn.tow.programs import VOLLEY, Built, load_program
 from avelorn.tow.schema.phase import Phase
@@ -104,8 +103,8 @@ def _graph(built: Built, attacker: Contingent, target: Contingent, distance: int
             "can-shoot": True,
             "line-of-sight": True,
             "attacker/moved": attacker.movement.moved,
-            "attacker/standing": Standing(attacker.models, 0),
-            "target/standing": Standing(target.models, 0),
+            "attacker/standing": built.fielded[Side.ATTACKER].standing(attacker.models),
+            "target/standing": built.fielded[Side.TARGET].standing(target.models),
             "target/models-at-start-of-phase": target.models,
             "target/battle-strength": target.models,
         }
