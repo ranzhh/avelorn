@@ -17,10 +17,13 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict
 
 from avelorn.tow.data import TOWRepository
+from avelorn.tow.schema.effect import Address
 from avelorn.tow.schema.ledger import Acknowledgement, GapKind
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import GrantEffect, Rule
+from avelorn.tow.schema.step import Step
 from avelorn.tow.schema.unit import OptionKind, UnitOption
+from avelorn.tow.steps import STEPS
 
 
 class Entry(StrEnum):
@@ -125,9 +128,13 @@ def rule_references(data: TOWRepository) -> Iterator[tuple[RuleRef, Site]]:
             for reference in profile.special_rules:
                 yield reference, Site(entry=Entry.WEAPON, id=slug)
     for slug, rule in sorted(data.rules.items()):
+        site = Site(entry=Entry.RULE, id=slug)
         for effect in rule.effects:
             if isinstance(effect, GrantEffect):
-                yield effect.grants, Site(entry=Entry.RULE, id=slug)
+                yield effect.grants, site
+        for addressed in () if rule.graph is None else rule.graph.effects:
+            if addressed.grants is not None:
+                yield addressed.grants, site
 
 
 def rule_gap(rule: Rule) -> GapKind | None:
@@ -142,6 +149,35 @@ def rule_gap(rule: Rule) -> GapKind | None:
     return None if rule.effects else GapKind.RULE_WITHOUT_EFFECTS
 
 
+def attached(address: Address) -> bool:
+    """Whether a registered step can take an effect landing at ``address``.
+
+    Returns:
+        True when some sequence the address lands in registers its step, and
+        any step whose block it is narrowed to.
+    """
+    block = address.in_
+    enclosed = not isinstance(block, Step) or any((s, block) in STEPS for s in block.sequences)
+    return enclosed and any((sequence, address.step) in STEPS for sequence in address.sequences)
+
+
+def _graph_gaps(slug: str, rule: Rule) -> Iterator[tuple[GapKind, str, Site]]:
+    """The gaps in a rule as the graph reads it.
+
+    Yields:
+        One gap per effect landing where no program registers the step, and
+        one per mechanic the rule needs.
+    """
+    if rule.graph is None:
+        return
+    site = Site(entry=Entry.RULE, id=slug)
+    for effect in rule.graph.effects:
+        if effect.at is not None and not attached(effect.at):
+            yield GapKind.UNATTACHED_EFFECT, f"{slug}/{effect.at.step}", site
+    for mechanic in rule.graph.needs:
+        yield GapKind.MISSING_MECHANIC, mechanic, site
+
+
 def _order(kind: GapKind, subject: str) -> tuple[int, str]:
     return list(GapKind).index(kind), subject
 
@@ -152,9 +188,13 @@ def _scan(data: TOWRepository) -> Iterator[tuple[GapKind, str, Site]]:
     Yields:
         The gap's kind, its ledger subject, and the entry it occurs in.
     """
+    referenced = set()
     for reference, site in rule_references(data):
+        referenced.add(reference.rule)
         if (kind := rule_gap(data.rules[reference.rule])) is not None:
             yield kind, reference.rule, site
+    for slug in sorted(referenced):
+        yield from _graph_gaps(slug, data.rules[slug])
     for slug, unit in sorted(data.units.items()):
         for row in unit.unread_rows:
             yield GapKind.PROFILE_ROW_UNREAD, f"{slug}/{row.name}", Site(entry=Entry.UNIT, id=slug)

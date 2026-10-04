@@ -7,8 +7,9 @@ gap needs any more is stale. `avelorn coverage` prints the same report.
 
 import yaml
 
-from avelorn.tow.coverage import coverage
+from avelorn.tow.coverage import attached, coverage
 from avelorn.tow.data import TOWRepository
+from avelorn.tow.schema.effect import Address
 from avelorn.tow.schema.ledger import GapKind
 
 REPO = TOWRepository()
@@ -42,3 +43,18 @@ def test_a_rule_without_effects_is_one_gap_whatever_its_x() -> None:
     fly = next(gap for gap in REPORT.gaps if gap.subject == "fly")
     assert fly.kind is GapKind.RULE_WITHOUT_EFFECTS
     assert {"frostheart-phoenix", "great-eagle"} <= {site.id for site in fly.sites}
+
+
+def test_an_effect_attaches_where_a_program_registers_its_step() -> None:
+    """Roll To Hit attaches through the volley; narrowed to combat, no program registers it."""
+    shooting = Address.model_validate({"step": "roll-to-hit", "by": "this-model"})
+    combat = Address.model_validate({"step": "roll-to-hit", "by": "this-model", "in": "combat"})
+    assert attached(shooting)
+    assert not attached(combat)
+
+
+def test_an_unattached_effect_is_one_gap_per_rule_and_step() -> None:
+    """Veteran's re-roll attaches at the Panic test, and waits at the rally test."""
+    unattached = {gap.subject for gap in REPORT.gaps if gap.kind is GapKind.UNATTACHED_EFFECT}
+    assert "veteran/rally-fleeing-units" in unattached
+    assert "veteran/make-panic-tests" not in unattached

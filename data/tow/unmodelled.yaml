@@ -2,8 +2,9 @@
 # `avelorn coverage` lists the gaps; tests/tow/test_coverage.py fails on a gap
 # missing here and on an entry no gap needs. Subjects: the rule's slug for a
 # rule without effects, <unit>/<row> for profile rows, the weapon or armour slug for
-# printed notes, <unit>/<option> for options, and the option kind for a command
-# model (champion, standard_bearer, musician).
+# printed notes, <unit>/<option> for options, the option kind for a command
+# model (champion, standard_bearer, musician), <rule>/<step> for an unattached
+# effect, and the mechanic's slug for a missing mechanic.
 
 # rule-without-effects: an entry holds the printed text, and nothing folds it.
 
@@ -312,3 +313,136 @@
   subject: maneaters/A standard bearer may have the Look-out Gnoblar special rule
   reason: Imported as prose, adding no rule. It is bought for the standard bearer, who has no profile row, so neither scope fits until command models are parts; Look Out, Sir! is not modelled.
   issue: 33
+
+# unattached-effect: the effect is addressed, and no program registers the
+# step it lands on yet.
+
+- kind: unattached-effect
+  subject: cleaving-blow/make-armour-saves
+  reason: Lands on Make Armour Saves in combat; no program registers the combat attack until the combat round registers it (item 14).
+- kind: unattached-effect
+  subject: elven-reflexes/who-strikes-first
+  reason: Lands on Who Strikes First?; no program registers it until the combat round registers it (item 14).
+- kind: unattached-effect
+  subject: enfeebling-cold/roll-to-wound
+  reason: Lands on Roll To Wound in combat; no program registers the combat attack until the combat round registers it (item 14).
+- kind: unattached-effect
+  subject: fight-in-extra-rank/who-can-fight
+  reason: Lands on Who Can Fight?; no program registers it until the combat round registers it (item 14).
+- kind: unattached-effect
+  subject: furious-charge/how-many-attacks
+  reason: Lands on How Many Attacks?; no program registers it until the combat round registers it (item 14).
+- kind: unattached-effect
+  subject: impact-hits/impact-hits
+  reason: Fills the Impact Hits slot; no program registers it until the charge reaches combat (item 20).
+- kind: unattached-effect
+  subject: impact-hits/roll-to-wound
+  reason: Lands on Roll To Wound inside the Impact Hits slot; no program registers it until the charge reaches combat (item 20).
+- kind: unattached-effect
+  subject: ithilmar-weapons/roll-to-hit
+  reason: Lands on Roll To Hit in combat; no program registers the combat attack until the combat round registers it (item 14).
+- kind: unattached-effect
+  subject: martial-prowess/roll-to-hit
+  reason: Lands on Roll To Hit in combat, for both sides' attacks; no program registers the combat attack until the combat round registers it (item 14).
+- kind: unattached-effect
+  subject: massed-infantry/calculate-combat-result
+  reason: Lands on Calculate Combat Result; no program registers it until the combat round registers it (item 14).
+- kind: unattached-effect
+  subject: parry/make-armour-saves
+  reason: Lands on Make Armour Saves in combat; no program registers the combat attack until the combat round registers it (item 14).
+- kind: unattached-effect
+  subject: press-of-battle/who-can-fight
+  reason: Lands on Who Can Fight?; no program registers it until the combat round registers it (item 14).
+- kind: unattached-effect
+  subject: requires-two-hands/choose-combat-and-determine-who-can-fight
+  reason: Lands on Step 1.1, where the weapon is chosen; no program registers it until the combat round registers it (item 14).
+- kind: unattached-effect
+  subject: shieldwall/break-test
+  reason: Lands on the Break Test; no program registers it until the steps from the Break Test on land (item 19).
+- kind: unattached-effect
+  subject: stomp-attacks/roll-to-wound
+  reason: Lands on Roll To Wound inside the Stomp Attacks slot; no program registers it until the combat round registers it (item 14).
+- kind: unattached-effect
+  subject: stomp-attacks/stomp-attacks
+  reason: Fills the Stomp Attacks slot; no program registers it until the combat round registers it (item 14).
+- kind: unattached-effect
+  subject: strike-first/who-strikes-first
+  reason: Lands on Who Strikes First?; no program registers it until the combat round registers it (item 14).
+- kind: unattached-effect
+  subject: strike-last/who-strikes-first
+  reason: Lands on Who Strikes First?; no program registers it until the combat round registers it (item 14).
+- kind: unattached-effect
+  subject: stubborn/break-test
+  reason: Lands on the Break Test; no program registers it until the steps from the Break Test on land (item 19).
+- kind: unattached-effect
+  subject: terror/break-test
+  reason: Lands on the Break Test; no program registers it until the steps from the Break Test on land (item 19).
+- kind: unattached-effect
+  subject: veteran/rally-fleeing-units
+  reason: Re-rolls the rally test; no program registers Rally Fleeing Units, and none is planned.
+- kind: unattached-effect
+  subject: veteran/redirecting-a-charge
+  reason: Re-rolls the test to redirect a charge; no program registers Redirecting a Charge, and none is planned.
+- kind: unattached-effect
+  subject: veteran/restrain-and-reform
+  reason: Re-rolls the Restraint test; no program registers Restrain & Reform, and none is planned.
+- kind: unattached-effect
+  subject: veteran/running-down-the-foe
+  reason: Re-rolls the test to reform after running down the foe; no program registers Running Down the Foe, and none is planned.
+- kind: unattached-effect
+  subject: volley-fire/who-can-shoot
+  reason: Lands on Who Can Shoot?, which the volley takes as a known; it becomes a step with shooting as a program (item 13).
+
+# missing-mechanic: a printed clause needs a mechanic the engine lacks.
+
+- kind: missing-mechanic
+  subject: base-contact
+  reason: Which models touch which is not modelled; a rule printed for models in base contact reaches the whole engaged unit (Blizzard Aura, Enfeebling Cold), and every front-rank model makes Impact Hits and Stomp Attacks.
+- kind: missing-mechanic
+  subject: challenges
+  reason: Challenges are not modelled, so Multiple Wounds never counts for Overkill.
+- kind: missing-mechanic
+  subject: characters
+  reason: Characters joining units are not modelled, so the clauses of Stubborn and Terror about a joined character have nothing to read.
+- kind: missing-mechanic
+  subject: facings
+  reason: Flank and rear facings are not modelled, so Martial Prowess's supporting attacks to the flank and rear have no combat to land in.
+- kind: missing-mechanic
+  subject: formations
+  reason: Formations are not modelled; Shieldwall's Close Order and Press of Battle's Combat Order are not read, a Skirmish formation keeps its Rank Bonus, and a unit with Skirmishers never chooses the formation it permits.
+  issue: 28
+- kind: missing-mechanic
+  subject: magic-items
+  reason: Magic items are not modelled; a hit caused by a magic item is not Magical, and a model carrying Flaming Attacks is not stopped from making Flaming attacks with a magic weapon.
+  issue: 31
+- kind: missing-mechanic
+  subject: march-tests
+  reason: Marching is not modelled, so Veteran never re-rolls the Leadership test a marching unit takes near the enemy.
+- kind: missing-mechanic
+  subject: multiple-units-in-combat
+  reason: Only a combat of one unit against one is modelled, so Stomp Attacks are never divided between enemy units.
+- kind: missing-mechanic
+  subject: parts
+  reason: A unit is read as one part until the program fields its parts (item 12); Veteran's majority of models is not counted, and Enemy Fire (Skirmishers) does not check that every model has a Unit Strength of 1, so enemies shooting at Ellyrian Reavers in Skirmish formation, light cavalry of Unit Strength 2, take the -1 To Hit the rule withholds from them.
+- kind: missing-mechanic
+  subject: psychology-tests
+  reason: Fear and Terror tests are not modelled (item 26 adds the slots); Terror's test on a charge target, and Veteran's re-roll of Fear and Terror tests, have no step.
+- kind: missing-mechanic
+  subject: regeneration-saves
+  reason: No Regeneration save exists in the step vocabulary or the corpus, so Cleaving Blow denies only the armour save.
+- kind: missing-mechanic
+  subject: spells
+  reason: Spells are not modelled, so no Magical or Flaming attack comes from a spell.
+- kind: missing-mechanic
+  subject: terrain
+  reason: Terrain is not modelled, so Volley Fire's hill variant, where the front two ranks shoot, never arises.
+- kind: missing-mechanic
+  subject: unrolled-dice
+  reason: No printed step rolls the dice X of Multiple Wounds for each unsaved wound (DESIGN-GRAPH Open 7).
+- kind: missing-mechanic
+  subject: weapon-runes
+  reason: Weapon runes are not modelled, so Gromril Weapons never meets a hand weapon inscribed with runes.
+- kind: missing-mechanic
+  subject: wizards
+  reason: No Wizard is in the corpus, so Dragon Armour's armour-without-penalty clause has no reader.
+  issue: 10

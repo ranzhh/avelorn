@@ -453,7 +453,7 @@
           "reason"
         ],
         "title": "Acknowledgement",
-        "description": "One gap, known and left open, with why.\n\n``subject`` is how the gap is addressed: the rule's slug for a rule without\neffects (one entry covers every place referencing it), ``<unit>/<row>`` for a\nprofile row, the weapon or armour slug for printed notes, and\n``<unit>/<option>`` for an option."
+        "description": "One gap, known and left open, with why.\n\n``subject`` is how the gap is addressed: the rule's slug for a rule without\neffects (one entry covers every place referencing it), ``<unit>/<row>`` for a\nprofile row, the weapon or armour slug for printed notes, ``<unit>/<option>``\nfor an option, ``<rule>/<step>`` for an effect landing on a step no program\nregisters yet, and the mechanic's slug for a mechanic a rule needs."
       },
       "AmountParameter": {
         "properties": {
@@ -1398,7 +1398,9 @@
           "rule-without-effects",
           "profile-row-unread",
           "printed-notes",
-          "inert-option"
+          "inert-option",
+          "unattached-effect",
+          "missing-mechanic"
         ],
         "title": "GapKind",
         "description": "How a piece of the corpus fails to reach the maths."
@@ -2346,7 +2348,7 @@
           "paragraphs"
         ],
         "title": "Rule",
-        "description": "A rules-page entry (special rule or core rule), text verbatim."
+        "description": "A rules-page entry (special rule or core rule), text verbatim.\n\nA rule file writes each effect for both engines (:class:`Clause`). The\nlegacy engine reads :attr:`effects`; the graph reads :attr:`graph`, which a\nrule built for the legacy engine alone does not have."
       },
       "RuleRef": {
         "anyOf": [
