@@ -14,7 +14,7 @@ paragraphs:
 effects:
   - when: {with: {type: bow}}
     add: {armour-piercing: 1}
-    at: {step: make-armour-saves, by: the-enemy}
+    at: {step: make-armour-saves, by: the-enemy, in: shooting}
     legacy:
       when: {wielding: {type: bow}}
   - when: {with: {type: bow}}

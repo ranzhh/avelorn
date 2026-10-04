@@ -314,84 +314,132 @@
   reason: Imported as prose, adding no rule. It is bought for the standard bearer, who has no profile row, so neither scope fits until command models are parts; Look Out, Sir! is not modelled.
   issue: 33
 
-# unattached-effect: the effect is addressed, and no program registers the
-# step it lands on yet.
+# unattached-effect: the effect is addressed, and no program registers a step
+# it needs yet: its landing in one sequence, or the trigger or fact it reads.
 
 - kind: unattached-effect
-  subject: cleaving-blow/make-armour-saves
-  reason: Lands on Make Armour Saves in combat; no program registers the combat attack until the combat round registers it (item 14).
+  subject: armour-bane/combat/make-armour-saves
+  reason: Moves Armour Piercing on a natural 6 To Wound in combat; no program registers the combat attack until the combat round lands (item 14).
 - kind: unattached-effect
-  subject: elven-reflexes/who-strikes-first
-  reason: Lands on Who Strikes First?; no program registers it until the combat round registers it (item 14).
+  subject: blessings-of-asuryan/combat/ward-saves
+  reason: Sets the Ward save against Flaming attacks in combat; no program registers the combat attack until the combat round lands (item 14).
 - kind: unattached-effect
-  subject: enfeebling-cold/roll-to-wound
-  reason: Lands on Roll To Wound in combat; no program registers the combat attack until the combat round registers it (item 14).
+  subject: cleaving-blow/combat/make-armour-saves
+  reason: Denies the armour save in combat; no program registers the combat attack until the combat round lands (item 14).
 - kind: unattached-effect
-  subject: fight-in-extra-rank/who-can-fight
-  reason: Lands on Who Can Fight?; no program registers it until the combat round registers it (item 14).
+  subject: daiths-reaper/combat/make-armour-saves
+  reason: Makes the enemy re-roll successful armour saves in combat; no program registers the combat attack until the combat round lands (item 14).
 - kind: unattached-effect
-  subject: furious-charge/how-many-attacks
-  reason: Lands on How Many Attacks?; no program registers it until the combat round registers it (item 14).
+  subject: dragon-armour/combat/ward-saves
+  reason: Sets the Ward save in combat; no program registers the combat attack until the combat round lands (item 14).
 - kind: unattached-effect
-  subject: impact-hits/impact-hits
-  reason: Fills the Impact Hits slot; no program registers it until the charge reaches combat (item 20).
+  subject: elven-reflexes/combat/who-strikes-first
+  reason: Lands on Who Strikes First?; no program registers it until the combat round lands (item 14).
 - kind: unattached-effect
-  subject: impact-hits/roll-to-wound
-  reason: Lands on Roll To Wound inside the Impact Hits slot; no program registers it until the charge reaches combat (item 20).
+  subject: enfeebling-cold/combat/roll-to-wound
+  reason: Lowers the enemy's Strength To Wound in combat; no program registers the combat attack until the combat round lands (item 14).
 - kind: unattached-effect
-  subject: ithilmar-weapons/roll-to-hit
-  reason: Lands on Roll To Hit in combat; no program registers the combat attack until the combat round registers it (item 14).
+  subject: fight-in-extra-rank/combat/who-can-fight
+  reason: Lands on Who Can Fight?; no program registers it until the combat round lands (item 14).
 - kind: unattached-effect
-  subject: martial-prowess/roll-to-hit
-  reason: Lands on Roll To Hit in combat, for both sides' attacks; no program registers the combat attack until the combat round registers it (item 14).
+  subject: furious-charge/charge/the-charge-move
+  reason: Reads the length of the charge move; no program registers The Charge Move until the charge lands (item 20).
 - kind: unattached-effect
-  subject: massed-infantry/calculate-combat-result
-  reason: Lands on Calculate Combat Result; no program registers it until the combat round registers it (item 14).
+  subject: furious-charge/combat/how-many-attacks
+  reason: Lands on How Many Attacks?; no program registers it until the combat round lands (item 14).
 - kind: unattached-effect
-  subject: parry/make-armour-saves
-  reason: Lands on Make Armour Saves in combat; no program registers the combat attack until the combat round registers it (item 14).
+  subject: gromril-armour/combat/make-armour-saves
+  reason: Re-rolls a natural 1 on armour saves in combat; no program registers the combat attack until the combat round lands (item 14).
 - kind: unattached-effect
-  subject: press-of-battle/who-can-fight
-  reason: Lands on Who Can Fight?; no program registers it until the combat round registers it (item 14).
+  subject: gromril-weapons/combat/make-armour-saves
+  reason: Sets the hand weapon's Armour Piercing in combat; no program registers the combat attack until the combat round lands (item 14).
 - kind: unattached-effect
-  subject: requires-two-hands/choose-combat-and-determine-who-can-fight
-  reason: Lands on Step 1.1, where the weapon is chosen; no program registers it until the combat round registers it (item 14).
+  subject: impact-hits/charge/the-charge-move
+  reason: Reads the length of the charge move; no program registers The Charge Move until the charge lands (item 20).
 - kind: unattached-effect
-  subject: shieldwall/break-test
+  subject: impact-hits/combat/impact-hits
+  reason: Fills the Impact Hits slot; no program registers it until the charge lands (item 20).
+- kind: unattached-effect
+  subject: impact-hits/combat/roll-to-wound
+  reason: Lands on Roll To Wound inside the Impact Hits slot; no program registers it until the charge lands (item 20).
+- kind: unattached-effect
+  subject: ithilmar-weapons/combat/roll-to-hit
+  reason: Re-rolls a natural 1 To Hit in combat; no program registers the combat attack until the combat round lands (item 14).
+- kind: unattached-effect
+  subject: martial-prowess/combat/roll-to-hit
+  reason: Raises Weapon Skill To Hit in combat, for both sides' attacks; no program registers the combat attack until the combat round lands (item 14).
+- kind: unattached-effect
+  subject: massed-infantry/combat-result/calculate-combat-result
+  reason: Lands on Calculate Combat Result; no program registers it until the combat round lands (item 14).
+- kind: unattached-effect
+  subject: multiple-wounds/combat/remove-casualties
+  reason: Multiplies unsaved wounds in combat; no program registers the combat attack until the combat round lands (item 14).
+- kind: unattached-effect
+  subject: parry/combat/choose-combat-and-determine-who-can-fight
+  reason: Reads the weapon chosen at Step 1.1; no program registers it until the combat round lands (item 14).
+- kind: unattached-effect
+  subject: parry/combat/make-armour-saves
+  reason: Improves the armour save in combat; no program registers the combat attack until the combat round lands (item 14).
+- kind: unattached-effect
+  subject: press-of-battle/combat/who-can-fight
+  reason: Lands on Who Can Fight?; no program registers it until the combat round lands (item 14).
+- kind: unattached-effect
+  subject: requires-two-hands/combat/choose-combat-and-determine-who-can-fight
+  reason: Lands on Step 1.1, where the weapon is chosen; no program registers it until the combat round lands (item 14).
+- kind: unattached-effect
+  subject: runes-of-protection/combat/ward-saves
+  reason: Sets the Ward save in combat; no program registers the combat attack until the combat round lands (item 14).
+- kind: unattached-effect
+  subject: shieldwall/break/break-test
   reason: Lands on the Break Test; no program registers it until the steps from the Break Test on land (item 19).
 - kind: unattached-effect
-  subject: stomp-attacks/roll-to-wound
-  reason: Lands on Roll To Wound inside the Stomp Attacks slot; no program registers it until the combat round registers it (item 14).
+  subject: stomp-attacks/combat/roll-to-wound
+  reason: Lands on Roll To Wound inside the Stomp Attacks slot; no program registers it until the combat round lands (item 14).
 - kind: unattached-effect
-  subject: stomp-attacks/stomp-attacks
-  reason: Fills the Stomp Attacks slot; no program registers it until the combat round registers it (item 14).
+  subject: stomp-attacks/combat/stomp-attacks
+  reason: Fills the Stomp Attacks slot; no program registers it until the combat round lands (item 14).
 - kind: unattached-effect
-  subject: strike-first/who-strikes-first
-  reason: Lands on Who Strikes First?; no program registers it until the combat round registers it (item 14).
+  subject: strike-first/combat/who-strikes-first
+  reason: Lands on Who Strikes First?; no program registers it until the combat round lands (item 14).
 - kind: unattached-effect
-  subject: strike-last/who-strikes-first
-  reason: Lands on Who Strikes First?; no program registers it until the combat round registers it (item 14).
+  subject: strike-last/combat/who-strikes-first
+  reason: Lands on Who Strikes First?; no program registers it until the combat round lands (item 14).
 - kind: unattached-effect
-  subject: stubborn/break-test
+  subject: stubborn/break/break-test
   reason: Lands on the Break Test; no program registers it until the steps from the Break Test on land (item 19).
 - kind: unattached-effect
-  subject: terror/break-test
+  subject: terror/break/break-test
   reason: Lands on the Break Test; no program registers it until the steps from the Break Test on land (item 19).
 - kind: unattached-effect
-  subject: veteran/rally-fleeing-units
-  reason: Re-rolls the rally test; no program registers Rally Fleeing Units, and none is planned.
+  subject: terror/combat-result/who-is-the-winner
+  reason: Reads which side won the combat; no program registers Who Is the Winner? until the combat round lands (item 14).
 - kind: unattached-effect
-  subject: veteran/redirecting-a-charge
-  reason: Re-rolls the test to redirect a charge; no program registers Redirecting a Charge, and none is planned.
+  subject: valour-of-ages/panic/fled-through
+  reason: Reads a Panic test caused by a fleeing friend; no program registers Fled Through, and no numbered item plans one.
 - kind: unattached-effect
-  subject: veteran/restrain-and-reform
-  reason: Re-rolls the Restraint test; no program registers Restrain & Reform, and none is planned.
+  subject: valour-of-ages/panic/make-panic-tests
+  reason: Re-rolls a Panic test taken outside a volley; only the volley registers the Panic test, and no numbered item plans the others.
 - kind: unattached-effect
-  subject: veteran/running-down-the-foe
-  reason: Re-rolls the test to reform after running down the foe; no program registers Running Down the Foe, and none is planned.
+  subject: veteran/break/restrain-and-reform
+  reason: Re-rolls the Restraint test; no program registers Restrain & Reform, and no numbered item plans one.
 - kind: unattached-effect
-  subject: volley-fire/who-can-shoot
+  subject: veteran/charge/redirecting-a-charge
+  reason: Re-rolls the test to redirect a charge; no program registers Redirecting a Charge, and no numbered item plans one.
+- kind: unattached-effect
+  subject: veteran/charge/running-down-the-foe
+  reason: Re-rolls the test to reform after running down the foe; no program registers Running Down the Foe, and no numbered item plans one.
+- kind: unattached-effect
+  subject: veteran/panic/make-panic-tests
+  reason: Re-rolls a Panic test taken outside a volley; only the volley registers the Panic test, and no numbered item plans the others.
+- kind: unattached-effect
+  subject: veteran/strategy/rally-fleeing-units
+  reason: Re-rolls the rally test; no program registers Rally Fleeing Units, and no numbered item plans one.
+- kind: unattached-effect
+  subject: volley-fire/shooting/who-can-shoot
   reason: Lands on Who Can Shoot?, which the volley takes as a known; it becomes a step with shooting as a program (item 13).
+- kind: unattached-effect
+  subject: witness-to-destiny/combat/ward-saves
+  reason: Sets the Ward save in combat; no program registers the combat attack until the combat round lands (item 14).
 
 # missing-mechanic: a printed clause needs a mechanic the engine lacks.
 

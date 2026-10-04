@@ -17,11 +17,11 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict
 
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.schema.effect import Address
+from avelorn.tow.schema.effect import Effect
 from avelorn.tow.schema.ledger import Acknowledgement, GapKind
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import GrantEffect, Rule
-from avelorn.tow.schema.step import Step
+from avelorn.tow.schema.step import Step, StepSequence
 from avelorn.tow.schema.unit import OptionKind, UnitOption
 from avelorn.tow.steps import STEPS
 
@@ -149,31 +149,47 @@ def rule_gap(rule: Rule) -> GapKind | None:
     return None if rule.effects else GapKind.RULE_WITHOUT_EFFECTS
 
 
-def attached(address: Address) -> bool:
-    """Whether a registered step can take an effect landing at ``address``.
+def unattached(effect: Effect) -> Iterator[tuple[StepSequence, Step]]:
+    """Every printed step the effect needs where no program registers it.
 
-    Returns:
-        True when some sequence the address lands in registers its step, and
-        any step whose block it is narrowed to.
+    The landing is needed in each sequence it can land in. A trigger, the
+    block it is narrowed to, or a step read as a fact is needed in at least
+    one sequence that prints it.
+
+    Yields:
+        The sequence and the step.
     """
-    block = address.in_
-    enclosed = not isinstance(block, Step) or any((s, block) in STEPS for s in block.sequences)
-    return enclosed and any((sequence, address.step) in STEPS for sequence in address.sequences)
+    if effect.at is not None:
+        for sequence in effect.at.sequences:
+            if (sequence, effect.at.step) not in STEPS:
+                yield sequence, effect.at.step
+    for step in sorted(_read_steps(effect)):
+        if not any((sequence, step) in STEPS for sequence in step.sequences):
+            yield from ((sequence, step) for sequence in step.sequences)
+
+
+def _read_steps(effect: Effect) -> set[Step]:
+    named = {Step(fact) for fact in effect.facts if fact in Step}
+    if effect.when is not None and effect.when.step is not None:
+        named.add(effect.when.step)
+    if effect.at is not None and isinstance(effect.at.in_, Step):
+        named.add(effect.at.in_)
+    return named
 
 
 def _graph_gaps(slug: str, rule: Rule) -> Iterator[tuple[GapKind, str, Site]]:
     """The gaps in a rule as the graph reads it.
 
     Yields:
-        One gap per effect landing where no program registers the step, and
-        one per mechanic the rule needs.
+        One gap per step an effect needs that no program registers, then one
+        per mechanic the rule needs.
     """
     if rule.graph is None:
         return
     site = Site(entry=Entry.RULE, id=slug)
     for effect in rule.graph.effects:
-        if effect.at is not None and not attached(effect.at):
-            yield GapKind.UNATTACHED_EFFECT, f"{slug}/{effect.at.step}", site
+        for sequence, step in unattached(effect):
+            yield GapKind.UNATTACHED_EFFECT, f"{slug}/{sequence}/{step}", site
     for mechanic in rule.graph.needs:
         yield GapKind.MISSING_MECHANIC, mechanic, site
 

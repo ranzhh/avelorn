@@ -16,7 +16,7 @@ paragraphs:
 # from the weapon's own profile, so it compiles only when the Reaper is in use.
 effects:
   - reroll: successful
-    at: {step: make-armour-saves, by: the-enemy}
+    at: {step: make-armour-saves, by: the-enemy, in: combat}
     legacy:
       reroll: make-armour-saves
       of: successful
