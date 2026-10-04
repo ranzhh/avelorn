@@ -721,7 +721,7 @@ class Repeat(Group):
     """
 
     kind = "repeat"
-    times: Step[int]
+    times: Projection[int]
     collapsed: bool = False
 
     def declare(self, program: "Program", prefix: str, visible: list[Item]) -> None:
@@ -743,9 +743,21 @@ class Repeat(Group):
         program.inside[self] = frozenset(inside)
         visible.append(self)
 
+    @property
+    def counter(self) -> Step[Any]:
+        """The step whose output ``times`` reads the count from.
+
+        Raises:
+            GraphError: ``times`` reads no step, or more than one.
+        """
+        steps = [source for source in self.times.reads if isinstance(source, Step)]
+        if len(steps) != 1:
+            raise GraphError(f"{self.name} must count its runs from one step")
+        return steps[0]
+
     def check(self, path: str, visible: list[Item]) -> None:
-        if self.times not in visible:
-            raise GraphError(f"{path} runs {self.times.name} times, which is not in scope")
+        if self.counter not in visible:
+            raise GraphError(f"{path} runs {self.counter.name} times, which is not in scope")
 
     def liveness(self, after: frozenset[Key], program: "Program") -> frozenset[Key]:
         program.live[self] = after
@@ -754,12 +766,12 @@ class Repeat(Group):
         body = super().liveness(counted, program)
         if tally is not None and program.seeds[tally] is self:
             after = after - {tally}
-        return after | body | {self.times}
+        return after | body | set(self.times.reads)
 
     def run(self, lane: "Lane") -> None:
         program = lane.program
         body = program.entries[self]
-        counts = {world: world.of(self.times) for world in lane.joint.mass}
+        counts = {world: self.times.of(world) for world in lane.joint.mass}
         opened = {world: world.keeping(body) for world in counts}
         ran: dict[World, Lane] = {}
         for world, count in counts.items():
@@ -849,7 +861,7 @@ class Repeat(Group):
         return tallied
 
     def detail(self, paths: Mapping[Any, str]) -> dict[str, Any]:
-        return {"times": paths[self.times], "collapsed": self.collapsed}
+        return {"times": paths[self.counter], "collapsed": self.collapsed}
 
 
 @dataclass(frozen=True, eq=False, kw_only=True)

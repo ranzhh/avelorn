@@ -287,7 +287,7 @@ class _Builder:
             )
         inner = dict(visible)
         items = self.block(entry.items, f"{here}.items", inner)
-        group = Repeat(name=entry.group, times=times, items=items)
+        group = Repeat(name=entry.group, times=times.output("times", _ZERO), items=items)
         groups[entry.group] = (group, inner)
         return group
 
