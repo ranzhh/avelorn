@@ -752,7 +752,13 @@ class Repeat(Group):
         for world, count in counts.items():
             start = opened[world]
             if count > 0 and start not in ran:
-                inner = Lane(program=program, given=lane.given, joint=Distribution.pure(start))
+                inner = Lane(
+                    program=program,
+                    given=lane.given,
+                    joint=Distribution.pure(start),
+                    choices=lane.choices,
+                    out=lane.out,
+                )
                 super().run(inner)
                 ran[start] = inner
         running: dict[World, Probability] = {}

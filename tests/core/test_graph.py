@@ -1595,6 +1595,92 @@ def test_a_cancel_with_nothing_to_remove_is_honoured() -> None:
     }
 
 
+def _hit_count(hit: bool) -> int:
+    return int(hit)
+
+
+def test_a_rule_declined_inside_a_repeat_moves_nothing_in_its_lane() -> None:
+    shots = Measurement[int](name="shots", side="attacker", kernel=_two)
+    coin = Roll[int](name="coin", side="attacker", kernel=_coin, target=Scalar("t", 1))
+    changed = Mark[tuple[Hashable, ...]]("hit")
+    hit = Roll[bool](
+        name="hit",
+        side="attacker",
+        inputs=(changed,),
+        changed=changed,
+        kernel=_hit_after,
+        target=Scalar("t", 4),
+    )
+    hits = Projection("hits", (hit,), _hit_count, Monoid(0))
+    hit.show(hits)
+    attack = Repeat(name="attack", times=shots, items=(coin, hit))
+    program = Program.build("aimed", _SIDES, (shots, attack))
+    aim = Landing(hit, changes=(_Shift(1, reads=(coin,), when=_heads),))
+    program.attach(
+        (
+            RuleNode(
+                rule="aim",
+                name="Aim",
+                holder=_ATTACKER,
+                sources=_MODEL,
+                landings=(aim,),
+                may=True,
+            ),
+        )
+    )
+    toggle = program.toggles["attacker", "aim"]
+
+    assert [
+        (
+            lane.choices[toggle],
+            lane.verdicts("attacker/archers/aim", hit).mass,
+            lane.read(hit, hits).mass,
+        )
+        for lane in program.evaluate()
+    ] == [
+        (
+            True,
+            {Verdict.APPLIED: _HALF, Verdict.HONOURED: _HALF},
+            {0: Fraction(25, 144), 1: Fraction(70, 144), 2: Fraction(49, 144)},
+        ),
+        (False, {Verdict.HONOURED: 1}, {0: Fraction(1, 4), 1: _HALF, 2: Fraction(1, 4)}),
+    ]
+
+
+def _one_or_two() -> Distribution[int]:
+    return Distribution({1: Fraction(1, 3), 2: Fraction(2, 3)})
+
+
+def _single(shots: int) -> bool:
+    return shots == 1
+
+
+def test_a_verdict_inside_a_repeat_weighs_the_worlds_that_enter_it() -> None:
+    shots = Measurement[int](name="shots", side="attacker", kernel=_one_or_two)
+    changed = Mark[tuple[Hashable, ...]]("hit")
+    hit = Roll[bool](
+        name="hit",
+        side="attacker",
+        inputs=(changed,),
+        changed=changed,
+        kernel=_hit_after,
+        target=Scalar("t", 4),
+    )
+    attack = Repeat(name="attack", times=shots, items=(hit,))
+    program = Program.build("aimed", _SIDES, (shots, attack))
+    aim = Landing(hit, changes=(_Shift(1, reads=(shots,), when=_single),))
+    program.attach(
+        (RuleNode(rule="aim", name="Aim", holder=_ATTACKER, sources=_MODEL, landings=(aim,)),)
+    )
+
+    (lane,) = program.evaluate()
+
+    assert lane.verdicts("attacker/archers/aim", hit).mass == {
+        Verdict.APPLIED: Fraction(1, 3),
+        Verdict.HONOURED: Fraction(2, 3),
+    }
+
+
 def _three_faces() -> Distribution[int]:
     return Distribution({face: Fraction(1, 3) for face in (1, 2, 3)})
 
