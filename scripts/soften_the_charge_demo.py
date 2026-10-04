@@ -52,20 +52,22 @@ def win_if_shot(game: TOWGame, defender: Unit):
     """The opening volley, and P(defender wins) with its distribution folded in.
 
     Returns:
-        The opening ShootingResult and the folded P(defender wins), exact.
+        The opening volley and the folded P(defender wins), exact.
     """
     lions = game.units["white-lions-of-chrace"]
     with game.turn().shooting() as shooting:
         opening = shooting.volley(game.field(defender, 10), game.field(lions, 10), distance=10)
-    standing = 10 - Distribution.from_counts(opening.casualties)
+    standing = 10 - opening.casualties
     folded = (standing >> (lambda left: win(game, defender, left))).prob(_defender_wins)
     return opening, folded
 
 
 def _report(defender: Unit, opening, dont: Probability, shoot: Probability) -> None:
     bs = defender.profiles[0][Characteristic.BALLISTIC_SKILL]
-    fells = "  ".join(f"{k}:{p:.0%}" for k, p in enumerate(opening.casualties) if p > 0.005)
-    print(f"  {defender.name} (BS {bs}, Lions save {opening.save_target}+):")
+    fells = "  ".join(
+        f"{k}:{p:.0%}" for k, p in sorted(opening.casualties.mass.items()) if p > 0.005
+    )
+    print(f"  {defender.name} (BS {bs}, Lions save {opening.needed('make-armour-saves')}):")
     print(f"    opening volley fells (of 10):  {fells}")
     print(f"    shoot elsewhere:       P(win) {dont:.3f}")
     print(f"    shoot the Lions first: P(win) {shoot:.3f}   ({shoot - dont:+.3f})")

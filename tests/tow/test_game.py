@@ -9,7 +9,7 @@ from avelorn.tow.data import TOWRepository
 from avelorn.tow.game import TOWGame
 from avelorn.tow.phases.combat import break_test, combat_result, fight
 from avelorn.tow.phases.movement import charge as charge_verb
-from avelorn.tow.phases.shooting import make_panic_tests, shoot_unit
+from avelorn.tow.phases.shooting import shoot_unit
 from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.stage import Stage
 from avelorn.tow.schema.unit import Unit
@@ -90,21 +90,16 @@ def test_steps_follow_the_stage_declaration_order(binding: str) -> None:
     assert stages == [stage for stage in Stage if stage in set(stages)]
 
 
-def test_volley_delegates_to_shoot_unit() -> None:
-    """game.shooting.volley is shoot_unit with the game's rules injected."""
+def test_a_volley_runs_on_the_program_with_the_corpus_rules() -> None:
+    """Archers at long range shoot under Firing at Long Range, as the old engine does."""
     archers = _fielded(REPO.units["elven-archers"], 3).wielding("Longbow")
     spearmen = _fielded(REPO.units["elven-spearmen"], 10)
-    bound = GAME.shooting.volley(archers, spearmen, distance=20)
-    direct = shoot_unit(archers, spearmen, phase_rules=GAME.in_play[Phase.SHOOTING], distance=20)
-    assert bound == direct
 
+    fired = GAME.shooting.volley(archers, spearmen, distance=20)
+    legacy = shoot_unit(archers, spearmen, phase_rules=GAME.in_play[Phase.SHOOTING], distance=20)
 
-def test_make_panic_tests_delegates() -> None:
-    """game.shooting.make_panic_tests is the morale seam, bound."""
-    archers = _fielded(REPO.units["elven-archers"], 3).wielding("Longbow")
-    spearmen = _fielded(REPO.units["elven-spearmen"], 10)
-    volley = GAME.shooting.volley(archers, spearmen)
-    assert GAME.shooting.make_panic_tests(volley, spearmen) == make_panic_tests(volley, spearmen)
+    assert fired.applied("volley/attack/elven-archer/roll-to-hit") == ("Firing at Long Range",)
+    assert fired.p_unsaved == legacy.p_unsaved
 
 
 def test_fight_result_and_break_test_delegate() -> None:

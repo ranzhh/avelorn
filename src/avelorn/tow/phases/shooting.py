@@ -57,11 +57,13 @@ from avelorn.tow.kernels import (
     wound_probability,
     wound_target,
 )
+from avelorn.tow.programs import Loaded
 from avelorn.tow.schema.psychology import PanicCause
 from avelorn.tow.schema.rule import AttackKind, RerollEffect, Rule
 from avelorn.tow.schema.stage import Stage
 from avelorn.tow.schema.unit import Characteristic
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile
+from avelorn.tow.volley import Volley, fire
 
 logger = logging.getLogger(__name__)
 
@@ -620,16 +622,12 @@ def _reroll_grant(loadout: Loadout, cause: PanicCause) -> str | None:
 class ShootingPhase(Phase):
     """The Shooting phase: its printed steps, its actions.
 
-    ``in_play`` are the chapter's rules in force — every volley
-    resolves under them.
+    ``program`` is the volley program, loaded with the corpus rules; every
+    volley runs on it.
     """
 
-    in_play: Mapping[str, Rule]
+    program: Loaded
 
-    # The printed shooting sequence: every step knows what it rolls —
-    # attack dice with their semantics (this Roll to Hit confirms 7+),
-    # then the unit-wide 2D6 panic test. The declaration: drift guards
-    # hold the attack factory and the Stage order to it.
     steps: ClassVar[tuple[type[Roll], ...]] = (
         RollToHitShooting,
         RollToWound,
@@ -640,35 +638,25 @@ class ShootingPhase(Phase):
 
     def volley(
         self,
-        attacker: Contingent,
-        defender: Contingent,
+        shooter: Contingent,
+        target: Contingent,
         *,
-        distance: int | None = None,
-        hit_modifier: int = 0,
-    ) -> ShootingResult:
-        """One unit shoots another with the weapon in hand, under the rules in force.
-
-        Returns:
-            The shooting outcome.
-        """
-        return shoot_unit(
-            attacker,
-            defender,
-            phase_rules=self.in_play,
-            distance=distance,
-            hit_modifier=hit_modifier,
-        )
-
-    def make_panic_tests(
-        self,
-        result: ShootingResult,
-        defender: Contingent,
-        *,
+        distance: int,
+        shooter_options: tuple[str, ...] = (),
+        target_options: tuple[str, ...] = (),
         battle_strength: int | None = None,
-    ) -> PanicResult:
-        """The panic step for one volley's casualties.
+    ) -> Volley:
+        """One unit shoots another with the weapon in hand, and the target tests its nerve.
 
         Returns:
-            The panic outcome distribution.
+            The volley's lane in which every rule the players may decline is taken.
         """
-        return make_panic_tests(result, defender, battle_strength=battle_strength)
+        return fire(
+            self.program,
+            shooter,
+            target,
+            distance=distance,
+            shooter_options=shooter_options,
+            target_options=target_options,
+            battle_strength=battle_strength,
+        )

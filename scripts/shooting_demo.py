@@ -35,7 +35,7 @@ def main() -> None:
             if standing == 0:
                 return Distribution.pure(0)
             fired = game.shooting.volley(shooters, game.field(target, standing), distance=12)
-            return standing - Distribution.from_counts(fired.casualties)
+            return standing - fired.casualties
 
         return volley
 
