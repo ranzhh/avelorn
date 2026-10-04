@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from avelorn.core.graph import Side as Role
 from avelorn.tow.schema.quantity import Quantity
 from avelorn.tow.schema.reference import RuleRef, Slug
-from avelorn.tow.schema.step import Step, StepKind, StepSequence
+from avelorn.tow.schema.step import BLOCKS, Step, StepKind, StepSequence
 from avelorn.tow.schema.unit import Characteristic, TroopType
 from avelorn.tow.schema.weapon import WeaponType
 
@@ -195,7 +195,7 @@ class Address(BaseModel):
     """A printed step and the role acting there, optionally narrowed to a block on its path.
 
     ``in`` and ``not_in`` name a sequence the step is printed in, or a step
-    whose block encloses it, as a Stand & Shoot volley sits in stand-and-shoot.
+    whose block runs it, as a Stand & Shoot volley runs inside stand-and-shoot.
     """
 
     model_config = _STRICT
@@ -210,6 +210,10 @@ class Address(BaseModel):
         for name, block in (("in", self.in_), ("not_in", self.not_in)):
             if isinstance(block, StepSequence) and block not in self.step.sequences:
                 raise ValueError(f"{name}: {self.step} is not printed in {block}")
+            if isinstance(block, Step) and (
+                block not in BLOCKS or self.step not in BLOCKS[block].steps
+            ):
+                raise ValueError(f"{name}: {block} runs no {self.step}")
         if self.in_ is not None and self.in_ == self.not_in:
             raise ValueError(f"in and not_in both name {self.in_}")
         if not self.sequences:
@@ -219,11 +223,12 @@ class Address(BaseModel):
     @property
     def sequences(self) -> tuple[StepSequence, ...]:
         """The sequences the address can land in."""
+        narrowed = BLOCKS[self.in_].sequence if isinstance(self.in_, Step) else self.in_
         return tuple(
             sequence
             for sequence in self.step.sequences
-            if (not isinstance(self.in_, StepSequence) or sequence == self.in_)
-            and sequence != self.not_in
+            if narrowed in (None, sequence)
+            and not (isinstance(self.not_in, StepSequence) and sequence == self.not_in)
         )
 
     def overlaps(self, other: "Address") -> bool:
@@ -236,9 +241,14 @@ class Address(BaseModel):
             self.step == other.step
             and self.by == other.by
             and bool(set(self.sequences) & set(other.sequences))
-            and (self.in_ is None or self.in_ != other.not_in)
-            and (other.in_ is None or other.in_ != self.not_in)
+            and not self._apart(other)
+            and not other._apart(self)
         )
+
+    def _apart(self, other: "Address") -> bool:
+        excluded = other.in_ is not None and type(other.in_) is type(self.not_in)
+        blocks = isinstance(self.in_, Step) and isinstance(other.in_, Step)
+        return (excluded and other.in_ == self.not_in) or (blocks and self.in_ != other.in_)
 
     def __str__(self) -> str:
         """The address as a sentence.

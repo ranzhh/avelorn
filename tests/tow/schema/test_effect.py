@@ -4,7 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.schema.effect import Effect, Operation, conflicts
+from avelorn.tow.schema.effect import Address, Effect, Operation, conflicts
 from avelorn.tow.schema.rule import Clause, ModifierEffect
 
 REPO = TOWRepository()
@@ -29,6 +29,14 @@ LANDS = {"at": {"step": "make-armour-saves", "by": "the-enemy"}}
             },
             "rolls no",
         ),
+        (
+            {"at": {"step": "roll-to-hit", "by": "this-model", "in": "break-test"}, "deny": True},
+            "runs no",
+        ),
+        (
+            {"at": {"step": "impact-hits", "by": "this-model", "in": "impact-hits"}, "hits": 1},
+            "runs no",
+        ),
     ],
     ids=[
         "unprinted step",
@@ -39,6 +47,8 @@ LANDS = {"at": {"step": "make-armour-saves", "by": "the-enemy"}}
         "grant without its receiver",
         "trigger on its own landing",
         "natural face of a measurement",
+        "block not running the step",
+        "step inside its own block",
     ],
 )
 def test_an_effect_that_does_not_say_one_thing_fails_to_load(
@@ -109,3 +119,19 @@ def test_two_rules_forcing_different_options_conflict() -> None:
     (found,) = conflicts({"stubborn": graph.effects, "doctored": gives})
     assert found.startswith("doctored and stubborn force gives-ground against")
     assert "at break-test by this-model" in found
+
+
+def _landing(slug: str, at: dict[str, str]) -> tuple[Effect, ...]:
+    (effect, *_) = _uncancelled(slug)
+    assert effect.at is not None
+    address = Address.model_validate({**effect.at.model_dump(by_alias=True), **at})
+    return (effect.model_copy(update={"at": address}),)
+
+
+def test_rules_in_different_blocks_never_conflict() -> None:
+    """Automatic hits from Impact Hits and from Stomp Attacks are never the same wound roll."""
+    impact = _landing("strike-first", {"step": "roll-to-wound", "in": "impact-hits"})
+    stomp = _landing("strike-last", {"step": "roll-to-wound", "in": "stomp-attacks"})
+    assert conflicts({"strike-first": impact, "strike-last": stomp}) == []
+    stomp = _landing("strike-last", {"step": "roll-to-wound", "in": "impact-hits"})
+    assert conflicts({"strike-first": impact, "strike-last": stomp}) != []

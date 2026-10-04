@@ -6,7 +6,10 @@ and in combat, is one member listing both. The vocabulary is closed: a step
 joins when a printed step is modelled or an imported rule names one.
 """
 
+from collections.abc import Mapping
 from enum import StrEnum
+from types import MappingProxyType
+from typing import NamedTuple
 
 
 class StepSequence(StrEnum):
@@ -142,3 +145,25 @@ class Step(StrEnum):
     RALLY_FLEEING_UNITS = "rally-fleeing-units", (StepSequence.STRATEGY,), StepKind.ROLL
     END_OF_TURN = "end-of-turn", (StepSequence.TURN,), StepKind.CONSEQUENCE
 
+
+class Block(NamedTuple):
+    """What a step that opens a block runs inside it."""
+
+    sequence: StepSequence
+    steps: frozenset[Step]
+
+
+_STRUCK = frozenset(
+    {Step.ROLL_TO_WOUND, Step.MAKE_ARMOUR_SAVES, Step.WARD_SAVES, Step.REMOVE_CASUALTIES}
+)
+
+BLOCKS: Mapping[Step, Block] = MappingProxyType(
+    {
+        Step.STAND_AND_SHOOT: Block(
+            StepSequence.SHOOTING,
+            frozenset(step for step in Step if StepSequence.SHOOTING in step.sequences),
+        ),
+        Step.IMPACT_HITS: Block(StepSequence.COMBAT, _STRUCK),
+        Step.STOMP_ATTACKS: Block(StepSequence.COMBAT, _STRUCK),
+    }
+)
