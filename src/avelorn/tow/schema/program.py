@@ -30,6 +30,14 @@ class Per(StrEnum):
     SIDE = "side"
 
 
+class Lifetime(StrEnum):
+    """How long a state fact holds before it is cleared."""
+
+    TURN = "turn"
+    COMBAT = "combat"
+    GAME = "game"
+
+
 class StateFact(BaseModel):
     """A state fact."""
 
@@ -38,6 +46,7 @@ class StateFact(BaseModel):
     fact: str
     type: FactType
     per: Per
+    lasts: Lifetime
 
 
 class StateFile(BaseModel):

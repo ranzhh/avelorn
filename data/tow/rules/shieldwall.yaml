@@ -13,7 +13,7 @@ needs: [formations]
 effects:
   - when:
       worn: {armour: shield}
-      facts: [{fact: charges-made, of: the-enemy, more-than: 0}]
+      facts: [{fact: charges-received, of: this-model, more-than: 0}]
     substitute: {fall-back-in-good-order: gives-ground}
     at: {step: break-test, by: this-model}
     limit: {per: game, times: 1}
