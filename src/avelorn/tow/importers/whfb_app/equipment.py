@@ -54,7 +54,7 @@ def parse_weapon(entry: Node, references: RuleReferences) -> WeaponImport:
         The weapon and the warnings raised while mapping it.
 
     Raises:
-        WhfbParseError: The page has no profile or a field is unparseable.
+        WhfbParseError: The page has no profile or a field is unparsable.
     """
     fields = entry.get("fields", {})
     slug, name = _slug_and_name(fields)

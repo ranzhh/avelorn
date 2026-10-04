@@ -69,7 +69,7 @@ def parse_unit(entry: Node, references: RuleReferences) -> ImportResult:
         The unit and the warnings raised while mapping it.
 
     Raises:
-        WhfbParseError: A required field is missing or unparseable.
+        WhfbParseError: A required field is missing or unparsable.
     """
     fields = entry.get("fields", {})
     slug = fields.get("slug")
