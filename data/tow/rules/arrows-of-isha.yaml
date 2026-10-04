@@ -17,8 +17,7 @@ effects:
     at: {step: make-armour-saves, by: the-enemy, in: shooting}
     legacy:
       when: {wielding: {type: bow}}
-  - when: {with: {type: bow}}
-    grants: {rule: armour-bane, X: 1}
-    to: this-model
+  - grants: {rule: armour-bane, X: 1}
+    to: {type: bow}
     legacy:
       when: {wielding: {type: bow}}

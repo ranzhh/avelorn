@@ -3,8 +3,9 @@
 An effect names its landing under ``at``: a printed step and the role acting
 there, relative to the bearer. ``when`` holds its trigger and gates, ``unless``
 holds gates that must settle false, and the effect carries exactly one
-operation, optionally under a ``limit``. A grant names who receives it under
-``to`` and has no landing of its own: the granted rule's effects carry theirs.
+operation, optionally under a ``limit``. A grant names who or which weapon
+receives it under ``to`` and has no landing of its own: the granted rule's
+effects carry theirs.
 Every model is strict, so an unknown key fails the load.
 """
 
@@ -98,8 +99,8 @@ class FactGate(Comparison):
     of: Role | None = None
 
 
-class WeaponGate(BaseModel):
-    """The weapon the sequence is fought or shot with, by family or by slug."""
+class WeaponMatch(BaseModel):
+    """A weapon, named by its family or its slug."""
 
     model_config = _STRICT
 
@@ -109,7 +110,7 @@ class WeaponGate(BaseModel):
     @model_validator(mode="after")
     def _asks_something(self) -> Self:
         if self.type is None and self.weapon is None:
-            raise ValueError("a weapon gate names a type or a weapon")
+            raise ValueError("a weapon match names a type or a weapon")
         return self
 
 
@@ -168,7 +169,7 @@ class Gates(BaseModel):
 
     model_config = _STRICT
 
-    with_: WeaponGate | None = Field(default=None, alias="with")
+    with_: WeaponMatch | None = Field(default=None, alias="with")
     worn: ArmourGate | None = None
     carried_by: Carrier | None = None
     attack: AttackGate | None = None
@@ -417,7 +418,7 @@ class Effect(BaseModel):
     grants: RuleRef | None = None
     cancels: Cancels | None = None
     of: Role | None = None
-    to: Role | None = None
+    to: Role | WeaponMatch | None = None
     at: Address | None = None
     limit: Limit | None = None
 
@@ -489,8 +490,10 @@ class Effect(BaseModel):
 
     @property
     def weapons(self) -> frozenset[str]:
-        """Every weapon the effect's gates name."""
+        """Every weapon the effect's gates or its grant's target name."""
         named = [gates.with_.weapon for gates in self._gates if gates.with_ is not None]
+        if isinstance(self.to, WeaponMatch):
+            named.append(self.to.weapon)
         return frozenset(weapon for weapon in named if weapon is not None)
 
     @property
