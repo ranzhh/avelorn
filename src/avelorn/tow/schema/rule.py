@@ -29,22 +29,26 @@ import re
 from collections.abc import Mapping
 from contextlib import suppress
 from enum import StrEnum
-from typing import Annotated, Literal, NamedTuple
+from typing import Annotated, Literal, NamedTuple, Self
 
 from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    ModelWrapValidatorHandler,
+    PrivateAttr,
+    TypeAdapter,
     field_serializer,
     field_validator,
     model_validator,
 )
 
+from avelorn.tow.schema.effect import Effect
 from avelorn.tow.schema.psychology import Outcome, PanicCause
 from avelorn.tow.schema.quantity import Quantity, Seam, seam_of
-from avelorn.tow.schema.reference import RuleRef
+from avelorn.tow.schema.reference import RuleRef, Slug
 from avelorn.tow.schema.stage import Dice, Stage
-from avelorn.tow.schema.unit import Characteristic, TroopType
+from avelorn.tow.schema.unit import Characteristic, ProfileRole, TroopType
 from avelorn.tow.schema.weapon import WeaponType
 
 _TEMPLATE = re.compile(r"^(?P<base>.+) \((?P<before>[^()X]*)X(?P<after>[^()X]*)\)$")
@@ -1270,10 +1274,178 @@ def _is_parameter(amount: object) -> bool:
     return amount == "X" or (isinstance(amount, Bounded) and amount.amount == "X")
 
 
+_LEGACY = TypeAdapter(RuleEffect)
+_SHARED = frozenset({"add", "set", "grants", "hits"})
+_LEGACY_OPERATIONS = frozenset(
+    {
+        "add",
+        "set",
+        "reroll",
+        "grants",
+        "forces",
+        "attack",
+        "bars",
+        "denies",
+        "multiplies",
+        "volley",
+        "replaces",
+        "hits",
+    }
+)
+_WRITTEN = frozenset({"at", "to", "legacy"})
+_RULE_KEYS = ("may", "not_on", "needs")
+
+
+class Clause(BaseModel):
+    """One effect as a rule file writes it: the graph's form, the legacy engine's, or both.
+
+    The legacy form is the effect's ``legacy`` block, together with the add, set,
+    grants or hits the graph's form states when the block names no operation of
+    its own. An effect without a ``legacy`` block is the graph's alone; one that
+    is only a ``legacy`` block is the legacy engine's alone.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    effect: Effect | None = None
+    legacy: RuleEffect | None = None
+
+    @model_validator(mode="after")
+    def _read_by_someone(self) -> Self:
+        if self.effect is None and self.legacy is None:
+            raise ValueError("an effect is written for the graph, the legacy engine, or both")
+        return self
+
+    @classmethod
+    def read(cls, written: object) -> "Clause":
+        """Read one effect as the file writes it.
+
+        Returns:
+            The graph's effect and the legacy engine's, where each has one.
+
+        Raises:
+            TypeError: the effect or its legacy block is not a mapping.
+        """
+        if not isinstance(written, Mapping):
+            raise TypeError(f"an effect is a mapping, not {written!r}")
+        graph = {key: value for key, value in written.items() if key != "legacy"}
+        block = written.get("legacy")
+        legacy = None
+        if block is not None:
+            if not isinstance(block, Mapping):
+                raise TypeError(f"a legacy block is a mapping, not {block!r}")
+            named = _LEGACY_OPERATIONS & set(block)
+            shared = {} if named else {key: graph[key] for key in _SHARED & set(graph)}
+            legacy = _LEGACY.validate_python({**shared, **block})
+        return cls(effect=Effect.model_validate(graph) if graph else None, legacy=legacy)
+
+    def written(self) -> dict[str, object]:
+        """The effect as the file writes it.
+
+        Returns:
+            The graph's keys, and the legacy block where the legacy engine reads it.
+        """
+        graph = {} if self.effect is None else _dumped(self.effect)
+        if self.legacy is None:
+            return graph
+        block = _dumped(self.legacy)
+        operations = _LEGACY_OPERATIONS & set(block)
+        if operations == _SHARED & set(graph) and all(block[k] == graph[k] for k in operations):
+            block = {key: value for key, value in block.items() if key not in operations}
+        return {**graph, "legacy": block}
+
+
+def _dumped(model: BaseModel) -> dict[str, object]:
+    return model.model_dump(mode="json", by_alias=True, exclude_defaults=True)
+
+
+class RuleGraph(BaseModel):
+    """A rule as the graph reads it: its effects, and what the rule says of itself.
+
+    ``may`` marks a rule its player may decline. ``not_on`` names the profile
+    rows the rule stops at, as "but not its mount" does. ``needs`` names the
+    mechanics a printed clause needs that the engine lacks, each a ledger subject.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    clauses: tuple[Clause, ...] = ()
+    may: bool = False
+    not_on: tuple[ProfileRole, ...] = ()
+    needs: tuple[Slug, ...] = ()
+
+    @property
+    def effects(self) -> tuple[Effect, ...]:
+        """The effects the graph reads, in the order written."""
+        return tuple(clause.effect for clause in self.clauses if clause.effect is not None)
+
+    def written(self) -> dict[str, object]:
+        """The rule-level keys and effects as the file writes them.
+
+        Returns:
+            The keys set, then the effects.
+        """
+        rule = self.model_dump(mode="json", include=set(_RULE_KEYS), exclude_defaults=True)
+        return {**rule, "effects": [clause.written() for clause in self.clauses]}
+
+
+def _in_file_form(data: dict[str, object]) -> bool:
+    effects = data.get("effects")
+    written = effects if isinstance(effects, list) else []
+    return any(key in data for key in _RULE_KEYS) or any(
+        isinstance(effect, Mapping) and _WRITTEN & set(effect) for effect in written
+    )
+
+
 class Rule(BaseModel):
-    """A rules-page entry (special rule or core rule), text verbatim."""
+    """A rules-page entry (special rule or core rule), text verbatim.
+
+    A rule file writes each effect for both engines (:class:`Clause`). The
+    legacy engine reads :attr:`effects`; the graph reads :attr:`graph`, which a
+    rule built for the legacy engine alone does not have.
+    """
 
     model_config = ConfigDict(extra="forbid")
+
+    _graph: RuleGraph | None = PrivateAttr(default=None)
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def _read_graph(cls, data: object, handler: ModelWrapValidatorHandler[Self]) -> Self:
+        if not isinstance(data, dict):
+            return handler(data)
+        fields = {str(key): value for key, value in data.items()}
+        if not _in_file_form(fields):
+            return handler(data)
+        written = fields.get("effects") or []
+        if not isinstance(written, list):
+            raise TypeError("effects is a list")
+        clauses = tuple(Clause.read(effect) for effect in written)
+        stated = {key: fields[key] for key in _RULE_KEYS if key in fields}
+        graph = RuleGraph.model_validate({**stated, "clauses": clauses})
+        legacy = [clause.legacy for clause in graph.clauses if clause.legacy is not None]
+        kept = {key: value for key, value in fields.items() if key not in _RULE_KEYS}
+        rule = handler({**kept, "effects": legacy})
+        readers = [effect for effect in graph.effects if effect.reads_x]
+        if readers and (rule.parameter is None or rule.parameter.kind != "amount"):
+            raise ValueError(f"an effect of {rule.name!r} reads an X the rule does not declare")
+        rule._graph = graph
+        return rule
+
+    @property
+    def graph(self) -> RuleGraph | None:
+        """The rule as the graph reads it, when its file writes it so."""
+        return self._graph
+
+    def with_graph(self, graph: RuleGraph | None) -> Self:
+        """The rule, read by the graph as ``graph``.
+
+        Returns:
+            A copy carrying ``graph``.
+        """
+        copy = self.model_copy()
+        copy._graph = graph
+        return copy
 
     id: str  # stable slug, e.g. "armour-bane"
     name: str  # printed name, e.g. "Armour Bane (X)"
