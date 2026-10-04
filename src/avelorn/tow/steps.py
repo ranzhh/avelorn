@@ -451,15 +451,22 @@ def make_armour_saves(
     return _thrown(needed, payloads.rerolls())
 
 
-def ward_saves(target: Fielded, wound: Die | None, save: Die | None) -> Distribution[Die | None]:
+def ward_saves(
+    target: Fielded, wound: Die | None, save: Die | None, changed: tuple[Hashable, ...]
+) -> Distribution[Die | None]:
     """Roll the ward save against a wound the armour did not stop.
+
+    A model with more than one ward save uses the best
+    (the-shooting-phase/more-than-one-save).
 
     Returns:
         The die as it lands, or None when no die is rolled.
     """
-    if not _succeeded(wound) or _succeeded(save) or target.ward is None:
+    printed = () if target.ward is None else (target.ward,)
+    wards = (*printed, *Payloads.of(changed).fixed(Quantity.WARD_SAVE))
+    if not _succeeded(wound) or _succeeded(save) or not wards:
         return Distribution.pure(None)
-    return _thrown(target.ward)
+    return _thrown(min(wards))
 
 
 def _unsaved(wound: Die | None, save: Die | None, ward: Die | None) -> int:
@@ -620,8 +627,9 @@ _SPECS = (
         name="ward-saves",
         kind=Kind.ROLL,
         side=Side.TARGET,
-        reads=(_TARGET, Output("roll-to-wound"), Output("make-armour-saves")),
+        reads=(_TARGET, Output("roll-to-wound"), Output("make-armour-saves"), CHANGED),
         kernel=ward_saves,
+        runs={Operation.SET: frozenset({Quantity.WARD_SAVE})},
         target=Offered((_TARGET,), lambda target: _shown(target.ward), _AGREED),
         readings={
             "saves": _counted("ward-saves"),

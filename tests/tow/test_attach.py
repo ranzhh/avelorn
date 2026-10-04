@@ -173,6 +173,15 @@ def test_armour_bane_applies_to_the_shots_that_wound_on_a_natural_six() -> None:
     }
 
 
+def test_mundane_arrows_meet_witness_to_destiny_alone() -> None:
+    (evaluated,) = _evaluated(_deployed("phoenix-guard"))
+
+    assert _verdicts(evaluated, "target/phoenix-guard/witness-to-destiny") == {Verdict.APPLIED: 1}
+    assert _verdicts(evaluated, "target/phoenix-guard/blessings-of-asuryan") == {
+        Verdict.HONOURED: 1
+    }
+
+
 def test_a_gate_reading_a_band_check_range_never_outputs_is_refused() -> None:
     printed = REPO.rules["firing-at-long-range"]
     assert printed.graph is not None
