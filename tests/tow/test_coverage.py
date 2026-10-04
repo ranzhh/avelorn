@@ -15,6 +15,7 @@ REPO = TOWRepository()
 REPORT = coverage(REPO)
 
 UNATTACHED = {gap.subject for gap in REPORT.gaps if gap.kind is GapKind.UNATTACHED_EFFECT}
+UNREACHED = {gap.subject for gap in REPORT.gaps if gap.kind is GapKind.UNREACHED_EFFECT}
 
 
 def test_every_gap_is_acknowledged_in_the_ledger() -> None:
@@ -61,6 +62,12 @@ def test_an_effect_waits_for_the_step_that_triggers_it() -> None:
 def test_an_effect_waits_for_a_step_it_reads_as_a_fact() -> None:
     """Furious Charge reads the length of a charge move no program registers yet."""
     assert "furious-charge/charge/the-charge-move" in UNATTACHED
+
+
+def test_a_volley_effect_waits_for_a_side_that_carries_it_there() -> None:
+    """Multiple Wounds is printed only on a combat profile, so no shooter carries it."""
+    assert "multiple-wounds/shooting/remove-casualties" in UNREACHED
+    assert "armour-bane/shooting/make-armour-saves" not in UNREACHED
 
 
 def test_a_rule_granted_only_by_the_graph_is_referenced_there() -> None:

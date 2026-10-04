@@ -6,13 +6,13 @@ import type { Distribution, Program, Reading, Roll } from './types';
 
 const program: Program = {
 	program: 'p',
-	sides: { 'this-model': 'one', 'the-enemy': 'two' },
+	sides: ['one', 'two'],
 	nodes: [
 		{
 			path: 'p/a',
 			step: 'a',
 			kind: 'measurement',
-			side: 'this-model',
+			side: 'one',
 			ran: true,
 			inputs: [],
 			edge: { readings: [{ label: 'n', value: 2 }] }
@@ -21,11 +21,11 @@ const program: Program = {
 			path: 'p/g/b',
 			step: 'b',
 			kind: 'roll',
-			side: 'this-model',
+			side: 'one',
 			ran: true,
 			inputs: [],
 			target: { label: 't', value: 1 },
-			modifiers: [{ rule: 'r1', move: 1 }],
+			modifiers: [{ rule: 'one/p/r1', move: 1 }],
 			edge: {
 				readings: [
 					{
@@ -42,7 +42,7 @@ const program: Program = {
 			path: 'p/g/c',
 			step: 'c',
 			kind: 'roll',
-			side: 'the-enemy',
+			side: 'two',
 			ran: true,
 			inputs: ['p/g/b'],
 			target: {
@@ -70,7 +70,7 @@ const program: Program = {
 			path: 'p/d',
 			step: 'd',
 			kind: 'consequence',
-			side: 'the-enemy',
+			side: 'two',
 			ran: true,
 			inputs: ['p/g/c'],
 			edge: {
@@ -89,12 +89,41 @@ const program: Program = {
 	blocks: [{ path: 'p/g', kind: 'repeat', times: 'p/a', collapsed: false }],
 	rules: [
 		{
+			id: 'one/p/r1',
 			rule: 'r1',
 			name: 'R1',
-			bearer: 'this-model',
-			landings: [{ at: 'p/g/b', verdicts: [{ verdict: 'applied', p: 1 }] }]
+			holder: { side: 'one', part: 'p' },
+			may: false,
+			sources: [{ carrier: 'effect', item: null, profile: null, via: 'one/p/r3' }],
+			landings: [{ at: 'p/g/b', triggers: ['p/a'], verdicts: [{ verdict: 'applied', p: 1 }] }]
 		},
-		{ rule: 'r2', name: 'R2', bearer: 'core', landings: [] }
+		{
+			id: 'two/q/r2',
+			rule: 'r2',
+			name: 'R2',
+			holder: { side: 'two', part: 'q' },
+			may: false,
+			sources: [{ carrier: 'effect', item: null, profile: null, via: 'two/q/r4' }],
+			landings: []
+		},
+		{
+			id: 'one/p/r3',
+			rule: 'r3',
+			name: 'R3',
+			holder: { side: 'one', part: 'p' },
+			may: false,
+			sources: [{ carrier: 'model', item: null, profile: null, via: null }],
+			landings: []
+		},
+		{
+			id: 'two/q/r4',
+			rule: 'r4',
+			name: 'R4',
+			holder: { side: 'two', part: 'q' },
+			may: false,
+			sources: [{ carrier: 'core', item: null, profile: null, via: null }],
+			landings: []
+		}
 	],
 	lanes: []
 };
@@ -168,11 +197,10 @@ describe('the program the tests draw', () => {
 	it('names an applied rule behind every modifier', () => {
 		for (const roll of rolls) {
 			for (const modifier of roll.modifiers) {
-				const rule = program.rules.find((candidate) => candidate.rule === modifier.rule);
-				expect(rule?.landings).toContainEqual({
-					at: roll.path,
-					verdicts: [{ verdict: 'applied', p: 1 }]
-				});
+				const rule = program.rules.find((candidate) => candidate.id === modifier.rule);
+				expect(rule?.landings).toContainEqual(
+					expect.objectContaining({ at: roll.path, verdicts: [{ verdict: 'applied', p: 1 }] })
+				);
 			}
 		}
 	});
@@ -270,9 +298,15 @@ describe('layout', () => {
 		expect(collapsed.landings[0].at).toBe(GROUP);
 	});
 
-	it('sets a rule with no landing aside as not modelled', () => {
-		expect(expanded.unmodelled.map((rule) => rule.rule)).toEqual(['r2']);
-		expect(expanded.rail.map((placed) => placed.rule.rule)).toEqual(['r1']);
+	it('sets aside as not modelled every rule that reaches no landing', () => {
+		expect(expanded.unmodelled.map((rule) => rule.id)).toEqual(['two/q/r2', 'two/q/r4']);
+	});
+
+	it('hangs a granting rule under the card of the rule it grants', () => {
+		const card = (id: string) => expanded.rail.find((placed) => placed.rule.id === id)!.box;
+		expect(expanded.rail.map((placed) => placed.rule.id)).toEqual(['one/p/r1', 'one/p/r3']);
+		expect(card('one/p/r3').x).toBe(card('one/p/r1').x);
+		expect(card('one/p/r3').y).toBeGreaterThan(card('one/p/r1').y + card('one/p/r1').height);
 	});
 
 	it('fits the flow into a narrower width and no narrower than the floor', () => {
@@ -376,11 +410,11 @@ describe('moving what was laid out', () => {
 	it('keeps every landing line pinned to its rule card and its step after moves', () => {
 		const shifted = moved(expanded, {
 			'p/g/b': { x: 30, y: 0 },
-			r1: { x: 0, y: 20 }
+			'one/p/r1': { x: 0, y: 20 }
 		});
-		const card = shifted.rail.find((placed) => placed.rule.rule === 'r1')!.box;
+		const card = shifted.rail.find((placed) => placed.rule.id === 'one/p/r1')!.box;
 		expect(card.y).toBe(expanded.rail[0].box.y + 20);
-		const landing = shifted.landings.find((each) => each.rule === 'r1')!;
+		const landing = shifted.landings.find((each) => each.rule === 'one/p/r1')!;
 		expect(landing.start).toEqual({ x: card.x + card.width / 2, y: card.y });
 		const target = shifted.steps.find((each) => each.path === landing.at)!.box;
 		expect(landing.end).toEqual({ x: target.x + target.width / 2, y: target.y + target.height });

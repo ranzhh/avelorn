@@ -1,7 +1,17 @@
 <script lang="ts">
 	import Readings from './Readings.svelte';
-	import { FRAME, MARGIN, caption, fitted, layout, moved, type Moves, type Point } from './layout';
-	import type { Judged, Program, Side, StepKind, Verdict } from '$lib/graph/types';
+	import {
+		FRAME,
+		MARGIN,
+		caption,
+		fitted,
+		grants,
+		layout,
+		moved,
+		type Moves,
+		type Point
+	} from './layout';
+	import type { Holder, Judged, Program, StepKind, Verdict } from '$lib/graph/types';
 
 	let { program }: { program: Program } = $props();
 
@@ -31,10 +41,9 @@
 		selected?.kind === 'block' ? drawn.blocks.find((each) => each.path === selected!.id) : undefined
 	);
 	const rule = $derived(
-		selected?.kind === 'rule' ? program.rules.find((each) => each.rule === selected!.id) : undefined
+		selected?.kind === 'rule' ? program.rules.find((each) => each.id === selected!.id) : undefined
 	);
 
-	const SIDES: Side[] = ['this-model', 'the-enemy'];
 	const MARK: Record<StepKind | 'group', string> = {
 		measurement: 'M',
 		decision: 'D',
@@ -47,8 +56,9 @@
 
 	const printed = (slug: string) => slug.replaceAll('-', ' ');
 	const last = (path: string) => path.slice(path.lastIndexOf('/') + 1);
-	const named = (id: string) => program.rules.find((each) => each.rule === id)?.name ?? id;
-	const bearer = (who: Side | 'core') => (who === 'core' ? 'core rules' : program.sides[who]);
+	const named = (id: string) => program.rules.find((each) => each.id === id)?.name ?? id;
+	const held = (holder: Holder) => `${holder.part} (${holder.side})`;
+	const tint = (side: string) => `side-${program.sides.indexOf(side)}`;
 	const signed = (move: number) => (move > 0 ? `+${move}` : `${move}`);
 	const is = (kind: Pick['kind'], id: string) => selected?.kind === kind && selected.id === id;
 	const percent = (p: number) => `${Math.round(p * 100)}%`;
@@ -108,8 +118,8 @@
 		<div class="head">
 			<h1>{program.program}</h1>
 			<div class="cluster sides">
-				{#each SIDES as side}
-					<span class="who {side}"><i></i>{program.sides[side]}</span>
+				{#each program.sides as side}
+					<span class="who {tint(side)}"><i></i>{side}</span>
 				{/each}
 			</div>
 			<div class="cluster legend">
@@ -224,7 +234,7 @@
 					{@const node = placed.node}
 					{@const pick = { kind: 'step', id: placed.path } as const}
 					<div
-						class="card {node.side}"
+						class="card {tint(node.side)}"
 						class:on={is('step', placed.path)}
 						class:held={grip?.id === placed.path}
 						role="button"
@@ -256,12 +266,12 @@
 					{/if}
 				{/each}
 
-				{#each drawn.rail as placed (placed.rule.rule)}
-					{@const pick = { kind: 'rule', id: placed.rule.rule } as const}
+				{#each drawn.rail as placed (placed.rule.id)}
+					{@const pick = { kind: 'rule', id: placed.rule.id } as const}
 					<div
 						class="card rule"
-						class:on={is('rule', placed.rule.rule)}
-						class:held={grip?.id === placed.rule.rule}
+						class:on={is('rule', placed.rule.id)}
+						class:held={grip?.id === placed.rule.id}
 						role="button"
 						tabindex="0"
 						style="left: {placed.box.x}px; top: {placed.box.y}px; width: {placed.box
@@ -273,7 +283,7 @@
 						onkeydown={(event) => key(event, pick)}
 					>
 						<h3>{placed.rule.name}</h3>
-						<span class="side">{bearer(placed.rule.bearer)}</span>
+						<span class="side">{held(placed.rule.holder)}</span>
 					</div>
 				{/each}
 
@@ -293,9 +303,8 @@
 		<footer class="unmodelled">
 			<span class="eyebrow">not modelled</span>
 			{#if drawn.unmodelled.length}
-				{#each drawn.unmodelled as each, index (each.rule)}
-					<span>{index ? '· ' : ''}{each.name} <span class="meta">{bearer(each.bearer)}</span></span
-					>
+				{#each drawn.unmodelled as each, index (each.id)}
+					<span>{index ? '· ' : ''}{each.name} <span class="meta">{held(each.holder)}</span></span>
 				{/each}
 			{:else}
 				<span class="meta">none</span>
@@ -317,7 +326,7 @@
 			</header>
 			<div class="field"><span>kind</span><span>{node.kind}</span></div>
 			<div class="field">
-				<span>side</span><span>{program.sides[node.side]}</span>
+				<span>side</span><span>{node.side}</span>
 			</div>
 			<div class="field"><span>path</span><span class="path">{node.path}</span></div>
 			{#if node.kind === 'roll'}
@@ -365,18 +374,27 @@
 				</button>
 			{/if}
 		{:else if rule}
+			{@const granted = grants(program, rule)}
 			<header>
 				<h3>{rule.name}</h3>
 			</header>
-			<div class="field"><span>bearer</span><span>{bearer(rule.bearer)}</span></div>
-			<div class="field"><span>id</span><span class="path">{rule.rule}</span></div>
+			<div class="field"><span>holder</span><span>{held(rule.holder)}</span></div>
+			<div class="field"><span>id</span><span class="path">{rule.id}</span></div>
 			<h2>landings</h2>
 			{#each rule.landings as landing}
 				<div class="field">
 					<span>{printed(last(landing.at))}</span>
 					<span class="verdict {leading(landing.verdicts)}">{shares(landing.verdicts)}</span>
 				</div>
+			{:else}
+				<span class="meta">none</span>
 			{/each}
+			{#if granted.length}
+				<h2>grants</h2>
+				{#each granted as each (each.id)}
+					<div class="field"><span>{each.name}</span><span>{held(each.holder)}</span></div>
+				{/each}
+			{/if}
 		{:else}
 			<span class="meta">select a step, group or rule to explore it</span>
 		{/if}
@@ -424,10 +442,10 @@
 		font-size: 0.65rem;
 		font-style: normal;
 	}
-	.this-model i {
+	.side-0 i {
 		background: #dcecff;
 	}
-	.the-enemy i {
+	.side-1 i {
 		background: #ffe0dc;
 	}
 	.scroll {
@@ -475,10 +493,10 @@
 		align-items: center;
 		gap: 0.35rem;
 	}
-	.card.this-model {
+	.card.side-0 {
 		border-left: 3px solid #3677b8;
 	}
-	.card.the-enemy {
+	.card.side-1 {
 		border-left: 3px solid #b84a3d;
 	}
 	.card.rule {

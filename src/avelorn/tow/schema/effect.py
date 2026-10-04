@@ -3,8 +3,9 @@
 An effect names its landing under ``at``: a printed step and the role acting
 there, relative to the bearer. ``when`` holds its trigger and gates, ``unless``
 holds gates that must settle false, and the effect carries exactly one
-operation, optionally under a ``limit``. A grant names who receives it under
-``to`` and has no landing of its own: the granted rule's effects carry theirs.
+operation, optionally under a ``limit``. A grant names who or which weapon
+receives it under ``to`` and has no landing of its own: the granted rule's
+effects carry theirs.
 Every model is strict, so an unknown key fails the load.
 """
 
@@ -23,7 +24,7 @@ from pydantic import (
     model_validator,
 )
 
-from avelorn.core.graph import Side as Role
+from avelorn.core.graph import Carrier
 from avelorn.tow.schema.quantity import Quantity
 from avelorn.tow.schema.reference import RuleRef, Slug
 from avelorn.tow.schema.step import BLOCKS, Step, StepKind, StepSequence
@@ -31,6 +32,14 @@ from avelorn.tow.schema.unit import Characteristic, TroopType
 from avelorn.tow.schema.weapon import WeaponType
 
 _STRICT = ConfigDict(extra="forbid", frozen=True)
+
+
+class Role(StrEnum):
+    """Who acts at a step, relative to the model whose rule it is."""
+
+    THIS_MODEL = "this-model"
+    THE_ENEMY = "the-enemy"
+
 
 _OTHER = {Role.THIS_MODEL: Role.THE_ENEMY, Role.THE_ENEMY: Role.THIS_MODEL}
 
@@ -48,6 +57,16 @@ class FactRef(BaseModel):
 
     fact: Slug | Characteristic
     of: Role | None = None
+
+    @model_validator(mode="after")
+    def _step_names_its_side(self) -> Self:
+        _owned(self.fact, self.of)
+        return self
+
+
+def _owned(fact: str, of: Role | None) -> None:
+    if fact in Step and of is None:
+        raise ValueError(f"{fact} is a step's output, so of names whose step it is")
 
 
 Amount = StrictInt | Literal["X"] | FactRef
@@ -90,9 +109,14 @@ class FactGate(Comparison):
     fact: Slug | Characteristic
     of: Role | None = None
 
+    @model_validator(mode="after")
+    def _step_names_its_side(self) -> Self:
+        _owned(self.fact, self.of)
+        return self
 
-class WeaponGate(BaseModel):
-    """The weapon the sequence is fought or shot with, by family or by slug."""
+
+class WeaponMatch(BaseModel):
+    """A weapon, named by its family or its slug."""
 
     model_config = _STRICT
 
@@ -102,7 +126,7 @@ class WeaponGate(BaseModel):
     @model_validator(mode="after")
     def _asks_something(self) -> Self:
         if self.type is None and self.weapon is None:
-            raise ValueError("a weapon gate names a type or a weapon")
+            raise ValueError("a weapon match names a type or a weapon")
         return self
 
 
@@ -145,23 +169,12 @@ class FoeGate(BaseModel):
         return self
 
 
-class Carrier(StrEnum):
-    """What carries a rule (what-special-rules-does-it-have)."""
-
-    MODEL = "model"
-    WEAPON = "weapon"
-    ARMOUR = "armour"
-    ITEM = "item"
-    EFFECT = "effect"
-    CORE = "core"
-
-
 class Gates(BaseModel):
     """The gates an effect reads, all of which hold together."""
 
     model_config = _STRICT
 
-    with_: WeaponGate | None = Field(default=None, alias="with")
+    with_: WeaponMatch | None = Field(default=None, alias="with")
     worn: ArmourGate | None = None
     carried_by: Carrier | None = None
     attack: AttackGate | None = None
@@ -410,7 +423,7 @@ class Effect(BaseModel):
     grants: RuleRef | None = None
     cancels: Cancels | None = None
     of: Role | None = None
-    to: Role | None = None
+    to: Role | WeaponMatch | None = None
     at: Address | None = None
     limit: Limit | None = None
 
@@ -482,8 +495,10 @@ class Effect(BaseModel):
 
     @property
     def weapons(self) -> frozenset[str]:
-        """Every weapon the effect's gates name."""
+        """Every weapon the effect's gates or its grant's target name."""
         named = [gates.with_.weapon for gates in self._gates if gates.with_ is not None]
+        if isinstance(self.to, WeaponMatch):
+            named.append(self.to.weapon)
         return frozenset(weapon for weapon in named if weapon is not None)
 
     @property

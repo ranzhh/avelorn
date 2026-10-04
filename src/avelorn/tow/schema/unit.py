@@ -6,12 +6,14 @@ validator gathers those keys into the row's ``characteristics``
 mapping, and Python code reads them through :class:`Characteristic`.
 """
 
+from collections.abc import Iterator
 from enum import StrEnum
 from typing import Annotated, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.functional_validators import BeforeValidator
 
+from avelorn.core.graph import Carrier, Source
 from avelorn.core.registry import Registry
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.troop_type import TroopTypeProfile
@@ -381,6 +383,15 @@ class Unit(BaseModel):
             A copy carrying the resolved :attr:`troop_type_profile`.
         """
         return self.model_copy(update={"troop_type_profile": troop_types.by_name(self.troop_type)})
+
+    def sources(self) -> Iterator[tuple[RuleRef, Source]]:
+        """The rules the datasheet prints, each carried by the model.
+
+        Yields:
+            The reference, and its source.
+        """
+        for reference in self.special_rules:
+            yield reference, Source(Carrier.MODEL)
 
     def highest(self, characteristic: Characteristic) -> int | None:
         """The unit's highest value for a characteristic.

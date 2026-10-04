@@ -7,7 +7,8 @@ entry with no gap is stale. The CLI, the API and the gate test all read this
 one report.
 
 The scan reads the corpus, not the rule registry, since a rule nothing
-references is no gap.
+references is no gap. The core rules of the phases are the exception: every side
+has them, so a volley effect of theirs that nothing reaches is one.
 """
 
 from collections import defaultdict
@@ -16,14 +17,21 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict
 
+from avelorn.tow.attach import attach_rules
+from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
+from avelorn.tow.programs import VOLLEY, load_program
 from avelorn.tow.schema.effect import Effect
 from avelorn.tow.schema.ledger import Acknowledgement, GapKind
+from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import GrantEffect, Rule
+from avelorn.tow.schema.stage import Side
 from avelorn.tow.schema.step import Step, StepSequence
 from avelorn.tow.schema.unit import OptionKind, UnitOption
-from avelorn.tow.steps import STEPS
+from avelorn.tow.steps import STEPS, Fielded
+
+type Effected = tuple[str, int, StepSequence, str]
 
 
 class Entry(StrEnum):
@@ -210,6 +218,7 @@ def _scan(data: TOWRepository) -> Iterator[tuple[GapKind, str, Site]]:
             yield kind, reference.rule, site
     for slug in sorted(referenced):
         yield from _graph_gaps(slug, data.rules[slug])
+    yield from _unreached(data, referenced)
     for slug, unit in sorted(data.units.items()):
         for row in unit.unread_rows:
             yield GapKind.PROFILE_ROW_UNREAD, f"{slug}/{row.name}", Site(entry=Entry.UNIT, id=slug)
@@ -226,6 +235,62 @@ def _scan(data: TOWRepository) -> Iterator[tuple[GapKind, str, Site]]:
     for slug, armour in sorted(data.armoury.items()):
         if armour.notes is not None:
             yield GapKind.PRINTED_NOTES, slug, Site(entry=Entry.ARMOUR, id=slug)
+
+
+def _unreached(data: TOWRepository, referenced: set[str]) -> Iterator[tuple[GapKind, str, Site]]:
+    """Every volley effect that no corpus side carries to its step.
+
+    An effect is expected in each sequence where the volley has its step, when
+    the volley has every step it reads. Each unit at its minimum size, bare and
+    with each option alone, faces itself: once per missile weapon it wields as
+    the shooter, and always as the target.
+
+    Yields:
+        The gap's kind, ``<rule>/<sequence>/<step>``, and the rule as its site.
+    """
+    volley = load_program(VOLLEY, data.rules)
+    specs = volley.specs.values()
+    have = {spec.key for spec in specs}
+    names = {spec.name for spec in specs}
+    core = {slug for slug, rule in data.rules.items() if rule.category in set(Phase)}
+    expected: set[Effected] = set()
+    for slug in sorted(referenced | core):
+        graph = data.rules[slug].graph
+        for index, effect in enumerate(() if graph is None else graph.effects):
+            if effect.at is None or not all(step in names for step in _read_steps(effect)):
+                continue
+            for sequence in effect.at.sequences:
+                if (sequence, effect.at.step) in have:
+                    expected.add((slug, index, sequence, effect.at.step))
+    reached: set[Effected] = set()
+    for contingent in _fieldings(data):
+        target = Fielded.of(contingent)
+        shooters = [
+            Fielded.of(contingent, weapon.name)
+            for weapon in contingent.loadout.weapons
+            if weapon.missile_profile is not None
+        ]
+        facing = [(target, {str(Side.TARGET)})]
+        facing += [(shooter, {str(side) for side in Side}) for shooter in shooters]
+        for attacker, counted in facing:
+            fielded = {Side.ATTACKER: attacker, Side.TARGET: target}
+            for reach in attach_rules(volley.program, volley.specs, fielded, data.rules).reaches:
+                if reach.holder.side in counted:
+                    spec = volley.specs[reach.at]
+                    reached.add((reach.rule, reach.effect, spec.sequence, spec.name))
+    for slug, _, sequence, step in sorted(expected - reached):
+        yield (
+            GapKind.UNREACHED_EFFECT,
+            f"{slug}/{sequence}/{step}",
+            Site(entry=Entry.RULE, id=slug),
+        )
+
+
+def _fieldings(data: TOWRepository) -> Iterator[Contingent]:
+    for slug, unit in sorted(data.units.items()):
+        bought = [()] + [(option.name,) for option in unit.options if option.applies_to is None]
+        for options in bought:
+            yield Contingent.deploy(slug, unit.unit_size.min, options, data=data)
 
 
 def _inert(option: UnitOption) -> bool:

@@ -19,6 +19,7 @@ class GapKind(StrEnum):
     PRINTED_NOTES = "printed-notes"
     INERT_OPTION = "inert-option"
     UNATTACHED_EFFECT = "unattached-effect"
+    UNREACHED_EFFECT = "unreached-effect"
     MISSING_MECHANIC = "missing-mechanic"
 
 
@@ -28,8 +29,9 @@ class Acknowledgement(BaseModel):
     ``subject`` is how the gap is addressed: the rule's slug for a rule without
     effects (one entry covers every place referencing it), ``<unit>/<row>`` for a
     profile row, the weapon or armour slug for printed notes, ``<unit>/<option>``
-    for an option, ``<rule>/<step>`` for an effect landing on a step no program
-    registers yet, and the mechanic's slug for a mechanic a rule needs.
+    for an option, ``<rule>/<sequence>/<step>`` for an effect needing a step no
+    program registers yet and for a volley effect no corpus side reaches, and the
+    mechanic's slug for a mechanic a rule needs.
     """
 
     model_config = ConfigDict(extra="forbid")
