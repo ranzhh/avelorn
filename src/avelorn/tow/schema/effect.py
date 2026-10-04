@@ -24,6 +24,8 @@ from avelorn.tow.schema.weapon import WeaponType
 
 _STRICT = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
 
+_OTHER = {Role.THIS_MODEL: Role.THE_ENEMY, Role.THE_ENEMY: Role.THIS_MODEL}
+
 Key = Quantity | Characteristic
 
 
@@ -245,6 +247,14 @@ class Address(BaseModel):
             and not other._apart(self)
         )
 
+    def mirrored(self) -> "Address":
+        """The address as the enemy of the bearer names it.
+
+        Returns:
+            The address with its role swapped.
+        """
+        return self.model_copy(update={"by": _OTHER[self.by]})
+
     def _apart(self, other: "Address") -> bool:
         excluded = other.in_ is not None and type(other.in_) is type(self.not_in)
         blocks = isinstance(self.in_, Step) and isinstance(other.in_, Step)
@@ -453,6 +463,16 @@ class Effect(BaseModel):
         named = {gates.worn.armour for gates in self._gates if gates.worn is not None}
         return frozenset(named if self.bar is None else {*named, self.bar})
 
+    def mirrored(self) -> "Effect":
+        """The effect as the enemy of the bearer reads it.
+
+        Returns:
+            The effect with the roles of its landing and its ``of`` swapped.
+        """
+        at = None if self.at is None else self.at.mirrored()
+        of = None if self.of is None else _OTHER[self.of]
+        return self.model_copy(update={"at": at, "of": of})
+
     def matches(self, rule: str, cancels: Cancels) -> bool:
         """Whether a cancel removes this effect of ``rule``.
 
@@ -516,8 +536,9 @@ _BEST = frozenset({Quantity.WARD_SAVE})
 def conflicts(rules: Mapping[str, Sequence[Effect]]) -> list[str]:
     """Every pair of rules that set one value, or force different options, at one address.
 
-    Two such rules conflict unless either cancels the other there. A Ward save
-    is no conflict: a model with more than one uses the best
+    Two such rules conflict unless either cancels the other there. Each pair is
+    compared on one model and on two models facing each other. A Ward save is
+    no conflict: a model with more than one uses the best
     (the-shooting-phase/more-than-one-save).
 
     Returns:
@@ -525,14 +546,16 @@ def conflicts(rules: Mapping[str, Sequence[Effect]]) -> list[str]:
     """
     found = []
     for (first, ours), (second, theirs) in combinations(sorted(rules.items()), 2):
-        for mine in ours:
-            for other in theirs:
-                if mine.at is None or other.at is None or not mine.at.overlaps(other.at):
-                    continue
-                clash = _clash(mine, other)
-                if clash is None or _cancelled(first, mine, ours, second, other, theirs):
-                    continue
-                found.append(f"{first} and {second} {clash} at {mine.at}, and neither cancels")
+        facing = tuple(effect.mirrored() for effect in theirs)
+        for named, others in ((second, theirs), (f"the enemy's {second}", facing)):
+            for mine in ours:
+                for other in others:
+                    if mine.at is None or other.at is None or not mine.at.overlaps(other.at):
+                        continue
+                    clash = _clash(mine, other)
+                    if clash is None or _cancelled(first, mine, ours, second, other, others):
+                        continue
+                    found.append(f"{first} and {named} {clash} at {mine.at}, and neither cancels")
     return found
 
 

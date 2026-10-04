@@ -3,6 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
+from avelorn.core.graph import Side as Role
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.schema.effect import Address, Effect, Operation, conflicts
 from avelorn.tow.schema.rule import Clause, ModifierEffect
@@ -98,15 +99,53 @@ def _uncancelled(slug: str) -> tuple[Effect, ...]:
 
 
 def test_two_rules_setting_one_value_conflict_unless_one_cancels() -> None:
-    """Strike First and Strike Last both set Initiative; only their cancels reconcile them."""
+    """Strike First and Strike Last both set Initiative; either one's cancel reconciles them."""
     both = {slug: _uncancelled(slug) for slug in ("strike-first", "strike-last")}
     assert conflicts(both) == [
         "strike-first and strike-last both set I at who-strikes-first by this-model, "
         "and neither cancels"
     ]
+    for slug in both:
+        graph = REPO.rules[slug].graph
+        assert graph is not None
+        assert conflicts({**both, slug: graph.effects}) == []
+
+
+def test_a_cancel_reaches_only_its_own_address() -> None:
+    """Strike First's cancel, moved to where the enemy acts, no longer reaches Strike Last."""
     graph = REPO.rules["strike-first"].graph
     assert graph is not None
-    assert conflicts({**both, "strike-first": graph.effects}) == []
+    moved = tuple(
+        effect.model_copy(update={"at": effect.at.mirrored()})
+        if effect.cancels is not None and effect.at is not None
+        else effect
+        for effect in graph.effects
+    )
+    assert conflicts({"strike-first": moved, "strike-last": _uncancelled("strike-last")}) != []
+
+
+def test_a_rule_on_the_enemy_conflicts_where_both_land() -> None:
+    """Setting the enemy's Initiative clashes with the enemy's own Strike First."""
+    chill = _landing("strike-last", {"by": "the-enemy"})
+    chill = tuple(effect.model_copy(update={"of": Role.THE_ENEMY}) for effect in chill)
+    (found,) = conflicts({"strike-first": _uncancelled("strike-first"), "strike-last": chill})
+    assert found.startswith("strike-first and the enemy's strike-last both set I")
+
+
+def test_rules_changing_different_models_never_conflict() -> None:
+    """Initiative set for the bearer and for the enemy at one step are two values."""
+    chill = tuple(
+        effect.model_copy(update={"of": Role.THE_ENEMY}) for effect in _uncancelled("strike-last")
+    )
+    assert conflicts({"strike-first": _uncancelled("strike-first"), "strike-last": chill}) == []
+
+
+def test_rules_landing_for_different_roles_never_conflict() -> None:
+    """The bearer's Initiative set where it acts and where the enemy acts are two landings."""
+    elsewhere = _landing("strike-last", {"by": "the-enemy"})
+    assert (
+        conflicts({"strike-first": _uncancelled("strike-first"), "strike-last": elsewhere}) == []
+    )
 
 
 def test_two_rules_forcing_different_options_conflict() -> None:
