@@ -94,6 +94,25 @@ class _Shift:
         return {"text": f"{self.by:+d}"}
 
 
+@dataclass(frozen=True)
+class _Cancel:
+    """A toy cancel that removes ``of`` in each world where ``when`` holds."""
+
+    of: Change
+    reads: tuple[Key, ...] = ()
+    when: Callable[..., bool] = _always
+    order: Order = Order.CANCEL
+
+    def settle(self, values: tuple[Any, ...], out: frozenset[str]) -> Hashable | None:
+        return "cancel" if self.when(*values) else None
+
+    def cancels(self, other: Change) -> bool:
+        return other is self.of
+
+    def view(self) -> dict[str, Any]:
+        return {"text": "cancel"}
+
+
 def test_a_roll_edge_carries_its_own_distribution() -> None:
     flip = Roll[int](name="flip", side="attacker", kernel=_coin, target=Scalar("target", 1))
     face = flip.output("face", Monoid(0))
@@ -1438,8 +1457,8 @@ def _heads(face: int) -> bool:
     return face == 1
 
 
-def _paired(face: int, hit: bool) -> tuple[int | bool, ...]:
-    return face, hit
+def _paired(first: Hashable, hit: bool) -> tuple[Hashable, ...]:
+    return first, hit
 
 
 def test_a_gated_change_moves_only_the_worlds_where_its_gate_holds() -> None:
@@ -1453,7 +1472,7 @@ def test_a_gated_change_moves_only_the_worlds_where_its_gate_holds() -> None:
         kernel=_hit_after,
         target=Scalar("t", 4),
     )
-    both = Projection("both", (coin, hit), _paired, Monoid[tuple[int | bool, ...]](()))
+    both = Projection("both", (coin, hit), _paired, Monoid[tuple[Hashable, ...]](()))
     hit.show(both)
     program = Program.build("gated", _SIDES, (coin, hit))
     aim = Landing(hit, changes=(_Shift(1, reads=(coin,), when=_heads),))
@@ -1472,6 +1491,107 @@ def test_a_gated_change_moves_only_the_worlds_where_its_gate_holds() -> None:
         (0, False): Fraction(1, 4),
         (1, True): Fraction(1, 3),
         (1, False): Fraction(1, 6),
+    }
+
+
+def _long(band: str) -> bool:
+    return band == "long"
+
+
+def test_a_cancel_removes_its_target_only_where_it_is_in_force() -> None:
+    band = Measurement[str](name="check-range", side="attacker", kernel=_band)
+    changed = Mark[tuple[Hashable, ...]]("hit")
+    hit = Roll[bool](
+        name="hit",
+        side="attacker",
+        inputs=(changed,),
+        changed=changed,
+        kernel=_hit_after,
+        target=Scalar("t", 4),
+    )
+    both = Projection("both", (band, hit), _paired, Monoid[tuple[Hashable, ...]](()))
+    hit.show(both)
+    program = Program.build("cancelled", _SIDES, (band, hit))
+    penalty = _Shift(-1)
+    cloak = _Cancel(penalty, reads=(band,), when=_long)
+    program.attach(
+        (
+            RuleNode(
+                rule="far",
+                name="Far",
+                holder=_ATTACKER,
+                sources=_MODEL,
+                landings=(Landing(hit, changes=(penalty,)),),
+            ),
+            RuleNode(
+                rule="cloak",
+                name="Cloak",
+                holder=_TARGET,
+                sources=_MODEL,
+                landings=(Landing(hit, changes=(cloak,)),),
+            ),
+        )
+    )
+
+    (lane,) = program.evaluate()
+
+    assert lane.verdicts("attacker/archers/far", hit).mass == {
+        Verdict.APPLIED: _HALF,
+        Verdict.CANCELLED: _HALF,
+    }
+    assert lane.verdicts("target/spearmen/cloak", hit).mass == {
+        Verdict.APPLIED: _HALF,
+        Verdict.HONOURED: _HALF,
+    }
+    assert lane.read(hit, both).mass == {
+        ("close", True): Fraction(1, 6),
+        ("close", False): Fraction(1, 3),
+        ("long", True): Fraction(1, 4),
+        ("long", False): Fraction(1, 4),
+    }
+
+
+def test_a_cancel_with_nothing_to_remove_is_honoured() -> None:
+    band = Measurement[str](name="check-range", side="attacker", kernel=_band)
+    changed = Mark[tuple[Hashable, ...]]("hit")
+    hit = Roll[bool](
+        name="hit",
+        side="attacker",
+        inputs=(changed,),
+        changed=changed,
+        kernel=_hit_after,
+        target=Scalar("t", 4),
+    )
+    program = Program.build("cancelled", _SIDES, (band, hit))
+    penalty = _Shift(-1, reads=(band,), when=_long)
+    program.attach(
+        (
+            RuleNode(
+                rule="far",
+                name="Far",
+                holder=_ATTACKER,
+                sources=_MODEL,
+                landings=(Landing(hit, changes=(penalty,)),),
+            ),
+            RuleNode(
+                rule="cloak",
+                name="Cloak",
+                holder=_TARGET,
+                sources=_MODEL,
+                landings=(Landing(hit, changes=(_Cancel(penalty),)),),
+            ),
+        )
+    )
+
+    (lane,) = program.evaluate()
+
+    assert lane.verdicts("attacker/archers/far", hit).mass == {
+        Verdict.CANCELLED: _HALF,
+        Verdict.HONOURED: _HALF,
+    }
+    assert lane.verdicts("target/spearmen/cloak", hit).mass == {
+        Verdict.APPLIED: _HALF,
+        Verdict.HONOURED: _HALF,
     }
 
 

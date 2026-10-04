@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Hashable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import IntEnum, StrEnum
 from fractions import Fraction
 from functools import cached_property, partial
@@ -28,6 +28,7 @@ class Carrier(StrEnum):
 
 class Verdict(StrEnum):
     APPLIED = "applied"
+    CANCELLED = "cancelled"
     HONOURED = "honoured"
     HELD = "held"
     INAPPLICABLE = "inapplicable"
@@ -121,9 +122,14 @@ class World:
 class Settled:
     world: World
     applied: frozenset[str] = frozenset()
+    cancelled: frozenset[str] = frozenset()
 
     def verdict(self, rule: str) -> Verdict:
-        return Verdict.APPLIED if rule in self.applied else Verdict.HONOURED
+        if rule in self.applied:
+            return Verdict.APPLIED
+        if rule in self.cancelled:
+            return Verdict.CANCELLED
+        return Verdict.HONOURED
 
 
 @dataclass(frozen=True, eq=False)
@@ -242,14 +248,18 @@ class Step[Out: Hashable](ABC):
     @abstractmethod
     def settled(self, world: World, lane: "Lane") -> Distribution[Settled]: ...
 
-    def changing(self, world: World, lane: "Lane") -> tuple[World, frozenset[str]]:
-        """Write the payloads in force under the mark, in the printed order.
+    def changing(self, world: World, lane: "Lane") -> Settled:
+        """Settle the changes in force, apply the cancels among them, and mark what is left.
+
+        Every cancel in force removes the other changes it names at once, so a
+        removed cancel still removes. The payloads left, cancels aside, are
+        written under the mark in the printed order.
 
         Returns:
-            The world holding the mark, and the nodes whose changes applied.
+            The world holding the mark, with the nodes applied and cancelled.
         """
         if self.changed is None:
-            return world, frozenset()
+            return Settled(world)
         in_force: list[tuple[str, Change, Hashable]] = []
         for node, change in lane.program.changes.get(self, ()):
             if node in lane.out:
@@ -257,12 +267,34 @@ class Step[Out: Hashable](ABC):
             payload = change.settle(tuple(world.of(key) for key in change.reads), lane.out)
             if payload is not None:
                 in_force.append((node, change, payload))
-        in_force.sort(key=lambda each: each[1].order)
-        written = tuple(payload for _, _, payload in in_force)
-        return world.holding(self.changed, written), frozenset(node for node, _, _ in in_force)
+        removes = {
+            index: {
+                other
+                for other, (_, change, _) in enumerate(in_force)
+                if other != index and cancel.cancels(change)
+            }
+            for index, (_, cancel, _) in enumerate(in_force)
+            if cancel.order is Order.CANCEL
+        }
+        removed = set[int]().union(*removes.values())
+        left = [(index, each) for index, each in enumerate(in_force) if index not in removed]
+        applied = {
+            node
+            for index, (node, change, _) in left
+            if change.order is not Order.CANCEL or removes[index]
+        }
+        cancelled = {node for node, _, _ in in_force} - {node for _, (node, _, _) in left}
+        kept = [
+            (change, payload)
+            for _, (_, change, payload) in left
+            if change.order is not Order.CANCEL
+        ]
+        written = tuple(payload for _, payload in sorted(kept, key=lambda each: each[0].order))
+        marked = world.holding(self.changed, written)
+        return Settled(marked, frozenset(applied), frozenset(cancelled))
 
-    def entered(self, world: World, applied: frozenset[str], value: Out) -> Settled:
-        return Settled(world.holding(self.key, value), applied)
+    def entered(self, changed: Settled, value: Out) -> Settled:
+        return replace(changed, world=changed.world.holding(self.key, value))
 
     def output(self, label: str, aggregation: Monoid[Out]) -> Projection[Out]:
         return Projection(label, (self.key,), _itself, aggregation)
@@ -364,8 +396,8 @@ class Measurement[Out: Hashable](Step[Out]):
     kernel: Kernel[Out]
 
     def settled(self, world: World, lane: "Lane") -> Distribution[Settled]:
-        changed, applied = self.changing(world, lane)
-        return self.kernel(*self.arguments(changed)).map(partial(self.entered, changed, applied))
+        changed = self.changing(world, lane)
+        return self.kernel(*self.arguments(changed.world)).map(partial(self.entered, changed))
 
 
 @dataclass(frozen=True, eq=False, kw_only=True)
@@ -374,8 +406,8 @@ class Consequence[Out: Hashable](Step[Out]):
     kernel: Kernel[Out]
 
     def settled(self, world: World, lane: "Lane") -> Distribution[Settled]:
-        changed, applied = self.changing(world, lane)
-        return self.kernel(*self.arguments(changed)).map(partial(self.entered, changed, applied))
+        changed = self.changing(world, lane)
+        return self.kernel(*self.arguments(changed.world)).map(partial(self.entered, changed))
 
 
 @dataclass(frozen=True, eq=False, kw_only=True)
@@ -385,8 +417,8 @@ class Roll[Out: Hashable](Step[Out]):
     target: Reading
 
     def settled(self, world: World, lane: "Lane") -> Distribution[Settled]:
-        changed, applied = self.changing(world, lane)
-        return self.kernel(*self.arguments(changed)).map(partial(self.entered, changed, applied))
+        changed = self.changing(world, lane)
+        return self.kernel(*self.arguments(changed.world)).map(partial(self.entered, changed))
 
     def shown(self) -> tuple[Reading, ...]:
         return (*self.readings, self.target)

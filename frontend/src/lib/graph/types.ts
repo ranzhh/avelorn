@@ -1,6 +1,6 @@
 export type StepKind = 'measurement' | 'decision' | 'roll' | 'consequence';
 
-export type Verdict = 'applied' | 'honoured' | 'held' | 'inapplicable';
+export type Verdict = 'applied' | 'cancelled' | 'honoured' | 'held' | 'inapplicable';
 
 export interface Outcome {
 	value: number | string;

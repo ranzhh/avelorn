@@ -51,7 +51,7 @@
 		consequence: 'C',
 		group: 'G'
 	};
-	const VERDICTS: Verdict[] = ['applied', 'honoured', 'held', 'inapplicable'];
+	const VERDICTS: Verdict[] = ['applied', 'cancelled', 'honoured', 'held', 'inapplicable'];
 	const STRIP = 236;
 
 	const printed = (slug: string) => slug.replaceAll('-', ' ');
