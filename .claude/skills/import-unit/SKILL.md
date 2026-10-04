@@ -92,8 +92,14 @@ For a rule with no entry or no effects, read the printed text -- `WhfbAppClient(
 is the plain prose -- and decide.
 
 **If it folds into something the engine models, author it.** Import the entry,
-then hand-author `effects:`. Read `src/avelorn/tow/schema/rule.py` for the
-vocabulary first. Templates in `data/tow/rules/`:
+then hand-author `effects:`. Read `src/avelorn/tow/schema/effect.py` for the
+effect vocabulary and `src/avelorn/tow/schema/step.py` for the printed step
+names first. Each effect states its trigger and gates under `when`, where it
+lands under `at` (a step, the role acting there, and optionally `in` or
+`not_in`), and one operation. The keys only the legacy engine reads go under
+`legacy:`, in the vocabulary of `src/avelorn/tow/schema/rule.py`; a block that
+names no operation of its own takes the add, set, grants or hits beside it. An
+effect without an address fails the load. Templates in `data/tow/rules/`:
 
 | shape | template |
 | --- | --- |
@@ -106,13 +112,15 @@ vocabulary first. Templates in `data/tow/rules/`:
 
 Where the effect leaves part of the printed rule out, say so in `notes:` --
 the seam surfaces it to the user (`gromril-weapons.yaml`, `stubborn.yaml`).
+Where a printed clause needs a mechanic the engine lacks, name it in `needs:`;
+each name is a `missing-mechanic` subject in the ledger.
 
 **Comment only what the data cannot say**: a modelling decision (why this gate
 and not another) or a deliberate omission. The reader has the printed paragraph
 above and the YAML below, so never paraphrase the effect, and never restate
 schema vocabulary -- that belongs in the schema's own docstrings. Most rules
 need no comment at all (`dragon-armour.yaml`, `press-of-battle.yaml`); where one
-earns its place it is a line or three (`parry.yaml`, `killing-blow.yaml`).
+earns its place it is a line or three (`volley-fire.yaml`, `killing-blow.yaml`).
 
 **If it cannot fold, import the entry text-only**
 (`uv run python scripts/import_whfb_app.py rule <slug>`), with no `effects:` and
