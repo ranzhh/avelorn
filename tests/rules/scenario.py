@@ -9,6 +9,7 @@ from avelorn.core.distribution import Probability
 from avelorn.core.registry import Registry
 from avelorn.tow.contingent import Charge, ChargeArc, Contingent, Movement
 from avelorn.tow.data import TOWRepository
+from avelorn.tow.kernels import Standing
 from avelorn.tow.phases.combat import (
     CombatPhase,
     FightResult,
@@ -19,11 +20,12 @@ from avelorn.tow.phases.combat import (
     strike_unit,
 )
 from avelorn.tow.phases.movement import StandAndShoot, charge
-from avelorn.tow.phases.shooting import make_panic_tests, shoot_unit
+from avelorn.tow.programs import VOLLEY, Evaluated, load_program
 from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.weapon import Weapon
+from avelorn.tow.steps import Fielded, Retreat
 
 REPO = TOWRepository()
 
@@ -156,7 +158,9 @@ class Outcome:
 
 
 def resolve(scenario: Scenario) -> Outcome:
-    """Resolve ``scenario`` on the legacy engine.
+    """Resolve ``scenario``: a volley and its Panic test on the graph, the rest on legacy.
+
+    The volley is read in the lane where every rule a player may decline is taken.
 
     Returns:
         The outcome its kind decides.
@@ -177,28 +181,11 @@ def resolve(scenario: Scenario) -> Outcome:
     shooting = _chapter(Phase.SHOOTING, scenario.dropped)
     combat = _chapter(Phase.COMBAT, scenario.dropped)
     match scenario.kind:
-        case Kind.SHOOT | Kind.PANIC:
-            volley = shoot_unit(
-                attacker, defender, phase_rules=shooting, distance=scenario.distance
-            )
-            outcome = Outcome(
-                attacks=volley.shots,
-                unsaved=volley.p_unsaved,
-                casualties=_pmf(volley.casualties),
-            )
-            if scenario.kind is Kind.SHOOT:
-                return outcome
-            panic = make_panic_tests(volley, defender)
-            return replace(
-                outcome,
-                panic=Panic(
-                    panic.p_test,
-                    panic.p_holds,
-                    panic.p_falls_back,
-                    panic.p_flees,
-                    panic.p_destroyed,
-                ),
-            )
+        case Kind.SHOOT:
+            return _shot(_volley(attacker, defender, scenario), defender.models)
+        case Kind.PANIC:
+            volley = _volley(attacker, defender, scenario)
+            return replace(_shot(volley, defender.models), panic=_panicked(volley))
         case Kind.STRIKE:
             struck = strike_unit(attacker, defender)
             return Outcome(
@@ -227,6 +214,53 @@ def resolve(scenario: Scenario) -> Outcome:
             assert reaction is not None
             fought = CombatPhase(in_play=combat).fight(engagement)
             return replace(_fought(fought, engagement.a), attacks=reaction.shots)
+
+
+def _volley(attacker: Contingent, defender: Contingent, scenario: Scenario) -> Evaluated:
+    rules = {slug: rule for slug, rule in REPO.rules.items() if slug not in scenario.dropped}
+    lanes = load_program(VOLLEY, rules).evaluate(
+        {
+            "attacker/fielded": Fielded.of(attacker, attacker.shooting_weapon().name),
+            "target/fielded": Fielded.of(defender),
+            "distance": scenario.distance,
+            "can-shoot": True,
+            "line-of-sight": True,
+            "attacker/moved": attacker.movement.moved,
+            "attacker/standing": Standing(attacker.models, 0),
+            "target/standing": Standing(defender.models, 0),
+            "target/models-at-start-of-phase": defender.models,
+            "target/battle-strength": defender.models,
+        }
+    )
+    (taken,) = (
+        volley
+        for volley in lanes
+        if all(volley.lane.choices[toggle] for toggle in volley.lane.program.toggles.values())
+    )
+    return taken
+
+
+def _shot(volley: Evaluated, models: int) -> Outcome:
+    (shots,) = volley.at("volley/how-many-shots").read("shots").mass
+    removed = volley.at("volley/remove-casualties")
+    lost = removed.read("models").map(lambda left: models - left)
+    return Outcome(
+        attacks=shots,
+        unsaved=removed.read("unsaved").expect(lambda unsaved: unsaved) / shots,
+        casualties={count: p for count, p in lost.mass.items() if p},
+    )
+
+
+def _panicked(volley: Evaluated) -> Panic:
+    tested = volley.at("volley/heavy-casualties").read("tested").mass.get(True, 0)
+    retreat = volley.at("volley/fall-back-or-flee").read("retreat").mass
+    return Panic(
+        tested,
+        retreat.get(Retreat.HOLDS, 0),
+        retreat.get(Retreat.FALLS_BACK_IN_GOOD_ORDER, 0),
+        retreat.get(Retreat.FLEES, 0),
+        retreat.get(Retreat.DESTROYED, 0),
+    )
 
 
 def _fought(fought: FightResult, attacker: Contingent) -> Outcome:
