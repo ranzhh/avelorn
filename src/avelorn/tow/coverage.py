@@ -274,7 +274,10 @@ def _unreached(data: TOWRepository, referenced: set[str]) -> Iterator[tuple[GapK
         facing += [(shooter, {str(side) for side in Side}) for shooter in shooters]
         for attacker, counted in facing:
             fielded = {Side.ATTACKER: attacker, Side.TARGET: target}
-            for reach in attach_rules(volley.program, volley.specs, fielded, data.rules).reaches:
+            attached = attach_rules(
+                volley.program, volley.specs, fielded, data.rules, volley.states
+            )
+            for reach in attached.reaches:
                 if reach.holder.side in counted:
                     spec = volley.specs[reach.at]
                     reached.add((reach.rule, reach.effect, spec.sequence, spec.name))

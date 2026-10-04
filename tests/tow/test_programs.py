@@ -60,7 +60,7 @@ def _input_twice(volley: dict[str, Any]) -> None:
 
 
 def _known_named_as_a_fact(volley: dict[str, Any]) -> None:
-    volley["inputs"].append({"known": "moved", "of": "attacker", "type": "bool"})
+    volley["inputs"].append({"known": "moved", "of": "target", "type": "bool"})
 
 
 def _tally_on_a_step_that_counts_none(volley: dict[str, Any]) -> None:
@@ -109,22 +109,22 @@ def _tally_on_a_step_that_counts_none(volley: dict[str, Any]) -> None:
         ),
         pytest.param(
             _fact_without_a_side,
-            "inputs.9.FactInput.of\n  Field required",
+            "inputs.10.FactInput.of\n  Field required",
             id="fact-without-a-side",
         ),
         pytest.param(
             _known_without_a_type,
-            "inputs.9.KnownInput.type\n  Field required",
+            "inputs.10.KnownInput.type\n  Field required",
             id="known-without-a-type",
         ),
         pytest.param(
             _input_twice,
-            "volley.yaml: inputs[9]: distance is an input twice",
+            "volley.yaml: inputs[10]: distance is an input twice",
             id="input-twice",
         ),
         pytest.param(
             _known_named_as_a_fact,
-            "volley.yaml: inputs[9]: moved is listed in state.yaml",
+            "volley.yaml: inputs[10]: moved is listed in state.yaml",
             id="known-named-as-a-fact",
         ),
         pytest.param(
@@ -147,7 +147,9 @@ def test_a_bad_entry_fails_the_load_at_its_path(edit: Edit, message: str, tmp_pa
 
 
 def test_evaluating_without_every_input_is_refused() -> None:
-    with pytest.raises(ProgramError, match="volley needs attacker/fielded, attacker/standing"):
+    with pytest.raises(
+        ProgramError, match="volley needs attacker/fielded, attacker/moved, attacker/standing"
+    ):
         load_program(VOLLEY, REPO.rules).evaluate({"distance": 12})
 
 
@@ -160,6 +162,7 @@ def test_a_bool_given_as_an_int_is_refused() -> None:
         "distance": True,
         "who-can-shoot": True,
         "line-of-sight": True,
+        "attacker/moved": False,
         "attacker/standing": Standing(10, 0),
         "target/standing": Standing(20, 0),
         "target/models-at-start-of-phase": 20,

@@ -10,6 +10,7 @@ from avelorn.core.distribution import Distribution, Kernel, Monoid, Probability
 from avelorn.core.graph import (
     Consequence,
     Key,
+    Mark,
     Measurement,
     Reading,
     Roll,
@@ -17,6 +18,7 @@ from avelorn.core.graph import (
     State,
     Step,
 )
+from avelorn.tow.changes import Folded, Payloads
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.engine.armour import defender_armour
 from avelorn.tow.kernels import (
@@ -32,6 +34,8 @@ from avelorn.tow.kernels import (
     shooting_hit_target,
     wound_target,
 )
+from avelorn.tow.schema.effect import Operation
+from avelorn.tow.schema.quantity import Quantity
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.stage import Side
 from avelorn.tow.schema.step import StepSequence
@@ -167,7 +171,15 @@ class Summed:
 
 SUMMED = Summed()
 
-type Read = Fact | Output | Summed
+
+@dataclass(frozen=True)
+class Changed:
+    """A read of the changes in force at the step, always its last input."""
+
+
+CHANGED = Changed()
+
+type Read = Fact | Output | Summed | Changed
 
 
 @dataclass(frozen=True)
@@ -190,7 +202,11 @@ class Counted:
 
 @dataclass(frozen=True, kw_only=True)
 class Spec:
-    """A printed step."""
+    """A printed step.
+
+    ``runs`` names what the kernel folds of each operation a rule lands there.
+    ``outcomes`` lists every value the step can output.
+    """
 
     sequence: StepSequence
     name: str
@@ -205,6 +221,8 @@ class Spec:
     in_force: Mapping[tuple[Side, Characteristic], Callable[[Fielded], int]] = field(
         default_factory=dict
     )
+    runs: Mapping[Operation, frozenset[Folded]] = field(default_factory=dict)
+    outcomes: frozenset[Hashable] | None = None
 
     def __post_init__(self) -> None:
         """Refuse an inconsistent spec.
@@ -220,6 +238,10 @@ class Spec:
             raise ValueError(f"{self.name}: reads a tally it does not count")
         if SUMMED not in self.reads and self.counts is not None:
             raise ValueError(f"{self.name}: counts a tally it does not read")
+        if (CHANGED in self.reads) != bool(self.runs):
+            raise ValueError(f"{self.name}: reads its changes exactly when it runs some")
+        if CHANGED in self.reads[:-1]:
+            raise ValueError(f"{self.name}: reads its changes before its last input")
 
     @property
     def key(self) -> tuple[StepSequence, str]:
@@ -227,7 +249,11 @@ class Spec:
         return self.sequence, self.name
 
     def build(
-        self, inputs: tuple[Key, ...], target: Reading | None, writes: State[Any] | None
+        self,
+        inputs: tuple[Key, ...],
+        target: Reading | None,
+        writes: State[Any] | None,
+        changed: Mark[tuple[Hashable, ...]] | None,
     ) -> Step[Any]:
         """Build the step instance from its resolved inputs.
 
@@ -241,11 +267,21 @@ class Spec:
         match self.kind:
             case Kind.MEASUREMENT:
                 return Measurement(
-                    name=self.name, side=side, inputs=inputs, kernel=self.kernel, writes=writes
+                    name=self.name,
+                    side=side,
+                    inputs=inputs,
+                    kernel=self.kernel,
+                    writes=writes,
+                    changed=changed,
                 )
             case Kind.CONSEQUENCE:
                 return Consequence(
-                    name=self.name, side=side, inputs=inputs, kernel=self.kernel, writes=writes
+                    name=self.name,
+                    side=side,
+                    inputs=inputs,
+                    kernel=self.kernel,
+                    writes=writes,
+                    changed=changed,
                 )
             case Kind.ROLL:
                 if target is None:
@@ -257,6 +293,7 @@ class Spec:
                     kernel=self.kernel,
                     writes=writes,
                     target=target,
+                    changed=changed,
                 )
 
 
@@ -337,13 +374,14 @@ def _hit_target(attacker: Fielded) -> int:
     return shooting_hit_target(_printed(attacker, Characteristic.BALLISTIC_SKILL))
 
 
-def roll_to_hit(attacker: Fielded) -> Distribution[Die]:
-    """Roll one shot To Hit against the shooter's Ballistic Skill.
+def roll_to_hit(attacker: Fielded, changed: tuple[Hashable, ...]) -> Distribution[Die]:
+    """Roll one shot To Hit against the shooter's Ballistic Skill, moved by the rules in force.
 
     Returns:
         The die as it lands.
     """
-    return shooting_hit(_printed(attacker, Characteristic.BALLISTIC_SKILL))
+    modifier = Payloads.of(changed).added(Quantity.TO_HIT)
+    return shooting_hit(_printed(attacker, Characteristic.BALLISTIC_SKILL), modifier)
 
 
 def _wound_target(attacker: Fielded, target: Fielded) -> int | None:
@@ -482,6 +520,7 @@ _SPECS = (
         reads=(_ATTACKER, Fact("distance")),
         kernel=check_range,
         readings={"band": _offer("check-range")},
+        outcomes=frozenset(Band),
     ),
     Spec(
         sequence=StepSequence.SHOOTING,
@@ -503,8 +542,9 @@ _SPECS = (
         name="roll-to-hit",
         kind=Kind.ROLL,
         side=Side.ATTACKER,
-        reads=(_ATTACKER,),
+        reads=(_ATTACKER, CHANGED),
         kernel=roll_to_hit,
+        runs={Operation.ADD: frozenset({Quantity.TO_HIT})},
         target=Offered((_ATTACKER,), lambda attacker: _shown(_hit_target(attacker)), _AGREED),
         readings={"hits": _counted("roll-to-hit")},
     ),
@@ -573,6 +613,7 @@ _SPECS = (
         reads=(_TARGET_STANDING, Fact("models-at-start-of-phase", Side.TARGET)),
         kernel=_heavy_casualties,
         readings={"tested": _offer("heavy-casualties")},
+        outcomes=frozenset({True, False}),
     ),
     Spec(
         sequence=StepSequence.SHOOTING,

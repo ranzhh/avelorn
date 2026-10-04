@@ -72,8 +72,7 @@ Corpus = Annotated[TOWRepository, Depends(corpus)]
 def graph_volley(data: Corpus) -> dict[str, object]:
     """Ten Elven Archers shoot twenty Elven Spearmen at 12 inches.
 
-    Each side's rules attach to the steps they reach. None of them changes a
-    number yet.
+    Each side's rules attach to the steps they reach.
 
     Returns:
         The evaluated volley program.
@@ -87,6 +86,7 @@ def graph_volley(data: Corpus) -> dict[str, object]:
             "distance": 12,
             "who-can-shoot": True,
             "line-of-sight": True,
+            "attacker/moved": False,
             "attacker/standing": Standing(archers.models, 0),
             "target/standing": Standing(spearmen.models, 0),
             "target/models-at-start-of-phase": spearmen.models,

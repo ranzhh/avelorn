@@ -66,6 +66,7 @@ def _volley(
     distance: int = 12,
     who_can_shoot: bool = True,
     line_of_sight: bool = True,
+    moved: bool = False,
 ) -> Evaluated:
     knowns: dict[str, Hashable] = {
         "attacker/fielded": attacker,
@@ -73,6 +74,7 @@ def _volley(
         "distance": distance,
         "who-can-shoot": who_can_shoot,
         "line-of-sight": line_of_sight,
+        "attacker/moved": moved,
         "attacker/standing": Standing(shooters, 0),
         "target/standing": Standing(models, 0),
         "target/models-at-start-of-phase": models,
@@ -110,7 +112,9 @@ def _assert_matches_legacy(
     ward: int | None,
     models: int,
     wounds: int,
+    moved: bool = False,
 ) -> None:
+    hit_modifier = -1 if moved else 0
     legacy = shoot(
         shots,
         ballistic_skill,
@@ -119,6 +123,7 @@ def _assert_matches_legacy(
         armour_value=armour,
         armour_piercing=armour_piercing,
         ward_target=ward,
+        hit_modifier=hit_modifier,
         wounds_per_model=wounds,
         targets=models,
     )
@@ -128,6 +133,7 @@ def _assert_matches_legacy(
         shooters=shots,
         models=models,
         battle_strength=models,
+        moved=moved,
     )
 
     correction = CORRECTIONS.get(pin)
@@ -140,6 +146,7 @@ def _assert_matches_legacy(
             armour_value=NO_ARMOUR if armour is None else armour,
             armour_piercing=armour_piercing,
             ward=ward,
+            hit_modifier=hit_modifier,
         )
         hit = _per_shot(evaluated, "volley/attack/roll-to-hit", "hits", shots)
         unsaved = _per_shot(evaluated, "volley/remove-casualties", "unsaved", shots)
@@ -162,17 +169,28 @@ def _assert_matches_legacy(
 
 
 _SCENARIOS = [
-    pytest.param(3, 4, 3, 3, 5, None, 3, 1, id="golden-chain"),
-    pytest.param(1, 4, 3, 3, None, 4, 1, 1, id="ward-save"),
-    pytest.param(10, 5, 1, 7, None, None, 10, 1, id="impossible-wound"),
-    pytest.param(10, 4, 3, 3, None, None, 2, 1, id="casualties-capped"),
-    pytest.param(6, 4, 3, 3, None, None, 6, 3, id="multi-wound-fold"),
-    pytest.param(1, 6, 10, 1, None, None, 1, 1, id="bs6"),
+    pytest.param(3, 4, 3, 3, 5, None, 3, 1, False, id="golden-chain"),
+    pytest.param(1, 4, 3, 3, None, 4, 1, 1, False, id="ward-save"),
+    pytest.param(10, 5, 1, 7, None, None, 10, 1, False, id="impossible-wound"),
+    pytest.param(10, 4, 3, 3, None, None, 2, 1, False, id="casualties-capped"),
+    pytest.param(6, 4, 3, 3, None, None, 6, 3, False, id="multi-wound-fold"),
+    pytest.param(1, 6, 10, 1, None, None, 1, 1, False, id="bs6"),
+    pytest.param(1, 6, 10, 1, None, None, 1, 1, True, id="bs6-moved"),
 ]
 
 
 @pytest.mark.parametrize(
-    ("shots", "ballistic_skill", "strength", "toughness", "armour", "ward", "models", "wounds"),
+    (
+        "shots",
+        "ballistic_skill",
+        "strength",
+        "toughness",
+        "armour",
+        "ward",
+        "models",
+        "wounds",
+        "moved",
+    ),
     _SCENARIOS,
 )
 def test_the_shooting_scenarios_match_legacy_shoot(
@@ -185,6 +203,7 @@ def test_the_shooting_scenarios_match_legacy_shoot(
     ward: int | None,
     models: int,
     wounds: int,
+    moved: bool,
 ) -> None:
     _assert_matches_legacy(
         request.node.nodeid,
@@ -197,6 +216,7 @@ def test_the_shooting_scenarios_match_legacy_shoot(
         ward,
         models,
         wounds,
+        moved,
     )
 
 

@@ -5,3 +5,11 @@
   reason: >-
     The chance one shot hits. Legacy needs 7 minus BS, so BS 6 hits on 2+ and
     never re-rolls. The chart hits on 2+ and re-rolls a miss at 6+.
+- pin: tests/tow/test_volley_program.py::test_the_shooting_scenarios_match_legacy_shoot[bs6-moved]
+  old: 5/6
+  new: 13/18
+  page: the-shooting-phase/to-hit-modifiers
+  reason: >-
+    The chance one shot hits after moving. Legacy needs 7 minus BS less the
+    modifier, so BS 6 at -1 still hits on 2+. The chart's first roll needs 3+,
+    and its re-roll of a miss at 6+ takes no modifier.

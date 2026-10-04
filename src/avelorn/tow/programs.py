@@ -16,6 +16,7 @@ from avelorn.core.graph import (
     Item,
     Key,
     Lane,
+    Mark,
     Program,
     Projection,
     Repeat,
@@ -40,7 +41,9 @@ from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.stage import Side
 from avelorn.tow.schema.unit import Characteristic
 from avelorn.tow.steps import (
+    CHANGED,
     STEPS,
+    Changed,
     Counted,
     Fact,
     Fielded,
@@ -89,6 +92,11 @@ class Loaded:
     specs: Mapping[Step[Any], Spec]
     rules: Mapping[str, Rule]
 
+    @property
+    def states(self) -> Mapping[str, State[Any]]:
+        """The state each input is held under, by the input's name."""
+        return MappingProxyType({name: given.state for name, given in self.inputs.items()})
+
     def evaluate(self, knowns: Mapping[str, Hashable]) -> tuple["Evaluated", ...]:
         """Evaluate the program with every input given by name.
 
@@ -118,7 +126,7 @@ class Loaded:
                 raise ProgramError(f"{side}/fielded expects Fielded; got {value!r}")
             fielded[side] = value
         program = _built(self.program.name, self.program.items, self.inputs)
-        program.attach(attach_rules(program, self.specs, fielded, self.rules).nodes)
+        program.attach(attach_rules(program, self.specs, fielded, self.rules, self.states).nodes)
         given = {self.inputs[name].state: value for name, value in knowns.items()}
         return tuple(
             Evaluated(self, lane, MappingProxyType(dict(knowns)))
@@ -295,19 +303,20 @@ class _Builder:
         if spec is None:
             raise self.error(here, f"{entry.step} is no step of the {sequence} sequence")
         tally = self.tally(spec, entry, here, groups)
-        inputs = tuple(self.key(read, spec, here, visible, tally) for read in spec.reads)
+        changed = Mark[tuple[Hashable, ...]](spec.name) if CHANGED in spec.reads else None
+        inputs = tuple(self.key(read, spec, here, visible, tally, changed) for read in spec.reads)
         target = None
         if spec.target is not None:
-            target = self.projection("needed", spec.target, spec, here, visible, tally)
+            target = self.projection("needed", spec.target, spec, here, visible, tally, changed)
         writes = None if spec.writes is None else self.write(spec.writes, here)
-        step = spec.build(inputs, target, writes)
+        step = spec.build(inputs, target, writes, changed)
         self.specs[step] = spec
         own = {**visible, spec.name: step}
         for name in entry.readings:
             offered = spec.readings.get(name)
             if offered is None:
                 raise self.error(here, f"{spec.name} offers no reading {name}")
-            step.show(self.projection(name, offered, spec, here, own, tally))
+            step.show(self.projection(name, offered, spec, here, own, tally, changed))
         return step
 
     def tally(
@@ -345,8 +354,11 @@ class _Builder:
         here: str,
         visible: Mapping[str, Step[Any]],
         tally: Tally[int] | None,
+        changed: Mark[tuple[Hashable, ...]] | None,
     ) -> Projection[Any]:
-        reads = tuple(self.key(read, spec, here, visible, tally) for read in offered.reads)
+        reads = tuple(
+            self.key(read, spec, here, visible, tally, changed) for read in offered.reads
+        )
         return Projection(label, reads, offered.project, offered.aggregation)
 
     def key(
@@ -356,6 +368,7 @@ class _Builder:
         here: str,
         visible: Mapping[str, Step[Any]],
         tally: Tally[int] | None,
+        changed: Mark[tuple[Hashable, ...]] | None,
     ) -> Key:
         match read:
             case Fact():
@@ -366,6 +379,10 @@ class _Builder:
                 if tally is None:
                     raise self.error(here, f"{spec.name} reads a tally it was not given")
                 return tally
+            case Changed():
+                if changed is None:
+                    raise self.error(here, f"{spec.name} reads changes it does not mark")
+                return changed
 
     def output(self, read: Output, spec: Spec, here: str, visible: Mapping[str, Step[Any]]) -> Key:
         step = visible.get(read.step)

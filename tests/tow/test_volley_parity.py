@@ -21,17 +21,13 @@ from avelorn.tow.steps import Fielded, Retreat
 
 STRIPPED = frozenset(
     {
-        "abyssal-cloak",
         "armour-bane",
         "arrows-of-isha",
         "blessings-of-asuryan",
         "deflect-shots",
         "dragon-armour",
-        "enemy-fire-skirmishers",
-        "firing-at-long-range",
         "gromril-armour",
         "lion-cloak",
-        "moving-and-shooting",
         "runes-of-protection",
         "valour-of-ages",
         "veteran",
@@ -141,6 +137,7 @@ def _graph(attacker: Contingent, target: Contingent, distance: int) -> Outcome:
             "distance": distance,
             "who-can-shoot": True,
             "line-of-sight": True,
+            "attacker/moved": attacker.movement.moved,
             "attacker/standing": Standing(attacker.models, 0),
             "target/standing": Standing(target.models, 0),
             "target/models-at-start-of-phase": target.models,
