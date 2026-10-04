@@ -43,6 +43,7 @@ from avelorn.tow.engine.attack import (
 )
 from avelorn.tow.engine.attack import Outcome as AttackOutcome
 from avelorn.tow.schema.psychology import Outcome
+from avelorn.tow.schema.quantity import Quantity, Seam, seam_of
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import (
     Add,
@@ -62,15 +63,12 @@ from avelorn.tow.schema.rule import (
     MembershipGate,
     ModifierEffect,
     NaturalRoll,
-    Quantity,
     ReplaceEffect,
     RerollEffect,
     Rule,
     RuleEffect,
-    Seam,
     VolleyEffect,
     WoundMultiplierEffect,
-    seam_of,
 )
 from avelorn.tow.schema.stage import Dice, Side, Stage
 from avelorn.tow.schema.unit import Characteristic, TroopType
