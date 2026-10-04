@@ -1,13 +1,11 @@
 """Every corpus volley on both engines."""
 
 from collections.abc import Hashable, Mapping
-from functools import cached_property
 from typing import NamedTuple
 
 import pytest
 
 from avelorn.core.distribution import Distribution, Probability
-from avelorn.core.registry import Registry
 from avelorn.tow.contingent import Contingent, Movement
 from avelorn.tow.coverage import fieldings
 from avelorn.tow.data import TOWRepository
@@ -16,34 +14,9 @@ from avelorn.tow.kernels import Standing
 from avelorn.tow.phases.shooting import make_panic_tests, shoot_unit
 from avelorn.tow.programs import VOLLEY, load_program
 from avelorn.tow.schema.phase import Phase
-from avelorn.tow.schema.rule import Rule
 from avelorn.tow.steps import Fielded, Retreat
 
-STRIPPED = frozenset(
-    {
-        "volley-fire",
-    }
-)
-
-
-class _Stripped(TOWRepository):
-    """The corpus with every rule in ``STRIPPED`` read by neither engine."""
-
-    @cached_property
-    def rules(self) -> Registry[Rule]:
-        """The printed rules, each stripped one left without effects."""
-        printed = TOWRepository().rules
-        return Registry(
-            [_stripped(rule) if rule.id in STRIPPED else rule for rule in printed.values()],
-            kind="rule",
-        )
-
-
-def _stripped(rule: Rule) -> Rule:
-    return rule.model_copy(update={"effects": []}).with_graph(None)
-
-
-REPO = _Stripped()
+REPO = TOWRepository()
 IN_PLAY = TOWGame.assemble(REPO).in_play[Phase.SHOOTING]
 VOLLEY_PROGRAM = load_program(VOLLEY, REPO.rules)
 
@@ -124,7 +97,7 @@ def _graph(attacker: Contingent, target: Contingent, distance: int) -> Outcome:
             "attacker/fielded": Fielded.of(attacker, attacker.weapon.name),
             "target/fielded": Fielded.of(target),
             "distance": distance,
-            "who-can-shoot": True,
+            "can-shoot": True,
             "line-of-sight": True,
             "attacker/moved": attacker.movement.moved,
             "attacker/standing": Standing(attacker.models, 0),

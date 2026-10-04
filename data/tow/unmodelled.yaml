@@ -436,9 +436,6 @@
   subject: veteran/strategy/rally-fleeing-units
   reason: Re-rolls the rally test; no program registers Rally Fleeing Units, and no numbered item plans one.
 - kind: unattached-effect
-  subject: volley-fire/shooting/who-can-shoot
-  reason: Lands on Who Can Shoot?, which the volley takes as a known; it becomes a step with shooting as a program (item 13).
-- kind: unattached-effect
   subject: witness-to-destiny/combat/ward-saves
   reason: Sets the Ward save in combat; no program registers the combat attack until the combat round lands (item 14).
 

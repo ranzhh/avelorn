@@ -1,18 +1,21 @@
 """Attaching the rules of both fielded sides to a program's steps.
 
-A landing carries the operations its step's kernel folds, or holds, carrying
-none, when any effect of the node there is one the step cannot run.
+A landing carries the operations its step runs, or holds, carrying none, when
+any effect of the node there is one the step cannot run.
 """
 
 from collections import defaultdict
 from collections.abc import Hashable, Mapping
 from dataclasses import dataclass
+from functools import partial
 from typing import Any
 
 from avelorn.core.errors import AvelornError
 from avelorn.core.graph import (
     Carrier,
     Change,
+    Contribution,
+    Eligibility,
     Holder,
     Landing,
     Program,
@@ -21,6 +24,7 @@ from avelorn.core.graph import (
     State,
     Step,
 )
+from avelorn.core.graph import Operation as GraphOperation
 from avelorn.tow.changes import (
     Attacks,
     Check,
@@ -195,13 +199,15 @@ class _Fielding:
         for at in sorted(landed, key=self.program.steps.index):
             reached = landed[at]
             triggers = {trigger for _, _, each in reached for trigger in each}
-            changes = self.changes(rule, side, at, reached)
-            if changes is None:
+            operations = self.operations(rule, side, at, reached)
+            if operations is None:
                 held.extend(Reach(rule.id, index, holder, at) for index, _, _ in reached)
+            contributions, changes = operations or ((), ())
             landings.append(
                 Landing(
                     at,
-                    changes=changes or (),
+                    contributions=contributions,
+                    changes=changes,
                     triggers=tuple(sorted(triggers, key=self.program.steps.index)),
                 )
             )
@@ -224,24 +230,47 @@ class _Fielding:
         except ValueError as error:
             raise AttachError(f"{rule.id} at {self.holders[side]}: {error}") from error
 
-    def changes(
+    def operations(
         self, rule: Rule, side: Side, at: Step[Any], reached: Reached
-    ) -> tuple[Change, ...] | None:
+    ) -> tuple[tuple[Contribution[Any], ...], tuple[Change, ...]] | None:
         carried = self.scopes[side][rule.id]
         if any(self.gated_grant(rule, source) for _, source in carried):
             return None
-        built: list[Change] = []
+        contributions: list[Contribution[Any]] = []
+        changes: list[Change] = []
         for _, effect, _ in reached:
+            if isinstance(at, Eligibility):
+                contribution = self.contribution(rule, side, at, effect)
+                if contribution is None:
+                    return None
+                contributions.append(contribution)
+                continue
             operated = self.operated(rule, side, at, effect)
             if operated is None:
                 return None
-            built.extend(operated)
+            changes.extend(operated)
         if rule.parameter is None and len(carried) > 1:
             raise AttachError(
                 f"{rule.id} at {self.holders[side]} has {len(carried)} sources, "
                 f"and no X to combine them, at {self.program.paths[at]}"
             )
-        return tuple(built)
+        return tuple(contributions), tuple(changes)
+
+    def contribution(
+        self, rule: Rule, side: Side, at: Step[Any], effect: Effect
+    ) -> Contribution[Any] | None:
+        named = effect.allow or effect.forbid
+        if named is None or effect.limit is not None:
+            return None
+        gate = self.gate(rule, side, at, effect)
+        if gate is None or any(isinstance(check, Attacks) for check in gate.checks):
+            return None
+        operation = GraphOperation.ALLOW if effect.allow else GraphOperation.FORBID
+        return Contribution(
+            operation=operation,
+            options=partial(_named, frozenset(named), gate),
+            inputs=gate.reads,
+        )
 
     def gated_grant(self, rule: Rule, source: Source) -> bool:
         if source.via is None:
@@ -365,6 +394,12 @@ class _Fielding:
         self, name: Printed, role: Role | None, side: Side, at: Step[Any]
     ) -> Step[Any] | None:
         return _nearest(name, role, side, at, self.program, self.specs)
+
+
+def _named(
+    named: frozenset[str], gate: Gate, printed: frozenset[str], *values: Hashable
+) -> frozenset[str]:
+    return named if gate.test(values, frozenset()) else frozenset()
 
 
 def _holders(fielded: Mapping[Side, Fielded]) -> dict[Side, Holder]:

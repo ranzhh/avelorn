@@ -13,6 +13,7 @@ def test_the_volley_graph_serves_the_volley_program() -> None:
     program = body.json()
     assert program["program"] == "volley"
     assert [node["path"] for node in program["nodes"]] == [
+        "volley/who-can-shoot",
         "volley/check-range",
         "volley/how-many-shots",
         "volley/attack/roll-to-hit",
@@ -32,10 +33,10 @@ def test_the_volley_graph_serves_the_volley_program() -> None:
             "collapsed": False,
         }
     ]
-    assert program["nodes"][1]["edge"]["readings"] == [
-        {"label": "shots", "outcomes": [{"value": 5, "p": 1.0}]}
+    assert program["nodes"][2]["edge"]["readings"] == [
+        {"label": "shots", "outcomes": [{"value": 8, "p": 1.0}]}
     ]
-    assert program["nodes"][2]["target"] == {
+    assert program["nodes"][3]["target"] == {
         "label": "needed",
         "outcomes": [{"value": "3+", "p": 1.0}],
     }

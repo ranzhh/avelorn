@@ -210,10 +210,14 @@ class Gate:
         return cls(live, barred) if barred else never
 
     @property
+    def checks(self) -> tuple[Check, ...]:
+        """Every condition of the gate."""
+        return (*self.when, *(self.unless or ()))
+
+    @property
     def reads(self) -> tuple[Key, ...]:
         """Every step or known the conditions compare, once each."""
-        checks = (*self.when, *(self.unless or ()))
-        return tuple(dict.fromkeys(key for check in checks for key in check.reads))
+        return tuple(dict.fromkeys(key for check in self.checks for key in check.reads))
 
     def test(self, values: tuple[Any, ...], out: frozenset[str]) -> bool:
         """Whether the gate holds in one world.

@@ -64,7 +64,7 @@ def _evaluated(
             "attacker/fielded": Fielded.of(archers, weapon),
             "target/fielded": Fielded.of(target),
             "distance": distance,
-            "who-can-shoot": True,
+            "can-shoot": True,
             "line-of-sight": True,
             "attacker/moved": False,
             "attacker/standing": Standing(archers.models, 0),
@@ -122,10 +122,10 @@ def test_the_abyssal_cloak_lands_on_the_shooter_roll_to_hit() -> None:
     ]
 
 
-def test_volley_fire_holds_a_node_where_the_volley_has_no_step_for_it() -> None:
+def test_volley_fire_lands_on_who_can_shoot() -> None:
     nodes = _attached(_archers(), Fielded.of(_deployed("elven-spearmen")))
 
-    assert nodes["attacker/elven-archers/volley-fire"].landings == ()
+    assert _landed(nodes["attacker/elven-archers/volley-fire"]) == [("volley/who-can-shoot", [])]
 
 
 def _verdicts(evaluated: Evaluated, node: str) -> Mapping[Verdict, Probability]:

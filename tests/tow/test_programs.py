@@ -19,16 +19,16 @@ REPO = TOWRepository()
 
 
 def _renamed_step(volley: dict[str, Any]) -> None:
-    volley["items"][0]["step"] = "check-ranges"
+    volley["items"][1]["step"] = "check-ranges"
 
 
 def _hit_after_wound(volley: dict[str, Any]) -> None:
-    attack = volley["items"][2]["items"]
+    attack = volley["items"][3]["items"]
     attack[0], attack[1] = attack[1], attack[0]
 
 
 def _ward_outside_the_group(volley: dict[str, Any]) -> None:
-    volley["items"].insert(3, "ward-saves")
+    volley["items"].insert(4, "ward-saves")
 
 
 def _standing_not_given(volley: dict[str, Any]) -> None:
@@ -36,15 +36,15 @@ def _standing_not_given(volley: dict[str, Any]) -> None:
 
 
 def _unknown_reading(volley: dict[str, Any]) -> None:
-    volley["items"][1]["readings"] = ["volleys"]
+    volley["items"][2]["readings"] = ["volleys"]
 
 
 def _no_tally(volley: dict[str, Any]) -> None:
-    del volley["items"][3]["tallies"]
+    del volley["items"][4]["tallies"]
 
 
 def _group_before_its_count(volley: dict[str, Any]) -> None:
-    volley["items"][1], volley["items"][2] = volley["items"][2], volley["items"][1]
+    volley["items"][2], volley["items"][3] = volley["items"][3], volley["items"][2]
 
 
 def _fact_without_a_side(volley: dict[str, Any]) -> None:
@@ -64,7 +64,7 @@ def _known_named_as_a_fact(volley: dict[str, Any]) -> None:
 
 
 def _tally_on_a_step_that_counts_none(volley: dict[str, Any]) -> None:
-    volley["items"][0]["tallies"] = ["attack"]
+    volley["items"][1]["tallies"] = ["attack"]
 
 
 @pytest.mark.parametrize(
@@ -72,39 +72,39 @@ def _tally_on_a_step_that_counts_none(volley: dict[str, Any]) -> None:
     [
         pytest.param(
             _renamed_step,
-            "volley.yaml: items[0]: check-ranges is no step of the shooting sequence",
+            "volley.yaml: items[1]: check-ranges is no step of the shooting sequence",
             id="unknown-step",
         ),
         pytest.param(
             _hit_after_wound,
-            "volley.yaml: items[2].items[0]: roll-to-wound reads roll-to-hit, "
+            "volley.yaml: items[3].items[0]: roll-to-wound reads roll-to-hit, "
             "which is not in scope",
             id="output-read-before-its-step",
         ),
         pytest.param(
             _ward_outside_the_group,
-            "volley.yaml: items[3]: ward-saves reads roll-to-wound, which is not in scope",
+            "volley.yaml: items[4]: ward-saves reads roll-to-wound, which is not in scope",
             id="output-read-outside-its-group",
         ),
         pytest.param(
             _standing_not_given,
-            "volley.yaml: items[3]: remove-casualties reads target/standing, "
+            "volley.yaml: items[4]: remove-casualties reads target/standing, "
             "which is no input and is not written",
             id="state-read-before-written",
         ),
         pytest.param(
             _unknown_reading,
-            "volley.yaml: items[1]: how-many-shots offers no reading volleys",
+            "volley.yaml: items[2]: how-many-shots offers no reading volleys",
             id="unknown-reading",
         ),
         pytest.param(
             _no_tally,
-            "volley.yaml: items[3]: remove-casualties needs the groups it tallies",
+            "volley.yaml: items[4]: remove-casualties needs the groups it tallies",
             id="tally-missing",
         ),
         pytest.param(
             _group_before_its_count,
-            "volley.yaml: items[1]: attack runs how-many-shots times, which is not in scope",
+            "volley.yaml: items[2]: attack runs how-many-shots times, which is not in scope",
             id="group-before-its-count",
         ),
         pytest.param(
@@ -129,7 +129,7 @@ def _tally_on_a_step_that_counts_none(volley: dict[str, Any]) -> None:
         ),
         pytest.param(
             _tally_on_a_step_that_counts_none,
-            "volley.yaml: items[0]: check-range sums no group",
+            "volley.yaml: items[1]: check-range sums no group",
             id="tally-on-a-step-that-counts-none",
         ),
     ],
@@ -160,7 +160,7 @@ def test_a_bool_given_as_an_int_is_refused() -> None:
         "attacker/fielded": Fielded.of(archers, "Longbow"),
         "target/fielded": Fielded.of(spearmen),
         "distance": True,
-        "who-can-shoot": True,
+        "can-shoot": True,
         "line-of-sight": True,
         "attacker/moved": False,
         "attacker/standing": Standing(10, 0),

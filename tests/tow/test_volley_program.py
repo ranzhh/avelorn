@@ -64,7 +64,7 @@ def _volley(
     models: int,
     battle_strength: int,
     distance: int = 12,
-    who_can_shoot: bool = True,
+    can_shoot: bool = True,
     line_of_sight: bool = True,
     moved: bool = False,
 ) -> Evaluated:
@@ -72,7 +72,7 @@ def _volley(
         "attacker/fielded": attacker,
         "target/fielded": target,
         "distance": distance,
-        "who-can-shoot": who_can_shoot,
+        "can-shoot": can_shoot,
         "line-of-sight": line_of_sight,
         "attacker/moved": moved,
         "attacker/standing": Standing(shooters, 0),
@@ -320,7 +320,7 @@ def test_the_panic_steps_match_legacy_make_panic_tests(
 
 
 def _corpus_volley(
-    distance: int, shooters: int = 10, who_can_shoot: bool = True, line_of_sight: bool = True
+    distance: int, shooters: int = 10, can_shoot: bool = True, line_of_sight: bool = True
 ) -> Evaluated:
     archers = Contingent.deploy("elven-archers", 10, data=REPO, frontage=5)
     spearmen = Contingent.deploy("elven-spearmen", 20, data=REPO, frontage=5)
@@ -331,7 +331,7 @@ def _corpus_volley(
         models=20,
         battle_strength=20,
         distance=distance,
-        who_can_shoot=who_can_shoot,
+        can_shoot=can_shoot,
         line_of_sight=line_of_sight,
     )
 
@@ -373,10 +373,10 @@ def test_each_side_of_a_mirror_match_reads_its_own_part() -> None:
 
 
 @pytest.mark.parametrize(
-    ("distance", "shooters", "who_can_shoot", "line_of_sight", "band", "shots"),
+    ("distance", "shooters", "can_shoot", "line_of_sight", "band", "shots"),
     [
-        pytest.param(15, 10, True, True, Band.SHORT, 5, id="short-range-at-half-range"),
-        pytest.param(30, 10, True, True, Band.LONG, 5, id="long-range-at-maximum-range"),
+        pytest.param(15, 10, True, True, Band.SHORT, 8, id="short-range-at-half-range"),
+        pytest.param(30, 10, True, True, Band.LONG, 8, id="long-range-at-maximum-range"),
         pytest.param(31, 10, True, True, Band.OUT_OF_RANGE, 0, id="out-of-range"),
         pytest.param(12, 3, True, True, Band.SHORT, 3, id="fewer-shooters-than-the-frontage"),
         pytest.param(12, 10, False, True, Band.SHORT, 0, id="nobody-can-shoot"),
@@ -386,12 +386,12 @@ def test_each_side_of_a_mirror_match_reads_its_own_part() -> None:
 def test_the_volley_counts_its_shots(
     distance: int,
     shooters: int,
-    who_can_shoot: bool,
+    can_shoot: bool,
     line_of_sight: bool,
     band: Band,
     shots: int,
 ) -> None:
-    volley = _corpus_volley(distance, shooters, who_can_shoot, line_of_sight)
+    volley = _corpus_volley(distance, shooters, can_shoot, line_of_sight)
 
     assert volley.at("volley/check-range").read("band").mass == {band: 1}
     assert volley.at("volley/how-many-shots").read("shots").mass == {shots: 1}

@@ -84,7 +84,7 @@ def graph_volley(data: Corpus) -> dict[str, object]:
             "attacker/fielded": Fielded.of(archers, "Longbow"),
             "target/fielded": Fielded.of(spearmen),
             "distance": 12,
-            "who-can-shoot": True,
+            "can-shoot": True,
             "line-of-sight": True,
             "attacker/moved": False,
             "attacker/standing": Standing(archers.models, 0),

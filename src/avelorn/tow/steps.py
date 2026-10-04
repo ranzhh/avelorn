@@ -9,6 +9,7 @@ from typing import Any
 from avelorn.core.distribution import Distribution, Kernel, Monoid, Probability
 from avelorn.core.graph import (
     Consequence,
+    Eligibility,
     Key,
     Mark,
     Measurement,
@@ -19,7 +20,7 @@ from avelorn.core.graph import (
     Step,
 )
 from avelorn.tow.changes import Folded, Payloads
-from avelorn.tow.contingent import Contingent
+from avelorn.tow.contingent import Contingent, Formation
 from avelorn.tow.engine.armour import defender_armour
 from avelorn.tow.kernels import (
     UNARMOURED,
@@ -39,12 +40,15 @@ from avelorn.tow.schema.effect import Operation, RerollOn
 from avelorn.tow.schema.quantity import Quantity
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.stage import Side
-from avelorn.tow.schema.step import StepSequence
+from avelorn.tow.schema.step import StepKind, StepSequence
 from avelorn.tow.schema.unit import Characteristic, Profile
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile
 from avelorn.tow.traits import Carries, Profiled
 
 NO_ROLL = "-"
+
+FRONT_RANK = "front-rank"
+HALF_OF_EACH_REAR_RANK = "half-of-each-rear-rank"
 
 _NATURAL = {
     RerollOn.NATURAL_1: 1,
@@ -150,8 +154,14 @@ class Kind(StrEnum):
     """Step kind."""
 
     MEASUREMENT = "measurement"
+    ELIGIBILITY = "eligibility"
     ROLL = "roll"
     CONSEQUENCE = "consequence"
+
+    @property
+    def printed(self) -> StepKind:
+        """The kind the step table prints; an eligibility is a measurement of who may act."""
+        return StepKind.MEASUREMENT if self is Kind.ELIGIBILITY else StepKind(self.value)
 
 
 @dataclass(frozen=True)
@@ -284,6 +294,10 @@ class Spec:
                     writes=writes,
                     changed=changed,
                 )
+            case Kind.ELIGIBILITY:
+                return Eligibility(
+                    name=self.name, side=side, inputs=inputs, kernel=self.kernel, writes=writes
+                )
             case Kind.CONSEQUENCE:
                 return Consequence(
                     name=self.name,
@@ -381,17 +395,38 @@ def check_range(attacker: Fielded, distance: int) -> Distribution[Band]:
     return Distribution.pure(Band.LONG if distance * 2 > reach else Band.SHORT)
 
 
+def who_can_shoot() -> Distribution[frozenset[str]]:
+    """Name the ranks that shoot on flat ground.
+
+    Returns:
+        The front rank alone.
+    """
+    return Distribution.pure(frozenset({FRONT_RANK}))
+
+
 def how_many_shots(
-    attacker: Fielded, standing: Standing, can_shoot: bool, in_sight: bool, band: Band
+    attacker: Fielded,
+    standing: Standing,
+    ranks: frozenset[str],
+    can_shoot: bool,
+    in_sight: bool,
+    band: Band,
 ) -> Distribution[int]:
-    """Count the shots.
+    """Count the shots of the ranks that shoot.
+
+    Half of each rank behind the front, rounding up, shoots when Who Can Shoot
+    names them.
 
     Returns:
         The number of shots.
     """
     if not (can_shoot and in_sight) or band is Band.OUT_OF_RANGE:
         return Distribution.pure(0)
-    return Distribution.pure(min(standing.models, attacker.frontage))
+    formation = Formation(standing.models, attacker.frontage)
+    shots = formation.files if FRONT_RANK in ranks else 0
+    if HALF_OF_EACH_REAR_RANK in ranks:
+        shots += sum((rank + 1) // 2 for rank in formation.rear_rank_sizes)
+    return Distribution.pure(shots)
 
 
 def _hit_target(attacker: Fielded) -> int:
@@ -536,6 +571,10 @@ def _landed(die: Die | None) -> int:
     return int(_succeeded(die))
 
 
+def _listed(ranks: frozenset[str]) -> str:
+    return ", ".join(sorted(ranks))
+
+
 _ATTACKER = Fact("fielded", Side.ATTACKER)
 _PRINTED = Payloads(())
 _TARGET = Fact("fielded", Side.TARGET)
@@ -558,6 +597,15 @@ def _counted(step: str) -> Offered:
 _SPECS = (
     Spec(
         sequence=StepSequence.SHOOTING,
+        name="who-can-shoot",
+        kind=Kind.ELIGIBILITY,
+        side=Side.ATTACKER,
+        reads=(),
+        kernel=who_can_shoot,
+        readings={"ranks": _offer("who-can-shoot", _listed)},
+    ),
+    Spec(
+        sequence=StepSequence.SHOOTING,
         name="check-range",
         kind=Kind.MEASUREMENT,
         side=Side.ATTACKER,
@@ -574,7 +622,8 @@ _SPECS = (
         reads=(
             _ATTACKER,
             Fact("standing", Side.ATTACKER),
-            Fact("who-can-shoot"),
+            Output("who-can-shoot"),
+            Fact("can-shoot"),
             Fact("line-of-sight"),
             Output("check-range"),
         ),
