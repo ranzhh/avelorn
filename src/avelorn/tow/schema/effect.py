@@ -13,7 +13,15 @@ from enum import StrEnum
 from itertools import combinations
 from typing import Annotated, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictInt,
+    StrictStr,
+    model_validator,
+)
 
 from avelorn.core.graph import Side as Role
 from avelorn.tow.schema.quantity import Quantity
@@ -22,7 +30,7 @@ from avelorn.tow.schema.step import BLOCKS, Step, StepKind, StepSequence
 from avelorn.tow.schema.unit import Characteristic, TroopType
 from avelorn.tow.schema.weapon import WeaponType
 
-_STRICT = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
+_STRICT = ConfigDict(extra="forbid", frozen=True)
 
 _OTHER = {Role.THIS_MODEL: Role.THE_ENEMY, Role.THE_ENEMY: Role.THIS_MODEL}
 
@@ -42,8 +50,8 @@ class FactRef(BaseModel):
     of: Role | None = None
 
 
-Amount = int | Literal["X"] | FactRef
-Value = bool | int | str | FactRef
+Amount = StrictInt | Literal["X"] | FactRef
+Value = StrictBool | StrictInt | StrictStr | FactRef
 
 
 class Comparison(BaseModel):
@@ -173,7 +181,7 @@ class When(Gates):
 
     step: Step | None = None
     by: Role | None = None
-    natural: int | None = Field(default=None, ge=1, le=6)
+    natural: StrictInt | None = Field(default=None, ge=1, le=6)
     is_: Value | None = Field(default=None, alias="is")
     needed: Comparison | None = None
 
@@ -277,8 +285,8 @@ class Bounded(BaseModel):
     model_config = _STRICT
 
     amount: Amount
-    maximum: int | None = None
-    minimum: int | None = None
+    maximum: StrictInt | None = None
+    minimum: StrictInt | None = None
 
     @model_validator(mode="after")
     def _carries_a_bound(self) -> Self:
@@ -349,7 +357,7 @@ class Limit(BaseModel):
     model_config = _STRICT
 
     per: Period
-    times: int = Field(ge=1)
+    times: StrictInt = Field(ge=1)
 
 
 _ATTRIBUTES = {Operation.SET: "set_"}
