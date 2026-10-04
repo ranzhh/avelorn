@@ -182,6 +182,16 @@ def test_mundane_arrows_meet_witness_to_destiny_alone() -> None:
     }
 
 
+def test_valour_of_ages_applies_where_heavy_casualties_force_a_panic_test() -> None:
+    (evaluated,) = _evaluated(_deployed("elven-spearmen"))
+    tested = evaluated.at("volley/heavy-casualties").read("tested").mass[True]
+
+    assert _verdicts(evaluated, "target/elven-spearmen/valour-of-ages") == {
+        Verdict.APPLIED: tested,
+        Verdict.HONOURED: 1 - tested,
+    }
+
+
 def test_a_gate_reading_a_band_check_range_never_outputs_is_refused() -> None:
     printed = REPO.rules["firing-at-long-range"]
     assert printed.graph is not None

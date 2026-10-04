@@ -483,15 +483,18 @@ def _heavy_casualties(standing: Standing, at_start_of_phase: int) -> Distributio
     return Distribution.pure(heavy_casualties(standing.models, at_start_of_phase))
 
 
-def make_panic_tests(target: Fielded, tested: bool) -> Distribution[Test]:
-    """Take the Panic test.
+def make_panic_tests(
+    target: Fielded, tested: bool, changed: tuple[Hashable, ...]
+) -> Distribution[Test]:
+    """Take the Panic test, re-rolling a failure once when a rule in force allows it.
 
     Returns:
         The test result.
     """
     if not tested:
         return Distribution.pure(Test.NOT_TAKEN)
-    passes = leadership_test(target.characteristic(Characteristic.LEADERSHIP))
+    rerolled = RerollOn.FAILED in Payloads.of(changed).rerolls()
+    passes = leadership_test(target.characteristic(Characteristic.LEADERSHIP), rerolled)
     return Distribution({Test.PASSED: passes, Test.FAILED: 1 - passes})
 
 
@@ -666,8 +669,9 @@ _SPECS = (
         name="make-panic-tests",
         kind=Kind.ROLL,
         side=Side.TARGET,
-        reads=(_TARGET, Output("heavy-casualties")),
+        reads=(_TARGET, Output("heavy-casualties"), CHANGED),
         kernel=make_panic_tests,
+        runs={Operation.REROLL: frozenset({RerollOn.FAILED})},
         target=Offered((_TARGET,), _leadership, _AGREED),
         readings={"test": _offer("make-panic-tests")},
     ),

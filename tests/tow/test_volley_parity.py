@@ -21,8 +21,6 @@ from avelorn.tow.steps import Fielded, Retreat
 
 STRIPPED = frozenset(
     {
-        "valour-of-ages",
-        "veteran",
         "volley-fire",
     }
 )
