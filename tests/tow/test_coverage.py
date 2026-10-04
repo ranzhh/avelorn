@@ -5,11 +5,15 @@ entry in ``data/tow/unmodelled.yaml`` saying why it stays open, and an entry no
 gap needs any more is stale. `avelorn coverage` prints the same report.
 """
 
+import copy
+
 import yaml
 
+from avelorn.core.registry import Registry
 from avelorn.tow.coverage import Entry, Site, coverage
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.schema.ledger import GapKind
+from avelorn.tow.schema.reference import RuleRef
 
 REPO = TOWRepository()
 REPORT = coverage(REPO)
@@ -68,6 +72,38 @@ def test_a_volley_effect_waits_for_a_side_that_carries_it_there() -> None:
     """Multiple Wounds is printed only on a combat profile, so no shooter carries it."""
     assert "multiple-wounds/shooting/remove-casualties" in UNREACHED
     assert "armour-bane/shooting/make-armour-saves" not in UNREACHED
+
+
+def test_a_volley_effect_its_step_cannot_run_is_held() -> None:
+    """Multiple Wounds on a longbow reaches Remove Casualties, which multiplies no wound yet."""
+    doctored = copy.copy(REPO)
+    wounding = RuleRef(rule="multiple-wounds", X=2)
+    doctored.weapons = Registry(
+        [
+            weapon.model_copy(
+                update={
+                    "profiles": [
+                        profile.model_copy(
+                            update={"special_rules": [*profile.special_rules, wounding]}
+                        )
+                        for profile in weapon.profiles
+                    ]
+                }
+            )
+            if weapon.id == "longbow"
+            else weapon
+            for weapon in REPO.weapons.values()
+        ],
+        kind="weapon",
+    )
+
+    held = [
+        (gap.subject, gap.reason)
+        for gap in coverage(doctored).gaps
+        if gap.kind is GapKind.HELD_EFFECT
+    ]
+
+    assert held == [("multiple-wounds/shooting/remove-casualties", None)]
 
 
 def test_a_rule_granted_only_by_the_graph_is_referenced_there() -> None:

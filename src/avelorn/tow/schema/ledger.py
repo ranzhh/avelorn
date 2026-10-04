@@ -20,6 +20,7 @@ class GapKind(StrEnum):
     INERT_OPTION = "inert-option"
     UNATTACHED_EFFECT = "unattached-effect"
     UNREACHED_EFFECT = "unreached-effect"
+    HELD_EFFECT = "held-effect"
     MISSING_MECHANIC = "missing-mechanic"
 
 
@@ -30,8 +31,9 @@ class Acknowledgement(BaseModel):
     effects (one entry covers every place referencing it), ``<unit>/<row>`` for a
     profile row, the weapon or armour slug for printed notes, ``<unit>/<option>``
     for an option, ``<rule>/<sequence>/<step>`` for an effect needing a step no
-    program registers yet and for a volley effect no corpus side reaches, and the
-    mechanic's slug for a mechanic a rule needs.
+    program registers yet, for a volley effect no corpus side reaches and for one
+    the volley's step cannot run, and the mechanic's slug for a mechanic a rule
+    needs.
     """
 
     model_config = ConfigDict(extra="forbid")
