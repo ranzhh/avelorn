@@ -77,4 +77,7 @@ def with_hand_authored[T: BaseModel](fresh: T, path: Path) -> tuple[T, list[str]
             f"{'was' if len(kept) == 1 else 'were'} written by hand; "
             "re-verify them against the new wording"
         )
-    return fresh.model_copy(update=kept), warnings
+    merged = fresh.model_copy(update=kept)
+    if isinstance(merged, Rule) and isinstance(existing, Rule):
+        merged = merged.with_graph(existing.graph)
+    return merged, warnings

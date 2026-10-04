@@ -10,7 +10,10 @@ paragraphs:
     characteristic to 1 (before any other modifiers are applied). If a model has both this rule and Strike First, the
     two rules cancel one another out.
 # The set lands before the additive folds, so a charge's +1 lifts this to 2.
-# The cancellation with Strike First is structural (see strike-first.yaml).
 effects:
-  - set:
-      I: 1
+  - set: {I: 1}
+    of: this-model
+    at: {step: who-strikes-first, by: this-model}
+    legacy: {}
+  - cancels: {rule: strike-first}
+    at: {step: who-strikes-first, by: this-model}

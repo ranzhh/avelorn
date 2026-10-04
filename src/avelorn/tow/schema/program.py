@@ -5,13 +5,7 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict, Field
 
 from avelorn.tow.schema.stage import Side
-
-
-class StepSequence(StrEnum):
-    """A printed sequence."""
-
-    SHOOTING = "shooting"
-    PANIC = "panic"
+from avelorn.tow.schema.step import StepSequence
 
 
 class FactType(StrEnum):
@@ -23,10 +17,25 @@ class FactType(StrEnum):
     FIELDED = "fielded"
 
 
+class DerivedFact(StrEnum):
+    """A printed quantity with no step of its own, worked out at the step that reads it."""
+
+    RANK_BONUS = "rank-bonus"
+    UNIT_STRENGTH = "unit-strength"
+
+
 class Per(StrEnum):
     """A state fact's key."""
 
     SIDE = "side"
+
+
+class Lifetime(StrEnum):
+    """How long a state fact holds before it is cleared."""
+
+    TURN = "turn"
+    COMBAT = "combat"
+    GAME = "game"
 
 
 class StateFact(BaseModel):
@@ -37,6 +46,7 @@ class StateFact(BaseModel):
     fact: str
     type: FactType
     per: Per
+    lasts: Lifetime
 
 
 class StateFile(BaseModel):

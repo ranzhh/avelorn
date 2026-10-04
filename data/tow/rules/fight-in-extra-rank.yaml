@@ -5,13 +5,14 @@ category: Troop Types
 paragraphs:
   - Certain weapons, such as thrusting or throwing spears, allow warriors not in the fighting rank
     to attack from behind their comrades. A model with this special rule may make a supporting attack.
-# The `movement.charge: false` gate is thrusting spear's printed restriction
-# ("cannot make a supporting attack during a turn in which it charged") — our
-# only carrier. A Fight-in-Extra-Rank weapon without it would move the gate
-# onto the weapon.
+# The no-charge gate is the printed restriction of every weapon carrying the
+# rule (thrusting spear, cavalry spear, ceremonial halberd). A carrier without
+# it would move the gate onto the weapon.
 effects:
-  - when:
-      movement:
-        charge: false
-    add:
-      supporting-ranks: 1
+  - unless:
+      facts: [{fact: charges-made, of: this-model, more-than: 0}]
+    allow: [supporting-attack]
+    at: {step: who-can-fight, by: this-model}
+    legacy:
+      when: {movement: {charge: false}}
+      add: {supporting-ranks: 1}

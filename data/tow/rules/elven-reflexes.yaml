@@ -7,10 +7,12 @@ flavour: Elves possess phenomenal speed and grace, striking at their enemies fas
 paragraphs:
   - A model with this special rule (but not its mount) has a +1 modifier to its Initiative characteristic (to a maximum of
     10) during the first round of any combat.
-# "(but not its mount)" is not modelled: mounts do not exist in the engine yet.
+not_on: [mount]
 effects:
   - when:
-      combat:
-        first_round: true
-    add:
-      I: { amount: 1, maximum: 10 }
+      facts: [{fact: rounds-fought, of: this-model, is: 0}]
+    add: {I: {amount: 1, maximum: 10}}
+    of: this-model
+    at: {step: who-strikes-first, by: this-model}
+    legacy:
+      when: {combat: {first_round: true}}

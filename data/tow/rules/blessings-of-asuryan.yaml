@@ -9,8 +9,8 @@ paragraphs:
   - A model with this special rule has a 5+ Ward save against any wounds suffered that were caused by an attack that has the
     Flaming Attacks special rule.
 effects:
-  - when:
-      target_of:
-        flaming: true
-    set:
-      ward-save: 5
+  - when: {attack: {flaming: true}}
+    set: {ward-save: 5}
+    at: {step: ward-saves, by: this-model}
+    legacy:
+      when: {target_of: {flaming: true}}

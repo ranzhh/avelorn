@@ -8,8 +8,11 @@ paragraphs:
     rigid ranks and files. Instead, it moves as a single loose group or rough line. This enables Skirmishers to move quickly
     and take advantage of terrain to shelter from the enemy.
 # The -1 To Hit is conferred by a grant, so "Enemy Fire (Skirmishers)" keeps
-# its effects on its own entry. Same shape as skirmishers.yaml.
+# its effects on its own entry.
+needs: [formations]
 effects:
   - grants: enemy-fire-skirmishers
+    to: this-model
+    legacy: {}
 notes: only the formation's Enemy Fire rule is modelled; the loose group's
   movement, its lack of ranks and files, and its use of terrain are not.

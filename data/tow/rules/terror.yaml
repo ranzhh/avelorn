@@ -16,12 +16,17 @@ paragraphs:
 # The printed "if the winning side ... includes one or more units that cause
 # Terror" is the seam's own structure: only a loser rolls against its
 # Leadership, and its foe is then the winner.
+needs: [psychology-tests, characters]
 effects:
-  - enemy: true
-    when:
-      combat: true
-    add:
-      Ld: -1
+  - when: {step: who-is-the-winner, by: this-model, is: won}
+    add: {Ld: -1}
+    of: the-enemy
+    at: {step: break-test, by: the-enemy}
+    legacy:
+      enemy: true
+      when: {combat: true}
+  - grants: fear
+    to: this-model
 notes: only the Break-test Leadership malus is modelled — the Leadership test
   on declaring a charge against a Terror-causer (and the Flee it forces), the
   Fear interplay, and immunity to Terror are not.

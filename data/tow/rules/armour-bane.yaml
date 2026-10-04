@@ -13,9 +13,8 @@ paragraphs:
   - For example, if a natural 6 is rolled when rolling To Wound with a weapon that has an AP of ' - ' and the Armour Bane
     (1) special rule, its AP counts as being -1 when making an Armour Save roll against that wound.
 effects:
-  - when:
-      natural:
-        face: 6
-        roll: roll-to-wound
-    add:
-      armour-piercing: X
+  - when: {step: roll-to-wound, by: this-model, natural: 6}
+    add: {armour-piercing: X}
+    at: {step: make-armour-saves, by: the-enemy}
+    legacy:
+      when: {natural: {face: 6, roll: roll-to-wound}}

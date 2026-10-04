@@ -10,7 +10,9 @@ paragraphs:
 # The shield is withdrawn from what the model effectively wears — the piece and
 # its whole bonus, not a counter-modifier. Kept against shooting, as printed.
 effects:
-  - when:
-      combat: true
-    bars: Shield
+  - bar: shield
+    at: {step: choose-combat-and-determine-who-can-fight, by: this-model}
+    legacy:
+      when: {combat: true}
+      bars: Shield
 notes: That the model cannot even be armed with the pairing is equipment legality (#17).

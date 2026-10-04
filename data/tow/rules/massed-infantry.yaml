@@ -8,9 +8,12 @@ paragraphs:
     with this rule, that side may claim a bonus of +1 combat result point.
 # In the one-on-one combats modelled today, "one or more units with this rule"
 # is simply the side that carries it.
+needs: [multiple-units-in-combat]
 effects:
   - when:
-      combat:
-        outnumbers: true
-    add:
-      combat-result: 1
+      facts:
+        - {fact: unit-strength, of: this-model, more-than: {fact: unit-strength, of: the-enemy}}
+    add: {combat-result: 1}
+    at: {step: calculate-combat-result, by: this-model}
+    legacy:
+      when: {combat: {outnumbers: true}}

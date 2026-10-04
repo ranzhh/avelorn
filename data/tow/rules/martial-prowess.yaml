@@ -14,9 +14,17 @@ paragraphs:
 # The flank/rear supporting-attacks clause is unexpressed: it has no effect on
 # the frontal combat modelled today and waits on #28, rather than being
 # approximated with a kind bespoke to one rule.
+needs: [facings]
 effects:
   - when:
-      combat:
-        first_round: true
-    add:
-      WS: 1
+      facts: [{fact: rounds-fought, of: this-model, is: 0}]
+    add: {WS: 1}
+    of: this-model
+    at: {step: roll-to-hit, by: this-model, in: combat}
+    legacy:
+      when: {combat: {first_round: true}}
+  - when:
+      facts: [{fact: rounds-fought, of: this-model, is: 0}]
+    add: {WS: 1}
+    of: this-model
+    at: {step: roll-to-hit, by: the-enemy, in: combat}

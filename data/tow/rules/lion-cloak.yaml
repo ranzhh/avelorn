@@ -9,12 +9,9 @@ flavour: The thick pelt of a Chracian White Lion offers exemplary protection aga
 paragraphs:
   - A model with this special rule improves its armour value by 1 (to a maximum of 2+) against non-magical shooting
     attacks.
-# A `target_of` gate, not a state gate like Parry's: this reads the incoming
-# attack, which is why it does not help against a magical bow.
 effects:
-  - when:
-      target_of:
-        kind: shooting
-        magical: false
-    add:
-      armour-value: { amount: 1, maximum: 2 }
+  - when: {attack: {magical: false}}
+    add: {armour-value: {amount: 1, maximum: 2}}
+    at: {step: make-armour-saves, by: this-model, in: shooting}
+    legacy:
+      when: {target_of: {kind: shooting, magical: false}}

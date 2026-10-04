@@ -9,8 +9,10 @@ paragraphs:
   - During the Combat phase, a model with this special rule that is engaged in combat improves its Initiative
     characteristic to 10 (before any other modifiers are applied). If a model has both this rule and Strike Last, the
     two rules cancel one another out.
-# The cancellation with Strike Last is honoured structurally, not authored: two
-# rules setting one characteristic to different values cancel in the fold.
 effects:
-  - set:
-      I: 10
+  - set: {I: 10}
+    of: this-model
+    at: {step: who-strikes-first, by: this-model}
+    legacy: {}
+  - cancels: {rule: strike-last}
+    at: {step: who-strikes-first, by: this-model}

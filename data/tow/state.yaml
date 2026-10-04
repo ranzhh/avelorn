@@ -2,6 +2,24 @@ facts:
   - fact: standing
     type: standing
     per: side
+    lasts: game
   - fact: moved
     type: bool
     per: side
+    lasts: turn
+  - fact: charges-made
+    type: int
+    per: side
+    lasts: turn
+  - fact: charges-received
+    type: int
+    per: side
+    lasts: turn
+  - fact: rounds-fought
+    type: int
+    per: side
+    lasts: combat
+  - fact: break-tests-taken
+    type: int
+    per: side
+    lasts: game

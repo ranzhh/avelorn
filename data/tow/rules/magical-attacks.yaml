@@ -8,7 +8,8 @@ paragraphs:
   - Any attack made or hit caused by a model with this special rule, or made using a weapon with this special rule, is a 'Magical'
     attack.
   - Note that all spells are considered to have this special rule, as are any hits caused by magic items.
+needs: [spells, magic-items]
 effects:
-  - attack:
-      magical: true
+  - legacy:
+      attack: {magical: true}
 notes: Spells and magic-item hits carry this rule too; neither exists to mark.

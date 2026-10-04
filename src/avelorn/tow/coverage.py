@@ -17,10 +17,13 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict
 
 from avelorn.tow.data import TOWRepository
+from avelorn.tow.schema.effect import Effect
 from avelorn.tow.schema.ledger import Acknowledgement, GapKind
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import GrantEffect, Rule
+from avelorn.tow.schema.step import Step, StepSequence
 from avelorn.tow.schema.unit import OptionKind, UnitOption
+from avelorn.tow.steps import STEPS
 
 
 class Entry(StrEnum):
@@ -125,9 +128,13 @@ def rule_references(data: TOWRepository) -> Iterator[tuple[RuleRef, Site]]:
             for reference in profile.special_rules:
                 yield reference, Site(entry=Entry.WEAPON, id=slug)
     for slug, rule in sorted(data.rules.items()):
+        site = Site(entry=Entry.RULE, id=slug)
         for effect in rule.effects:
             if isinstance(effect, GrantEffect):
-                yield effect.grants, Site(entry=Entry.RULE, id=slug)
+                yield effect.grants, site
+        for addressed in () if rule.graph is None else rule.graph.effects:
+            if addressed.grants is not None:
+                yield addressed.grants, site
 
 
 def rule_gap(rule: Rule) -> GapKind | None:
@@ -142,6 +149,50 @@ def rule_gap(rule: Rule) -> GapKind | None:
     return None if rule.effects else GapKind.RULE_WITHOUT_EFFECTS
 
 
+def unattached(effect: Effect) -> Iterator[tuple[StepSequence, Step]]:
+    """Every printed step the effect needs where no program registers it.
+
+    The landing is needed in each sequence it can land in. A trigger, the
+    block it is narrowed to, or a step read as a fact is needed in at least
+    one sequence that prints it.
+
+    Yields:
+        The sequence and the step.
+    """
+    if effect.at is not None:
+        for sequence in effect.at.sequences:
+            if (sequence, effect.at.step) not in STEPS:
+                yield sequence, effect.at.step
+    for step in sorted(_read_steps(effect)):
+        if not any((sequence, step) in STEPS for sequence in step.sequences):
+            yield from ((sequence, step) for sequence in step.sequences)
+
+
+def _read_steps(effect: Effect) -> set[Step]:
+    named = {Step(fact) for fact in effect.facts if fact in Step}
+    if effect.when is not None and effect.when.step is not None:
+        named.add(effect.when.step)
+    if effect.at is not None and isinstance(effect.at.in_, Step):
+        named.add(effect.at.in_)
+    return named
+
+
+def _graph_gaps(slug: str, rule: Rule) -> Iterator[tuple[GapKind, str, Site]]:
+    """The gaps in a rule as the graph reads it.
+
+    Yields:
+        Each gap's kind, its ledger subject, and the rule as its site.
+    """
+    if rule.graph is None:
+        return
+    site = Site(entry=Entry.RULE, id=slug)
+    for effect in rule.graph.effects:
+        for sequence, step in unattached(effect):
+            yield GapKind.UNATTACHED_EFFECT, f"{slug}/{sequence}/{step}", site
+    for mechanic in rule.graph.needs:
+        yield GapKind.MISSING_MECHANIC, mechanic, site
+
+
 def _order(kind: GapKind, subject: str) -> tuple[int, str]:
     return list(GapKind).index(kind), subject
 
@@ -152,9 +203,13 @@ def _scan(data: TOWRepository) -> Iterator[tuple[GapKind, str, Site]]:
     Yields:
         The gap's kind, its ledger subject, and the entry it occurs in.
     """
+    referenced = set()
     for reference, site in rule_references(data):
+        referenced.add(reference.rule)
         if (kind := rule_gap(data.rules[reference.rule])) is not None:
             yield kind, reference.rule, site
+    for slug in sorted(referenced):
+        yield from _graph_gaps(slug, data.rules[slug])
     for slug, unit in sorted(data.units.items()):
         for row in unit.unread_rows:
             yield GapKind.PROFILE_ROW_UNREAD, f"{slug}/{row.name}", Site(entry=Entry.UNIT, id=slug)

@@ -10,8 +10,8 @@ paragraphs:
 # Every attack the engine resolves is an enemy's, so "enemy attack" adds no
 # further gate; wounds from spells are not modelled, so nothing over-applies.
 effects:
-  - when:
-      target_of:
-        magical: false
-    set:
-      ward-save: 6
+  - when: {attack: {magical: false}}
+    set: {ward-save: 6}
+    at: {step: ward-saves, by: this-model}
+    legacy:
+      when: {target_of: {magical: false}}
