@@ -1,13 +1,22 @@
 """Step registry."""
 
-from collections.abc import Callable, Hashable, Mapping
+from collections.abc import Callable, Hashable, Iterator, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Any
 
 from avelorn.core.distribution import Distribution, Kernel, Monoid, Probability
-from avelorn.core.graph import Consequence, Key, Measurement, Reading, Roll, State, Step
+from avelorn.core.graph import (
+    Consequence,
+    Key,
+    Measurement,
+    Reading,
+    Roll,
+    Source,
+    State,
+    Step,
+)
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.engine.armour import defender_armour
 from avelorn.tow.kernels import (
@@ -23,11 +32,12 @@ from avelorn.tow.kernels import (
     shooting_hit_target,
     wound_target,
 )
+from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.stage import Side
 from avelorn.tow.schema.step import StepSequence
 from avelorn.tow.schema.unit import Characteristic, Profile
-from avelorn.tow.schema.weapon import WeaponProfile
-from avelorn.tow.traits import Profiled
+from avelorn.tow.schema.weapon import Weapon, WeaponProfile
+from avelorn.tow.traits import Carries, Profiled
 
 NO_ROLL = "-"
 
@@ -42,6 +52,8 @@ class Fielded:
     weapon: WeaponProfile | None = None
     armour: int | None = None
     ward: int | None = None
+    wielded: Weapon | None = None
+    carried: tuple[tuple[RuleRef, Source], ...] = ()
 
     def characteristic(self, c: Characteristic) -> int | None:
         """The part's printed value for a characteristic.
@@ -51,12 +63,21 @@ class Fielded:
         """
         return self.row.characteristic(c)
 
+    def sources(self) -> Iterator[tuple[RuleRef, Source]]:
+        """The rules the side carries into the step, with what gives each.
+
+        Yields:
+            The reference, and its source.
+        """
+        yield from self.carried
+
     @classmethod
     def of(cls, contingent: Contingent, weapon: str | None = None) -> "Fielded":
         """Field a contingent as one part.
 
         The armour value folds from the armour worn. A ward comes only from rules,
-        so a side fielded from the corpus has none.
+        so a side fielded from the corpus has none. The side carries the rules of
+        its datasheet, its troop type, and the profile its weapon shoots with.
 
         Returns:
             The fielded side.
@@ -64,17 +85,25 @@ class Fielded:
         Raises:
             ValueError: ``weapon`` has no missile profile.
         """
-        profile = None
+        unit = contingent.unit
+        carriers: tuple[Carries, ...] = (unit, unit.rank_and_file)
+        carried = [pair for carrier in carriers for pair in carrier.sources()]
+        wielded = profile = None
         if weapon is not None:
-            profile = contingent.loadout.weapon(weapon).missile_profile
+            wielded = contingent.loadout.weapon(weapon)
+            profile = wielded.missile_profile
             if profile is None:
                 raise ValueError(f"{weapon} has no missile profile; it cannot shoot")
+            shot = profile.name or wielded.name
+            carried += [pair for pair in wielded.sources() if pair[1].profile == shot]
         return cls(
-            part=contingent.unit.id,
-            row=contingent.unit.main,
+            part=unit.id,
+            row=unit.main,
             frontage=contingent.frontage,
             weapon=profile,
             armour=defender_armour(contingent.loadout.armour),
+            wielded=wielded,
+            carried=tuple(carried),
         )
 
 

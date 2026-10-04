@@ -8,12 +8,14 @@ of "-" becomes 0.
 """
 
 import re
+from collections.abc import Iterator
 from enum import StrEnum
 from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.functional_validators import BeforeValidator
 
+from avelorn.core.graph import Carrier, Source
 from avelorn.tow.schema.reference import RuleRef
 
 _RELATIVE_STRENGTH_RE = re.compile(r"S([+-]\d+)?")
@@ -137,6 +139,18 @@ class Weapon(BaseModel):
     weapon_type: WeaponType | None = None  # the rulebook family; None until a rule needs it
     profiles: list[WeaponProfile] = Field(min_length=1)
     notes: str | None = None  # printed usage restrictions, verbatim
+
+    def sources(self) -> Iterator[tuple[RuleRef, Source]]:
+        """The rules each profile prints, carried by this weapon under that profile's name.
+
+        A profile with no name of its own goes by the weapon's.
+
+        Yields:
+            The reference, and its source.
+        """
+        for profile in self.profiles:
+            for reference in profile.special_rules:
+                yield reference, Source(Carrier.WEAPON, self.id, profile.name or self.name)
 
     @property
     def missile_profile(self) -> WeaponProfile | None:

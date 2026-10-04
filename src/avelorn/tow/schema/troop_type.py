@@ -9,10 +9,12 @@ each member — how it ranks up, the special rules it confers, and its base
 size in time.
 """
 
+from collections.abc import Iterator
 from typing import assert_never
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from avelorn.core.graph import Carrier, Source
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.unit_strength import UnitStrength, UnitStrengthMarker
 
@@ -41,6 +43,15 @@ class TroopTypeProfile(BaseModel):
     models_per_rank: int | None = Field(default=None, ge=1)
     max_rank_bonus: int = Field(default=0, ge=0)
     special_rules: tuple[RuleRef, ...] = ()
+
+    def sources(self) -> Iterator[tuple[RuleRef, Source]]:
+        """The rules the troop type confers, each carried by the model.
+
+        Yields:
+            The reference, and its source.
+        """
+        for reference in self.special_rules:
+            yield reference, Source(Carrier.MODEL)
 
     def unit_strength_per_model(self, wounds: int | None) -> int:
         """This troop type's Unit Strength for one model of ``wounds`` Wounds.
