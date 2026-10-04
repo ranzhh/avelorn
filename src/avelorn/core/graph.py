@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Hashable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
+from fractions import Fraction
 from functools import cached_property, partial
 from inspect import signature
 from types import MappingProxyType
@@ -50,6 +51,12 @@ def _shown(value: object) -> int | str:
 
 def _itself[T](value: T) -> T:
     return value
+
+
+def _divided(p: Probability, weight: Probability) -> Probability:
+    if isinstance(p, int) and isinstance(weight, int):
+        return Fraction(p, weight)
+    return p / weight
 
 
 def _accepts(function: Callable[..., Any], count: int) -> bool:
@@ -529,7 +536,7 @@ class Decision[Out: Hashable](Amended[Out, Out]):
             return world.keeping(entry)
 
         within = {
-            world: p / weight
+            world: _divided(p, weight)
             for world, p in resolved.mass.items()
             if world.of(self) == body.option
         }

@@ -1352,6 +1352,26 @@ def test_a_node_granted_only_through_a_declined_node_is_honoured() -> None:
     ] == [(True, {Verdict.APPLIED: 1}), (False, {Verdict.HONOURED: 1})]
 
 
+def _three_faces() -> Distribution[int]:
+    return Distribution({face: Fraction(1, 3) for face in (1, 2, 3)})
+
+
+def test_a_toggle_lane_keeps_its_masses_exact() -> None:
+    die = Roll[int](name="die", side="target", kernel=_three_faces, target=Scalar("t", 1))
+    face = die.output("face", Monoid(0))
+    die.show(face)
+    program = Program.build("toggled", _SIDES, (die,))
+    program.attach(
+        (RuleNode(rule="stubborn", name="Stubborn", holder=_TARGET, sources=_MODEL, may=True),)
+    )
+
+    third = Fraction(1, 3)
+    assert [lane.read(die, face).mass for lane in program.evaluate()] == [
+        {1: third, 2: third, 3: third},
+        {1: third, 2: third, 3: third},
+    ]
+
+
 def test_a_decision_inside_a_repeat_is_refused() -> None:
     once = Measurement[int](name="once", side="attacker", kernel=_one)
     weapon = Decision[str](name="weapon", side="attacker", options={"hand": ()}, otherwise="hand")
