@@ -24,6 +24,7 @@ from pydantic import (
     model_validator,
 )
 
+from avelorn.core.graph import Carrier
 from avelorn.tow.schema.quantity import Quantity
 from avelorn.tow.schema.reference import RuleRef, Slug
 from avelorn.tow.schema.step import BLOCKS, Step, StepKind, StepSequence
@@ -151,17 +152,6 @@ class FoeGate(BaseModel):
         if self.troop_type is None and self.army is None and self.has is None:
             raise ValueError("a foe gate names a troop type, an army or a rule")
         return self
-
-
-class Carrier(StrEnum):
-    """What carries a rule (what-special-rules-does-it-have)."""
-
-    MODEL = "model"
-    WEAPON = "weapon"
-    ARMOUR = "armour"
-    ITEM = "item"
-    EFFECT = "effect"
-    CORE = "core"
 
 
 class Gates(BaseModel):

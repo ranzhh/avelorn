@@ -14,9 +14,14 @@ from avelorn.core.errors import AvelornError
 class GraphError(AvelornError): ...
 
 
-class Bearer(StrEnum):
-    THIS_MODEL = "this-model"
-    THE_ENEMY = "the-enemy"
+class Carrier(StrEnum):
+    """What carries a rule (what-special-rules-does-it-have)."""
+
+    MODEL = "model"
+    WEAPON = "weapon"
+    ARMOUR = "armour"
+    ITEM = "item"
+    EFFECT = "effect"
     CORE = "core"
 
 
@@ -727,37 +732,81 @@ class Body(Block):
 
 
 @dataclass(frozen=True)
+class Holder:
+    """Who holds a rule at a step: a part of one side."""
+
+    side: str
+    part: str
+
+    def __str__(self) -> str:
+        return f"{self.side}/{self.part}"
+
+
+@dataclass(frozen=True)
+class Source:
+    """One thing that gives a holder a rule; ``via`` names the node that granted it."""
+
+    carrier: Carrier
+    item: str | None = None
+    profile: str | None = None
+    via: str | None = None
+
+    def view(self) -> dict[str, Any]:
+        return {
+            "carrier": self.carrier.value,
+            "item": self.item,
+            "profile": self.profile,
+            "via": self.via,
+        }
+
+
+@dataclass(frozen=True)
 class Landing:
     at: Step[Any]
     contributions: tuple[Contribution[Any], ...] = ()
     moves: tuple[int, ...] = ()
+    triggers: tuple[Step[Any], ...] = ()
 
-    def view(self, paths: Mapping[Any, str], rule: str, lane: "Lane") -> dict[str, Any]:
+    def view(self, paths: Mapping[Any, str], node: str, lane: "Lane") -> dict[str, Any]:
         verdicts = []
         if self.at in lane.edges:
-            read = lane.verdicts(rule, self.at).mass
+            read = lane.verdicts(node, self.at).mass
             verdicts = [
                 {"verdict": verdict.value, "p": float(read[verdict])}
                 for verdict in Verdict
                 if verdict in read
             ]
-        return {"at": paths[self.at], "verdicts": verdicts}
+        return {
+            "at": paths[self.at],
+            "triggers": [paths[trigger] for trigger in self.triggers],
+            "verdicts": verdicts,
+        }
 
 
 @dataclass(frozen=True)
 class RuleNode:
+    """One rule at one holder, with every source that gives it the rule."""
+
     rule: str
     name: str
-    bearer: Bearer
+    holder: Holder
+    sources: tuple[Source, ...]
     landings: tuple[Landing, ...] = ()
     may: bool = False
 
+    @property
+    def id(self) -> str:
+        return f"{self.holder}/{self.rule}"
+
     def view(self, paths: Mapping[Any, str], lane: "Lane") -> dict[str, Any]:
         return {
+            "id": self.id,
             "rule": self.rule,
             "name": self.name,
-            "bearer": self.bearer.value,
-            "landings": [landing.view(paths, self.rule, lane) for landing in self.landings],
+            "holder": {"side": self.holder.side, "part": self.holder.part},
+            "may": self.may,
+            "sources": [source.view() for source in self.sources],
+            "landings": [landing.view(paths, self.id, lane) for landing in self.landings],
         }
 
 
@@ -770,8 +819,8 @@ class Program:
     steps: list[Step[Any]] = field(default_factory=list)
     blocks: list[Block] = field(default_factory=list)
     decisions: list[Decision[Any]] = field(default_factory=list)
-    rules: list[RuleNode] = field(default_factory=list)
-    toggles: dict[str, May] = field(default_factory=dict)
+    rules: dict[str, RuleNode] = field(default_factory=dict)
+    toggles: dict[tuple[str, str], May] = field(default_factory=dict)
     amendments: dict[Step[Any], list[Amendment]] = field(default_factory=dict)
     modifiers: dict[Step[Any], list[Modifier]] = field(default_factory=dict)
     states: list[State[Any]] = field(default_factory=list)
@@ -855,34 +904,57 @@ class Program:
     def amending(self, step: Step[Any]) -> tuple[Amendment, ...]:
         return tuple(self.amendments.get(step, ()))
 
-    def attach(self, rule: RuleNode) -> None:
-        if any(attached.rule == rule.rule for attached in self.rules):
-            raise GraphError(f"{rule.rule} is attached to {self.name} twice")
-        if rule.may and rule.bearer is Bearer.CORE:
-            raise GraphError(f"{rule.rule} is a core rule, which no player may decline")
-        for landing in rule.landings:
-            self.check_landing(rule.rule, landing)
-        if rule.may:
-            toggle = May(name=rule.rule, side=str(rule.bearer))
-            toggle.declare(self, f"{self.name}/may", [])
-            self.toggles[rule.rule] = toggle
-        for landing in rule.landings:
-            path = self.paths[landing.at]
-            for contribution in landing.contributions:
-                self.reach(path, contribution.inputs, list(self.visible[landing.at]))
-                self.amendments.setdefault(landing.at, []).append(
-                    Amendment(rule.rule, contribution)
-                )
-            for move in landing.moves:
-                self.modifiers.setdefault(landing.at, []).append(Modifier(rule.rule, move))
-        self.rules.append(rule)
+    def attach(self, nodes: tuple[RuleNode, ...]) -> None:
+        named = {**self.rules}
+        for node in nodes:
+            if node.id in named:
+                raise GraphError(f"{node.id} is attached to {self.name} twice")
+            named[node.id] = node
+        for node in nodes:
+            self.check_node(node, named)
+        for node in nodes:
+            if node.may:
+                self.toggle(node.holder.side, node.rule)
+            for landing in node.landings:
+                path = self.paths[landing.at]
+                for contribution in landing.contributions:
+                    self.reach(path, contribution.inputs, list(self.visible[landing.at]))
+                    self.amendments.setdefault(landing.at, []).append(
+                        Amendment(node.id, contribution)
+                    )
+                for move in landing.moves:
+                    self.modifiers.setdefault(landing.at, []).append(Modifier(node.id, move))
+            self.rules[node.id] = node
         self.settle_liveness()
+
+    def check_node(self, node: RuleNode, named: Mapping[str, RuleNode]) -> None:
+        if not node.sources:
+            raise GraphError(f"{node.id} has no source")
+        if node.holder.side not in self.sides:
+            raise GraphError(f"{node.id} is held by {node.holder.side}, no side of {self.name}")
+        for source in node.sources:
+            if source.via is not None and source.via not in named:
+                raise GraphError(f"{node.id} is granted via {source.via}, which is no node")
+        if node.may and all(source.carrier is Carrier.CORE for source in node.sources):
+            raise GraphError(f"{node.id} is a core rule, which no player may decline")
+        for landing in node.landings:
+            self.check_landing(node.id, landing)
+
+    def toggle(self, side: str, rule: str) -> None:
+        if (side, rule) in self.toggles:
+            return
+        toggle = May(name=rule, side=side)
+        toggle.declare(self, f"{self.name}/may/{side}", [])
+        self.toggles[side, rule] = toggle
 
     def check_landing(self, rule: str, landing: Landing) -> None:
         at = landing.at
         if at not in self.paths:
             raise GraphError(f"{rule} lands on {at.name}, which is not declared")
         path = self.paths[at]
+        for trigger in landing.triggers:
+            if trigger not in self.visible[at]:
+                raise GraphError(f"{rule} at {path} is triggered by {trigger.name}, not in scope")
         if landing.contributions and not isinstance(at, Amended):
             raise GraphError(f"{rule} amends {path}, which settles no options")
         if landing.moves and not isinstance(at, Roll):
@@ -946,17 +1018,23 @@ class Lane:
     edges: dict[Step[Any], Edge] = field(default_factory=dict)
     judged: dict[tuple[Step[Any], str], Distribution[Verdict]] = field(default_factory=dict)
 
-    def declined(self, rule: str) -> bool:
-        toggle = self.program.toggles.get(rule)
-        return toggle is not None and not self.choices[toggle]
+    def declined(self, node: str) -> bool:
+        held = self.program.rules[node]
+        toggle = self.program.toggles.get((held.holder.side, held.rule))
+        if toggle is not None and not self.choices[toggle]:
+            return True
+        granters = [source.via for source in held.sources]
+        return all(granter is not None and self.declined(granter) for granter in granters)
 
-    def verdicts(self, rule: str, at: Step[Any]) -> Distribution[Verdict]:
+    def verdicts(self, node: str, at: Step[Any]) -> Distribution[Verdict]:
         if at not in self.edges:
             raise GraphError(f"{self.program.paths[at]} did not run in this lane")
-        if any(each.rule == rule for each in self.program.amending(at)):
-            return self.judged[at, rule]
-        if any(each.rule == rule for each in self.program.modifiers.get(at, ())):
-            return Distribution.pure(Verdict.HONOURED if self.declined(rule) else Verdict.APPLIED)
+        if self.declined(node):
+            return Distribution.pure(Verdict.HONOURED)
+        if any(each.rule == node for each in self.program.amending(at)):
+            return self.judged[at, node]
+        if any(each.rule == node for each in self.program.modifiers.get(at, ())):
+            return Distribution.pure(Verdict.APPLIED)
         return Distribution.pure(Verdict.HELD)
 
     def read[T: Hashable](self, step: Step[Any], projection: Projection[T]) -> Distribution[T]:
@@ -973,7 +1051,7 @@ class Lane:
             "sides": list(self.program.sides),
             "nodes": [step.view(paths, self) for step in self.program.steps],
             "blocks": [block.view(paths) for block in self.program.blocks],
-            "rules": [rule.view(paths, self) for rule in self.program.rules],
+            "rules": [node.view(paths, self) for node in self.program.rules.values()],
             "lanes": [
                 {"decision": paths[decision], "outcome": str(outcome)}
                 for decision, outcome in self.choices.items()

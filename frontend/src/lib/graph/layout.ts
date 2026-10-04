@@ -229,7 +229,7 @@ function wire(
 	gap: number
 ): { edges: PlacedEdge[]; landings: PlacedLanding[] } {
 	const boxes = boxesOf(steps, blocks);
-	const cards = new Map(rail.map((placed) => [placed.rule.rule, placed.box]));
+	const cards = new Map(rail.map((placed) => [placed.rule.id, placed.box]));
 	return {
 		edges: edges.map((edge) => {
 			const start = right(boxes.get(edge.from)!);
@@ -245,6 +245,10 @@ function wire(
 }
 
 const NOWHERE: Point = { x: 0, y: 0 };
+
+export function grants(program: Program, granter: Rule): Rule[] {
+	return program.rules.filter((rule) => rule.sources.some((source) => source.via === granter.id));
+}
 
 export function layout(program: Program, collapsed: string[], metrics = METRICS): Layout {
 	const { node, gap } = metrics;
@@ -354,28 +358,45 @@ export function layout(program: Program, collapsed: string[], metrics = METRICS)
 		});
 	}
 
-	const modelled = program.rules.filter((rule) => rule.landings.length > 0);
-	const unmodelled = program.rules.filter((rule) => rule.landings.length === 0);
+	const rows = [program.rules.filter((rule) => rule.landings.length > 0)];
+	const modelled = new Set(rows[0].map((rule) => rule.id));
+	while (rows[rows.length - 1].length) {
+		const next = program.rules.filter(
+			(rule) =>
+				!modelled.has(rule.id) && grants(program, rule).some((each) => modelled.has(each.id))
+		);
+		for (const rule of next) modelled.add(rule.id);
+		rows.push(next);
+	}
+	const unmodelled = program.rules.filter((rule) => !modelled.has(rule.id));
 
 	const railTop = rowBottom + RAIL_GAP;
-	const wanted = modelled
-		.map((rule) => {
-			const xs = rule.landings.map((landing) => top(boxes.get(standsFor.get(landing.at)!)!).x);
-			return { rule, centre: xs.reduce((sum, x) => sum + x, 0) / xs.length };
-		})
-		.sort((a, b) => a.centre - b.centre);
-
+	const centres = new Map<string, number>();
 	const rail: PlacedRule[] = [];
-	let edge = MARGIN;
-	for (const { rule, centre } of wanted) {
-		const x = Math.max(centre - node.width / 2, edge);
-		rail.push({ rule, box: { x, y: railTop, width: node.width, height: RULE.height } });
-		edge = x + node.width + RULE.gap;
-	}
+	rows.forEach((row, depth) => {
+		const wanted = row
+			.map((rule) => {
+				const xs = depth
+					? grants(program, rule)
+							.filter((each) => centres.has(each.id))
+							.map((each) => centres.get(each.id)!)
+					: rule.landings.map((landing) => top(boxes.get(standsFor.get(landing.at)!)!).x);
+				return { rule, centre: xs.reduce((sum, x) => sum + x, 0) / xs.length };
+			})
+			.sort((a, b) => a.centre - b.centre);
+		const y = railTop + depth * (RULE.height + RULE.gap);
+		let edge = MARGIN;
+		for (const { rule, centre } of wanted) {
+			const x = Math.max(centre - node.width / 2, edge);
+			rail.push({ rule, box: { x, y, width: node.width, height: RULE.height } });
+			centres.set(rule.id, x + node.width / 2);
+			edge = x + node.width + RULE.gap;
+		}
+	});
 
 	const landings: PlacedLanding[] = rail.flatMap(({ rule }) =>
 		rule.landings.map((landing) => ({
-			rule: rule.rule,
+			rule: rule.id,
 			at: standsFor.get(landing.at)!,
 			verdicts: landing.verdicts,
 			start: NOWHERE,
@@ -440,7 +461,7 @@ export function moved(drawn: Layout, moves: Moves): Layout {
 	);
 	const carded = drawn.rail.map((placed) => ({
 		...placed,
-		box: shifted(placed.box, of(placed.rule.rule))
+		box: shifted(placed.box, of(placed.rule.id))
 	}));
 	const by = nudge(dragged, reframed, carded);
 	const steps = dragged.map((step) => ({ ...step, box: shifted(step.box, by) }));

@@ -8,14 +8,15 @@ import pytest
 
 from avelorn.core.distribution import Distribution, Monoid
 from avelorn.core.graph import (
-    Bearer,
     Body,
     By,
+    Carrier,
     Consequence,
     Contribution,
     Decision,
     Eligibility,
     GraphError,
+    Holder,
     Landing,
     Measurement,
     Operation,
@@ -27,6 +28,7 @@ from avelorn.core.graph import (
     Scalar,
     Sequence,
     Slot,
+    Source,
     State,
     Step,
     Taken,
@@ -38,6 +40,10 @@ from avelorn.core.graph import (
 _SIXTH = Fraction(1, 6)
 _HALF = Fraction(1, 2)
 _SIDES = ("attacker", "target")
+_ATTACKER = Holder("attacker", "archers")
+_TARGET = Holder("target", "spearmen")
+_MODEL = (Source(Carrier.MODEL),)
+_CORE = (Source(Carrier.CORE),)
 
 
 def _d6() -> Distribution[int]:
@@ -885,11 +891,14 @@ def test_a_rule_cannot_land_on_a_step_the_program_lacks() -> None:
 
     with pytest.raises(GraphError, match="lands on stray, which is not declared"):
         program.attach(
-            RuleNode(
-                rule="hatred",
-                name="Hatred",
-                bearer=Bearer.THIS_MODEL,
-                landings=(Landing(stray),),
+            (
+                RuleNode(
+                    rule="hatred",
+                    name="Hatred",
+                    holder=_ATTACKER,
+                    sources=_MODEL,
+                    landings=(Landing(stray),),
+                ),
             )
         )
 
@@ -956,28 +965,31 @@ def _charge_reaction() -> tuple[_Reaction, Consequence[int], Projection[int], St
     charge.show(left)
     program = Program.build("charge", _SIDES, (gap, movement, reactions, charge))
     program.attach(
-        RuleNode(
-            rule="stand-and-shoot",
-            name="Stand & Shoot",
-            bearer=Bearer.CORE,
-            landings=(
-                Landing(
-                    who,
-                    contributions=(
-                        Contribution(
-                            operation=Operation.FORBID,
-                            inputs=(gap, movement),
-                            options=_every_weapon_when_too_close,
+        (
+            RuleNode(
+                rule="stand-and-shoot",
+                name="Stand & Shoot",
+                holder=_TARGET,
+                sources=_CORE,
+                landings=(
+                    Landing(
+                        who,
+                        contributions=(
+                            Contribution(
+                                operation=Operation.FORBID,
+                                inputs=(gap, movement),
+                                options=_every_weapon_when_too_close,
+                            ),
                         ),
                     ),
-                ),
-                Landing(
-                    instead,
-                    contributions=(
-                        Contribution(
-                            operation=Operation.FORCE,
-                            inputs=(who,),
-                            options=_hold_once_anyone_fired,
+                    Landing(
+                        instead,
+                        contributions=(
+                            Contribution(
+                                operation=Operation.FORCE,
+                                inputs=(who,),
+                                options=_hold_once_anyone_fired,
+                            ),
                         ),
                     ),
                 ),
@@ -999,7 +1011,7 @@ def test_inside_the_charger_movement_nothing_fires_and_elsewhere_the_shooters_ho
         Taken("hold", By.ONLY): _HALF,
     }
     assert lane.read(charge, left).mass == {5: _HALF, 4: _HALF}
-    assert lane.verdicts("stand-and-shoot", instead).mass == {
+    assert lane.verdicts("target/spearmen/stand-and-shoot", instead).mass == {
         Verdict.HONOURED: _HALF,
         Verdict.APPLIED: _HALF,
     }
@@ -1050,11 +1062,14 @@ def test_a_world_whose_choice_is_forbidden_takes_the_printed_otherwise() -> None
         options=_stand_and_shoot_when_too_close,
     )
     program.attach(
-        RuleNode(
-            rule="too-close",
-            name="Too Close",
-            bearer=Bearer.CORE,
-            landings=(Landing(reactions, contributions=(too_close,)),),
+        (
+            RuleNode(
+                rule="too-close",
+                name="Too Close",
+                holder=_TARGET,
+                sources=_CORE,
+                landings=(Landing(reactions, contributions=(too_close,)),),
+            ),
         )
     )
     (lane,) = program.evaluate(choices={reactions: "stand-and-shoot"})
@@ -1090,11 +1105,14 @@ def _held(amends: _Amends) -> tuple[Program, Decision[str]]:
         for operation, options in amends
     )
     program.attach(
-        RuleNode(
-            rule="must-hold",
-            name="Must Hold",
-            bearer=Bearer.CORE,
-            landings=(Landing(reaction, contributions=contributions),),
+        (
+            RuleNode(
+                rule="must-hold",
+                name="Must Hold",
+                holder=_TARGET,
+                sources=_CORE,
+                landings=(Landing(reaction, contributions=contributions),),
+            ),
         )
     )
     return program, reaction
@@ -1160,11 +1178,14 @@ def test_a_closed_option_exists_only_where_a_rule_opens_it(
     )
     if opened:
         program.attach(
-            RuleNode(
-                rule="fire-and-flee",
-                name="Fire & Flee",
-                bearer=Bearer.THE_ENEMY,
-                landings=(Landing(reaction, contributions=(opener,)),),
+            (
+                RuleNode(
+                    rule="fire-and-flee",
+                    name="Fire & Flee",
+                    holder=_TARGET,
+                    sources=_MODEL,
+                    landings=(Landing(reaction, contributions=(opener,)),),
+                ),
             )
         )
 
@@ -1191,19 +1212,25 @@ def test_a_forbid_wins_over_an_allow_at_an_eligibility() -> None:
     )
     allow = Contribution(operation=Operation.ALLOW, options=_a_pistol)
     program.attach(
-        RuleNode(
-            rule="too-close",
-            name="Too Close",
-            bearer=Bearer.CORE,
-            landings=(Landing(who, contributions=(forbid,)),),
+        (
+            RuleNode(
+                rule="too-close",
+                name="Too Close",
+                holder=_TARGET,
+                sources=_CORE,
+                landings=(Landing(who, contributions=(forbid,)),),
+            ),
         )
     )
     program.attach(
-        RuleNode(
-            rule="brace-of-pistols",
-            name="Brace of Pistols",
-            bearer=Bearer.THE_ENEMY,
-            landings=(Landing(who, contributions=(allow,)),),
+        (
+            RuleNode(
+                rule="brace-of-pistols",
+                name="Brace of Pistols",
+                holder=_TARGET,
+                sources=_MODEL,
+                landings=(Landing(who, contributions=(allow,)),),
+            ),
         )
     )
     (lane,) = program.evaluate()
@@ -1212,11 +1239,11 @@ def test_a_forbid_wins_over_an_allow_at_an_eligibility() -> None:
         frozenset({"bow"}): _HALF,
         frozenset({"bow", "pistol"}): _HALF,
     }
-    assert lane.verdicts("too-close", who).mass == {
+    assert lane.verdicts("target/spearmen/too-close", who).mass == {
         Verdict.APPLIED: _HALF,
         Verdict.HONOURED: _HALF,
     }
-    assert lane.verdicts("brace-of-pistols", who).mass == {Verdict.APPLIED: 1}
+    assert lane.verdicts("target/spearmen/brace-of-pistols", who).mass == {Verdict.APPLIED: 1}
 
 
 def _hold(printed: frozenset[str]) -> frozenset[str]:
@@ -1232,20 +1259,23 @@ def test_a_rule_the_player_may_decline_applies_only_in_the_lane_that_takes_it() 
     )
     program = Program.build("charge", _SIDES, (reaction,))
     program.attach(
-        RuleNode(
-            rule="stubborn",
-            name="Stubborn",
-            bearer=Bearer.THE_ENEMY,
-            may=True,
-            landings=(
-                Landing(
-                    reaction,
-                    contributions=(Contribution(operation=Operation.FORCE, options=_hold),),
+        (
+            RuleNode(
+                rule="stubborn",
+                name="Stubborn",
+                holder=_TARGET,
+                sources=_MODEL,
+                may=True,
+                landings=(
+                    Landing(
+                        reaction,
+                        contributions=(Contribution(operation=Operation.FORCE, options=_hold),),
+                    ),
                 ),
             ),
         )
     )
-    toggle = program.toggles["stubborn"]
+    toggle = program.toggles["target", "stubborn"]
 
     lanes = program.evaluate(choices={reaction: "flee"})
 
@@ -1253,13 +1283,73 @@ def test_a_rule_the_player_may_decline_applies_only_in_the_lane_that_takes_it() 
         (
             lane.choices[toggle],
             lane.read(reaction, reaction.taken).mass,
-            lane.verdicts("stubborn", reaction).mass,
+            lane.verdicts("target/spearmen/stubborn", reaction).mass,
         )
         for lane in lanes
     ] == [
         (True, {Taken("hold", By.ONLY): 1}, {Verdict.APPLIED: 1}),
         (False, {Taken("flee", By.CHOSEN): 1}, {Verdict.HONOURED: 1}),
     ]
+
+
+def test_one_rule_at_two_holders_is_two_nodes_judged_apart() -> None:
+    hit = Roll[int](name="roll-to-hit", side="attacker", kernel=_d6, target=Scalar("t", 4))
+    program = Program.build("volley", _SIDES, (hit,))
+    program.attach(
+        (
+            RuleNode(
+                rule="hatred",
+                name="Hatred",
+                holder=_ATTACKER,
+                sources=_MODEL,
+                landings=(Landing(hit, moves=(1,)),),
+            ),
+            RuleNode(
+                rule="hatred",
+                name="Hatred",
+                holder=_TARGET,
+                sources=_MODEL,
+                landings=(Landing(hit),),
+            ),
+        )
+    )
+    (lane,) = program.evaluate()
+
+    assert [(rule["id"], rule["landings"][0]["verdicts"]) for rule in lane.to_view()["rules"]] == [
+        ("attacker/archers/hatred", [{"verdict": "applied", "p": 1.0}]),
+        ("target/spearmen/hatred", [{"verdict": "held", "p": 1.0}]),
+    ]
+
+
+def test_a_node_granted_only_through_a_declined_node_is_honoured() -> None:
+    hit = Roll[int](name="roll-to-hit", side="attacker", kernel=_d6, target=Scalar("t", 4))
+    program = Program.build("volley", _SIDES, (hit,))
+    program.attach(
+        (
+            RuleNode(
+                rule="skirmishers", name="Skirmishers", holder=_TARGET, sources=_MODEL, may=True
+            ),
+            RuleNode(
+                rule="skirmish-formation",
+                name="Skirmish Formation",
+                holder=_TARGET,
+                sources=(Source(Carrier.EFFECT, via="target/spearmen/skirmishers"),),
+            ),
+            RuleNode(
+                rule="enemy-fire",
+                name="Enemy Fire",
+                holder=_TARGET,
+                sources=(Source(Carrier.EFFECT, via="target/spearmen/skirmish-formation"),),
+                landings=(Landing(hit, moves=(-1,)),),
+            ),
+        )
+    )
+    toggle = program.toggles["target", "skirmishers"]
+
+    assert [
+        (lane.choices[toggle], lane.verdicts("target/spearmen/enemy-fire", hit).mass)
+        for lane in program.evaluate()
+    ] == [(True, {Verdict.APPLIED: 1}), (False, {Verdict.HONOURED: 1})]
 
 
 def test_a_decision_inside_a_repeat_is_refused() -> None:
@@ -1293,7 +1383,17 @@ def _no_printed_set(gap: int) -> frozenset[str]:
     return frozenset()
 
 
-def _refusal(case: str) -> tuple[Program, Landing]:
+def _node(
+    landing: Landing | None = None,
+    holder: Holder = _TARGET,
+    sources: tuple[Source, ...] = _CORE,
+    may: bool = False,
+) -> RuleNode:
+    landings = () if landing is None else (landing,)
+    return RuleNode(rule="r", name="R", holder=holder, sources=sources, landings=landings, may=may)
+
+
+def _refusal(case: str) -> tuple[Program, tuple[RuleNode, ...]]:
     gap = Measurement[int](name="gap", side="target", kernel=_three_or_nine)
     after = Measurement[int](name="after", side="target", kernel=_three_or_nine)
     who = Eligibility[str](name="who-can-shoot", side="target", kernel=_a_bow)
@@ -1301,45 +1401,69 @@ def _refusal(case: str) -> tuple[Program, Landing]:
         name="charge-reactions", side="target", options={"hold": ()}, otherwise="hold"
     )
     program = Program.build("charge", _SIDES, (gap, who, reaction, after))
-    landings = {
-        "force-at-an-eligibility": Landing(
-            who, (Contribution(operation=Operation.FORCE, options=_a_pistol),)
+    nodes = {
+        "force-at-an-eligibility": (
+            _node(Landing(who, (Contribution(operation=Operation.FORCE, options=_a_pistol),))),
         ),
-        "contribution-arity": Landing(
-            reaction,
-            (Contribution(operation=Operation.ALLOW, inputs=(gap,), options=_no_printed_set),),
+        "contribution-arity": (
+            _node(
+                Landing(
+                    reaction,
+                    (
+                        Contribution(
+                            operation=Operation.ALLOW, inputs=(gap,), options=_no_printed_set
+                        ),
+                    ),
+                )
+            ),
         ),
-        "contribution-reads-a-later-step": Landing(
-            reaction,
-            (Contribution(operation=Operation.ALLOW, inputs=(after,), options=_charge_offered),),
+        "contribution-reads-a-later-step": (
+            _node(
+                Landing(
+                    reaction,
+                    (
+                        Contribution(
+                            operation=Operation.ALLOW, inputs=(after,), options=_charge_offered
+                        ),
+                    ),
+                )
+            ),
         ),
-        "contribution-on-a-plain-step": Landing(
-            gap, (Contribution(operation=Operation.ALLOW, options=_a_pistol),)
+        "contribution-on-a-plain-step": (
+            _node(Landing(gap, (Contribution(operation=Operation.ALLOW, options=_a_pistol),))),
         ),
+        "repeated-id": (_node(), _node()),
+        "no-source": (_node(sources=()),),
+        "unknown-holder-side": (_node(holder=Holder("defender", "spearmen")),),
+        "via-naming-no-node": (
+            _node(sources=(Source(Carrier.EFFECT, via="target/spearmen/stray"),)),
+        ),
+        "trigger-out-of-scope": (_node(Landing(gap, triggers=(after,))),),
+        "may-with-only-core-sources": (_node(may=True),),
     }
-    return program, landings[case]
+    return program, nodes[case]
 
 
-@pytest.mark.parametrize(
-    ("case", "message"),
-    [
-        ("force-at-an-eligibility", "forces charge/who-can-shoot, which only allow and forbid"),
-        ("contribution-arity", "cannot accept the options and 1 inputs"),
-        ("contribution-reads-a-later-step", "reads after, not in scope"),
-        ("contribution-on-a-plain-step", "amends charge/gap, which settles no options"),
-    ],
-    ids=[
-        "force-at-an-eligibility",
-        "contribution-arity",
-        "contribution-reads-a-later-step",
-        "contribution-on-a-plain-step",
-    ],
-)
-def test_a_landing_the_step_cannot_take_is_refused_at_attach(case: str, message: str) -> None:
-    program, landing = _refusal(case)
+_REFUSALS = {
+    "force-at-an-eligibility": "forces charge/who-can-shoot, which only allow and forbid",
+    "contribution-arity": "cannot accept the options and 1 inputs",
+    "contribution-reads-a-later-step": "reads after, not in scope",
+    "contribution-on-a-plain-step": "amends charge/gap, which settles no options",
+    "repeated-id": "target/spearmen/r is attached to charge twice",
+    "no-source": "target/spearmen/r has no source",
+    "unknown-holder-side": "defender/spearmen/r is held by defender, no side of charge",
+    "via-naming-no-node": "granted via target/spearmen/stray, which is no node",
+    "trigger-out-of-scope": "r at charge/gap is triggered by after, not in scope",
+    "may-with-only-core-sources": "target/spearmen/r is a core rule, which no player may decline",
+}
 
-    with pytest.raises(GraphError, match=message):
-        program.attach(RuleNode(rule="r", name="R", bearer=Bearer.CORE, landings=(landing,)))
+
+@pytest.mark.parametrize(("case", "message"), list(_REFUSALS.items()), ids=list(_REFUSALS))
+def test_a_node_the_program_cannot_take_is_refused_at_attach(case: str, message: str) -> None:
+    program, nodes = _refusal(case)
+
+    with pytest.raises(GraphError, match=re.escape(message)):
+        program.attach(nodes)
 
 
 def test_a_rule_offering_an_option_the_decision_lacks_is_refused() -> None:
@@ -1350,11 +1474,14 @@ def test_a_rule_offering_an_option_the_decision_lacks_is_refused() -> None:
     program = Program.build("charge", _SIDES, (gap, reaction))
     offer = Contribution(operation=Operation.ALLOW, inputs=(gap,), options=_charge_offered)
     program.attach(
-        RuleNode(
-            rule="stray",
-            name="Stray",
-            bearer=Bearer.CORE,
-            landings=(Landing(reaction, contributions=(offer,)),),
+        (
+            RuleNode(
+                rule="stray",
+                name="Stray",
+                holder=_TARGET,
+                sources=_CORE,
+                landings=(Landing(reaction, contributions=(offer,)),),
+            ),
         )
     )
 
@@ -1414,25 +1541,28 @@ _volley = Program.build(
 )
 
 _volley.attach(
-    RuleNode(
-        rule="volley-fire",
-        name="Volley Fire",
-        bearer=Bearer.THIS_MODEL,
-        landings=(
-            Landing(_shots),
-            Landing(_to_hit, moves=(1,)),
-            Landing(
-                _aftermath,
-                contributions=(
-                    Contribution(
-                        operation=Operation.FORCE, inputs=(_range,), options=_stand_when_close
+    (
+        RuleNode(
+            rule="volley-fire",
+            name="Volley Fire",
+            holder=_ATTACKER,
+            sources=_MODEL,
+            landings=(
+                Landing(_shots),
+                Landing(_to_hit, moves=(1,)),
+                Landing(
+                    _aftermath,
+                    contributions=(
+                        Contribution(
+                            operation=Operation.FORCE, inputs=(_range,), options=_stand_when_close
+                        ),
                     ),
                 ),
             ),
         ),
     )
 )
-_volley.attach(RuleNode(rule="stubborn", name="Stubborn", bearer=Bearer.CORE))
+_volley.attach((RuleNode(rule="stubborn", name="Stubborn", holder=_TARGET, sources=_MODEL),))
 
 
 def _view() -> dict[str, Any]:
@@ -1444,11 +1574,27 @@ def test_a_rule_node_reads_its_verdicts_from_the_lane() -> None:
     rules = _view()["rules"]
 
     assert rules[0]["landings"] == [
-        {"at": "volley/shots", "verdicts": [{"verdict": "held", "p": 1.0}]},
-        {"at": "volley/attack/roll-to-hit", "verdicts": [{"verdict": "applied", "p": 1.0}]},
-        {"at": "volley/aftermath", "verdicts": [{"verdict": "applied", "p": 1.0}]},
+        {"at": "volley/shots", "triggers": [], "verdicts": [{"verdict": "held", "p": 1.0}]},
+        {
+            "at": "volley/attack/roll-to-hit",
+            "triggers": [],
+            "verdicts": [{"verdict": "applied", "p": 1.0}],
+        },
+        {
+            "at": "volley/aftermath",
+            "triggers": [],
+            "verdicts": [{"verdict": "applied", "p": 1.0}],
+        },
     ]
-    assert rules[1] == {"rule": "stubborn", "name": "Stubborn", "bearer": "core", "landings": []}
+    assert rules[1] == {
+        "id": "target/spearmen/stubborn",
+        "rule": "stubborn",
+        "name": "Stubborn",
+        "holder": {"side": "target", "part": "spearmen"},
+        "may": False,
+        "sources": [{"carrier": "model", "item": None, "profile": None, "via": None}],
+        "landings": [],
+    }
 
 
 def test_the_view_carries_the_blocks_and_the_stacked_readings() -> None:
@@ -1466,7 +1612,7 @@ def test_the_view_carries_the_blocks_and_the_stacked_readings() -> None:
     ]
     assert hits["inputs"] == ["volley/choose-range"]
     assert hits["target"] == {"label": "to hit", "value": 4}
-    assert hits["modifiers"] == [{"rule": "volley-fire", "move": 1}]
+    assert hits["modifiers"] == [{"rule": "attacker/archers/volley-fire", "move": 1}]
     assert hits["edge"]["readings"][0]["outcomes"] == [
         {"value": 0, "p": 0.125},
         {"value": 1, "p": 0.375},
@@ -1516,6 +1662,9 @@ def test_the_view_matches_the_front_end_types() -> None:
         assert set(block) == declared[_BLOCK_OF[block["kind"]]]
     for rule in view["rules"]:
         assert set(rule) == declared["Rule"]
+        assert set(rule["holder"]) == declared["Holder"]
+        for source in rule["sources"]:
+            assert set(source) == declared["Source"]
         for landing in rule["landings"]:
             assert set(landing) == declared["Landing"]
             for verdict in landing["verdicts"]:
