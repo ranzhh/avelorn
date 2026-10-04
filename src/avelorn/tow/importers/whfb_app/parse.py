@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Protocol
 
 from pydantic import ValidationError
 
-from avelorn.tow.schema.reference import RuleRef
+from avelorn.tow.schema.reference import RuleRef, slugified
 from avelorn.tow.schema.unit import (
     BaseSize,
     OptionKind,
@@ -243,15 +243,6 @@ def _is_mount(row: Node) -> bool:
         and row.get("BS") in (None, "-")
         and row.get("Ld") in (None, "-")
     )
-
-
-def slugified(text: str) -> str:
-    """Slugify a name the way the site builds entry slugs.
-
-    Returns:
-        Lowercase text with non-alphanumeric runs collapsed to hyphens.
-    """
-    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
 
 
 def _rule_list(

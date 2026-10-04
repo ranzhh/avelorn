@@ -11,13 +11,14 @@ from pins.corrections import corrections
 from avelorn.core.distribution import Distribution, Monoid, Probability
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
+from avelorn.tow.fielding import Fielding, Part
 from avelorn.tow.kernels import Standing, save_probability
 from avelorn.tow.phases.shooting import make_panic_tests, shoot
 from avelorn.tow.programs import VOLLEY, Evaluated, load_program
 from avelorn.tow.schema.stage import Side
 from avelorn.tow.schema.unit import Characteristic
 from avelorn.tow.schema.weapon import WeaponStrength
-from avelorn.tow.steps import Band, Fielded, Retreat
+from avelorn.tow.steps import Band, Retreat
 from avelorn.tow.traits import Operand
 
 REPO = TOWRepository()
@@ -28,7 +29,7 @@ LONGBOW = REPO.weapons["longbow"].missile_profile
 CORRECTIONS = corrections()
 
 
-def _shooter(shots: int, ballistic_skill: int, strength: int, armour_piercing: int) -> Fielded:
+def _shooter(shots: int, ballistic_skill: int, strength: int, armour_piercing: int) -> Fielding:
     assert LONGBOW is not None
     row = ARCHERS.main.model_copy(
         update={
@@ -41,10 +42,12 @@ def _shooter(shots: int, ballistic_skill: int, strength: int, armour_piercing: i
     bow = LONGBOW.model_copy(
         update={"strength": WeaponStrength(base=strength), "armour_piercing": armour_piercing}
     )
-    return Fielded("archers", row, shots, bow)
+    return Fielding("archers", (Part("archers", row, shots, weapon=bow),), shots)
 
 
-def _target(toughness: int, wounds: int, armour: int | None, ward: int | None) -> Fielded:
+def _target(
+    toughness: int, wounds: int, armour: int | None, ward: int | None, models: int
+) -> Fielding:
     row = SPEARMEN.main.model_copy(
         update={
             "characteristics": {
@@ -54,12 +57,13 @@ def _target(toughness: int, wounds: int, armour: int | None, ward: int | None) -
             }
         }
     )
-    return Fielded("spearmen", row, 5, armour=armour, ward=ward)
+    part = Part("spearmen", row, models, armour=armour, ward=ward)
+    return Fielding("spearmen", (part,), 5)
 
 
 def _volley(
-    attacker: Fielded,
-    target: Fielded,
+    attacker: Fielding,
+    target: Fielding,
     *,
     shooters: int,
     models: int,
@@ -129,7 +133,7 @@ def _assert_matches_legacy(
     )
     evaluated = _volley(
         _shooter(shots, ballistic_skill, strength, armour_piercing),
-        _target(toughness, wounds, armour, ward),
+        _target(toughness, wounds, armour, ward, models),
         shooters=shots,
         models=models,
         battle_strength=models,
@@ -148,7 +152,7 @@ def _assert_matches_legacy(
             ward=ward,
             hit_modifier=hit_modifier,
         )
-        hit = _per_shot(evaluated, "volley/attack/roll-to-hit", "hits", shots)
+        hit = _per_shot(evaluated, "volley/attack/archers/roll-to-hit", "hits", shots)
         unsaved = _per_shot(evaluated, "volley/remove-casualties", "unsaved", shots)
         assert hit != legacy.p_hit
         assert (legacy.p_hit, hit) == (correction.old, correction.new)
@@ -156,11 +160,13 @@ def _assert_matches_legacy(
         return
 
     hit_and_wounded = legacy.p_hit * legacy.p_wound
-    assert _read(evaluated, "volley/attack/roll-to-hit", "hits") == _landed(shots, legacy.p_hit)
-    assert _read(evaluated, "volley/attack/roll-to-wound", "wounds") == _landed(
+    assert _read(evaluated, "volley/attack/archers/roll-to-hit", "hits") == _landed(
+        shots, legacy.p_hit
+    )
+    assert _read(evaluated, "volley/attack/archers/roll-to-wound", "wounds") == _landed(
         shots, hit_and_wounded
     )
-    assert _read(evaluated, "volley/attack/make-armour-saves", "saves") == _landed(
+    assert _read(evaluated, "volley/attack/archers/make-armour-saves", "saves") == _landed(
         shots, hit_and_wounded * save_probability(legacy.save_target)
     )
     unsaved = evaluated.at("volley/remove-casualties").read("unsaved")
@@ -303,7 +309,7 @@ def test_the_panic_steps_match_legacy_make_panic_tests(
     )
     evaluated = _volley(
         _shooter(shots, 4, 3, 0),
-        _target(3, 1, 5, None),
+        _target(3, 1, 5, None, models),
         shooters=shots,
         models=models,
         battle_strength=battle_strength,
@@ -325,8 +331,8 @@ def _corpus_volley(
     archers = Contingent.deploy("elven-archers", 10, data=REPO, frontage=5)
     spearmen = Contingent.deploy("elven-spearmen", 20, data=REPO, frontage=5)
     return _volley(
-        Fielded.of(archers, "Longbow"),
-        Fielded.of(spearmen),
+        Fielding.of(archers, "Longbow"),
+        Fielding.of(spearmen),
         shooters=shooters,
         models=20,
         battle_strength=20,
@@ -339,14 +345,14 @@ def _corpus_volley(
 def test_ballistic_skill_6_shows_its_chart_target_moved_by_the_rules_in_force() -> None:
     volley = _volley(
         _shooter(1, 6, 3, 0),
-        _target(3, 1, None, None),
+        _target(3, 1, None, None, 1),
         shooters=1,
         models=1,
         battle_strength=1,
         moved=True,
     )
 
-    hit = volley.at("volley/attack/roll-to-hit")
+    hit = volley.at("volley/attack/archers/roll-to-hit")
     assert (hit.read("printed").mass, hit.read("needed").mass) == (
         {"2+ then 6+": 1},
         {"3+ then 6+": 1},
@@ -357,15 +363,15 @@ def test_a_save_shows_every_target_armour_bane_leaves_in_force() -> None:
     sisters = Contingent.deploy("sisters-of-avelorn", 5, data=REPO, frontage=5)
     spearmen = Contingent.deploy("elven-spearmen", 10, data=REPO)
     volley = _volley(
-        Fielded.of(sisters, "Bow of Avelorn"),
-        Fielded.of(spearmen),
+        Fielding.of(sisters, "Bow of Avelorn"),
+        Fielding.of(spearmen),
         shooters=5,
         models=10,
         battle_strength=10,
     )
     every_six, no_save_at_all = Fraction(31, 36) ** 5, Fraction(5, 36) ** 5
 
-    saves = volley.at("volley/attack/make-armour-saves")
+    saves = volley.at("volley/attack/sister-of-avelorn/make-armour-saves")
     assert saves.read("printed").mass == {"5+": 1}
     assert saves.read("needed").mass == {
         "6+": every_six,
@@ -375,37 +381,37 @@ def test_a_save_shows_every_target_armour_bane_leaves_in_force() -> None:
 
 
 def test_a_part_at_a_step_reads_its_characteristic_as_an_operand() -> None:
-    at = _corpus_volley(12).at("volley/attack/roll-to-wound")
+    at = _corpus_volley(12).at("volley/attack/elven-archer/roll-to-wound")
 
-    assert at.part(Side.TARGET, "elven-spearmen").characteristic(
+    assert at.part(Side.TARGET, "elven-spearman").characteristic(
         Characteristic.TOUGHNESS
     ) == Operand(Distribution.pure(3), 3)
 
 
 def test_a_shooter_wounds_at_its_weapon_strength() -> None:
     volley = _volley(
-        _shooter(5, 4, 5, 0), _target(3, 1, None, None), shooters=5, models=5, battle_strength=5
+        _shooter(5, 4, 5, 0), _target(3, 1, None, None, 5), shooters=5, models=5, battle_strength=5
     )
 
-    archers = volley.at("volley/attack/roll-to-wound").part(Side.ATTACKER, "archers")
+    archers = volley.at("volley/attack/archers/roll-to-wound").part(Side.ATTACKER, "archers")
     assert archers.characteristic(Characteristic.STRENGTH) == Operand(Distribution.pure(5), 3)
 
 
 def test_each_side_of_a_mirror_match_reads_its_own_part() -> None:
     archers = Contingent.deploy("elven-archers", 10, data=REPO, frontage=5)
     volley = _volley(
-        Fielded.of(archers, "Longbow"),
-        Fielded.of(archers),
+        Fielding.of(archers, "Longbow"),
+        Fielding.of(archers),
         shooters=10,
         models=10,
         battle_strength=10,
     )
 
-    at = volley.at("volley/attack/roll-to-wound")
-    assert at.part(Side.ATTACKER, "elven-archers").characteristic(
+    at = volley.at("volley/attack/elven-archer/roll-to-wound")
+    assert at.part(Side.ATTACKER, "elven-archer").characteristic(
         Characteristic.STRENGTH
     ) == Operand(Distribution.pure(3), 3)
-    assert at.part(Side.TARGET, "elven-archers").characteristic(
+    assert at.part(Side.TARGET, "elven-archer").characteristic(
         Characteristic.TOUGHNESS
     ) == Operand(Distribution.pure(3), 3)
 

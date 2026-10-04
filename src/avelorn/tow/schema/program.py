@@ -96,12 +96,20 @@ class StepEntry(BaseModel):
     tallies: list[str] = Field(default_factory=list)
 
 
+class Each(StrEnum):
+    """What a group of steps runs once for."""
+
+    FIGHTER = "each-fighter"
+
+
 class GroupEntry(BaseModel):
-    """A repeated group of steps."""
+    """A group of steps run once for each fighter of a side, as many times as its share."""
 
     model_config = ConfigDict(extra="forbid")
 
     group: str
+    for_: Each = Field(alias="for")
+    of: Side
     times: str
     items: list[StepEntry | str] = Field(min_length=1)
 

@@ -9,13 +9,14 @@ from avelorn.core.distribution import Distribution, Probability
 from avelorn.tow.contingent import Contingent, Movement
 from avelorn.tow.coverage import fieldings
 from avelorn.tow.data import TOWRepository
+from avelorn.tow.fielding import Fielding
 from avelorn.tow.game import TOWGame
 from avelorn.tow.kernels import Standing
 from avelorn.tow.phases.shooting import make_panic_tests, shoot_unit
 from avelorn.tow.programs import VOLLEY, Built, load_program
 from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.stage import Side
-from avelorn.tow.steps import Fielded, Retreat
+from avelorn.tow.steps import Retreat
 
 REPO = TOWRepository()
 IN_PLAY = TOWGame.assemble(REPO).in_play[Phase.SHOOTING]
@@ -36,9 +37,12 @@ def _kept[T: Hashable](mass: Mapping[T, Probability]) -> dict[T, Probability]:
     return {value: p for value, p in mass.items() if p}
 
 
-def _fielded(fielded: Fielded, models: int) -> str:
-    parts = (fielded.part, fielded.row, fielded.frontage, fielded.weapon, fielded.armour)
-    return repr((*parts, fielded.ward, fielded.wielded, fielded.carried, models))
+def _fielded(fielded: Fielding, models: int) -> str:
+    parts = tuple(
+        (part.id, part.row, part.count, part.weapon, part.armour, part.ward, part.wielded)
+        for part in fielded.parts
+    )
+    return repr((parts, tuple(fielded.sources()), fielded.frontage, models))
 
 
 def _name(slug: str, options: tuple[str, ...]) -> str:
@@ -57,12 +61,14 @@ def _distinct() -> tuple[dict[str, Contingent], dict[str, Contingent]]:
     targets: dict[str, tuple[str, Contingent]] = {}
     for options, contingent in fieldings(REPO):
         name = _name(contingent.unit.id, options)
-        targets.setdefault(_fielded(Fielded.of(contingent), contingent.models), (name, contingent))
+        targets.setdefault(
+            _fielded(Fielding.of(contingent), contingent.models), (name, contingent)
+        )
         for fielding in _sizes(contingent, options):
             for weapon in fielding.loadout.weapons:
                 if weapon.missile_profile is not None:
                     armed = fielding.wielding(weapon.name)
-                    fielded = Fielded.of(armed, weapon.name)
+                    fielded = Fielding.of(armed, weapon.name)
                     shooters.setdefault(
                         _fielded(fielded, armed.models),
                         (f"{name}/{weapon.id}/{armed.models}", armed),
@@ -126,10 +132,10 @@ def _graph(built: Built, attacker: Contingent, target: Contingent, distance: int
 def test_every_volley_agrees_with_legacy(shooter: str) -> None:
     shooting = SHOOTERS[shooter]
     assert shooting.weapon is not None
-    fielded = Fielded.of(shooting, shooting.weapon.name)
+    fielded = Fielding.of(shooting, shooting.weapon.name)
     disagreements = []
     for name, target in TARGETS.items():
-        built = VOLLEY_PROGRAM.built({Side.ATTACKER: fielded, Side.TARGET: Fielded.of(target)})
+        built = VOLLEY_PROGRAM.built({Side.ATTACKER: fielded, Side.TARGET: Fielding.of(target)})
         for moved in (False, True):
             attacker = shooting.after(Movement.march()) if moved else shooting
             profile = attacker.shooting_weapon().missile_profile

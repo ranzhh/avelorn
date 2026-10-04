@@ -35,6 +35,7 @@ from avelorn.tow.changes import (
     Operated,
     Shows,
 )
+from avelorn.tow.fielding import Fielding
 from avelorn.tow.schema.effect import (
     Address,
     Effect,
@@ -53,7 +54,7 @@ from avelorn.tow.schema.stage import Side
 from avelorn.tow.schema.step import Step as Printed
 from avelorn.tow.schema.step import StepSequence
 from avelorn.tow.schema.weapon import Weapon
-from avelorn.tow.steps import Fielded, Spec
+from avelorn.tow.steps import Spec
 
 type Carried = tuple[tuple[RuleRef, Source], ...]
 type Reached = list[tuple[int, Effect, tuple[Step[Any], ...]]]
@@ -88,7 +89,7 @@ class Attachment:
 
 
 def rules_in_scope(
-    holder: Holder, fielded: Mapping[Side, Fielded], rules: Mapping[str, Rule]
+    holder: Holder, fielded: Mapping[Side, Fielding], rules: Mapping[str, Rule]
 ) -> Mapping[str, Carried]:
     """Every rule a holder has, with each source that gives it.
 
@@ -124,7 +125,7 @@ def rules_in_scope(
 def attach_rules(
     program: Program,
     specs: Mapping[Step[Any], Spec],
-    fielded: Mapping[Side, Fielded],
+    fielded: Mapping[Side, Fielding],
     rules: Mapping[str, Rule],
     inputs: Mapping[str, State[Any]],
 ) -> Attachment:
@@ -182,7 +183,7 @@ def attach_rules(
 class _Fielding:
     program: Program
     specs: Mapping[Step[Any], Spec]
-    fielded: Mapping[Side, Fielded]
+    fielded: Mapping[Side, Fielding]
     rules: Mapping[str, Rule]
     inputs: Mapping[str, State[Any]]
     holders: Mapping[Side, Holder]
@@ -348,7 +349,7 @@ class _Fielding:
             return None
         checks: list[Check] = []
         if gates.with_ is not None:
-            wielded = self.fielded[side].wielded
+            wielded = self.fielded[side].hit.wielded
             checks.append(Constant(wielded is not None and _matches(gates.with_, wielded)))
         if gates.attack is not None:
             attack = gates.attack
@@ -403,8 +404,8 @@ def _named(
     return named if gate.test(values, frozenset()) else frozenset()
 
 
-def _holders(fielded: Mapping[Side, Fielded]) -> dict[Side, Holder]:
-    return {side: Holder(str(side), each.part) for side, each in fielded.items()}
+def _holders(fielded: Mapping[Side, Fielding]) -> dict[Side, Holder]:
+    return {side: Holder(str(side), each.unit) for side, each in fielded.items()}
 
 
 def _core(rules: Mapping[str, Rule]) -> list[str]:
@@ -422,7 +423,7 @@ def _grant(
     to: Role | WeaponMatch | None,
     via: str,
     side: Side,
-    fielded: Mapping[Side, Fielded],
+    fielded: Mapping[Side, Fielding],
     scopes: Mapping[Side, dict[str, list[tuple[RuleRef, Source]]]],
 ) -> None:
     match to:
@@ -431,7 +432,7 @@ def _grant(
         case Role.THE_ENEMY:
             scopes[side.other][granted.rule].append((granted, Source(Carrier.EFFECT, via=via)))
         case WeaponMatch() as target:
-            wielded, profile = fielded[side].wielded, fielded[side].weapon
+            wielded, profile = fielded[side].hit.wielded, fielded[side].hit.weapon
             if wielded is None or profile is None or not _matches(target, wielded):
                 return
             source = Source(Carrier.WEAPON, wielded.id, profile.name or wielded.name, via)

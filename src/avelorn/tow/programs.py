@@ -1,6 +1,6 @@
 """Programs loaded from YAML."""
 
-from collections.abc import Hashable, Mapping, Sequence
+from collections.abc import Hashable, Mapping
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
@@ -21,12 +21,14 @@ from avelorn.core.graph import (
     Program,
     Projection,
     Repeat,
+    Sequence,
     State,
     Step,
     Tally,
 )
 from avelorn.tow.attach import Attachment, attach_rules
 from avelorn.tow.data import DATA_DIR
+from avelorn.tow.fielding import Fielding, Part
 from avelorn.tow.kernels import Standing
 from avelorn.tow.schema.program import (
     FactInput,
@@ -47,7 +49,6 @@ from avelorn.tow.steps import (
     Changed,
     Counted,
     Fact,
-    Fielded,
     Holding,
     Offered,
     Output,
@@ -55,6 +56,7 @@ from avelorn.tow.steps import (
     Spec,
     Summed,
     holdings,
+    share,
 )
 from avelorn.tow.traits import Operand
 
@@ -109,7 +111,7 @@ class Loaded:
         """The state each input is held under, by the input's name."""
         return MappingProxyType({name: given.state for name, given in self.inputs.items()})
 
-    def built(self, fielded: Mapping[Side, Fielded]) -> "Built":
+    def built(self, fielded: Mapping[Side, Fielding]) -> "Built":
         """Build the program for one fielding of each side, and attach their rules.
 
         Each build makes its own steps and rule nodes, so no two fieldings share them.
@@ -148,7 +150,7 @@ class Built:
     inputs: Mapping[str, Input]
     program: Program
     specs: Mapping[Step[Any], Spec]
-    fielded: Mapping[Side, Fielded]
+    fielded: Mapping[Side, Fielding]
     attachment: Attachment
 
     def evaluate(self, knowns: Mapping[str, Hashable]) -> tuple["Evaluated", ...]:
@@ -238,10 +240,11 @@ class At:
         Raises:
             ProgramError: that side fields no such part.
         """
-        fielded = self.evaluated.built.fielded[side]
-        if fielded.part != part:
-            raise ProgramError(f"the {side} fields no part {part}")
-        return PartAt(self, side, fielded)
+        try:
+            found = self.evaluated.built.fielded[side].part(part)
+        except KeyError as error:
+            raise ProgramError(f"the {side} fields no part {part}") from error
+        return PartAt(self, side, found)
 
 
 @dataclass(frozen=True)
@@ -250,7 +253,7 @@ class PartAt:
 
     at: At
     side: Side
-    fielded: Fielded
+    part: Part
 
     def characteristic(self, c: Characteristic) -> Operand[int | None]:
         """The characteristic in force at the step.
@@ -258,10 +261,10 @@ class PartAt:
         Returns:
             The operand; no attached rule changes it yet.
         """
-        printed = self.fielded.characteristic(c)
+        printed = self.part.characteristic(c)
         spec = self.at.evaluated.built.specs[self.at.step]
         resolve = spec.in_force.get((self.side, c))
-        value = printed if resolve is None else resolve(self.fielded)
+        value = printed if resolve is None else resolve(self.part)
         return Operand(Distribution.pure(value), printed)
 
 
@@ -278,8 +281,9 @@ class _Builder:
     file: ProgramFile
     facts: Mapping[str, StateFact]
     inputs: dict[str, Input]
-    fielded: Mapping[Side, Fielded] | None
+    fielded: Mapping[Side, Fielding] | None
     states: dict[str, State[Any]] = field(default_factory=dict)
+    fighter: tuple[Side, Part | None] | None = None
     specs: dict[Step[Any], Spec] = field(default_factory=dict)
     written: set[str] = field(default_factory=set)
 
@@ -310,11 +314,11 @@ class _Builder:
 
     def block(
         self,
-        entries: Sequence[GroupEntry | StepEntry | str],
+        entries: list[GroupEntry | StepEntry | str] | list[StepEntry | str],
         where: str,
         visible: dict[str, Step[Any]],
     ) -> tuple[Item, ...]:
-        groups: dict[str, tuple[Repeat, dict[str, Step[Any]]]] = {}
+        groups: dict[str, list[tuple[Repeat, dict[str, Step[Any]]]]] = {}
         built: list[Item] = []
         for index, entry in enumerate(entries):
             here = f"{where}[{index}]"
@@ -332,25 +336,37 @@ class _Builder:
         entry: GroupEntry,
         here: str,
         visible: dict[str, Step[Any]],
-        groups: dict[str, tuple[Repeat, dict[str, Step[Any]]]],
-    ) -> Repeat:
+        groups: dict[str, list[tuple[Repeat, dict[str, Step[Any]]]]],
+    ) -> Sequence:
         times = visible.get(entry.times)
         if times is None:
             raise self.error(
                 here, f"{entry.group} runs {entry.times} times, which is not in scope"
             )
-        inner = dict(visible)
-        items = self.block(entry.items, f"{here}.items", inner)
-        group = Repeat(name=entry.group, times=times.output("times", _ZERO), items=items)
-        groups[entry.group] = (group, inner)
-        return group
+        if self.fighter is not None:
+            raise self.error(here, f"{entry.group} runs inside another fighter's group")
+        fighters: tuple[Part | None, ...] = (
+            (None,) if self.fielded is None else self.fielded[entry.of].parts
+        )
+        repeats: list[Repeat] = []
+        for fighter in fighters:
+            self.fighter = (entry.of, fighter)
+            inner = dict(visible)
+            items = self.block(entry.items, f"{here}.items", inner)
+            part = None if fighter is None else fighter.id
+            counted = Projection("times", (times.key,), partial(share, part), _ZERO)
+            repeat = Repeat(name=part or "fighter", times=counted, items=items)
+            groups.setdefault(entry.group, []).append((repeat, inner))
+            repeats.append(repeat)
+        self.fighter = None
+        return Sequence(name=entry.group, items=tuple(repeats))
 
     def step(
         self,
         entry: StepEntry,
         here: str,
         visible: dict[str, Step[Any]],
-        groups: Mapping[str, tuple[Repeat, dict[str, Step[Any]]]],
+        groups: Mapping[str, list[tuple[Repeat, dict[str, Step[Any]]]]],
     ) -> Step[Any]:
         sequence = entry.sequence or self.file.sequence
         spec = STEPS.get((sequence, entry.step))
@@ -385,7 +401,7 @@ class _Builder:
         spec: Spec,
         entry: StepEntry,
         here: str,
-        groups: Mapping[str, tuple[Repeat, dict[str, Step[Any]]]],
+        groups: Mapping[str, list[tuple[Repeat, dict[str, Step[Any]]]]],
     ) -> Tally[int] | None:
         if spec.counts is None:
             if entry.tallies:
@@ -397,8 +413,8 @@ class _Builder:
         for name in entry.tallies:
             if name not in groups:
                 raise self.error(here, f"{spec.name} tallies {name}, no group before it here")
-            group, inner = groups[name]
-            counts[group] = self.counted(spec.counts, spec, here, inner)
+            for group, inner in groups[name]:
+                counts[group] = self.counted(spec.counts, spec, here, inner)
         return Tally(spec.counts.label, counts)
 
     def counted(
@@ -425,15 +441,29 @@ class _Builder:
         )
         return Projection(label, reads, project, offered.aggregation)
 
-    def held(self, reads: tuple[Read, ...], spec: Spec, here: str) -> tuple[Fielded | None, ...]:
-        bound: list[Fielded | None] = []
+    def held(
+        self, reads: tuple[Read, ...], spec: Spec, here: str
+    ) -> tuple[Fielding | Part | None, ...]:
+        if spec.fighter and self.fighter is None:
+            raise self.error(here, f"{spec.name} is made per fighter, outside a fighter's group")
+        if not spec.fighter and self.fighter is not None:
+            raise self.error(here, f"{spec.name} is made per side, inside a fighter's group")
+        bound: list[Fielding | Part | None] = []
         for holding in holdings(reads):
             if holding.of not in self.file.fielded:
                 raise self.error(
                     here, f"{spec.name} reads the {holding.of}, which {self.source} does not field"
                 )
-            bound.append(None if self.fielded is None else self.fielded[holding.of])
+            bound.append(self.holding(holding.of))
         return tuple(bound)
+
+    def holding(self, side: Side) -> Fielding | Part | None:
+        if self.fielded is None:
+            return None
+        if self.fighter is None:
+            return self.fielded[side]
+        of, fighter = self.fighter
+        return fighter if side is of else self.fielded[side].hit
 
     def key(
         self,
