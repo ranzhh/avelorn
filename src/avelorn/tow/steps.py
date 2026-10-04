@@ -20,7 +20,6 @@ from avelorn.core.graph import (
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.engine.armour import defender_armour
 from avelorn.tow.kernels import (
-    Confirm,
     Die,
     Standing,
     armour_save_target,
@@ -29,6 +28,7 @@ from avelorn.tow.kernels import (
     heavy_casualties,
     leadership_test,
     remove_casualties,
+    shooting_hit,
     shooting_hit_target,
     wound_target,
 )
@@ -343,7 +343,7 @@ def roll_to_hit(attacker: Fielded) -> Distribution[Die]:
     Returns:
         The die as it lands.
     """
-    return d6(_hit_target(attacker), confirm=Confirm.SECOND_DIE)
+    return shooting_hit(_printed(attacker, Characteristic.BALLISTIC_SKILL))
 
 
 def _wound_target(attacker: Fielded, target: Fielded) -> int | None:

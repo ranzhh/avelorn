@@ -4,6 +4,8 @@ from collections.abc import Hashable, Mapping
 from itertools import product
 
 import pytest
+from oracle.procedure import NO_ARMOUR, Attack, Phase, one_attack
+from pins.corrections import corrections
 
 from avelorn.core.distribution import Distribution, Monoid, Probability
 from avelorn.tow.contingent import Contingent
@@ -22,6 +24,7 @@ VOLLEY_PROGRAM = load_program(VOLLEY, REPO.rules)
 ARCHERS = REPO.units["elven-archers"]
 SPEARMEN = REPO.units["elven-spearmen"]
 LONGBOW = REPO.weapons["longbow"].missile_profile
+CORRECTIONS = corrections()
 
 
 def _shooter(shots: int, ballistic_skill: int, strength: int, armour_piercing: int) -> Fielded:
@@ -92,7 +95,12 @@ def _casualties(evaluated: Evaluated, models: int) -> Distribution[int]:
     return evaluated.at("volley/remove-casualties").read("models").map(lambda left: models - left)
 
 
+def _per_shot(evaluated: Evaluated, path: str, reading: str, shots: int) -> Probability:
+    return evaluated.at(path).read(reading).expect(lambda count: count) / shots
+
+
 def _assert_matches_legacy(
+    pin: str,
     shots: int,
     ballistic_skill: int,
     strength: int,
@@ -122,6 +130,24 @@ def _assert_matches_legacy(
         battle_strength=models,
     )
 
+    correction = CORRECTIONS.get(pin)
+    if correction is not None:
+        attack = Attack(
+            Phase.SHOOTING,
+            skill=ballistic_skill,
+            strength=strength,
+            toughness=toughness,
+            armour_value=NO_ARMOUR if armour is None else armour,
+            armour_piercing=armour_piercing,
+            ward=ward,
+        )
+        hit = _per_shot(evaluated, "volley/attack/roll-to-hit", "hits", shots)
+        unsaved = _per_shot(evaluated, "volley/remove-casualties", "unsaved", shots)
+        assert hit != legacy.p_hit
+        assert (legacy.p_hit, hit) == (correction.old, correction.new)
+        assert unsaved == one_attack(attack).unsaved
+        return
+
     hit_and_wounded = legacy.p_hit * legacy.p_wound
     assert _read(evaluated, "volley/attack/roll-to-hit", "hits") == _landed(shots, legacy.p_hit)
     assert _read(evaluated, "volley/attack/roll-to-wound", "wounds") == _landed(
@@ -135,17 +161,22 @@ def _assert_matches_legacy(
     assert _casualties(evaluated, models).mass == Distribution.from_counts(legacy.casualties).mass
 
 
+_SCENARIOS = [
+    pytest.param(3, 4, 3, 3, 5, None, 3, 1, id="golden-chain"),
+    pytest.param(1, 4, 3, 3, None, 4, 1, 1, id="ward-save"),
+    pytest.param(10, 5, 1, 7, None, None, 10, 1, id="impossible-wound"),
+    pytest.param(10, 4, 3, 3, None, None, 2, 1, id="casualties-capped"),
+    pytest.param(6, 4, 3, 3, None, None, 6, 3, id="multi-wound-fold"),
+    pytest.param(1, 6, 10, 1, None, None, 1, 1, id="bs6"),
+]
+
+
 @pytest.mark.parametrize(
     ("shots", "ballistic_skill", "strength", "toughness", "armour", "ward", "models", "wounds"),
-    [
-        pytest.param(3, 4, 3, 3, 5, None, 3, 1, id="golden-chain"),
-        pytest.param(1, 4, 3, 3, None, 4, 1, 1, id="ward-save"),
-        pytest.param(10, 5, 1, 7, None, None, 10, 1, id="impossible-wound"),
-        pytest.param(10, 4, 3, 3, None, None, 2, 1, id="casualties-capped"),
-        pytest.param(6, 4, 3, 3, None, None, 6, 3, id="multi-wound-fold"),
-    ],
+    _SCENARIOS,
 )
 def test_the_shooting_scenarios_match_legacy_shoot(
+    request: pytest.FixtureRequest,
     shots: int,
     ballistic_skill: int,
     strength: int,
@@ -156,8 +187,24 @@ def test_the_shooting_scenarios_match_legacy_shoot(
     wounds: int,
 ) -> None:
     _assert_matches_legacy(
-        shots, ballistic_skill, strength, toughness, armour, 0, ward, models, wounds
+        request.node.nodeid,
+        shots,
+        ballistic_skill,
+        strength,
+        toughness,
+        armour,
+        0,
+        ward,
+        models,
+        wounds,
     )
+
+
+def test_every_correction_pins_a_shooting_scenario(request: pytest.FixtureRequest) -> None:
+    module = request.node.nodeid.split("::")[0]
+    test = test_the_shooting_scenarios_match_legacy_shoot.__name__
+
+    assert set(CORRECTIONS) <= {f"{module}::{test}[{each.id}]" for each in _SCENARIOS}
 
 
 _SWEEP = list(
@@ -190,6 +237,7 @@ _SWEEP = list(
     ],
 )
 def test_the_sweep_matches_legacy_shoot(
+    request: pytest.FixtureRequest,
     ballistic_skill: int,
     strength_toughness: tuple[int, int],
     armour: int | None,
@@ -201,7 +249,16 @@ def test_the_sweep_matches_legacy_shoot(
     strength, toughness = strength_toughness
     models, wounds = unit
     _assert_matches_legacy(
-        shots, ballistic_skill, strength, toughness, armour, armour_piercing, ward, models, wounds
+        request.node.nodeid,
+        shots,
+        ballistic_skill,
+        strength,
+        toughness,
+        armour,
+        armour_piercing,
+        ward,
+        models,
+        wounds,
     )
 
 

@@ -1,9 +1,11 @@
 """Kernel tests against verbatim rulebook values (tow.whfb.app)."""
 
+import re
 from collections.abc import Callable
 from fractions import Fraction
 
 import pytest
+from oracle.procedure import Attack, Phase, one_attack
 
 from avelorn.core.distribution import Distribution
 from avelorn.tow.kernels import (
@@ -20,7 +22,9 @@ from avelorn.tow.kernels import (
     melee_hit_target,
     remove_casualties,
     save_probability,
+    shooting_hit,
     shooting_hit_target,
+    success,
     wound_probability,
     wound_target,
 )
@@ -126,6 +130,33 @@ def test_armour_save_target(
 def test_hit_probability(target: int, expected: float) -> None:
     """Hit probabilities, including the 7+ confirm rule."""
     assert hit_probability(target) == pytest.approx(expected)
+
+
+@pytest.mark.parametrize("modifier", [0, -1, -2])
+@pytest.mark.parametrize("ballistic_skill", range(6, 11))
+def test_ballistic_skill_six_or_higher_hits_as_the_oracle(
+    ballistic_skill: int, modifier: int
+) -> None:
+    """A first roll on 2+ shifted by the modifier, then the chart's re-roll unmodified."""
+    attack = Attack(
+        Phase.SHOOTING, skill=ballistic_skill, strength=10, toughness=1, hit_modifier=modifier
+    )
+    always_wounds = Fraction(5, 6)
+
+    hit = success(shooting_hit(ballistic_skill, modifier))
+
+    assert hit * always_wounds == one_attack(attack).unsaved
+
+
+@pytest.mark.parametrize(
+    ("ballistic_skill", "modifier", "message"),
+    [(6, -5, "BS 6 at -5 needs 7+ on its first roll"), (11, 0, "BS 11 is off the printed chart")],
+)
+def test_shooting_hit_refuses_a_roll_the_chart_does_not_print(
+    ballistic_skill: int, modifier: int, message: str
+) -> None:
+    with pytest.raises(ValueError, match=re.escape(message)):
+        shooting_hit(ballistic_skill, modifier)
 
 
 def test_save_probability_none_means_no_save() -> None:

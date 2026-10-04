@@ -1,0 +1,7 @@
+- pin: tests/tow/test_volley_program.py::test_the_shooting_scenarios_match_legacy_shoot[bs6]
+  old: 5/6
+  new: 31/36
+  page: the-shooting-phase/bs-of-6-or-higher
+  reason: >-
+    The chance one shot hits. Legacy needs 7 minus BS, so BS 6 hits on 2+ and
+    never re-rolls. The chart hits on 2+ and re-rolls a miss at 6+.
