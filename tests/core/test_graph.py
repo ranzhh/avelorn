@@ -75,6 +75,10 @@ def _always(*values: Any) -> bool:
     return True
 
 
+def _runs(step: Step[int]) -> Projection[int]:
+    return step.output("times", Monoid(0))
+
+
 @dataclass(frozen=True)
 class _Shift:
     """A toy change that moves a roll by ``by`` in each world where ``when`` holds."""
@@ -127,7 +131,7 @@ def test_a_roll_edge_carries_its_own_distribution() -> None:
 def test_a_path_is_the_step_place_in_the_block_tree() -> None:
     shots = Measurement[int](name="shots", side="attacker", kernel=_three)
     hit = Roll[int](name="roll-to-hit", side="attacker", kernel=_d6, target=Scalar("t", 4))
-    attack = Repeat(name="attack", times=shots, items=(hit,))
+    attack = Repeat(name="attack", times=_runs(shots), items=(hit,))
     program = Program.build("volley", _SIDES, (shots, attack))
 
     assert program.paths[shots] == "volley/shots"
@@ -144,7 +148,7 @@ _certain_die.show(_certain_sixes)
 _certain = Program.build(
     "certain",
     _SIDES,
-    (_certain_shots, Repeat(name="attack", times=_certain_shots, items=(_certain_die,))),
+    (_certain_shots, Repeat(name="attack", times=_runs(_certain_shots), items=(_certain_die,))),
 )
 
 
@@ -171,7 +175,7 @@ _open_die.show(_open_sixes)
 _open = Program.build(
     "open",
     _SIDES,
-    (_open_shots, Repeat(name="attack", times=_open_shots, items=(_open_die,))),
+    (_open_shots, Repeat(name="attack", times=_runs(_open_shots), items=(_open_die,))),
 )
 
 
@@ -198,7 +202,7 @@ _spent_die.show(_spent_sixes)
 _spent = Program.build(
     "spent",
     _SIDES,
-    (_spent_shots, Repeat(name="attack", times=_spent_shots, items=(_spent_die,))),
+    (_spent_shots, Repeat(name="attack", times=_runs(_spent_shots), items=(_spent_die,))),
 )
 
 
@@ -250,7 +254,7 @@ _wound.show(_wounds)
 _coupled = Program.build(
     "coupled",
     _SIDES,
-    (_once, Repeat(name="attack", times=_once, items=(_hit, _wound))),
+    (_once, Repeat(name="attack", times=_runs(_once), items=(_hit, _wound))),
 )
 
 
@@ -290,7 +294,7 @@ def test_a_step_reads_an_enclosing_block() -> None:
     program = Program.build(
         "volley",
         _SIDES,
-        (attacks, strength, Repeat(name="attack", times=attacks, items=(wound,))),
+        (attacks, strength, Repeat(name="attack", times=_runs(attacks), items=(wound,))),
     )
     (lane,) = program.evaluate()
     faces = lane.read(wound, face)
@@ -313,7 +317,7 @@ def test_a_step_cannot_read_inside_a_nested_block() -> None:
         Program.build(
             "volley",
             _SIDES,
-            (shots, Repeat(name="attack", times=shots, items=(hit,)), removed),
+            (shots, Repeat(name="attack", times=_runs(shots), items=(hit,)), removed),
         )
 
 
@@ -327,7 +331,7 @@ def test_a_reading_cannot_show_a_step_out_of_scope() -> None:
         Program.build(
             "volley",
             _SIDES,
-            (shots, Repeat(name="attack", times=shots, items=(hit,)), removed),
+            (shots, Repeat(name="attack", times=_runs(shots), items=(hit,)), removed),
         )
 
 
@@ -336,7 +340,9 @@ def test_a_group_cannot_run_a_count_out_of_scope() -> None:
     hit = Roll[int](name="roll-to-hit", side="attacker", kernel=_d6, target=Scalar("t", 4))
 
     with pytest.raises(GraphError, match="runs shots times, which is not in scope"):
-        Program.build("volley", _SIDES, (Repeat(name="attack", times=hidden, items=(hit,)),))
+        Program.build(
+            "volley", _SIDES, (Repeat(name="attack", times=_runs(hidden), items=(hit,)),)
+        )
 
 
 def test_an_unread_output_dies_at_its_own_edge() -> None:
@@ -555,7 +561,7 @@ def test_a_repeat_holds_inside_only_what_its_inside_reads() -> None:
     roll = Measurement[int](name="roll", side="attacker", kernel=_d6)
     roll.show(roll.output("face", Monoid(0)))
     later = Consequence[int](name="later", side="attacker", inputs=(outer,), kernel=_toll)
-    attack = Repeat(name="attack", times=shots, items=(roll,))
+    attack = Repeat(name="attack", times=_runs(shots), items=(roll,))
     (lane,) = Program.build("volley", _SIDES, (outer, shots, attack, later)).evaluate()
 
     assert len(lane.edges[roll].stacks.mass) == 2
@@ -564,7 +570,7 @@ def test_a_repeat_holds_inside_only_what_its_inside_reads() -> None:
 def test_a_repeat_exit_drops_what_only_its_inside_read() -> None:
     shots = Measurement[int](name="shots", side="attacker", kernel=_one_or_two)
     roll = Measurement[int](name="roll", side="attacker", kernel=_d6)
-    attack = Repeat(name="attack", times=shots, items=(roll,))
+    attack = Repeat(name="attack", times=_runs(shots), items=(roll,))
     (lane,) = Program.build("volley", _SIDES, (shots, attack)).evaluate()
 
     assert len(lane.joint.mass) == 1
@@ -584,7 +590,9 @@ def test_a_repeat_cannot_write_state() -> None:
 
     with pytest.raises(GraphError, match="remove-casualties writes models inside a repeat"):
         Program.build(
-            "volley", _SIDES, (shots, Repeat(name="attack", times=shots, items=(hit, remove)))
+            "volley",
+            _SIDES,
+            (shots, Repeat(name="attack", times=_runs(shots), items=(hit, remove))),
         )
 
 
@@ -681,7 +689,7 @@ def test_a_group_stacks_its_attacks_per_outer_world() -> None:
     )
     hits = hit.output("hits", Monoid(0))
     hit.show(hits)
-    attack = Repeat(name="attack", times=shots, items=(hit,))
+    attack = Repeat(name="attack", times=_runs(shots), items=(hit,))
     (lane,) = Program.build("volley", _SIDES, (band, shots, attack)).evaluate()
 
     assert lane.read(hit, hits).mass == {0: _HALF, 2: _HALF}
@@ -729,7 +737,7 @@ def test_remove_casualties_reads_the_tally_of_its_own_world() -> None:
     )
     hits = hit.output("hits", Monoid(0))
     hit.show(hits)
-    attack = Repeat(name="attack", times=attackers, items=(hit,))
+    attack = Repeat(name="attack", times=_runs(attackers), items=(hit,))
     tally = Tally[int]("hits", {attack: hits})
     remove = Consequence[int](
         name="remove-casualties",
@@ -775,8 +783,8 @@ def test_a_tally_sums_every_group_it_counts() -> None:
     mount = Measurement[int](
         name="mount-hit", side="attacker", inputs=(charged,), kernel=_hits_on_the_charge
     )
-    riders = Repeat(name="riders", times=once, items=(rider,))
-    mounts = Repeat(name="mounts", times=once, items=(mount,))
+    riders = Repeat(name="riders", times=_runs(once), items=(rider,))
+    mounts = Repeat(name="mounts", times=_runs(once), items=(mount,))
     hits = Tally[int](
         "hits",
         {mounts: mount.output("hits", Monoid(0)), riders: rider.output("hits", Monoid(0))},
@@ -800,10 +808,58 @@ def _hits_on_the_charge(charged: bool) -> Distribution[int]:
     return Distribution.pure(int(charged))
 
 
+def _two_and_three() -> Distribution[tuple[int, int]]:
+    return Distribution.pure((2, 3))
+
+
+def _first(counts: tuple[int, int]) -> int:
+    return counts[0]
+
+
+def _second(counts: tuple[int, int]) -> int:
+    return counts[1]
+
+
+def test_repeats_sharing_one_count_tally_as_one_repeat_of_the_whole() -> None:
+    counts = Measurement[tuple[int, int]](name="counts", side="attacker", kernel=_two_and_three)
+    first_flip = Measurement[int](name="flip", side="attacker", kernel=_coin)
+    second_flip = Measurement[int](name="flip", side="attacker", kernel=_coin)
+    first = Repeat(
+        name="first",
+        times=Projection("times", (counts,), _first, Monoid(0)),
+        items=(first_flip,),
+    )
+    second = Repeat(
+        name="second",
+        times=Projection("times", (counts,), _second, Monoid(0)),
+        items=(second_flip,),
+    )
+    heads = Tally[int](
+        "heads",
+        {
+            first: first_flip.output("heads", Monoid(0)),
+            second: second_flip.output("heads", Monoid(0)),
+        },
+    )
+    summed = Consequence[int](name="sum", side="attacker", inputs=(heads,), kernel=_toll)
+    total = summed.output("heads", Monoid(0))
+    summed.show(total)
+    attack = Sequence(name="attack", items=(first, second))
+    program = Program.build("toy", _SIDES, (counts, attack, summed))
+
+    (lane,) = program.evaluate()
+
+    assert lane.read(summed, total).mass == _coin().repeat(5, Monoid(0)).mass
+    assert [first.view(program.paths), second.view(program.paths)] == [
+        {"path": "toy/attack/first", "kind": "repeat", "times": "toy/counts", "collapsed": False},
+        {"path": "toy/attack/second", "kind": "repeat", "times": "toy/counts", "collapsed": False},
+    ]
+
+
 def test_a_tally_of_a_group_out_of_scope_is_refused() -> None:
     once = Measurement[int](name="once", side="attacker", kernel=_one)
     hit = Measurement[int](name="hit", side="attacker", kernel=_coin)
-    attack = Repeat(name="attack", times=once, items=(hit,))
+    attack = Repeat(name="attack", times=_runs(once), items=(hit,))
     reaction = Decision[str](
         name="declare-reaction", side="target", options={"hold": (attack,)}, otherwise="hold"
     )
@@ -857,8 +913,8 @@ def test_a_tally_that_cannot_be_summed_is_refused(
     once = Measurement[int](name="once", side="attacker", kernel=_one)
     hit = Measurement[int](name="hit", side="attacker", kernel=_coin)
     miss = Measurement[int](name="miss", side="attacker", kernel=_coin)
-    attack = Repeat(name="attack", times=once, items=(hit,))
-    other = Repeat(name="other", times=once, items=(miss,))
+    attack = Repeat(name="attack", times=_runs(once), items=(hit,))
+    other = Repeat(name="other", times=_runs(once), items=(miss,))
     hits = Tally[int]("hits", counts(attack, hit, other, miss))
     remove = Consequence[int](
         name="remove-casualties", side="target", inputs=(hits,), kernel=_toll
@@ -876,7 +932,7 @@ def test_a_tally_that_cannot_be_summed_is_refused(
 def test_a_group_feeds_only_one_tally() -> None:
     once = Measurement[int](name="once", side="attacker", kernel=_one)
     hit = Measurement[int](name="hit", side="attacker", kernel=_coin)
-    attack = Repeat(name="attack", times=once, items=(hit,))
+    attack = Repeat(name="attack", times=_runs(once), items=(hit,))
     hits = Tally[int]("hits", {attack: hit.output("hits", Monoid(0))})
     wounds = Tally[int]("wounds", {attack: hit.output("wounds", Monoid(0))})
     remove = Consequence[int](
@@ -891,10 +947,12 @@ def test_a_group_feeds_only_one_tally() -> None:
 def test_a_repeat_inside_a_repeat_is_refused() -> None:
     once = Measurement[int](name="once", side="attacker", kernel=_one)
     hit = Measurement[int](name="hit", side="attacker", kernel=_coin)
-    inner = Repeat(name="inner", times=once, items=(hit,))
+    inner = Repeat(name="inner", times=_runs(once), items=(hit,))
 
     with pytest.raises(GraphError, match="fight/outer/inner repeats inside fight/outer"):
-        Program.build("fight", _SIDES, (once, Repeat(name="outer", times=once, items=(inner,))))
+        Program.build(
+            "fight", _SIDES, (once, Repeat(name="outer", times=_runs(once), items=(inner,)))
+        )
 
 
 def test_a_step_acting_for_a_side_the_program_lacks_is_refused() -> None:
@@ -1626,7 +1684,7 @@ def test_a_rule_declined_inside_a_repeat_moves_nothing_in_its_lane() -> None:
     )
     hits = Projection("hits", (hit,), _hit_count, Monoid(0))
     hit.show(hits)
-    attack = Repeat(name="attack", times=shots, items=(coin, hit))
+    attack = Repeat(name="attack", times=_runs(shots), items=(coin, hit))
     program = Program.build("aimed", _SIDES, (shots, attack))
     aim = Landing(hit, changes=(_Shift(1, reads=(coin,), when=_heads),))
     program.attach(
@@ -1679,7 +1737,7 @@ def test_a_verdict_inside_a_repeat_weighs_the_worlds_that_enter_it() -> None:
         kernel=_hit_after,
         target=Scalar("t", 4),
     )
-    attack = Repeat(name="attack", times=shots, items=(hit,))
+    attack = Repeat(name="attack", times=_runs(shots), items=(hit,))
     program = Program.build("aimed", _SIDES, (shots, attack))
     aim = Landing(hit, changes=(_Shift(1, reads=(shots,), when=_single),))
     program.attach(
@@ -1721,7 +1779,9 @@ def test_a_decision_inside_a_repeat_is_refused() -> None:
     with pytest.raises(
         GraphError, match="fight/attack/weapon settles options inside fight/attack"
     ):
-        Program.build("fight", _SIDES, (once, Repeat(name="attack", times=once, items=(weapon,))))
+        Program.build(
+            "fight", _SIDES, (once, Repeat(name="attack", times=_runs(once), items=(weapon,)))
+        )
 
 
 def test_a_decision_that_writes_state_is_refused() -> None:
@@ -1938,7 +1998,7 @@ _volley = Program.build(
     (
         _shots,
         _range,
-        Repeat(name="attack", times=_shots, items=(_to_hit,)),
+        Repeat(name="attack", times=_runs(_shots), items=(_to_hit,)),
         _stomp,
         _aftermath,
     ),

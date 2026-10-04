@@ -11,6 +11,7 @@ from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.kernels import Standing
 from avelorn.tow.programs import VOLLEY, ProgramError, load_program
+from avelorn.tow.schema.stage import Side
 from avelorn.tow.steps import Fielded
 
 type Edit = Callable[[dict[str, Any]], None]
@@ -67,6 +68,10 @@ def _tally_on_a_step_that_counts_none(volley: dict[str, Any]) -> None:
     volley["items"][1]["tallies"] = ["attack"]
 
 
+def _target_unfielded(volley: dict[str, Any]) -> None:
+    volley["fielded"] = ["attacker"]
+
+
 @pytest.mark.parametrize(
     ("edit", "message"),
     [
@@ -109,28 +114,34 @@ def _tally_on_a_step_that_counts_none(volley: dict[str, Any]) -> None:
         ),
         pytest.param(
             _fact_without_a_side,
-            "inputs.10.FactInput.of\n  Field required",
+            "inputs.8.FactInput.of\n  Field required",
             id="fact-without-a-side",
         ),
         pytest.param(
             _known_without_a_type,
-            "inputs.10.KnownInput.type\n  Field required",
+            "inputs.8.KnownInput.type\n  Field required",
             id="known-without-a-type",
         ),
         pytest.param(
             _input_twice,
-            "volley.yaml: inputs[10]: distance is an input twice",
+            "volley.yaml: inputs[8]: distance is an input twice",
             id="input-twice",
         ),
         pytest.param(
             _known_named_as_a_fact,
-            "volley.yaml: inputs[10]: moved is listed in state.yaml",
+            "volley.yaml: inputs[8]: moved is listed in state.yaml",
             id="known-named-as-a-fact",
         ),
         pytest.param(
             _tally_on_a_step_that_counts_none,
             "volley.yaml: items[1]: check-range sums no group",
             id="tally-on-a-step-that-counts-none",
+        ),
+        pytest.param(
+            _target_unfielded,
+            "volley.yaml: items[3].items[1]: roll-to-wound reads the target, "
+            "which volley.yaml does not field",
+            id="side-not-fielded",
         ),
     ],
 )
@@ -146,19 +157,28 @@ def test_a_bad_entry_fails_the_load_at_its_path(edit: Edit, message: str, tmp_pa
     assert message in str(refused.value)
 
 
+def _fielded() -> dict[Side, Fielded]:
+    archers = Contingent.deploy("elven-archers", 10, frontage=5)
+    spearmen = Contingent.deploy("elven-spearmen", 20, frontage=5)
+    return {Side.ATTACKER: Fielded.of(archers, "Longbow"), Side.TARGET: Fielded.of(spearmen)}
+
+
+def test_building_without_every_side_fielded_is_refused() -> None:
+    attacker = _fielded()[Side.ATTACKER]
+
+    with pytest.raises(ProgramError, match="volley needs the target fielded"):
+        load_program(VOLLEY, REPO.rules).built({Side.ATTACKER: attacker})
+
+
 def test_evaluating_without_every_input_is_refused() -> None:
-    with pytest.raises(
-        ProgramError, match="volley needs attacker/fielded, attacker/moved, attacker/standing"
-    ):
-        load_program(VOLLEY, REPO.rules).evaluate({"distance": 12})
+    built = load_program(VOLLEY, REPO.rules).built(_fielded())
+
+    with pytest.raises(ProgramError, match="volley needs attacker/moved, attacker/standing"):
+        built.evaluate({"distance": 12})
 
 
 def test_a_bool_given_as_an_int_is_refused() -> None:
-    archers = Contingent.deploy("elven-archers", 10, frontage=5)
-    spearmen = Contingent.deploy("elven-spearmen", 20, frontage=5)
     knowns = {
-        "attacker/fielded": Fielded.of(archers, "Longbow"),
-        "target/fielded": Fielded.of(spearmen),
         "distance": True,
         "can-shoot": True,
         "line-of-sight": True,
@@ -170,4 +190,4 @@ def test_a_bool_given_as_an_int_is_refused() -> None:
     }
 
     with pytest.raises(ProgramError, match="distance expects int; got True"):
-        load_program(VOLLEY, REPO.rules).evaluate(knowns)
+        load_program(VOLLEY, REPO.rules).built(_fielded()).evaluate(knowns)

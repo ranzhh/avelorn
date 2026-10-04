@@ -14,7 +14,6 @@ class FactType(StrEnum):
     INT = "int"
     BOOL = "bool"
     STANDING = "standing"
-    FIELDED = "fielded"
 
 
 class DerivedFact(StrEnum):
@@ -108,11 +107,12 @@ class GroupEntry(BaseModel):
 
 
 class ProgramFile(BaseModel):
-    """A program file."""
+    """A program file; ``fielded`` names the sides each build fields."""
 
     model_config = ConfigDict(extra="forbid")
 
     program: str
     sequence: StepSequence
+    fielded: list[Side]
     inputs: list[FactInput | KnownInput]
     items: list[GroupEntry | StepEntry | str] = Field(min_length=1)

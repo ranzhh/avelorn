@@ -1,8 +1,7 @@
 program: volley
 sequence: shooting
+fielded: [attacker, target]
 inputs:
-  - {known: fielded, of: attacker, type: fielded}
-  - {known: fielded, of: target, type: fielded}
   - {known: distance, type: int}
   - {known: can-shoot, type: bool}
   - {known: line-of-sight, type: bool}

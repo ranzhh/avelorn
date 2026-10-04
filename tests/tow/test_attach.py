@@ -8,12 +8,12 @@ from fractions import Fraction
 import pytest
 
 from avelorn.core.distribution import Probability
-from avelorn.core.graph import Carrier, RuleNode, Source, Verdict
-from avelorn.tow.attach import AttachError, attach_rules
+from avelorn.core.graph import Carrier, Source, Verdict
+from avelorn.tow.attach import AttachError
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.kernels import Standing
-from avelorn.tow.programs import VOLLEY, Evaluated, load_program
+from avelorn.tow.programs import VOLLEY, Built, Evaluated, load_program
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import Clause, Rule, RuleGraph
 from avelorn.tow.schema.stage import Side
@@ -27,24 +27,16 @@ def _deployed(slug: str) -> Contingent:
     return Contingent.deploy(slug, REPO.units[slug].unit_size.min, data=REPO)
 
 
-def _attached(
-    attacker: Fielded, target: Fielded, rules: Mapping[str, Rule] = REPO.rules
-) -> dict[str, RuleNode]:
-    attachment = attach_rules(
-        VOLLEY_PROGRAM.program,
-        VOLLEY_PROGRAM.specs,
-        {Side.ATTACKER: attacker, Side.TARGET: target},
-        rules,
-        VOLLEY_PROGRAM.states,
-    )
-    return {node.id: node for node in attachment.nodes}
+def _attached(attacker: Fielded, target: Fielded, rules: Mapping[str, Rule] = REPO.rules) -> Built:
+    loaded = VOLLEY_PROGRAM if rules is REPO.rules else load_program(VOLLEY, rules)
+    return loaded.built({Side.ATTACKER: attacker, Side.TARGET: target})
 
 
-def _landed(node: RuleNode) -> list[tuple[str, list[str]]]:
-    paths = VOLLEY_PROGRAM.program.paths
+def _landed(built: Built, node: str) -> list[tuple[str, list[str]]]:
+    paths = built.program.paths
     return [
         (paths[landing.at], [paths[trigger] for trigger in landing.triggers])
-        for landing in node.landings
+        for landing in built.program.rules[node].landings
     ]
 
 
@@ -59,10 +51,8 @@ def _evaluated(
 ) -> tuple[Evaluated, ...]:
     unit, weapon = shooter
     archers = _deployed(unit)
-    return VOLLEY_PROGRAM.evaluate(
+    return _attached(Fielded.of(archers, weapon), Fielded.of(target)).evaluate(
         {
-            "attacker/fielded": Fielded.of(archers, weapon),
-            "target/fielded": Fielded.of(target),
             "distance": distance,
             "can-shoot": True,
             "line-of-sight": True,
@@ -89,8 +79,8 @@ def test_a_side_carries_the_rules_of_the_profile_it_shoots_with() -> None:
 
 def test_a_bow_and_the_grant_to_it_make_one_armour_bane() -> None:
     sisters = Fielded.of(_deployed("sisters-of-avelorn"), "Bow of Avelorn")
-    nodes = _attached(sisters, Fielded.of(_deployed("elven-archers")))
-    bane = nodes["attacker/sisters-of-avelorn/armour-bane"]
+    built = _attached(sisters, Fielded.of(_deployed("elven-archers")))
+    bane = built.program.rules["attacker/sisters-of-avelorn/armour-bane"]
     bow = Source(Carrier.WEAPON, "bow-of-avelorn", "Bow of Avelorn")
 
     assert bane.name == "Armour Bane (2)"
@@ -98,14 +88,18 @@ def test_a_bow_and_the_grant_to_it_make_one_armour_bane() -> None:
         bow,
         Source(bow.carrier, bow.item, bow.profile, "attacker/sisters-of-avelorn/arrows-of-isha"),
     )
-    assert _landed(bane) == [("volley/attack/make-armour-saves", ["volley/attack/roll-to-wound"])]
+    assert _landed(built, bane.id) == [
+        ("volley/attack/make-armour-saves", ["volley/attack/roll-to-wound"])
+    ]
 
 
 def test_only_the_side_taking_the_panic_test_holds_valour_of_ages() -> None:
-    nodes = _attached(_archers(), Fielded.of(_deployed("elven-spearmen")))
+    built = _attached(_archers(), Fielded.of(_deployed("elven-spearmen")))
 
     assert [
-        (node.id, _landed(node)) for node in nodes.values() if node.rule == "valour-of-ages"
+        (node, _landed(built, node))
+        for node, held in built.program.rules.items()
+        if held.rule == "valour-of-ages"
     ] == [
         (
             "target/elven-spearmen/valour-of-ages",
@@ -115,17 +109,17 @@ def test_only_the_side_taking_the_panic_test_holds_valour_of_ages() -> None:
 
 
 def test_the_abyssal_cloak_lands_on_the_shooter_roll_to_hit() -> None:
-    nodes = _attached(_archers(), Fielded.of(_deployed("merwyrm")))
+    built = _attached(_archers(), Fielded.of(_deployed("merwyrm")))
 
-    assert _landed(nodes["target/merwyrm/abyssal-cloak"]) == [
+    assert _landed(built, "target/merwyrm/abyssal-cloak") == [
         ("volley/attack/roll-to-hit", ["volley/check-range"])
     ]
 
 
 def test_volley_fire_lands_on_who_can_shoot() -> None:
-    nodes = _attached(_archers(), Fielded.of(_deployed("elven-spearmen")))
+    built = _attached(_archers(), Fielded.of(_deployed("elven-spearmen")))
 
-    assert _landed(nodes["attacker/elven-archers/volley-fire"]) == [("volley/who-can-shoot", [])]
+    assert _landed(built, "attacker/elven-archers/volley-fire") == [("volley/who-can-shoot", [])]
 
 
 def _verdicts(evaluated: Evaluated, node: str) -> Mapping[Verdict, Probability]:
@@ -246,4 +240,3 @@ def test_each_fielding_evaluates_with_its_own_rule_nodes() -> None:
         "target/merwyrm/large-target",
         "target/merwyrm/terror",
     ]
-    assert VOLLEY_PROGRAM.program.rules == {}

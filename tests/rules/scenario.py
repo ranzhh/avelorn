@@ -21,6 +21,7 @@ from avelorn.tow.phases.combat import (
 )
 from avelorn.tow.phases.movement import StandAndShoot, charge
 from avelorn.tow.programs import VOLLEY, Evaluated, load_program
+from avelorn.tow.schema import stage
 from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import Rule
@@ -218,19 +219,25 @@ def resolve(scenario: Scenario) -> Outcome:
 
 def _volley(attacker: Contingent, defender: Contingent, scenario: Scenario) -> Evaluated:
     rules = {slug: rule for slug, rule in REPO.rules.items() if slug not in scenario.dropped}
-    lanes = load_program(VOLLEY, rules).evaluate(
-        {
-            "attacker/fielded": Fielded.of(attacker, attacker.shooting_weapon().name),
-            "target/fielded": Fielded.of(defender),
-            "distance": scenario.distance,
-            "can-shoot": True,
-            "line-of-sight": True,
-            "attacker/moved": attacker.movement.moved,
-            "attacker/standing": Standing(attacker.models, 0),
-            "target/standing": Standing(defender.models, 0),
-            "target/models-at-start-of-phase": defender.models,
-            "target/battle-strength": defender.models,
-        }
+    fielded = {
+        stage.Side.ATTACKER: Fielded.of(attacker, attacker.shooting_weapon().name),
+        stage.Side.TARGET: Fielded.of(defender),
+    }
+    lanes = (
+        load_program(VOLLEY, rules)
+        .built(fielded)
+        .evaluate(
+            {
+                "distance": scenario.distance,
+                "can-shoot": True,
+                "line-of-sight": True,
+                "attacker/moved": attacker.movement.moved,
+                "attacker/standing": Standing(attacker.models, 0),
+                "target/standing": Standing(defender.models, 0),
+                "target/models-at-start-of-phase": defender.models,
+                "target/battle-strength": defender.models,
+            }
+        )
     )
     (taken,) = (
         volley

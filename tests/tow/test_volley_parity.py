@@ -12,8 +12,9 @@ from avelorn.tow.data import TOWRepository
 from avelorn.tow.game import TOWGame
 from avelorn.tow.kernels import Standing
 from avelorn.tow.phases.shooting import make_panic_tests, shoot_unit
-from avelorn.tow.programs import VOLLEY, load_program
+from avelorn.tow.programs import VOLLEY, Built, load_program
 from avelorn.tow.schema.phase import Phase
+from avelorn.tow.schema.stage import Side
 from avelorn.tow.steps import Fielded, Retreat
 
 REPO = TOWRepository()
@@ -90,12 +91,9 @@ def _legacy(attacker: Contingent, target: Contingent, distance: int) -> Outcome:
     )
 
 
-def _graph(attacker: Contingent, target: Contingent, distance: int) -> Outcome:
-    assert attacker.weapon is not None
-    lanes = VOLLEY_PROGRAM.evaluate(
+def _graph(built: Built, attacker: Contingent, target: Contingent, distance: int) -> Outcome:
+    lanes = built.evaluate(
         {
-            "attacker/fielded": Fielded.of(attacker, attacker.weapon.name),
-            "target/fielded": Fielded.of(target),
             "distance": distance,
             "can-shoot": True,
             "line-of-sight": True,
@@ -126,18 +124,20 @@ def _graph(attacker: Contingent, target: Contingent, distance: int) -> Outcome:
 
 @pytest.mark.parametrize("shooter", list(SHOOTERS))
 def test_every_volley_agrees_with_legacy(shooter: str) -> None:
+    shooting = SHOOTERS[shooter]
+    assert shooting.weapon is not None
+    fielded = Fielded.of(shooting, shooting.weapon.name)
     disagreements = []
     for name, target in TARGETS.items():
+        built = VOLLEY_PROGRAM.built({Side.ATTACKER: fielded, Side.TARGET: Fielded.of(target)})
         for moved in (False, True):
-            attacker = SHOOTERS[shooter]
-            if moved:
-                attacker = attacker.after(Movement.march())
+            attacker = shooting.after(Movement.march()) if moved else shooting
             profile = attacker.shooting_weapon().missile_profile
             assert profile is not None
             assert isinstance(profile.range, int)
             for distance in (profile.range // 2, profile.range):
                 legacy = _legacy(attacker, target, distance)
-                graph = _graph(attacker, target, distance)
+                graph = _graph(built, attacker, target, distance)
                 if graph != legacy:
                     scenario = f'{name} at {distance}"{" after moving" if moved else ""}'
                     disagreements.append(f"{scenario}: graph {graph}, legacy {legacy}")
