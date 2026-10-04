@@ -1297,7 +1297,7 @@ _RULE_KEYS = ("may", "not_on", "needs")
 
 
 class Clause(BaseModel):
-    """One effect as a rule file writes it: the graph's form, the legacy engine's, or both.
+    """One effect as a rule file writes it.
 
     The legacy form is the effect's ``legacy`` block, together with the add, set,
     grants or hits the graph's form states when the block names no operation of
@@ -1313,7 +1313,7 @@ class Clause(BaseModel):
     @model_validator(mode="after")
     def _read_by_someone(self) -> Self:
         if self.effect is None and self.legacy is None:
-            raise ValueError("an effect is written for the graph, the legacy engine, or both")
+            raise ValueError("an effect is written for at least one engine")
         return self
 
     @classmethod
@@ -1360,7 +1360,7 @@ def _dumped(model: BaseModel) -> dict[str, object]:
 
 
 class RuleGraph(BaseModel):
-    """A rule as the graph reads it: its effects, and what the rule says of itself.
+    """A rule as the graph reads it.
 
     ``may`` marks a rule its player may decline. ``not_on`` names the profile
     rows the rule stops at, as "but not its mount" does. ``needs`` names the

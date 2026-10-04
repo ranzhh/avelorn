@@ -1,4 +1,4 @@
-"""A rule effect as the graph reads it: where it triggers, where it lands, what it does.
+"""A rule effect as the graph reads it.
 
 An effect names its landing under ``at``: a printed step and the role acting
 there, relative to the bearer. ``when`` holds its trigger and gates, ``unless``
@@ -185,10 +185,11 @@ class Unless(Gates):
 
 
 class When(Gates):
-    """A trigger and gates: the step whose outcome fires the effect, and what must hold.
+    """What fires an effect.
 
-    The trigger is ``step`` and ``by``, and optionally the ``natural`` face its
-    die shows, the outcome it ``is``, or the score it ``needed``.
+    The trigger is ``step`` and ``by``. It may also read the ``natural`` face
+    its die shows, the outcome it ``is`` or the score it ``needed``. The gates
+    must hold as well.
     """
 
     step: Step | None = None
@@ -382,7 +383,7 @@ Options = Annotated[tuple[Slug, ...], Field(min_length=1)]
 
 
 class Effect(BaseModel):
-    """One printed effect: its trigger and gates, its landing, and one operation.
+    """One printed effect.
 
     ``of`` names whose characteristic an add or set changes, since a step reads
     the characteristics of both models at once.
@@ -458,7 +459,7 @@ class Effect(BaseModel):
 
     @property
     def fact_refs(self) -> tuple[FactRef, ...]:
-        """Every fact read as a value, in an amount or in a comparison."""
+        """Every fact read as a value."""
         values = [*self.amounts, *(gate.compared[1] for gate in self.fact_gates)]
         return tuple(value for value in values if isinstance(value, FactRef))
 
@@ -470,7 +471,7 @@ class Effect(BaseModel):
 
     @property
     def rules(self) -> frozenset[str]:
-        """Every rule the effect names: one it grants, cancels, or asks the foe to have."""
+        """Every rule the effect names."""
         foes = [gates.foe for gates in self._gates if gates.foe is not None]
         named = {rule for foe in foes for rule in foe.has or ()}
         if self.grants is not None:
@@ -523,18 +524,23 @@ class Effect(BaseModel):
 
     @model_validator(mode="after")
     def _lands_or_is_granted(self) -> Self:
-        if self.grants is not None:
-            if self.to is None or self.at is not None:
-                raise ValueError("a grant names who receives it with to, and no landing")
-        elif self.at is None or self.to is not None:
-            raise ValueError("an effect lands at an address; only a grant names to")
+        if self.grants is not None and self.to is None:
+            raise ValueError("a grant names who receives it under to")
+        if self.grants is not None and self.at is not None:
+            raise ValueError("a grant has no landing of its own")
+        if self.grants is None and self.at is None:
+            raise ValueError("an effect lands at an address")
+        if self.grants is None and self.to is not None:
+            raise ValueError("to names who receives a grant")
         return self
 
     @model_validator(mode="after")
     def _owns_a_characteristic(self) -> Self:
         changes_one = any(isinstance(key, Characteristic) for key in self.keys)
-        if changes_one != (self.of is not None):
-            raise ValueError("of names whose characteristic an add or set changes, and only that")
+        if changes_one and self.of is None:
+            raise ValueError("of names whose characteristic changes")
+        if self.of is not None and not changes_one:
+            raise ValueError("of belongs to a changed characteristic")
         return self
 
     @model_validator(mode="after")
@@ -573,7 +579,7 @@ _BEST = frozenset({Quantity.WARD_SAVE})
 
 
 def conflicts(rules: Mapping[str, Sequence[Effect]]) -> list[str]:
-    """Every pair of rules that set one value, or force different options, at one address.
+    """Every pair of rules that clash at one address.
 
     Two such rules conflict unless either cancels the other there. Each pair is
     compared on one model and on two models facing each other. A Ward save is

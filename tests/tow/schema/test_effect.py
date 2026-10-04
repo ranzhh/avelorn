@@ -1,4 +1,4 @@
-"""The graph's rule schema: addresses, operations, and the legacy form beside them."""
+"""The graph's rule schema."""
 
 import pytest
 from pydantic import ValidationError
@@ -23,7 +23,7 @@ LANDS = {"at": {"step": "make-armour-saves", "by": "the-enemy"}}
         ({**LANDS, "set_": {"armour-piercing": 1}}, "set_"),
         ({**LANDS, "add": {"armour-piercing": True}}, "armour-piercing"),
         ({"at": {"step": "who-strikes-first", "by": "this-model"}, "set": {"I": 10}}, "of names"),
-        ({**LANDS, "grants": "armour-bane"}, "to"),
+        ({**LANDS, "grants": "armour-bane"}, "under to"),
         ({**LANDS, "when": {"step": "make-armour-saves", "by": "the-enemy"}, "deny": True}, "own"),
         (
             {

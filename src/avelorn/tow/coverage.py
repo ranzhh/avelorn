@@ -181,8 +181,7 @@ def _graph_gaps(slug: str, rule: Rule) -> Iterator[tuple[GapKind, str, Site]]:
     """The gaps in a rule as the graph reads it.
 
     Yields:
-        One gap per step an effect needs that no program registers, then one
-        per mechanic the rule needs.
+        Each gap's kind, its ledger subject, and the rule as its site.
     """
     if rule.graph is None:
         return
