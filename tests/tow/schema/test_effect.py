@@ -3,9 +3,11 @@
 import pytest
 from pydantic import ValidationError
 
-from avelorn.tow.schema.effect import Effect
+from avelorn.tow.data import TOWRepository
+from avelorn.tow.schema.effect import Effect, Operation, conflicts
 from avelorn.tow.schema.rule import Clause, ModifierEffect
 
+REPO = TOWRepository()
 LANDS = {"at": {"step": "make-armour-saves", "by": "the-enemy"}}
 
 
@@ -77,3 +79,33 @@ def test_an_effect_without_a_legacy_block_is_the_graphs_alone() -> None:
     clause = Clause.read({**LANDS, "add": {"armour-piercing": 1}})
     assert clause.effect is not None
     assert clause.legacy is None
+
+
+def _uncancelled(slug: str) -> tuple[Effect, ...]:
+    graph = REPO.rules[slug].graph
+    assert graph is not None
+    return tuple(effect for effect in graph.effects if effect.operation is not Operation.CANCELS)
+
+
+def test_two_rules_setting_one_value_conflict_unless_one_cancels() -> None:
+    """Strike First and Strike Last both set Initiative; only their cancels reconcile them."""
+    both = {slug: _uncancelled(slug) for slug in ("strike-first", "strike-last")}
+    assert conflicts(both) == [
+        "strike-first and strike-last both set I at who-strikes-first by this-model, "
+        "and neither cancels"
+    ]
+    graph = REPO.rules["strike-first"].graph
+    assert graph is not None
+    assert conflicts({**both, "strike-first": graph.effects}) == []
+
+
+def test_two_rules_forcing_different_options_conflict() -> None:
+    """A second rule forcing another Break test result clashes with Stubborn."""
+    graph = REPO.rules["stubborn"].graph
+    assert graph is not None
+    gives = tuple(
+        effect.model_copy(update={"force": ("gives-ground",)}) for effect in graph.effects
+    )
+    (found,) = conflicts({"stubborn": graph.effects, "doctored": gives})
+    assert found.startswith("doctored and stubborn force gives-ground against")
+    assert "at break-test by this-model" in found

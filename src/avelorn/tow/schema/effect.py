@@ -384,14 +384,64 @@ class Effect(BaseModel):
         return frozenset({*(self.add or {}), *(self.set_ or {})})
 
     @property
+    def _amounts(self) -> tuple[Amount, ...]:
+        written = [
+            *(self.add or {}).values(),
+            *(self.set_ or {}).values(),
+            self.hits,
+            self.multiply,
+        ]
+        return tuple(
+            amount.amount if isinstance(amount, Bounded) else amount
+            for amount in written
+            if amount is not None
+        )
+
+    @property
+    def _gates(self) -> tuple[Gates, ...]:
+        return tuple(gates for gates in (self.when, self.unless) if gates is not None)
+
+    @property
     def reads_x(self) -> bool:
         """Whether an amount of the operation is the rule's X."""
-        amounts = [*(self.add or {}).values(), *(self.set_ or {}).values()]
-        amounts += [self.hits, self.multiply]
-        return any(
-            amount == "X" or (isinstance(amount, Bounded) and amount.amount == "X")
-            for amount in amounts
-        )
+        return "X" in self._amounts
+
+    @property
+    def facts(self) -> frozenset[str]:
+        """Every fact the effect reads, by name."""
+        compared = [gate for gates in self._gates for gate in gates.facts]
+        values = [
+            *self._amounts,
+            *(c.is_ for c in compared),
+            *(c.at_least for c in compared),
+            *(c.at_most for c in compared),
+            *(c.more_than for c in compared),
+        ]
+        named = {gate.fact for gate in compared}
+        return frozenset(named | {value.fact for value in values if isinstance(value, FactRef)})
+
+    @property
+    def rules(self) -> frozenset[str]:
+        """Every rule the effect names: one it grants, cancels, or asks the foe to have."""
+        foes = [gates.foe for gates in self._gates if gates.foe is not None]
+        named = {rule for foe in foes for rule in foe.has or ()}
+        if self.grants is not None:
+            named.add(self.grants.rule)
+        if self.cancels is not None and self.cancels.rule is not None:
+            named.add(self.cancels.rule)
+        return frozenset(named)
+
+    @property
+    def weapons(self) -> frozenset[str]:
+        """Every weapon the effect's gates name."""
+        named = [gates.with_.weapon for gates in self._gates if gates.with_ is not None]
+        return frozenset(weapon for weapon in named if weapon is not None)
+
+    @property
+    def armour(self) -> frozenset[str]:
+        """Every piece of armour the effect's gates or its bar name."""
+        named = {gates.worn.armour for gates in self._gates if gates.worn is not None}
+        return frozenset(named if self.bar is None else {*named, self.bar})
 
     def matches(self, rule: str, cancels: Cancels) -> bool:
         """Whether a cancel removes this effect of ``rule``.

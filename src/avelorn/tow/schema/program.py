@@ -17,6 +17,13 @@ class FactType(StrEnum):
     FIELDED = "fielded"
 
 
+class DerivedFact(StrEnum):
+    """A printed quantity with no step of its own, worked out at the step that reads it."""
+
+    RANK_BONUS = "rank-bonus"
+    UNIT_STRENGTH = "unit-strength"
+
+
 class Per(StrEnum):
     """A state fact's key."""
 

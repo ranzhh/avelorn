@@ -5,3 +5,12 @@ facts:
   - fact: moved
     type: bool
     per: side
+  - fact: charges-made
+    type: int
+    per: side
+  - fact: rounds-fought
+    type: int
+    per: side
+  - fact: break-tests-taken
+    type: int
+    per: side
