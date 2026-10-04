@@ -9,7 +9,9 @@ paragraphs:
 # Formations are not modelled yet, so a unit with this rule is taken to be
 # skirmishing. The -1 To Hit is the formation's own rule, conferred by a grant
 # so its effects stay authored on that entry.
+needs: [formations]
 effects:
-  - grants: enemy-fire-skirmishers
+  - legacy:
+      grants: enemy-fire-skirmishers
 notes: the Skirmish formation is not modelled; a unit with this rule is taken
   to be skirmishing at all times.

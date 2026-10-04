@@ -10,5 +10,12 @@ paragraphs:
   - A unit with this special rule may re-roll any failed Panic test caused by taking heavy casualties or by being fled through
     by a friendly unit.
 effects:
-  - reroll: make-panic-tests
-    causes: [heavy-casualties, fled-through]
+  - when: {step: heavy-casualties, by: this-model, is: true}
+    reroll: failed
+    at: {step: make-panic-tests, by: this-model}
+    legacy:
+      reroll: make-panic-tests
+      causes: [heavy-casualties, fled-through]
+  - when: {step: fled-through, by: this-model, is: true}
+    reroll: failed
+    at: {step: make-panic-tests, by: this-model}

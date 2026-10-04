@@ -10,13 +10,12 @@ paragraphs:
     Hit of a natural 1. Note that this special rule only applies to a single, non-magical hand weapon and does not apply
     to a model's mount (should it have one). If the model is using two hand weapons or any other sort of weapon, this
     special rule ceases to apply.
-# The "single, non-magical" and "not a mount" restrictions are not expressed —
-# the engine fields one weapon in hand per rank-and-file model, none magical,
-# no mounts, so they cannot arise.
+not_on: [mount]
 effects:
-  - when:
-      combat: true
-      wielding:
-        name: Hand Weapon
-    reroll: roll-to-hit
-    on_natural: 1
+  - when: {with: {weapon: hand-weapon}}
+    reroll: natural-1
+    at: {step: roll-to-hit, by: this-model, in: combat}
+    legacy:
+      when: {combat: true, wielding: {name: Hand Weapon}}
+      reroll: roll-to-hit
+      on_natural: 1

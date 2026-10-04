@@ -5,15 +5,13 @@ category: Special Rules
 paragraphs:
   - Whilst engaged in close combat, a model with this rule that is equipped with and chooses to use a hand weapon and shield
     improves its armour value by 1, to a maximum of 3+.
-# `combat` is a presence gate, not `target_of` like Lion Cloak's: RAW a shot at
-# a unit locked in combat still benefits. The printed infantry restriction is
-# unexpressed — the engine fields only infantry in close combat today.
 effects:
   - when:
-      combat: true
-      wielding:
-        name: Hand Weapon
-      worn:
-        name: Shield
-    add:
-      armour-value: { amount: 1, maximum: 3 }
+      step: choose-combat-and-determine-who-can-fight
+      by: this-model
+      is: hand-weapon
+      worn: {armour: shield}
+    add: {armour-value: {amount: 1, maximum: 3}}
+    at: {step: make-armour-saves, by: this-model, in: combat}
+    legacy:
+      when: {combat: true, wielding: {name: Hand Weapon}, worn: {name: Shield}}

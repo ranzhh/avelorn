@@ -10,12 +10,14 @@ paragraphs:
 # Read before a weapon resolves its own Strength, so a weapon striking at the
 # wielder's Strength (S, S+2) strikes from the lowered value while one that
 # prints its own is untouched, as printed.
+needs: [base-contact]
 effects:
-  - enemy: true
-    when:
-      combat: true
-    add:
-      S: { amount: -1, minimum: 1 }
+  - add: {S: {amount: -1, minimum: 1}}
+    of: the-enemy
+    at: {step: roll-to-wound, by: the-enemy, in: combat}
+    legacy:
+      enemy: true
+      when: {combat: true}
 notes: base contact is read as being engaged in the combat — the whole engaged
   enemy unit suffers the malus, not only the models touching this one; mount
   rows are read printed, so an engaged foe's mounts keep their own Strength.

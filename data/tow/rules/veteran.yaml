@@ -8,12 +8,23 @@ paragraphs:
   - If the majority of the models in a unit have this special rule, the unit may re-roll any failed Leadership test.
   - Note that a Break test is not a Leadership test.
 # Every printed panic cause qualifies, so no `causes` filter, where Valour of
-# Ages names two. The printed Break-test exclusion needs no expressing: a Break
-# test is a decision, not this stage.
+# Ages names two.
 notes: >-
   The "majority of the models" condition is not expressed: the engine fields a
   homogeneous unit, so a rule printed on its profile is carried by every model
   and the majority always holds. It will need a gate once a unit can be mustered
   from parts that do not all share it.
+needs: [parts, psychology-tests, march-tests]
 effects:
-  - reroll: make-panic-tests
+  - reroll: failed
+    at: {step: make-panic-tests, by: this-model}
+    legacy:
+      reroll: make-panic-tests
+  - reroll: failed
+    at: {step: rally-fleeing-units, by: this-model}
+  - reroll: failed
+    at: {step: redirecting-a-charge, by: this-model}
+  - reroll: failed
+    at: {step: running-down-the-foe, by: this-model}
+  - reroll: failed
+    at: {step: restrain-and-reform, by: this-model}

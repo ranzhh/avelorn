@@ -7,9 +7,11 @@ paragraphs:
     arrayed in combat order is not one, but two ranks deep. In other words, models that are directly
     behind and in base contact with models in the unit's actual fighting rank are also considered to
     be within its fighting rank.
+needs: [formations]
 effects:
-  - when:
-      movement:
-        charge: false
-    add:
-      fighting-ranks: 1
+  - unless:
+      facts: [{fact: charges-made, of: this-model, more-than: 0}]
+    add: {fighting-ranks: 1}
+    at: {step: who-can-fight, by: this-model}
+    legacy:
+      when: {movement: {charge: false}}

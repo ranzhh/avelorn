@@ -13,13 +13,13 @@ paragraphs:
 # "Infantry or cavalry" expands to the categories' printed sub-types
 # (troop-types-in-detail): the rulebook's own reading is that a category names
 # its sub-types unless excepted.
+needs: [regeneration-saves]
 effects:
   - when:
-      combat: true
-      natural:
-        face: 6
-        roll: roll-to-wound
-      foe:
+      step: roll-to-wound
+      by: this-model
+      natural: 6
+      foe: &infantry-or-cavalry
         troop_type:
           - Regular Infantry
           - Heavy Infantry
@@ -29,6 +29,20 @@ effects:
           - Heavy Cavalry
           - Monstrous Cavalry
           - War Beast
-    denies: [make-armour-saves]
-    slays: true
+    deny: true
+    at: {step: make-armour-saves, by: the-enemy, in: combat}
+    legacy:
+      when:
+        combat: true
+        natural: {face: 6, roll: roll-to-wound}
+        foe: *infantry-or-cavalry
+      denies: [make-armour-saves]
+      slays: true
+  - when:
+      step: roll-to-wound
+      by: this-model
+      natural: 6
+      foe: *infantry-or-cavalry
+    multiply: {fact: W, of: the-enemy}
+    at: {step: remove-casualties, by: the-enemy, in: combat}
 notes: Regeneration saves do not exist to deny.

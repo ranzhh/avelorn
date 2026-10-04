@@ -9,9 +9,8 @@ paragraphs:
   - A model with this special rule has a 6+ Ward save against any wounds suffered that were caused by a non-magical shooting
     attack.
 effects:
-  - when:
-      target_of:
-        kind: shooting
-        magical: false
-    set:
-      ward-save: 6
+  - when: {attack: {magical: false}}
+    set: {ward-save: 6}
+    at: {step: ward-saves, by: this-model, in: shooting}
+    legacy:
+      when: {target_of: {kind: shooting, magical: false}}

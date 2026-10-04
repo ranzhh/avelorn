@@ -11,9 +11,9 @@ paragraphs:
 # rank's blows only.
 effects:
   - when:
-      movement:
-        charge:
-          distance:
-            at_least: 3
-    add:
-      A: 1
+      facts: [{fact: the-charge-move, of: this-model, at-least: 3}]
+    add: {A: 1}
+    of: this-model
+    at: {step: how-many-attacks, by: this-model}
+    legacy:
+      when: {movement: {charge: {distance: {at_least: 3}}}}

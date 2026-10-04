@@ -9,18 +9,21 @@ paragraphs:
     a 'Cleaving Blow'. Enemy models whose troop type is regular infantry, heavy infantry, light cavalry, heavy cavalry or
     war beasts are not permitted an armour or Regeneration save against a Cleaving Blow (Ward saves can be attempted as normal).
   - Note that if an attack wounds automatically, this special rule cannot be used.
+needs: [regeneration-saves]
 effects:
   - when:
-      combat: true
-      natural:
-        face: 6
-        roll: roll-to-wound
+      step: roll-to-wound
+      by: this-model
+      natural: 6
       foe:
-        troop_type:
-          - Regular Infantry
-          - Heavy Infantry
-          - Light Cavalry
-          - Heavy Cavalry
-          - War Beast
-    denies: [make-armour-saves]
+        troop_type: [Regular Infantry, Heavy Infantry, Light Cavalry, Heavy Cavalry, War Beast]
+    deny: true
+    at: {step: make-armour-saves, by: the-enemy, in: combat}
+    legacy:
+      when:
+        combat: true
+        natural: {face: 6, roll: roll-to-wound}
+        foe:
+          troop_type: [Regular Infantry, Heavy Infantry, Light Cavalry, Heavy Cavalry, War Beast]
+      denies: [make-armour-saves]
 notes: Regeneration saves do not exist to deny.

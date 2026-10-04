@@ -15,14 +15,17 @@ paragraphs:
   - Impact Hits can only be made by a charging model that moved 3" or more and that is in base contact with the enemy. Impact
     Hits are resolved against the charged unit when the combat is chosen during Step 1.1 of the Choose Combat & Fight sub-phase,
     before issuing challenges. They hit automatically and use the unmodified Strength of the model making them.
+needs: [base-contact]
 effects:
   - when:
-      movement:
-        charge:
-          distance:
-            at_least: 3
+      facts: [{fact: the-charge-move, of: this-model, at-least: 3}]
     hits: X
-    order: first
+    at: {step: impact-hits, by: this-model}
+    legacy:
+      when: {movement: {charge: {distance: {at_least: 3}}}}
+      order: first
+  - cancels: {op: add, quantity: S}
+    at: {step: roll-to-wound, by: this-model, in: impact-hits}
 notes: >-
   "In base contact" is read as the engine reads contact everywhere: every
   front-rank model causes its hits, an equally wide foe assumed. The hits are

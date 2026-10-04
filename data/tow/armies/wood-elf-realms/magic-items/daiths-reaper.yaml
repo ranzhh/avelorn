@@ -15,6 +15,9 @@ paragraphs:
 # "against wounds caused by this weapon" needs no gate: the entry is referenced
 # from the weapon's own profile, so it compiles only when the Reaper is in use.
 effects:
-  - reroll: make-armour-saves
-    of: successful
-    enemy: true
+  - reroll: successful
+    at: {step: make-armour-saves, by: the-enemy}
+    legacy:
+      reroll: make-armour-saves
+      of: successful
+      enemy: true

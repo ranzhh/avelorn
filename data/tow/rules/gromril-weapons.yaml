@@ -9,11 +9,13 @@ paragraphs:
   - A hand weapon carried by a model with this special rule has an Armour Piercing characteristic of -1.
   - Note that this special rule only applies to a single, ordinary hand weapon. If the model is using two hand weapons or
     any other sort of weapon, or if their hand weapon is inscribed with any Weapon runes, this special rule ceases to apply.
+needs: [weapon-runes]
 effects:
-  - when:
-      wielding:
-        name: Hand Weapon
-    add:
-      armour-piercing: 1
+  - when: {with: {weapon: hand-weapon}}
+    set: {armour-piercing: 1}
+    at: {step: make-armour-saves, by: the-enemy}
+    legacy:
+      when: {wielding: {name: Hand Weapon}}
+      add: {armour-piercing: 1}
 notes: 'Not modelled: the exclusions for two hand weapons, or a hand weapon
   bearing Weapon runes.'

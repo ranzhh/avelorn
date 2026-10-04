@@ -10,8 +10,8 @@ paragraphs:
 # only carrier. A Fight-in-Extra-Rank weapon without it would move the gate
 # onto the weapon.
 effects:
-  - when:
-      movement:
-        charge: false
-    add:
-      supporting-ranks: 1
+  - allow: [supporting-attack]
+    at: {step: who-can-fight, by: this-model}
+    legacy:
+      when: {movement: {charge: false}}
+      add: {supporting-ranks: 1}

@@ -136,3 +136,12 @@ def test_modifier_effect_prints_the_rulebook_key() -> None:
     rendered = rule_to_yaml(REPO.rules["strike-first"])
     assert "- set:" in rendered
     assert "set_" not in rendered
+
+
+def test_addresses_survive_a_reimport(tmp_path: Path) -> None:
+    """The graph's form of each effect carries over onto the freshly scraped rule."""
+    existing = REPO.rules["armour-bane"]
+    assert existing.graph is not None
+    path = _existing(tmp_path, rule_to_yaml(existing))
+    merged, _ = with_hand_authored(_REIMPORTED, path)
+    assert merged.graph == existing.graph

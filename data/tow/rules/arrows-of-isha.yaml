@@ -11,10 +11,14 @@ paragraphs:
 # Armour Bane (1) is granted by name, not copied, so a change to its entry
 # tracks here. It stacks with the Bow of Avelorn's own printed Armour Bane (1)
 # — two instances, +2 on a natural 6.
-when:
-  wielding:
-    type: bow
 effects:
-  - add:
-      armour-piercing: 1
-  - grants: {rule: armour-bane, X: 1}
+  - when: {with: {type: bow}}
+    add: {armour-piercing: 1}
+    at: {step: make-armour-saves, by: the-enemy}
+    legacy:
+      when: {wielding: {type: bow}}
+  - when: {with: {type: bow}}
+    grants: {rule: armour-bane, X: 1}
+    to: this-model
+    legacy:
+      when: {wielding: {type: bow}}

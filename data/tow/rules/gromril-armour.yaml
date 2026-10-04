@@ -11,5 +11,8 @@ paragraphs:
 # The grant reaches only the attacks the bearer suffers: carried into a strike,
 # it never touches the enemy's saves.
 effects:
-  - reroll: make-armour-saves
-    on_natural: 1
+  - reroll: natural-1
+    at: {step: make-armour-saves, by: this-model}
+    legacy:
+      reroll: make-armour-saves
+      on_natural: 1
