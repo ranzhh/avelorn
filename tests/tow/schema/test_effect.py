@@ -7,6 +7,7 @@ from avelorn.core.graph import Side as Role
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.schema.effect import Address, Effect, Operation, conflicts
 from avelorn.tow.schema.rule import Clause, ModifierEffect
+from avelorn.tow.schema.step import StepSequence
 
 REPO = TOWRepository()
 LANDS = {"at": {"step": "make-armour-saves", "by": "the-enemy"}}
@@ -84,6 +85,14 @@ def test_an_effect_that_does_not_say_one_thing_fails_to_load(
     """An effect names a printed step, one operation and every owner, or it does not load."""
     with pytest.raises(ValidationError, match=refused):
         Effect.model_validate(written)
+
+
+def test_an_address_excluding_a_sequence_lands_in_the_others() -> None:
+    """Roll To Hit outside shooting is the combat roll alone."""
+    address = Address.model_validate(
+        {"step": "roll-to-hit", "by": "this-model", "not_in": "shooting"}
+    )
+    assert address.sequences == (StepSequence.COMBAT,)
 
 
 def test_a_legacy_block_without_an_operation_reads_the_graphs() -> None:

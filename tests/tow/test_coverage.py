@@ -7,7 +7,7 @@ gap needs any more is stale. `avelorn coverage` prints the same report.
 
 import yaml
 
-from avelorn.tow.coverage import coverage
+from avelorn.tow.coverage import Entry, Site, coverage
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.schema.ledger import GapKind
 
@@ -61,3 +61,9 @@ def test_an_effect_waits_for_the_step_that_triggers_it() -> None:
 def test_an_effect_waits_for_a_step_it_reads_as_a_fact() -> None:
     """Furious Charge reads the length of a charge move no program registers yet."""
     assert "furious-charge/charge/the-charge-move" in UNATTACHED
+
+
+def test_a_rule_granted_only_by_the_graph_is_referenced_there() -> None:
+    """Flaming Attacks grants Fear in the graph alone, and the Fear gap names it."""
+    fear = next(gap for gap in REPORT.gaps if gap.subject == "fear")
+    assert Site(entry=Entry.RULE, id="flaming-attacks") in fear.sites
