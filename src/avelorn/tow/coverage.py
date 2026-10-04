@@ -17,7 +17,6 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict
 
-from avelorn.tow.attach import attach_rules
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.programs import VOLLEY, load_program
@@ -250,7 +249,7 @@ def _volley_gaps(data: TOWRepository, referenced: set[str]) -> Iterator[tuple[Ga
         The gap's kind, ``<rule>/<sequence>/<step>``, and the rule as its site.
     """
     volley = load_program(VOLLEY, data.rules)
-    specs = volley.specs.values()
+    specs = volley.specs
     have = {spec.key for spec in specs}
     names = {spec.name for spec in specs}
     core = {slug for slug, rule in data.rules.items() if rule.category in set(Phase)}
@@ -275,14 +274,12 @@ def _volley_gaps(data: TOWRepository, referenced: set[str]) -> Iterator[tuple[Ga
         facing = [(target, {str(Side.TARGET)})]
         facing += [(shooter, {str(side) for side in Side}) for shooter in shooters]
         for attacker, counted in facing:
-            fielded = {Side.ATTACKER: attacker, Side.TARGET: target}
-            attached = attach_rules(
-                volley.program, volley.specs, fielded, data.rules, volley.states
-            )
+            built = volley.built({Side.ATTACKER: attacker, Side.TARGET: target})
+            attached = built.attachment
             for reaches, found in ((attached.reaches, reached), (attached.held, held)):
                 for reach in reaches:
                     if reach.holder.side in counted:
-                        spec = volley.specs[reach.at]
+                        spec = built.specs[reach.at]
                         found.add((reach.rule, reach.effect, spec.sequence, spec.name))
     gaps = ((GapKind.UNREACHED_EFFECT, expected - reached), (GapKind.HELD_EFFECT, held))
     for kind, effects in gaps:

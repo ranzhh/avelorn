@@ -3,6 +3,7 @@
 from collections.abc import Callable, Hashable, Iterator, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
+from itertools import takewhile
 from types import MappingProxyType
 from typing import Any
 
@@ -179,6 +180,16 @@ class Fact:
 
 
 @dataclass(frozen=True)
+class Holding:
+    """A read of what a side holds at the step, bound when the program is built.
+
+    It comes before every other read of a step or a reading.
+    """
+
+    of: Side
+
+
+@dataclass(frozen=True)
 class Output:
     """A read of an earlier step's output, by step name."""
 
@@ -200,7 +211,22 @@ class Changed:
 
 CHANGED = Changed()
 
-type Read = Fact | Output | Summed | Changed
+type Read = Holding | Fact | Output | Summed | Changed
+
+
+def holdings(reads: tuple[Read, ...]) -> tuple[Holding, ...]:
+    """The holdings that lead ``reads``.
+
+    Returns:
+        Each leading holding, in order.
+
+    Raises:
+        ValueError: a holding comes after another read.
+    """
+    leading = tuple(takewhile(lambda read: isinstance(read, Holding), reads))
+    if any(isinstance(read, Holding) for read in reads[len(leading) :]):
+        raise ValueError(f"{reads}: a holding comes after another read")
+    return tuple(read for read in leading if isinstance(read, Holding))
 
 
 @dataclass(frozen=True)
@@ -267,6 +293,9 @@ class Spec:
             raise ValueError(f"{self.name}: reads its changes before its last input")
         if (self.printed is not None) != (self.kind is Kind.ROLL and CHANGED in self.reads):
             raise ValueError(f"{self.name}: shows a printed target exactly when rules change it")
+        offered = (self.target, self.printed, *self.readings.values())
+        for reads in (self.reads, *(each.reads for each in offered if each is not None)):
+            holdings(reads)
 
     @property
     def key(self) -> tuple[StepSequence, str]:
@@ -275,13 +304,14 @@ class Spec:
 
     def build(
         self,
+        kernel: Kernel[Any],
         inputs: tuple[Key, ...],
         target: Reading | None,
         writes: State[Any] | None,
         changed: Mark[tuple[Hashable, ...]] | None,
         printed: Reading | None,
     ) -> Step[Any]:
-        """Build the step instance from its resolved inputs.
+        """Build the step instance from its kernel, with its holdings bound, and its inputs.
 
         Returns:
             The step, of the class its kind names.
@@ -296,20 +326,20 @@ class Spec:
                     name=self.name,
                     side=side,
                     inputs=inputs,
-                    kernel=self.kernel,
+                    kernel=kernel,
                     writes=writes,
                     changed=changed,
                 )
             case Kind.ELIGIBILITY:
                 return Eligibility(
-                    name=self.name, side=side, inputs=inputs, kernel=self.kernel, writes=writes
+                    name=self.name, side=side, inputs=inputs, kernel=kernel, writes=writes
                 )
             case Kind.CONSEQUENCE:
                 return Consequence(
                     name=self.name,
                     side=side,
                     inputs=inputs,
-                    kernel=self.kernel,
+                    kernel=kernel,
                     writes=writes,
                     changed=changed,
                 )
@@ -320,7 +350,7 @@ class Spec:
                     name=self.name,
                     side=side,
                     inputs=inputs,
-                    kernel=self.kernel,
+                    kernel=kernel,
                     writes=writes,
                     target=target,
                     printed=printed,
@@ -544,7 +574,7 @@ def _unsaved(wound: Die | None, save: Die | None, ward: Die | None) -> int:
     return int(_succeeded(wound) and not _succeeded(save) and not _succeeded(ward))
 
 
-def _remove_casualties(standing: Standing, target: Fielded, wounds: int) -> Distribution[Standing]:
+def _remove_casualties(target: Fielded, standing: Standing, wounds: int) -> Distribution[Standing]:
     return Distribution.pure(
         remove_casualties(standing, wounds, _printed(target, Characteristic.WOUNDS))
     )
@@ -611,9 +641,9 @@ def _listed(ranks: frozenset[str]) -> str:
     return ", ".join(sorted(ranks))
 
 
-_ATTACKER = Fact("fielded", Side.ATTACKER)
+_ATTACKER = Holding(Side.ATTACKER)
 _PRINTED = Payloads(())
-_TARGET = Fact("fielded", Side.TARGET)
+_TARGET = Holding(Side.TARGET)
 _TARGET_STANDING = Fact("standing", Side.TARGET)
 _UNITED = Monoid[Hashable](_UNSHOWN, _united)
 _COUNT = Monoid(0)
@@ -746,7 +776,7 @@ _SPECS = (
         name="remove-casualties",
         kind=Kind.CONSEQUENCE,
         side=Side.TARGET,
-        reads=(_TARGET_STANDING, _TARGET, SUMMED),
+        reads=(_TARGET, _TARGET_STANDING, SUMMED),
         kernel=_remove_casualties,
         writes=_TARGET_STANDING,
         counts=Counted("unsaved wounds", _UNSAVED, _unsaved),

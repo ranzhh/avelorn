@@ -70,8 +70,6 @@ def _volley(
     moved: bool = False,
 ) -> Evaluated:
     knowns: dict[str, Hashable] = {
-        "attacker/fielded": attacker,
-        "target/fielded": target,
         "distance": distance,
         "can-shoot": can_shoot,
         "line-of-sight": line_of_sight,
@@ -81,7 +79,8 @@ def _volley(
         "target/models-at-start-of-phase": models,
         "target/battle-strength": battle_strength,
     }
-    (evaluated,) = VOLLEY_PROGRAM.evaluate(knowns)
+    built = VOLLEY_PROGRAM.built({Side.ATTACKER: attacker, Side.TARGET: target})
+    (evaluated,) = built.evaluate(knowns)
     return evaluated
 
 

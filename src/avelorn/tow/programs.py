@@ -2,6 +2,7 @@
 
 from collections.abc import Hashable, Mapping, Sequence
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any
@@ -24,7 +25,7 @@ from avelorn.core.graph import (
     Step,
     Tally,
 )
-from avelorn.tow.attach import attach_rules
+from avelorn.tow.attach import Attachment, attach_rules
 from avelorn.tow.data import DATA_DIR
 from avelorn.tow.kernels import Standing
 from avelorn.tow.schema.program import (
@@ -47,11 +48,13 @@ from avelorn.tow.steps import (
     Counted,
     Fact,
     Fielded,
+    Holding,
     Offered,
     Output,
     Read,
     Spec,
     Summed,
+    holdings,
 )
 from avelorn.tow.traits import Operand
 
@@ -63,7 +66,6 @@ TYPES: Mapping[FactType, type] = MappingProxyType(
         FactType.INT: int,
         FactType.BOOL: bool,
         FactType.STANDING: Standing,
-        FactType.FIELDED: Fielded,
     }
 )
 
@@ -85,23 +87,72 @@ class Input:
 
 @dataclass(frozen=True)
 class Loaded:
-    """A loaded program, with the corpus rules it attaches from."""
+    """A loaded program file, with the corpus rules it attaches from.
 
-    program: Program
+    ``specs`` are the printed steps the program makes, in file order.
+    """
+
+    source: str
+    file: ProgramFile
+    facts: Mapping[str, StateFact]
     inputs: Mapping[str, Input]
-    specs: Mapping[Step[Any], Spec]
+    specs: tuple[Spec, ...]
     rules: Mapping[str, Rule]
+
+    @property
+    def sides(self) -> tuple[Side, ...]:
+        """The sides each build fields."""
+        return tuple(self.file.fielded)
 
     @property
     def states(self) -> Mapping[str, State[Any]]:
         """The state each input is held under, by the input's name."""
         return MappingProxyType({name: given.state for name, given in self.inputs.items()})
 
+    def built(self, fielded: Mapping[Side, Fielded]) -> "Built":
+        """Build the program for one fielding of each side, and attach their rules.
+
+        Each build makes its own steps and rule nodes, so no two fieldings share them.
+
+        Returns:
+            The built program.
+
+        Raises:
+            ProgramError: a side the program fields is not given, or a side it does not
+                field is.
+        """
+        missing = [str(side) for side in self.sides if side not in fielded]
+        if missing:
+            raise ProgramError(f"{self.file.program} needs the {', '.join(missing)} fielded")
+        stray = [str(side) for side in fielded if side not in self.sides]
+        if stray:
+            raise ProgramError(f"{self.file.program} fields no {', '.join(stray)}")
+        states = dict(self.states)
+        builder = _Builder(self.source, self.file, self.facts, dict(self.inputs), fielded, states)
+        program = builder.build()
+        attachment = attach_rules(program, builder.specs, fielded, self.rules, self.states)
+        program.attach(attachment.nodes)
+        return Built(
+            self.inputs,
+            program,
+            MappingProxyType(builder.specs),
+            MappingProxyType(dict(fielded)),
+            attachment,
+        )
+
+
+@dataclass(frozen=True)
+class Built:
+    """A program built for one fielding of each side, their rules attached."""
+
+    inputs: Mapping[str, Input]
+    program: Program
+    specs: Mapping[Step[Any], Spec]
+    fielded: Mapping[Side, Fielded]
+    attachment: Attachment
+
     def evaluate(self, knowns: Mapping[str, Hashable]) -> tuple["Evaluated", ...]:
         """Evaluate the program with every input given by name.
-
-        Each evaluation builds the program afresh and attaches the rules of the
-        sides fielded, so no two fieldings share a rule node.
 
         Returns:
             One evaluation per lane.
@@ -119,18 +170,10 @@ class Loaded:
             expected = self.inputs[name].type
             if type(value) is not expected:
                 raise ProgramError(f"{name} expects {expected.__name__}; got {value!r}")
-        fielded: dict[Side, Fielded] = {}
-        for side in map(Side, self.program.sides):
-            value = knowns[Fact("fielded", side).full]
-            if not isinstance(value, Fielded):
-                raise ProgramError(f"{side}/fielded expects Fielded; got {value!r}")
-            fielded[side] = value
-        program = _built(self.program.name, self.program.items, self.inputs)
-        program.attach(attach_rules(program, self.specs, fielded, self.rules, self.states).nodes)
         given = {self.inputs[name].state: value for name, value in knowns.items()}
         return tuple(
             Evaluated(self, lane, MappingProxyType(dict(knowns)))
-            for lane in program.evaluate(state=given)
+            for lane in self.program.evaluate(state=given)
         )
 
 
@@ -138,7 +181,7 @@ class Loaded:
 class Evaluated:
     """One lane of an evaluated program, read by path."""
 
-    loaded: Loaded
+    built: Built
     lane: Lane
     knowns: Mapping[str, Hashable]
 
@@ -195,8 +238,8 @@ class At:
         Raises:
             ProgramError: that side fields no such part.
         """
-        fielded = self.evaluated.knowns[Fact("fielded", side).full]
-        if not isinstance(fielded, Fielded) or fielded.part != part:
+        fielded = self.evaluated.built.fielded[side]
+        if fielded.part != part:
             raise ProgramError(f"the {side} fields no part {part}")
         return PartAt(self, side, fielded)
 
@@ -216,7 +259,7 @@ class PartAt:
             The operand; no attached rule changes it yet.
         """
         printed = self.fielded.characteristic(c)
-        spec = self.at.evaluated.loaded.specs[self.at.step]
+        spec = self.at.evaluated.built.specs[self.at.step]
         resolve = spec.in_force.get((self.side, c))
         value = printed if resolve is None else resolve(self.fielded)
         return Operand(Distribution.pure(value), printed)
@@ -235,9 +278,20 @@ class _Builder:
     file: ProgramFile
     facts: Mapping[str, StateFact]
     inputs: dict[str, Input]
+    fielded: Mapping[Side, Fielded] | None
     states: dict[str, State[Any]] = field(default_factory=dict)
     specs: dict[Step[Any], Spec] = field(default_factory=dict)
     written: set[str] = field(default_factory=set)
+
+    def build(self) -> Program:
+        items = self.block(self.file.items, "items", {})
+        try:
+            program = Program.build(self.file.program, tuple(map(str, self.file.fielded)), items)
+        except GraphError as error:
+            raise ProgramError(f"{self.source}: {error}") from error
+        for given in self.inputs.values():
+            program.hold(given.state)
+        return program
 
     def take(self, entry: FactInput | KnownInput, here: str) -> None:
         name = entry.name
@@ -304,14 +358,19 @@ class _Builder:
             raise self.error(here, f"{entry.step} is no step of the {sequence} sequence")
         tally = self.tally(spec, entry, here, groups)
         changed = Mark[tuple[Hashable, ...]](spec.name) if CHANGED in spec.reads else None
-        inputs = tuple(self.key(read, spec, here, visible, tally, changed) for read in spec.reads)
+        bound = self.held(spec.reads, spec, here)
+        kernel = partial(spec.kernel, *bound) if bound else spec.kernel
+        inputs = tuple(
+            self.key(read, spec, here, visible, tally, changed)
+            for read in spec.reads[len(bound) :]
+        )
         target = printed = None
         if spec.target is not None:
             target = self.projection("needed", spec.target, spec, here, visible, tally, changed)
         if spec.printed is not None:
             printed = self.projection("printed", spec.printed, spec, here, visible, tally, changed)
         writes = None if spec.writes is None else self.write(spec.writes, here)
-        step = spec.build(inputs, target, writes, changed, printed)
+        step = spec.build(kernel, inputs, target, writes, changed, printed)
         self.specs[step] = spec
         own = {**visible, spec.name: step}
         for name in entry.readings:
@@ -358,10 +417,23 @@ class _Builder:
         tally: Tally[int] | None,
         changed: Mark[tuple[Hashable, ...]] | None,
     ) -> Projection[Any]:
+        bound = self.held(offered.reads, spec, here)
+        project = partial(offered.project, *bound) if bound else offered.project
         reads = tuple(
-            self.key(read, spec, here, visible, tally, changed) for read in offered.reads
+            self.key(read, spec, here, visible, tally, changed)
+            for read in offered.reads[len(bound) :]
         )
-        return Projection(label, reads, offered.project, offered.aggregation)
+        return Projection(label, reads, project, offered.aggregation)
+
+    def held(self, reads: tuple[Read, ...], spec: Spec, here: str) -> tuple[Fielded | None, ...]:
+        bound: list[Fielded | None] = []
+        for holding in holdings(reads):
+            if holding.of not in self.file.fielded:
+                raise self.error(
+                    here, f"{spec.name} reads the {holding.of}, which {self.source} does not field"
+                )
+            bound.append(None if self.fielded is None else self.fielded[holding.of])
+        return tuple(bound)
 
     def key(
         self,
@@ -373,6 +445,8 @@ class _Builder:
         changed: Mark[tuple[Hashable, ...]] | None,
     ) -> Key:
         match read:
+            case Holding():
+                raise self.error(here, f"{spec.name} reads the {read.of} after another input")
             case Fact():
                 return self.read(read, spec, here)
             case Output():
@@ -417,31 +491,21 @@ class _Builder:
         return ProgramError(f"{self.source}: {here}: {message}")
 
 
-def _built(name: str, items: tuple[Item, ...], inputs: Mapping[str, Input]) -> Program:
-    program = Program.build(name, tuple(map(str, Side)), items)
-    for given in inputs.values():
-        program.hold(given.state)
-    return program
-
-
 def load_program(path: Path, rules: Mapping[str, Rule], state: Path = STATE) -> Loaded:
     """Load and check a program file.
 
-    Returns:
-        The built program, the inputs it needs and the rules it attaches from.
+    The check builds the program once with no side fielded, so an entry that
+    does not load fails here with a :class:`ProgramError` naming its path in
+    the file.
 
-    Raises:
-        ProgramError: an entry does not load; the message names its path in the file.
+    Returns:
+        The loaded program, the inputs it needs and the rules it attaches from.
     """
     file = _parsed(path, ProgramFile)
     facts = {fact.fact: fact for fact in _parsed(state, StateFile).facts}
-    builder = _Builder(path.name, file, facts, {})
+    builder = _Builder(path.name, file, facts, {}, None)
     for index, entry in enumerate(file.inputs):
         builder.take(entry, f"inputs[{index}]")
-    items = builder.block(file.items, "items", {})
+    builder.build()
     inputs = MappingProxyType(builder.inputs)
-    try:
-        program = _built(file.program, items, inputs)
-    except GraphError as error:
-        raise ProgramError(f"{path.name}: {error}") from error
-    return Loaded(program, inputs, MappingProxyType(builder.specs), rules)
+    return Loaded(path.name, file, facts, inputs, tuple(builder.specs.values()), rules)

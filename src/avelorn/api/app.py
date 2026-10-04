@@ -31,6 +31,7 @@ from avelorn.tow.muster import Complement
 from avelorn.tow.programs import VOLLEY, load_program
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
+from avelorn.tow.schema.stage import Side
 from avelorn.tow.schema.weapon import Weapon
 from avelorn.tow.steps import Fielded
 from avelorn.tow.views import (
@@ -79,19 +80,22 @@ def graph_volley(data: Corpus) -> dict[str, object]:
     """
     archers = Contingent.deploy("elven-archers", 10, data=data, frontage=5)
     spearmen = Contingent.deploy("elven-spearmen", 20, data=data, frontage=5)
-    (volley,) = load_program(VOLLEY, data.rules).evaluate(
-        {
-            "attacker/fielded": Fielded.of(archers, "Longbow"),
-            "target/fielded": Fielded.of(spearmen),
-            "distance": 12,
-            "can-shoot": True,
-            "line-of-sight": True,
-            "attacker/moved": False,
-            "attacker/standing": Standing(archers.models, 0),
-            "target/standing": Standing(spearmen.models, 0),
-            "target/models-at-start-of-phase": spearmen.models,
-            "target/battle-strength": spearmen.models,
-        }
+    fielded = {Side.ATTACKER: Fielded.of(archers, "Longbow"), Side.TARGET: Fielded.of(spearmen)}
+    (volley,) = (
+        load_program(VOLLEY, data.rules)
+        .built(fielded)
+        .evaluate(
+            {
+                "distance": 12,
+                "can-shoot": True,
+                "line-of-sight": True,
+                "attacker/moved": False,
+                "attacker/standing": Standing(archers.models, 0),
+                "target/standing": Standing(spearmen.models, 0),
+                "target/models-at-start-of-phase": spearmen.models,
+                "target/battle-strength": spearmen.models,
+            }
+        )
     )
     return volley.lane.to_view()
 
