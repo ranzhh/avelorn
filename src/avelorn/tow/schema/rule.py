@@ -1329,9 +1329,9 @@ class Clause(BaseModel):
         if not isinstance(written, Mapping):
             raise TypeError(f"an effect is a mapping, not {written!r}")
         graph = {key: value for key, value in written.items() if key != "legacy"}
-        block = written.get("legacy")
         legacy = None
-        if block is not None:
+        if "legacy" in written:
+            block = written.get("legacy")
             if not isinstance(block, Mapping):
                 raise TypeError(f"a legacy block is a mapping, not {block!r}")
             named = _LEGACY_OPERATIONS & set(block)
@@ -1417,6 +1417,8 @@ class Rule(BaseModel):
         fields = {str(key): value for key, value in data.items()}
         if not _in_file_form(fields):
             return handler(data)
+        if "when" in fields:
+            raise ValueError("a rule written for the graph gates each effect with its own when")
         written = fields.get("effects") or []
         if not isinstance(written, list):
             raise TypeError("effects is a list")
@@ -1465,14 +1467,15 @@ class Rule(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _hoist_shared_when(cls, data: object) -> object:
-        # A rule-level ``when`` is the condition the whole rule reads — Arrows
-        # of Isha's "any bow" holds for every clause. Written once at the rule
-        # and conjoined into each effect's own gate here, so the data does not
-        # repeat it and the rest of the engine still reads one gate per effect.
-        # A subject constrained at both the rule and an effect is ambiguous —
-        # a data error, not a silent override — but the union of disjoint
-        # subjects (the rule's "wielding a bow" beside an effect's natural 6)
-        # is the ordinary conjunction.
+        """Conjoin a legacy rule's rule-level ``when`` into each of its effects.
+
+        Returns:
+            The rule data, its effects each carrying the shared gate.
+
+        Raises:
+            TypeError: an effect is not a mapping.
+            ValueError: a subject is gated at both the rule and an effect.
+        """
         if not isinstance(data, dict) or "when" not in data:
             return data
         data = dict(data)
