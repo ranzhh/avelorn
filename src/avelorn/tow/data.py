@@ -13,9 +13,9 @@ from pathlib import Path
 from avelorn.core.loading import load_yaml, load_yaml_dir
 from avelorn.core.registry import Registry
 from avelorn.tow.schema.armour import Armour
-from avelorn.tow.schema.effect import Effect, conflicts
+from avelorn.tow.schema.effect import Effect, FactRef, conflicts
 from avelorn.tow.schema.ledger import Ledger
-from avelorn.tow.schema.program import DerivedFact, StateFile
+from avelorn.tow.schema.program import DerivedFact, FactType, StateFact, StateFile
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import GrantEffect, Rule, bind
 from avelorn.tow.schema.step import Step
@@ -100,14 +100,15 @@ def _checked(where: str, references: Iterable[RuleRef], rules: Mapping[str, Rule
             raise ValueError(f"{where}: {reference}: {err}") from err
 
 
-def _addressed(rules: Mapping[str, Rule], facts: Iterable[str]) -> None:
+def _addressed(rules: Mapping[str, Rule], state: Iterable[StateFact]) -> None:
     """Fail the load on a rule whose effects the graph cannot read as written.
 
     Raises:
-        ValueError: a rule with effects writes no addresses, an effect names a
-            rule or fact that does not exist, or two rules conflict at one address.
+        ValueError: naming the rule and what the graph cannot read.
     """
-    known = {*facts, *Step, *DerivedFact, *Characteristic}
+    types = {fact.fact: fact.type for fact in state}
+    types |= {str(fact): FactType.INT for fact in (*DerivedFact, *Characteristic)}
+    known = {*types, *Step}
     for rule in rules.values():
         if rule.effects and rule.graph is None:
             raise ValueError(f"rule {rule.id}: its effects state no addresses")
@@ -116,9 +117,38 @@ def _addressed(rules: Mapping[str, Rule], facts: Iterable[str]) -> None:
                 raise ValueError(f"rule {rule.id}: no fact is named {', '.join(unknown)}")
             if missing := sorted(effect.rules - set(rules)):
                 raise ValueError(f"rule {rule.id}: no rule entry {', '.join(missing)}")
+            _typed(rule.id, effect, types)
     graphs = {slug: rule.graph.effects for slug, rule in rules.items() if rule.graph is not None}
     if found := conflicts(graphs):
         raise ValueError("; ".join(found))
+
+
+def _typed(rule: str, effect: Effect, types: Mapping[str, FactType]) -> None:
+    """Fail the load on a fact read against the type ``state.yaml`` gives it.
+
+    Raises:
+        ValueError: naming the rule and the fact.
+    """
+    for read in (*effect.fact_gates, *effect.fact_refs):
+        if read.fact in types and read.of is None:
+            raise ValueError(f"rule {rule}: {read.fact} is read without of")
+    for ref in effect.amounts:
+        if isinstance(ref, FactRef) and types.get(ref.fact, FactType.INT) is not FactType.INT:
+            raise ValueError(f"rule {rule}: {ref.fact} is no number")
+    for gate in effect.fact_gates:
+        comparator, value = gate.compared
+        kind = types.get(gate.fact)
+        if kind is not None and not _fits(kind, comparator, value, types):
+            written = f"{comparator} {value!r}"
+            raise ValueError(f"rule {rule}: {gate.fact} ({kind}) cannot be compared {written}")
+
+
+def _fits(kind: FactType, comparator: str, value: object, types: Mapping[str, FactType]) -> bool:
+    if isinstance(value, FactRef):
+        return types.get(value.fact, kind) is kind and kind is FactType.INT
+    if kind is FactType.BOOL:
+        return comparator == "is" and isinstance(value, bool)
+    return kind is FactType.INT and isinstance(value, int) and not isinstance(value, bool)
 
 
 def _named(kind: str, names: Iterable[tuple[str, frozenset[str]]], known: Iterable[str]) -> None:
@@ -223,7 +253,7 @@ class TOWRepository:
             grants += [e.grants for e in _effects(rule) if e.grants is not None]
             _checked(f"rule {rule.id}", grants, rules)
         state = load_yaml(self._data_dir / "tow/state.yaml", StateFile)
-        _addressed(rules, (fact.fact for fact in state.facts))
+        _addressed(rules, state.facts)
         return rules
 
     @cached_property

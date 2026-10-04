@@ -64,6 +64,18 @@ class Comparison(BaseModel):
     at_most: Value | None = Field(default=None, alias="at-most")
     more_than: Value | None = Field(default=None, alias="more-than")
 
+    @property
+    def compared(self) -> tuple[str, "Value"]:
+        """The comparator as written, with the value it compares against."""
+        written = (
+            ("is", self.is_),
+            ("at-least", self.at_least),
+            ("at-most", self.at_most),
+            ("more-than", self.more_than),
+        )
+        (pair,) = ((name, value) for name, value in written if value is not None)
+        return pair
+
     @model_validator(mode="after")
     def _compares_once(self) -> Self:
         values = (self.is_, self.at_least, self.at_most, self.more_than)
@@ -416,7 +428,8 @@ class Effect(BaseModel):
         return frozenset({*(self.add or {}), *(self.set_ or {})})
 
     @property
-    def _amounts(self) -> tuple[Amount, ...]:
+    def amounts(self) -> tuple[Amount, ...]:
+        """Every amount the operation reads."""
         written = [
             *(self.add or {}).values(),
             *(self.set_ or {}).values(),
@@ -436,21 +449,24 @@ class Effect(BaseModel):
     @property
     def reads_x(self) -> bool:
         """Whether an amount of the operation is the rule's X."""
-        return "X" in self._amounts
+        return "X" in self.amounts
+
+    @property
+    def fact_gates(self) -> tuple[FactGate, ...]:
+        """Every fact the gates compare."""
+        return tuple(gate for gates in self._gates for gate in gates.facts)
+
+    @property
+    def fact_refs(self) -> tuple[FactRef, ...]:
+        """Every fact read as a value, in an amount or in a comparison."""
+        values = [*self.amounts, *(gate.compared[1] for gate in self.fact_gates)]
+        return tuple(value for value in values if isinstance(value, FactRef))
 
     @property
     def facts(self) -> frozenset[str]:
         """Every fact the effect reads, by name."""
-        compared = [gate for gates in self._gates for gate in gates.facts]
-        values = [
-            *self._amounts,
-            *(c.is_ for c in compared),
-            *(c.at_least for c in compared),
-            *(c.at_most for c in compared),
-            *(c.more_than for c in compared),
-        ]
-        named = {gate.fact for gate in compared}
-        return frozenset(named | {value.fact for value in values if isinstance(value, FactRef)})
+        named = {gate.fact for gate in self.fact_gates}
+        return frozenset(named | {ref.fact for ref in self.fact_refs})
 
     @property
     def rules(self) -> frozenset[str]:
