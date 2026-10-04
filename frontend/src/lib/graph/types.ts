@@ -23,9 +23,9 @@ export interface Edge {
 	readings: Reading[];
 }
 
-export interface Modifier {
+export interface Change {
 	rule: string;
-	move: number;
+	text: string;
 }
 
 interface Step {
@@ -35,6 +35,7 @@ interface Step {
 	inputs: string[];
 	ran: boolean;
 	edge: Edge;
+	changes: Change[];
 }
 
 export interface Measurement extends Step {
@@ -49,7 +50,6 @@ export interface Decision extends Step {
 export interface Roll extends Step {
 	kind: 'roll';
 	target: Reading;
-	modifiers: Modifier[];
 }
 
 export interface Consequence extends Step {

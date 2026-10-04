@@ -15,7 +15,8 @@ const program: Program = {
 			side: 'one',
 			ran: true,
 			inputs: [],
-			edge: { readings: [{ label: 'n', value: 2 }] }
+			edge: { readings: [{ label: 'n', value: 2 }] },
+			changes: []
 		},
 		{
 			path: 'p/g/b',
@@ -25,7 +26,7 @@ const program: Program = {
 			ran: true,
 			inputs: [],
 			target: { label: 't', value: 1 },
-			modifiers: [{ rule: 'one/p/r1', move: 1 }],
+			changes: [{ rule: 'one/p/r1', text: '+1' }],
 			edge: {
 				readings: [
 					{
@@ -52,7 +53,7 @@ const program: Program = {
 					{ value: 2, p: 0.25 }
 				]
 			},
-			modifiers: [],
+			changes: [],
 			edge: {
 				readings: [
 					{
@@ -73,6 +74,7 @@ const program: Program = {
 			side: 'two',
 			ran: true,
 			inputs: ['p/g/c'],
+			changes: [],
 			edge: {
 				readings: [
 					{
@@ -194,13 +196,11 @@ describe('the program the tests draw', () => {
 		}
 	});
 
-	it('names an applied rule behind every modifier', () => {
-		for (const roll of rolls) {
-			for (const modifier of roll.modifiers) {
-				const rule = program.rules.find((candidate) => candidate.id === modifier.rule);
-				expect(rule?.landings).toContainEqual(
-					expect.objectContaining({ at: roll.path, verdicts: [{ verdict: 'applied', p: 1 }] })
-				);
+	it('lands the rule behind every change on its step', () => {
+		for (const node of program.nodes) {
+			for (const change of node.changes) {
+				const rule = program.rules.find((candidate) => candidate.id === change.rule);
+				expect(rule?.landings).toContainEqual(expect.objectContaining({ at: node.path }));
 			}
 		}
 	});

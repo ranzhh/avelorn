@@ -1,5 +1,6 @@
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Hashable
+from dataclasses import dataclass
 from fractions import Fraction
 from pathlib import Path
 from typing import Any
@@ -11,15 +12,19 @@ from avelorn.core.graph import (
     Body,
     By,
     Carrier,
+    Change,
     Consequence,
     Contribution,
     Decision,
     Eligibility,
     GraphError,
     Holder,
+    Key,
     Landing,
+    Mark,
     Measurement,
     Operation,
+    Order,
     Program,
     Projection,
     Repeat,
@@ -64,6 +69,29 @@ def _one() -> Distribution[int]:
 
 def _six(face: int) -> int:
     return 1 if face == 6 else 0
+
+
+def _always(*values: Any) -> bool:
+    return True
+
+
+@dataclass(frozen=True)
+class _Shift:
+    """A toy change that moves a roll by ``by`` in each world where ``when`` holds."""
+
+    by: int
+    reads: tuple[Key, ...] = ()
+    when: Callable[..., bool] = _always
+    order: Order = Order.ADD
+
+    def settle(self, values: tuple[Any, ...], out: frozenset[str]) -> Hashable | None:
+        return self.by if self.when(*values) else None
+
+    def cancels(self, other: Change) -> bool:
+        return False
+
+    def view(self) -> dict[str, Any]:
+        return {"text": f"{self.by:+d}"}
 
 
 def test_a_roll_edge_carries_its_own_distribution() -> None:
@@ -325,6 +353,39 @@ def _no_inputs() -> Distribution[int]:
 
 def _two_inputs(first: int, second: int) -> Distribution[int]:
     return Distribution.pure(first + second)
+
+
+def _a_mark_read_first(source: Step[int], changed: Mark[tuple[Hashable, ...]]) -> Step[Any]:
+    return Measurement[int](
+        name="marked",
+        side="attacker",
+        inputs=(changed, source),
+        changed=changed,
+        kernel=_two_inputs,
+    )
+
+
+def _a_mark_on_an_eligibility(source: Step[int], changed: Mark[tuple[Hashable, ...]]) -> Step[Any]:
+    return Eligibility[str](
+        name="marked", side="attacker", inputs=(changed,), changed=changed, kernel=_a_bow
+    )
+
+
+@pytest.mark.parametrize(
+    ("marked", "message"),
+    [
+        (_a_mark_read_first, "marked/marked marks marked but does not read it last"),
+        (_a_mark_on_an_eligibility, "marked/marked marks marked, but it settles options"),
+    ],
+)
+def test_a_mark_the_kernel_does_not_read_last_is_refused(
+    marked: Callable[[Step[int], Mark[tuple[Hashable, ...]]], Step[Any]], message: str
+) -> None:
+    source = Measurement[int](name="source", side="attacker", kernel=_three)
+    step = marked(source, Mark[tuple[Hashable, ...]]("marked"))
+
+    with pytest.raises(GraphError, match=re.escape(message)):
+        Program.build("marked", _SIDES, (source, step))
 
 
 @pytest.mark.parametrize("kernel", [_no_inputs, _two_inputs])
@@ -1292,8 +1353,24 @@ def test_a_rule_the_player_may_decline_applies_only_in_the_lane_that_takes_it() 
     ]
 
 
+def _marked_d6(changed: tuple[Hashable, ...]) -> Distribution[int]:
+    return _d6()
+
+
+def _marked_hit() -> Roll[int]:
+    changed = Mark[tuple[Hashable, ...]]("roll-to-hit")
+    return Roll[int](
+        name="roll-to-hit",
+        side="attacker",
+        inputs=(changed,),
+        changed=changed,
+        kernel=_marked_d6,
+        target=Scalar("t", 4),
+    )
+
+
 def test_one_rule_at_two_holders_is_two_nodes_judged_apart() -> None:
-    hit = Roll[int](name="roll-to-hit", side="attacker", kernel=_d6, target=Scalar("t", 4))
+    hit = _marked_hit()
     program = Program.build("volley", _SIDES, (hit,))
     program.attach(
         (
@@ -1302,7 +1379,7 @@ def test_one_rule_at_two_holders_is_two_nodes_judged_apart() -> None:
                 name="Hatred",
                 holder=_ATTACKER,
                 sources=_MODEL,
-                landings=(Landing(hit, moves=(1,)),),
+                landings=(Landing(hit, changes=(_Shift(1),)),),
             ),
             RuleNode(
                 rule="hatred",
@@ -1322,7 +1399,7 @@ def test_one_rule_at_two_holders_is_two_nodes_judged_apart() -> None:
 
 
 def test_a_node_granted_only_through_a_declined_node_is_honoured() -> None:
-    hit = Roll[int](name="roll-to-hit", side="attacker", kernel=_d6, target=Scalar("t", 4))
+    hit = _marked_hit()
     program = Program.build("volley", _SIDES, (hit,))
     program.attach(
         (
@@ -1340,7 +1417,7 @@ def test_a_node_granted_only_through_a_declined_node_is_honoured() -> None:
                 name="Enemy Fire",
                 holder=_TARGET,
                 sources=(Source(Carrier.EFFECT, via="target/spearmen/skirmish-formation"),),
-                landings=(Landing(hit, moves=(-1,)),),
+                landings=(Landing(hit, changes=(_Shift(-1),)),),
             ),
         )
     )
@@ -1350,6 +1427,52 @@ def test_a_node_granted_only_through_a_declined_node_is_honoured() -> None:
         (lane.choices[toggle], lane.verdicts("target/spearmen/enemy-fire", hit).mass)
         for lane in program.evaluate()
     ] == [(True, {Verdict.APPLIED: 1}), (False, {Verdict.HONOURED: 1})]
+
+
+def _hit_after(changed: tuple[int, ...]) -> Distribution[bool]:
+    needed = 4 - sum(changed)
+    return Distribution({True: Fraction(7 - needed, 6), False: Fraction(needed - 1, 6)})
+
+
+def _heads(face: int) -> bool:
+    return face == 1
+
+
+def _paired(face: int, hit: bool) -> tuple[int | bool, ...]:
+    return face, hit
+
+
+def test_a_gated_change_moves_only_the_worlds_where_its_gate_holds() -> None:
+    coin = Measurement[int](name="coin", side="attacker", kernel=_coin)
+    changed = Mark[tuple[Hashable, ...]]("hit")
+    hit = Roll[bool](
+        name="hit",
+        side="attacker",
+        inputs=(changed,),
+        changed=changed,
+        kernel=_hit_after,
+        target=Scalar("t", 4),
+    )
+    both = Projection("both", (coin, hit), _paired, Monoid[tuple[int | bool, ...]](()))
+    hit.show(both)
+    program = Program.build("gated", _SIDES, (coin, hit))
+    aim = Landing(hit, changes=(_Shift(1, reads=(coin,), when=_heads),))
+    program.attach(
+        (RuleNode(rule="aim", name="Aim", holder=_ATTACKER, sources=_MODEL, landings=(aim,)),)
+    )
+
+    (lane,) = program.evaluate()
+
+    assert lane.verdicts("attacker/archers/aim", hit).mass == {
+        Verdict.APPLIED: _HALF,
+        Verdict.HONOURED: _HALF,
+    }
+    assert lane.read(hit, both).mass == {
+        (0, True): Fraction(1, 4),
+        (0, False): Fraction(1, 4),
+        (1, True): Fraction(1, 3),
+        (1, False): Fraction(1, 6),
+    }
 
 
 def _three_faces() -> Distribution[int]:
@@ -1413,15 +1536,27 @@ def _node(
     return RuleNode(rule="r", name="R", holder=holder, sources=sources, landings=landings, may=may)
 
 
+def _marked_three(changed: tuple[Hashable, ...]) -> Distribution[int]:
+    return _three()
+
+
 def _refusal(case: str) -> tuple[Program, tuple[RuleNode, ...]]:
     gap = Measurement[int](name="gap", side="target", kernel=_three_or_nine)
+    changed = Mark[tuple[Hashable, ...]]("aimed")
+    aimed = Measurement[int](
+        name="aimed", side="target", inputs=(changed,), changed=changed, kernel=_marked_three
+    )
     after = Measurement[int](name="after", side="target", kernel=_three_or_nine)
     who = Eligibility[str](name="who-can-shoot", side="target", kernel=_a_bow)
     reaction = Decision[str](
         name="charge-reactions", side="target", options={"hold": ()}, otherwise="hold"
     )
-    program = Program.build("charge", _SIDES, (gap, who, reaction, after))
+    program = Program.build("charge", _SIDES, (gap, aimed, who, reaction, after))
     nodes = {
+        "change-at-an-unmarked-step": (_node(Landing(gap, changes=(_Shift(1),))),),
+        "change-reads-a-later-step": (
+            _node(Landing(aimed, changes=(_Shift(1, reads=(after,)),))),
+        ),
         "force-at-an-eligibility": (
             _node(Landing(who, (Contribution(operation=Operation.FORCE, options=_a_pistol),))),
         ),
@@ -1465,6 +1600,8 @@ def _refusal(case: str) -> tuple[Program, tuple[RuleNode, ...]]:
 
 
 _REFUSALS = {
+    "change-at-an-unmarked-step": "r changes charge/gap, which marks no changes",
+    "change-reads-a-later-step": "r at charge/aimed reads after, not in scope",
     "force-at-an-eligibility": "forces charge/who-can-shoot, which only allow and forbid",
     "contribution-arity": "cannot accept the options and 1 inputs",
     "contribution-reads-a-later-step": "reads after, not in scope",
@@ -1509,7 +1646,7 @@ def test_a_rule_offering_an_option_the_decision_lacks_is_refused() -> None:
         program.evaluate()
 
 
-def _hit_on(range_band: str) -> Distribution[int]:
+def _hit_on(range_band: str, changed: tuple[Hashable, ...]) -> Distribution[int]:
     return _d6()
 
 
@@ -1524,10 +1661,12 @@ _range = Decision[str](
     options={"close": (), "long": ()},
     otherwise="close",
 )
+_to_hit_changed = Mark[tuple[Hashable, ...]]("roll-to-hit")
 _to_hit = Roll[int](
     name="roll-to-hit",
     side="attacker",
-    inputs=(_range,),
+    inputs=(_range, _to_hit_changed),
+    changed=_to_hit_changed,
     kernel=_hit_on,
     target=Scalar("to hit", 4),
 )
@@ -1569,7 +1708,7 @@ _volley.attach(
             sources=_MODEL,
             landings=(
                 Landing(_shots),
-                Landing(_to_hit, moves=(1,)),
+                Landing(_to_hit, changes=(_Shift(1),)),
                 Landing(
                     _aftermath,
                     contributions=(
@@ -1632,7 +1771,7 @@ def test_the_view_carries_the_blocks_and_the_stacked_readings() -> None:
     ]
     assert hits["inputs"] == ["volley/choose-range"]
     assert hits["target"] == {"label": "to hit", "value": 4}
-    assert hits["modifiers"] == [{"rule": "attacker/archers/volley-fire", "move": 1}]
+    assert hits["changes"] == [{"rule": "attacker/archers/volley-fire", "text": "+1"}]
     assert hits["edge"]["readings"][0]["outcomes"] == [
         {"value": 0, "p": 0.125},
         {"value": 1, "p": 0.375},
@@ -1676,8 +1815,8 @@ def test_the_view_matches_the_front_end_types() -> None:
         assert set(node["edge"]) == declared["Edge"]
         for reading in node["edge"]["readings"]:
             _reading_shape(reading, declared)
-        for modifier in node.get("modifiers", ()):
-            assert set(modifier) == declared["Modifier"]
+        for change in node["changes"]:
+            assert set(change) == declared["Change"]
     for block in view["blocks"]:
         assert set(block) == declared[_BLOCK_OF[block["kind"]]]
     for rule in view["rules"]:
