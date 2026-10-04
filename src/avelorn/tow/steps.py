@@ -24,8 +24,8 @@ from avelorn.tow.kernels import (
     shooting_hit_target,
     wound_target,
 )
-from avelorn.tow.schema.program import StepSequence
 from avelorn.tow.schema.stage import Side
+from avelorn.tow.schema.step import StepSequence
 from avelorn.tow.schema.unit import Characteristic, Profile
 from avelorn.tow.schema.weapon import WeaponProfile
 from avelorn.tow.traits import Profiled

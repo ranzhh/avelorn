@@ -5,13 +5,7 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict, Field
 
 from avelorn.tow.schema.stage import Side
-
-
-class StepSequence(StrEnum):
-    """A printed sequence."""
-
-    SHOOTING = "shooting"
-    PANIC = "panic"
+from avelorn.tow.schema.step import StepSequence
 
 
 class FactType(StrEnum):
