@@ -3,8 +3,9 @@
 # missing here and on an entry no gap needs. Subjects: the rule's slug for a
 # rule without effects, <unit>/<row> for profile rows, the weapon or armour slug for
 # printed notes, <unit>/<option> for options, the option kind for a command
-# model (champion, standard_bearer, musician), <rule>/<step> for an unattached
-# effect, and the mechanic's slug for a missing mechanic.
+# model (champion, standard_bearer, musician), <rule>/<sequence>/<step> for an
+# unattached effect and for an unreached effect, and the mechanic's slug for a
+# missing mechanic.
 
 # rule-without-effects: an entry holds the printed text, and nothing folds it.
 
@@ -441,6 +442,13 @@
   subject: witness-to-destiny/combat/ward-saves
   reason: Sets the Ward save in combat; no program registers the combat attack until the combat round lands (item 14).
 
+# unreached-effect: the volley registers every step the effect needs, and no
+# corpus side, shooting or shot at, carries the rule to it.
+
+- kind: unreached-effect
+  subject: multiple-wounds/shooting/remove-casualties
+  reason: Only the Great Eagle's Serrated Maw carries it, a combat profile, so no corpus side shoots with it.
+
 # missing-mechanic: a printed clause needs a mechanic the engine lacks.
 
 - kind: missing-mechanic
@@ -474,7 +482,7 @@
   reason: No gate reads the Unit Strength of the bearer's own models, so Enemy Fire (Skirmishers) does not check that every model has a Unit Strength of 1; enemies shooting at Ellyrian Reavers in Skirmish formation, light cavalry of Unit Strength 2, take the -1 To Hit the rule withholds from them.
 - kind: missing-mechanic
   subject: parts
-  reason: A unit is read as one part until the program fields its parts (item 12), so Veteran's majority of models is not counted.
+  reason: A unit is read as one part until the program fields its parts (item 13), so Veteran's majority of models is not counted.
 - kind: missing-mechanic
   subject: psychology-tests
   reason: Fear and Terror tests are not modelled (item 26 adds the slots); Terror's test on a charge target, and Veteran's re-roll of Fear and Terror tests, have no step.

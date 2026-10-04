@@ -453,7 +453,7 @@
           "reason"
         ],
         "title": "Acknowledgement",
-        "description": "One gap, known and left open, with why.\n\n``subject`` is how the gap is addressed: the rule's slug for a rule without\neffects (one entry covers every place referencing it), ``<unit>/<row>`` for a\nprofile row, the weapon or armour slug for printed notes, ``<unit>/<option>``\nfor an option, ``<rule>/<step>`` for an effect landing on a step no program\nregisters yet, and the mechanic's slug for a mechanic a rule needs."
+        "description": "One gap, known and left open, with why.\n\n``subject`` is how the gap is addressed: the rule's slug for a rule without\neffects (one entry covers every place referencing it), ``<unit>/<row>`` for a\nprofile row, the weapon or armour slug for printed notes, ``<unit>/<option>``\nfor an option, ``<rule>/<sequence>/<step>`` for an effect needing a step no\nprogram registers yet and for a volley effect no corpus side reaches, and the\nmechanic's slug for a mechanic a rule needs."
       },
       "AmountParameter": {
         "properties": {
@@ -1400,6 +1400,7 @@
           "printed-notes",
           "inert-option",
           "unattached-effect",
+          "unreached-effect",
           "missing-mechanic"
         ],
         "title": "GapKind",
