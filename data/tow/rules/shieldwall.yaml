@@ -21,6 +21,6 @@ effects:
       when: {combat: {was_charged: true}, worn: {name: Shield}}
       replaces: {break: {fall-back-in-good-order: gives-ground}}
 notes: >-
-  Modelled with no player choice ("may ... rather than" is always taken) and no
-  once-per-game tracking. The Close Order requirement is a formation, which the
-  engine does not model (#28), so it is not gated.
+  The legacy engine models it with no player choice ("may ... rather than" is always taken) and no
+  once-per-game tracking. The Close Order requirement is a formation, which the engine does not
+  model (#28), so it is not gated.
