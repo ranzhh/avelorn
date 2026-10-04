@@ -218,7 +218,7 @@ def _scan(data: TOWRepository) -> Iterator[tuple[GapKind, str, Site]]:
             yield kind, reference.rule, site
     for slug in sorted(referenced):
         yield from _graph_gaps(slug, data.rules[slug])
-    yield from _unreached(data, referenced)
+    yield from _volley_gaps(data, referenced)
     for slug, unit in sorted(data.units.items()):
         for row in unit.unread_rows:
             yield GapKind.PROFILE_ROW_UNREAD, f"{slug}/{row.name}", Site(entry=Entry.UNIT, id=slug)
@@ -237,13 +237,14 @@ def _scan(data: TOWRepository) -> Iterator[tuple[GapKind, str, Site]]:
             yield GapKind.PRINTED_NOTES, slug, Site(entry=Entry.ARMOUR, id=slug)
 
 
-def _unreached(data: TOWRepository, referenced: set[str]) -> Iterator[tuple[GapKind, str, Site]]:
-    """Every volley effect that no corpus side carries to its step.
+def _volley_gaps(data: TOWRepository, referenced: set[str]) -> Iterator[tuple[GapKind, str, Site]]:
+    """Every volley effect that no corpus side carries into the volley's numbers.
 
     An effect is expected in each sequence where the volley has its step, when
     the volley has every step it reads. Each unit at its minimum size, bare and
     with each option alone, faces itself: once per missile weapon it wields as
-    the shooter, and always as the target.
+    the shooter, and always as the target. A side that carries an effect to a
+    step that cannot run it leaves the effect held.
 
     Yields:
         The gap's kind, ``<rule>/<sequence>/<step>``, and the rule as its site.
@@ -263,7 +264,8 @@ def _unreached(data: TOWRepository, referenced: set[str]) -> Iterator[tuple[GapK
                 if (sequence, effect.at.step) in have:
                     expected.add((slug, index, sequence, effect.at.step))
     reached: set[Effected] = set()
-    for contingent in _fieldings(data):
+    held: set[Effected] = set()
+    for _, contingent in fieldings(data):
         target = Fielded.of(contingent)
         shooters = [
             Fielded.of(contingent, weapon.name)
@@ -274,23 +276,30 @@ def _unreached(data: TOWRepository, referenced: set[str]) -> Iterator[tuple[GapK
         facing += [(shooter, {str(side) for side in Side}) for shooter in shooters]
         for attacker, counted in facing:
             fielded = {Side.ATTACKER: attacker, Side.TARGET: target}
-            for reach in attach_rules(volley.program, volley.specs, fielded, data.rules).reaches:
-                if reach.holder.side in counted:
-                    spec = volley.specs[reach.at]
-                    reached.add((reach.rule, reach.effect, spec.sequence, spec.name))
-    for slug, _, sequence, step in sorted(expected - reached):
-        yield (
-            GapKind.UNREACHED_EFFECT,
-            f"{slug}/{sequence}/{step}",
-            Site(entry=Entry.RULE, id=slug),
-        )
+            attached = attach_rules(
+                volley.program, volley.specs, fielded, data.rules, volley.states
+            )
+            for reaches, found in ((attached.reaches, reached), (attached.held, held)):
+                for reach in reaches:
+                    if reach.holder.side in counted:
+                        spec = volley.specs[reach.at]
+                        found.add((reach.rule, reach.effect, spec.sequence, spec.name))
+    gaps = ((GapKind.UNREACHED_EFFECT, expected - reached), (GapKind.HELD_EFFECT, held))
+    for kind, effects in gaps:
+        for slug, _, sequence, step in sorted(effects):
+            yield kind, f"{slug}/{sequence}/{step}", Site(entry=Entry.RULE, id=slug)
 
 
-def _fieldings(data: TOWRepository) -> Iterator[Contingent]:
+def fieldings(data: TOWRepository) -> Iterator[tuple[tuple[str, ...], Contingent]]:
+    """Every unit at its minimum size and default frontage, bare and with each option alone.
+
+    Yields:
+        The options bought, and the fielded unit.
+    """
     for slug, unit in sorted(data.units.items()):
         bought = [()] + [(option.name,) for option in unit.options if option.applies_to is None]
         for options in bought:
-            yield Contingent.deploy(slug, unit.unit_size.min, options, data=data)
+            yield options, Contingent.deploy(slug, unit.unit_size.min, options, data=data)
 
 
 def _inert(option: UnitOption) -> bool:

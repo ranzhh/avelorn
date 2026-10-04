@@ -51,7 +51,7 @@
 		consequence: 'C',
 		group: 'G'
 	};
-	const VERDICTS: Verdict[] = ['applied', 'honoured', 'held', 'inapplicable'];
+	const VERDICTS: Verdict[] = ['applied', 'cancelled', 'honoured', 'held', 'inapplicable'];
 	const STRIP = 236;
 
 	const printed = (slug: string) => slug.replaceAll('-', ' ');
@@ -59,7 +59,6 @@
 	const named = (id: string) => program.rules.find((each) => each.id === id)?.name ?? id;
 	const held = (holder: Holder) => `${holder.part} (${holder.side})`;
 	const tint = (side: string) => `side-${program.sides.indexOf(side)}`;
-	const signed = (move: number) => (move > 0 ? `+${move}` : `${move}`);
 	const is = (kind: Pick['kind'], id: string) => selected?.kind === kind && selected.id === id;
 	const percent = (p: number) => `${Math.round(p * 100)}%`;
 	const leading = (verdicts: Judged[]) =>
@@ -329,24 +328,28 @@
 				<span>side</span><span>{node.side}</span>
 			</div>
 			<div class="field"><span>path</span><span class="path">{node.path}</span></div>
-			{#if node.kind === 'roll'}
-				<h2>target</h2>
-				<Readings readings={[node.target]} width={STRIP} />
-				<h2>modifiers</h2>
-				{#if node.modifiers.length}
-					{#each node.modifiers as modifier}
-						<div class="field">
-							<span>{named(modifier.rule)}</span><span class="num">{signed(modifier.move)}</span>
-						</div>
-					{/each}
-				{:else}
-					<span class="meta">none</span>
-				{/if}
+			{#if node.kind === 'roll' && node.printed}
+				<h2>printed</h2>
+				<Readings readings={[node.printed]} width={STRIP} />
 			{:else if node.kind === 'decision'}
 				<h2>options</h2>
 				{#each node.options as option}
 					<div class="field"><span>{option}</span></div>
 				{/each}
+			{/if}
+			<h2>changes</h2>
+			{#if node.changes.length}
+				{#each node.changes as change}
+					<div class="field">
+						<span>{named(change.rule)}</span><span class="num">{change.text}</span>
+					</div>
+				{/each}
+			{:else}
+				<span class="meta">none</span>
+			{/if}
+			{#if node.kind === 'roll'}
+				<h2>{node.printed ? 'in force' : 'target'}</h2>
+				<Readings readings={[node.target]} width={STRIP} />
 			{/if}
 			<h2>edge out</h2>
 			{#if !node.ran}

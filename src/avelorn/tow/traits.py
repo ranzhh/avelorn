@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from avelorn.core.distribution import Distribution
-from avelorn.core.graph import Modifier, Source
+from avelorn.core.graph import Source
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.unit import Characteristic
 
@@ -28,4 +28,4 @@ class Operand[V: Hashable]:
 
     value: Distribution[V]
     printed: V
-    changes: tuple[Modifier, ...] = ()
+    changes: tuple[tuple[str, Hashable], ...] = ()

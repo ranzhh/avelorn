@@ -4,13 +4,15 @@ inputs:
   - {known: fielded, of: attacker, type: fielded}
   - {known: fielded, of: target, type: fielded}
   - {known: distance, type: int}
-  - {known: who-can-shoot, type: bool}
+  - {known: can-shoot, type: bool}
   - {known: line-of-sight, type: bool}
+  - {fact: moved, of: attacker}
   - {fact: standing, of: attacker}
   - {fact: standing, of: target}
   - {known: models-at-start-of-phase, of: target, type: int}
   - {known: battle-strength, of: target, type: int}
 items:
+  - {step: who-can-shoot, readings: [ranks]}
   - {step: check-range, readings: [band]}
   - {step: how-many-shots, readings: [shots]}
   - group: attack

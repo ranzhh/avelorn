@@ -9,7 +9,9 @@ from typing import Any
 from avelorn.core.distribution import Distribution, Kernel, Monoid, Probability
 from avelorn.core.graph import (
     Consequence,
+    Eligibility,
     Key,
+    Mark,
     Measurement,
     Reading,
     Roll,
@@ -17,10 +19,12 @@ from avelorn.core.graph import (
     State,
     Step,
 )
-from avelorn.tow.contingent import Contingent
+from avelorn.tow.changes import Folded, Payloads
+from avelorn.tow.contingent import Contingent, Formation
 from avelorn.tow.engine.armour import defender_armour
 from avelorn.tow.kernels import (
-    Confirm,
+    HIGH_BALLISTIC_SKILL,
+    UNARMOURED,
     Die,
     Standing,
     armour_save_target,
@@ -29,17 +33,32 @@ from avelorn.tow.kernels import (
     heavy_casualties,
     leadership_test,
     remove_casualties,
+    shooting_hit,
     shooting_hit_target,
     wound_target,
 )
+from avelorn.tow.schema.effect import Operation, RerollOn
+from avelorn.tow.schema.quantity import Quantity
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.stage import Side
-from avelorn.tow.schema.step import StepSequence
+from avelorn.tow.schema.step import StepKind, StepSequence
 from avelorn.tow.schema.unit import Characteristic, Profile
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile
 from avelorn.tow.traits import Carries, Profiled
 
 NO_ROLL = "-"
+
+FRONT_RANK = "front-rank"
+HALF_OF_EACH_REAR_RANK = "half-of-each-rear-rank"
+
+_NATURAL = {
+    RerollOn.NATURAL_1: 1,
+    RerollOn.NATURAL_2: 2,
+    RerollOn.NATURAL_3: 3,
+    RerollOn.NATURAL_4: 4,
+    RerollOn.NATURAL_5: 5,
+    RerollOn.NATURAL_6: 6,
+}
 
 
 @dataclass(frozen=True, eq=False)
@@ -136,8 +155,14 @@ class Kind(StrEnum):
     """Step kind."""
 
     MEASUREMENT = "measurement"
+    ELIGIBILITY = "eligibility"
     ROLL = "roll"
     CONSEQUENCE = "consequence"
+
+    @property
+    def printed(self) -> StepKind:
+        """The kind the step table prints; an eligibility is a measurement of who may act."""
+        return StepKind.MEASUREMENT if self is Kind.ELIGIBILITY else StepKind(self.value)
 
 
 @dataclass(frozen=True)
@@ -167,7 +192,15 @@ class Summed:
 
 SUMMED = Summed()
 
-type Read = Fact | Output | Summed
+
+@dataclass(frozen=True)
+class Changed:
+    """A read of the changes in force at the step, always its last input."""
+
+
+CHANGED = Changed()
+
+type Read = Fact | Output | Summed | Changed
 
 
 @dataclass(frozen=True)
@@ -190,7 +223,12 @@ class Counted:
 
 @dataclass(frozen=True, kw_only=True)
 class Spec:
-    """A printed step."""
+    """A printed step.
+
+    ``runs`` names what the kernel folds of each operation a rule lands there.
+    ``outcomes`` lists every value the step can output. A roll whose rules
+    change it shows its ``target`` in force and its ``printed`` target.
+    """
 
     sequence: StepSequence
     name: str
@@ -199,12 +237,15 @@ class Spec:
     reads: tuple[Read, ...]
     kernel: Kernel[Any]
     target: Offered | None = None
+    printed: Offered | None = None
     readings: Mapping[str, Offered] = field(default_factory=dict)
     writes: Fact | None = None
     counts: Counted | None = None
     in_force: Mapping[tuple[Side, Characteristic], Callable[[Fielded], int]] = field(
         default_factory=dict
     )
+    runs: Mapping[Operation, frozenset[Folded]] = field(default_factory=dict)
+    outcomes: frozenset[Hashable] | None = None
 
     def __post_init__(self) -> None:
         """Refuse an inconsistent spec.
@@ -220,6 +261,12 @@ class Spec:
             raise ValueError(f"{self.name}: reads a tally it does not count")
         if SUMMED not in self.reads and self.counts is not None:
             raise ValueError(f"{self.name}: counts a tally it does not read")
+        if (CHANGED in self.reads) != bool(self.runs):
+            raise ValueError(f"{self.name}: reads its changes exactly when it runs some")
+        if CHANGED in self.reads[:-1]:
+            raise ValueError(f"{self.name}: reads its changes before its last input")
+        if (self.printed is not None) != (self.kind is Kind.ROLL and CHANGED in self.reads):
+            raise ValueError(f"{self.name}: shows a printed target exactly when rules change it")
 
     @property
     def key(self) -> tuple[StepSequence, str]:
@@ -227,7 +274,12 @@ class Spec:
         return self.sequence, self.name
 
     def build(
-        self, inputs: tuple[Key, ...], target: Reading | None, writes: State[Any] | None
+        self,
+        inputs: tuple[Key, ...],
+        target: Reading | None,
+        writes: State[Any] | None,
+        changed: Mark[tuple[Hashable, ...]] | None,
+        printed: Reading | None,
     ) -> Step[Any]:
         """Build the step instance from its resolved inputs.
 
@@ -241,11 +293,25 @@ class Spec:
         match self.kind:
             case Kind.MEASUREMENT:
                 return Measurement(
+                    name=self.name,
+                    side=side,
+                    inputs=inputs,
+                    kernel=self.kernel,
+                    writes=writes,
+                    changed=changed,
+                )
+            case Kind.ELIGIBILITY:
+                return Eligibility(
                     name=self.name, side=side, inputs=inputs, kernel=self.kernel, writes=writes
                 )
             case Kind.CONSEQUENCE:
                 return Consequence(
-                    name=self.name, side=side, inputs=inputs, kernel=self.kernel, writes=writes
+                    name=self.name,
+                    side=side,
+                    inputs=inputs,
+                    kernel=self.kernel,
+                    writes=writes,
+                    changed=changed,
                 )
             case Kind.ROLL:
                 if target is None:
@@ -257,6 +323,8 @@ class Spec:
                     kernel=self.kernel,
                     writes=writes,
                     target=target,
+                    printed=printed,
+                    changed=changed,
                 )
 
 
@@ -280,9 +348,23 @@ def _strength(attacker: Fielded) -> int:
     return strength.resolve(_printed(attacker, Characteristic.STRENGTH))
 
 
-def _thrown(target: int) -> Distribution[Die | None]:
+def _covers(on: RerollOn, die: Die) -> bool:
+    match on:
+        case RerollOn.FAILED:
+            return not die.success
+        case RerollOn.SUCCESSFUL:
+            return die.success
+    return die.natural == _NATURAL[on]
+
+
+def _covered(rerolls: frozenset[RerollOn]) -> frozenset[Die]:
+    dice = (Die(face, landed) for face in range(1, 7) for landed in (False, True))
+    return frozenset(die for die in dice if any(_covers(on, die) for on in rerolls))
+
+
+def _thrown(target: int, rerolls: frozenset[RerollOn] = frozenset()) -> Distribution[Die | None]:
     landed: dict[Die | None, Probability] = {}
-    for die, p in d6(target).mass.items():
+    for die, p in d6(target, _covered(rerolls)).mass.items():
         landed[die] = p
     return Distribution(landed)
 
@@ -295,12 +377,33 @@ def _shown(target: int | None) -> str:
     return NO_ROLL if target is None else f"{target}+"
 
 
-def _agreed(first: Hashable, second: Hashable) -> Hashable:
-    if first == NO_ROLL:
+@dataclass(frozen=True)
+class _Unshown:
+    """What a step shows across no attacks."""
+
+    def __str__(self) -> str:
+        """No roll, as the rulebook prints it.
+
+        Returns:
+            The dash.
+        """
+        return NO_ROLL
+
+
+_UNSHOWN = _Unshown()
+
+
+def _last_unrolled(shown: str) -> tuple[bool, str]:
+    return shown == NO_ROLL, shown
+
+
+def _united(first: Hashable, second: Hashable) -> Hashable:
+    if first == _UNSHOWN:
         return second
-    if second in (NO_ROLL, first):
+    if second in (_UNSHOWN, first):
         return first
-    raise ValueError(f"one world holds two targets, {first} and {second}")
+    shown = {*str(first).split(" or "), *str(second).split(" or ")}
+    return " or ".join(sorted(shown, key=_last_unrolled))
 
 
 def check_range(attacker: Fielded, distance: int) -> Distribution[Band]:
@@ -320,30 +423,56 @@ def check_range(attacker: Fielded, distance: int) -> Distribution[Band]:
     return Distribution.pure(Band.LONG if distance * 2 > reach else Band.SHORT)
 
 
+def who_can_shoot() -> Distribution[frozenset[str]]:
+    """Name the ranks that shoot on flat ground.
+
+    Returns:
+        The front rank alone.
+    """
+    return Distribution.pure(frozenset({FRONT_RANK}))
+
+
 def how_many_shots(
-    attacker: Fielded, standing: Standing, can_shoot: bool, in_sight: bool, band: Band
+    attacker: Fielded,
+    standing: Standing,
+    ranks: frozenset[str],
+    can_shoot: bool,
+    in_sight: bool,
+    band: Band,
 ) -> Distribution[int]:
-    """Count the shots.
+    """Count the shots of the ranks that shoot.
+
+    Half of each rank behind the front, rounding up, shoots when Who Can Shoot
+    names them.
 
     Returns:
         The number of shots.
     """
     if not (can_shoot and in_sight) or band is Band.OUT_OF_RANGE:
         return Distribution.pure(0)
-    return Distribution.pure(min(standing.models, attacker.frontage))
+    formation = Formation(standing.models, attacker.frontage)
+    shots = formation.files if FRONT_RANK in ranks else 0
+    if HALF_OF_EACH_REAR_RANK in ranks:
+        shots += sum((rank + 1) // 2 for rank in formation.rear_rank_sizes)
+    return Distribution.pure(shots)
 
 
-def _hit_target(attacker: Fielded) -> int:
-    return shooting_hit_target(_printed(attacker, Characteristic.BALLISTIC_SKILL))
+def _hit_needed(attacker: Fielded, payloads: Payloads) -> str:
+    ballistic_skill = _printed(attacker, Characteristic.BALLISTIC_SKILL)
+    modifier = payloads.added(Quantity.TO_HIT)
+    if ballistic_skill < 6:
+        return _shown(shooting_hit_target(ballistic_skill, modifier))
+    return f"{2 - modifier}+ then {HIGH_BALLISTIC_SKILL[ballistic_skill]}+"
 
 
-def roll_to_hit(attacker: Fielded) -> Distribution[Die]:
-    """Roll one shot To Hit against the shooter's Ballistic Skill.
+def roll_to_hit(attacker: Fielded, changed: tuple[Hashable, ...]) -> Distribution[Die]:
+    """Roll one shot To Hit against the shooter's Ballistic Skill, moved by the rules in force.
 
     Returns:
         The die as it lands.
     """
-    return d6(_hit_target(attacker), confirm=Confirm.SECOND_DIE)
+    modifier = Payloads.of(changed).added(Quantity.TO_HIT)
+    return shooting_hit(_printed(attacker, Characteristic.BALLISTIC_SKILL), modifier)
 
 
 def _wound_target(attacker: Fielded, target: Fielded) -> int | None:
@@ -362,33 +491,53 @@ def roll_to_wound(attacker: Fielded, target: Fielded, hit: Die) -> Distribution[
     return _thrown(needed)
 
 
-def _save_target(target: Fielded, attacker: Fielded) -> int | None:
-    return armour_save_target(target.armour, _missile(attacker).armour_piercing)
+def _save_target(target: Fielded, attacker: Fielded, payloads: Payloads) -> int | None:
+    piercing = _missile(attacker).armour_piercing - payloads.added(Quantity.ARMOUR_PIERCING)
+    armour = UNARMOURED if target.armour is None else target.armour
+    maxima, _ = payloads.bounds(Quantity.ARMOUR_VALUE)
+    improved = max((armour - payloads.added(Quantity.ARMOUR_VALUE), *maxima))
+    return armour_save_target(improved, piercing)
 
 
 def make_armour_saves(
-    target: Fielded, attacker: Fielded, wound: Die | None
+    target: Fielded, attacker: Fielded, wound: Die | None, changed: tuple[Hashable, ...]
 ) -> Distribution[Die | None]:
-    """Roll the armour save against a wound.
+    """Roll the armour save against a wound, as the rules in force change it.
+
+    Armour Piercing worsens the save by each amount added to it. The armour
+    value improves by each amount added, to no better than the best bound
+    printed, and a model with no armour counts as 7+ before it improves.
 
     Returns:
         The die as it lands, or None when no die is rolled.
     """
-    needed = _save_target(target, attacker)
+    payloads = Payloads.of(changed)
+    needed = _save_target(target, attacker, payloads)
     if not _succeeded(wound) or needed is None:
         return Distribution.pure(None)
-    return _thrown(needed)
+    return _thrown(needed, payloads.rerolls())
 
 
-def ward_saves(target: Fielded, wound: Die | None, save: Die | None) -> Distribution[Die | None]:
+def ward_saves(
+    target: Fielded, wound: Die | None, save: Die | None, changed: tuple[Hashable, ...]
+) -> Distribution[Die | None]:
     """Roll the ward save against a wound the armour did not stop.
+
+    A model with more than one ward save uses the best
+    (the-shooting-phase/more-than-one-save).
 
     Returns:
         The die as it lands, or None when no die is rolled.
     """
-    if not _succeeded(wound) or _succeeded(save) or target.ward is None:
+    ward = _ward(target, Payloads.of(changed))
+    if not _succeeded(wound) or _succeeded(save) or ward is None:
         return Distribution.pure(None)
-    return _thrown(target.ward)
+    return _thrown(ward)
+
+
+def _ward(target: Fielded, payloads: Payloads) -> int | None:
+    printed = () if target.ward is None else (target.ward,)
+    return min((*printed, *payloads.fixed(Quantity.WARD_SAVE)), default=None)
 
 
 def _unsaved(wound: Die | None, save: Die | None, ward: Die | None) -> int:
@@ -405,15 +554,18 @@ def _heavy_casualties(standing: Standing, at_start_of_phase: int) -> Distributio
     return Distribution.pure(heavy_casualties(standing.models, at_start_of_phase))
 
 
-def make_panic_tests(target: Fielded, tested: bool) -> Distribution[Test]:
-    """Take the Panic test.
+def make_panic_tests(
+    target: Fielded, tested: bool, changed: tuple[Hashable, ...]
+) -> Distribution[Test]:
+    """Take the Panic test, re-rolling a failure once when a rule in force allows it.
 
     Returns:
         The test result.
     """
     if not tested:
         return Distribution.pure(Test.NOT_TAKEN)
-    passes = leadership_test(target.characteristic(Characteristic.LEADERSHIP))
+    rerolled = RerollOn.FAILED in Payloads.of(changed).rerolls()
+    passes = leadership_test(target.characteristic(Characteristic.LEADERSHIP), rerolled)
     return Distribution({Test.PASSED: passes, Test.FAILED: 1 - passes})
 
 
@@ -455,16 +607,21 @@ def _landed(die: Die | None) -> int:
     return int(_succeeded(die))
 
 
+def _listed(ranks: frozenset[str]) -> str:
+    return ", ".join(sorted(ranks))
+
+
 _ATTACKER = Fact("fielded", Side.ATTACKER)
+_PRINTED = Payloads(())
 _TARGET = Fact("fielded", Side.TARGET)
 _TARGET_STANDING = Fact("standing", Side.TARGET)
-_AGREED = Monoid[Hashable](NO_ROLL, _agreed)
+_UNITED = Monoid[Hashable](_UNSHOWN, _united)
 _COUNT = Monoid(0)
 _UNSAVED = (Output("roll-to-wound"), Output("make-armour-saves"), Output("ward-saves"))
 
 
 def _offer(
-    step: str, project: Callable[..., Hashable] = _itself, aggregation: Monoid[Any] = _AGREED
+    step: str, project: Callable[..., Hashable] = _itself, aggregation: Monoid[Any] = _UNITED
 ) -> Offered:
     return Offered((Output(step),), project, aggregation)
 
@@ -476,12 +633,22 @@ def _counted(step: str) -> Offered:
 _SPECS = (
     Spec(
         sequence=StepSequence.SHOOTING,
+        name="who-can-shoot",
+        kind=Kind.ELIGIBILITY,
+        side=Side.ATTACKER,
+        reads=(),
+        kernel=who_can_shoot,
+        readings={"ranks": _offer("who-can-shoot", _listed)},
+    ),
+    Spec(
+        sequence=StepSequence.SHOOTING,
         name="check-range",
         kind=Kind.MEASUREMENT,
         side=Side.ATTACKER,
         reads=(_ATTACKER, Fact("distance")),
         kernel=check_range,
         readings={"band": _offer("check-range")},
+        outcomes=frozenset(Band),
     ),
     Spec(
         sequence=StepSequence.SHOOTING,
@@ -491,7 +658,8 @@ _SPECS = (
         reads=(
             _ATTACKER,
             Fact("standing", Side.ATTACKER),
-            Fact("who-can-shoot"),
+            Output("who-can-shoot"),
+            Fact("can-shoot"),
             Fact("line-of-sight"),
             Output("check-range"),
         ),
@@ -503,9 +671,15 @@ _SPECS = (
         name="roll-to-hit",
         kind=Kind.ROLL,
         side=Side.ATTACKER,
-        reads=(_ATTACKER,),
+        reads=(_ATTACKER, CHANGED),
         kernel=roll_to_hit,
-        target=Offered((_ATTACKER,), lambda attacker: _shown(_hit_target(attacker)), _AGREED),
+        runs={Operation.ADD: frozenset({Quantity.TO_HIT})},
+        target=Offered(
+            (_ATTACKER, CHANGED),
+            lambda attacker, changed: _hit_needed(attacker, Payloads.of(changed)),
+            _UNITED,
+        ),
+        printed=Offered((_ATTACKER,), lambda attacker: _hit_needed(attacker, _PRINTED), _UNITED),
         readings={"hits": _counted("roll-to-hit")},
     ),
     Spec(
@@ -519,7 +693,7 @@ _SPECS = (
         target=Offered(
             (_ATTACKER, _TARGET),
             lambda attacker, target: _shown(_wound_target(attacker, target)),
-            _AGREED,
+            _UNITED,
         ),
         readings={"wounds": _counted("roll-to-wound")},
     ),
@@ -528,12 +702,23 @@ _SPECS = (
         name="make-armour-saves",
         kind=Kind.ROLL,
         side=Side.TARGET,
-        reads=(_TARGET, _ATTACKER, Output("roll-to-wound")),
+        reads=(_TARGET, _ATTACKER, Output("roll-to-wound"), CHANGED),
         kernel=make_armour_saves,
+        runs={
+            Operation.ADD: frozenset({Quantity.ARMOUR_PIERCING, Quantity.ARMOUR_VALUE}),
+            Operation.REROLL: frozenset(RerollOn),
+        },
         target=Offered(
+            (_TARGET, _ATTACKER, CHANGED),
+            lambda target, attacker, changed: _shown(
+                _save_target(target, attacker, Payloads.of(changed))
+            ),
+            _UNITED,
+        ),
+        printed=Offered(
             (_TARGET, _ATTACKER),
-            lambda target, attacker: _shown(_save_target(target, attacker)),
-            _AGREED,
+            lambda target, attacker: _shown(_save_target(target, attacker, _PRINTED)),
+            _UNITED,
         ),
         readings={"saves": _counted("make-armour-saves")},
     ),
@@ -542,9 +727,15 @@ _SPECS = (
         name="ward-saves",
         kind=Kind.ROLL,
         side=Side.TARGET,
-        reads=(_TARGET, Output("roll-to-wound"), Output("make-armour-saves")),
+        reads=(_TARGET, Output("roll-to-wound"), Output("make-armour-saves"), CHANGED),
         kernel=ward_saves,
-        target=Offered((_TARGET,), lambda target: _shown(target.ward), _AGREED),
+        runs={Operation.SET: frozenset({Quantity.WARD_SAVE})},
+        target=Offered(
+            (_TARGET, CHANGED),
+            lambda target, changed: _shown(_ward(target, Payloads.of(changed))),
+            _UNITED,
+        ),
+        printed=Offered((_TARGET,), lambda target: _shown(target.ward), _UNITED),
         readings={
             "saves": _counted("ward-saves"),
             "unsaved": Offered(_UNSAVED, _unsaved, _COUNT),
@@ -573,15 +764,18 @@ _SPECS = (
         reads=(_TARGET_STANDING, Fact("models-at-start-of-phase", Side.TARGET)),
         kernel=_heavy_casualties,
         readings={"tested": _offer("heavy-casualties")},
+        outcomes=frozenset({True, False}),
     ),
     Spec(
         sequence=StepSequence.SHOOTING,
         name="make-panic-tests",
         kind=Kind.ROLL,
         side=Side.TARGET,
-        reads=(_TARGET, Output("heavy-casualties")),
+        reads=(_TARGET, Output("heavy-casualties"), CHANGED),
         kernel=make_panic_tests,
-        target=Offered((_TARGET,), _leadership, _AGREED),
+        runs={Operation.REROLL: frozenset({RerollOn.FAILED})},
+        target=Offered((_TARGET,), _leadership, _UNITED),
+        printed=Offered((_TARGET,), _leadership, _UNITED),
         readings={"test": _offer("make-panic-tests")},
     ),
     Spec(

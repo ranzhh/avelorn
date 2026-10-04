@@ -1,16 +1,51 @@
 """Attaching the rules of both fielded sides to a program's steps.
 
-No operation is attached yet: a landing names its step and the steps that trigger it.
+A landing carries the operations its step runs, or holds, carrying none, when
+any effect of the node there is one the step cannot run.
 """
 
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import Hashable, Mapping
 from dataclasses import dataclass
+from functools import partial
 from typing import Any
 
 from avelorn.core.errors import AvelornError
-from avelorn.core.graph import Carrier, Holder, Landing, Program, RuleNode, Source, Step
-from avelorn.tow.schema.effect import Address, Effect, Role, WeaponMatch
+from avelorn.core.graph import (
+    Carrier,
+    Change,
+    Contribution,
+    Eligibility,
+    Holder,
+    Landing,
+    Program,
+    RuleNode,
+    Source,
+    State,
+    Step,
+)
+from avelorn.core.graph import Operation as GraphOperation
+from avelorn.tow.changes import (
+    Attacks,
+    Check,
+    Constant,
+    Equals,
+    Gate,
+    Granted,
+    Operated,
+    Shows,
+)
+from avelorn.tow.schema.effect import (
+    Address,
+    Effect,
+    FactGate,
+    FactRef,
+    Gates,
+    Operation,
+    Role,
+    WeaponMatch,
+    When,
+)
 from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import Rule
@@ -21,6 +56,7 @@ from avelorn.tow.schema.weapon import Weapon
 from avelorn.tow.steps import Fielded, Spec
 
 type Carried = tuple[tuple[RuleRef, Source], ...]
+type Reached = list[tuple[int, Effect, tuple[Step[Any], ...]]]
 
 _PHASES = frozenset(Phase)
 
@@ -41,10 +77,14 @@ class Reach:
 
 @dataclass(frozen=True)
 class Attachment:
-    """The rule nodes of one fielding, with every reach behind their landings."""
+    """The rule nodes of one fielding, with every reach behind their landings.
+
+    ``held`` lists the reaches whose landing carries nothing.
+    """
 
     nodes: tuple[RuleNode, ...]
     reaches: tuple[Reach, ...]
+    held: tuple[Reach, ...]
 
 
 def rules_in_scope(
@@ -86,20 +126,26 @@ def attach_rules(
     specs: Mapping[Step[Any], Spec],
     fielded: Mapping[Side, Fielded],
     rules: Mapping[str, Rule],
+    inputs: Mapping[str, State[Any]],
 ) -> Attachment:
     """The rule nodes both fielded sides give a program, built and not yet attached.
 
-    A rule whose sources at one holder give X values that do not combine fails
-    with an :class:`AttachError`.
+    ``inputs`` are the program's inputs by name, which fact gates read. The
+    attach fails with an :class:`AttachError` on a rule whose sources at one
+    holder give X values that do not combine, on a gate comparing a step with a
+    value it never outputs, and on a rule with no X carried twice to a landing
+    that runs.
 
     Returns:
-        The nodes, ordered by side then slug, and every effect that reached a step.
+        The nodes, ordered by side then slug, every effect that reached a step,
+        and the reaches held.
     """
     holders = _holders(fielded)
     scopes = {side: rules_in_scope(holder, fielded, rules) for side, holder in holders.items()}
+    fielding = _Fielding(program, specs, fielded, rules, inputs, holders, scopes)
     run = {spec.sequence for spec in specs.values()}
     printed = {spec.key for spec in specs.values()}
-    landed: dict[tuple[Side, str], dict[Step[Any], list[Step[Any]]]] = defaultdict(dict)
+    landed: dict[tuple[Side, str], dict[Step[Any], Reached]] = defaultdict(dict)
     kept: set[tuple[Side, str]] = set()
     reaches: list[Reach] = []
     for side, scope in scopes.items():
@@ -119,16 +165,242 @@ def attach_rules(
                     if triggers is None:
                         kept.add((side, slug))
                         continue
-                    landed[side, slug].setdefault(step, []).extend(triggers)
+                    landed[side, slug].setdefault(step, []).append((index, effect, triggers))
                     reaches.append(Reach(slug, index, holders[side], step))
-    held = _granting({*landed, *kept}, scopes, holders)
-    nodes = []
+    named = _granting({*landed, *kept}, scopes, holders)
+    nodes: list[RuleNode] = []
+    held: list[Reach] = []
     for side in sorted(scopes, key=list(Side).index):
-        for slug in sorted(slug for each, slug in held if each is side):
-            nodes.append(
-                _node(rules[slug], holders[side], scopes[side][slug], landed[side, slug], program)
+        for slug in sorted(slug for each, slug in named if each is side):
+            node, holding = fielding.node(rules[slug], side, landed[side, slug])
+            nodes.append(node)
+            held.extend(holding)
+    return Attachment(tuple(nodes), tuple(reaches), tuple(held))
+
+
+@dataclass(frozen=True)
+class _Fielding:
+    program: Program
+    specs: Mapping[Step[Any], Spec]
+    fielded: Mapping[Side, Fielded]
+    rules: Mapping[str, Rule]
+    inputs: Mapping[str, State[Any]]
+    holders: Mapping[Side, Holder]
+    scopes: Mapping[Side, Mapping[str, Carried]]
+
+    def node(
+        self, rule: Rule, side: Side, landed: Mapping[Step[Any], Reached]
+    ) -> tuple[RuleNode, list[Reach]]:
+        holder = self.holders[side]
+        carried = self.scopes[side][rule.id]
+        x = self.x(rule, side)
+        landings = []
+        held = []
+        for at in sorted(landed, key=self.program.steps.index):
+            reached = landed[at]
+            triggers = {trigger for _, _, each in reached for trigger in each}
+            operations = self.operations(rule, side, at, reached)
+            if operations is None:
+                held.extend(Reach(rule.id, index, holder, at) for index, _, _ in reached)
+            contributions, changes = operations or ((), ())
+            landings.append(
+                Landing(
+                    at,
+                    contributions=contributions,
+                    changes=changes,
+                    triggers=tuple(sorted(triggers, key=self.program.steps.index)),
+                )
             )
-    return Attachment(tuple(nodes), tuple(reaches))
+        node = RuleNode(
+            rule=rule.id,
+            name=rule.display(x),
+            holder=holder,
+            sources=tuple(source for _, source in carried),
+            landings=tuple(landings),
+            may=rule.graph is not None and rule.graph.may,
+        )
+        return node, held
+
+    def x(self, rule: Rule, side: Side) -> int | str | None:
+        xs = [
+            reference.x for reference, _ in self.scopes[side][rule.id] if reference.x is not None
+        ]
+        try:
+            return None if rule.parameter is None else rule.parameter.combined(xs)
+        except ValueError as error:
+            raise AttachError(f"{rule.id} at {self.holders[side]}: {error}") from error
+
+    def operations(
+        self, rule: Rule, side: Side, at: Step[Any], reached: Reached
+    ) -> tuple[tuple[Contribution[Any], ...], tuple[Change, ...]] | None:
+        carried = self.scopes[side][rule.id]
+        if any(self.gated_grant(rule, source) for _, source in carried):
+            return None
+        contributions: list[Contribution[Any]] = []
+        changes: list[Change] = []
+        for _, effect, _ in reached:
+            if isinstance(at, Eligibility):
+                contribution = self.contribution(rule, side, at, effect)
+                if contribution is None:
+                    return None
+                contributions.append(contribution)
+                continue
+            operated = self.operated(rule, side, at, effect)
+            if operated is None:
+                return None
+            changes.extend(operated)
+        if rule.parameter is None and len(carried) > 1:
+            raise AttachError(
+                f"{rule.id} at {self.holders[side]} has {len(carried)} sources, "
+                f"and no X to combine them, at {self.program.paths[at]}"
+            )
+        return tuple(contributions), tuple(changes)
+
+    def contribution(
+        self, rule: Rule, side: Side, at: Step[Any], effect: Effect
+    ) -> Contribution[Any] | None:
+        named = effect.allow or effect.forbid
+        if named is None or effect.limit is not None:
+            return None
+        gate = self.gate(rule, side, at, effect)
+        if gate is None or any(isinstance(check, Attacks) for check in gate.checks):
+            return None
+        operation = GraphOperation.ALLOW if effect.allow else GraphOperation.FORBID
+        return Contribution(
+            operation=operation,
+            options=partial(_named, frozenset(named), gate),
+            text=f"{operation} {', '.join(sorted(named))}",
+            inputs=gate.reads,
+        )
+
+    def gated_grant(self, rule: Rule, source: Source) -> bool:
+        if source.via is None:
+            return False
+        granter = source.via.rsplit("/", 1)[-1]
+        return any(
+            effect.grants is not None
+            and effect.grants.rule == rule.id
+            and (effect.when is not None or effect.unless is not None)
+            for effect in _effects(self.rules[granter])
+        )
+
+    def operated(
+        self, rule: Rule, side: Side, at: Step[Any], effect: Effect
+    ) -> list[Operated] | None:
+        runs = self.specs[at].runs
+        operation = effect.operation
+        if effect.limit is not None or not runs:
+            return None
+        keys: tuple[Any, ...] = (None,)
+        match operation:
+            case Operation.ADD | Operation.SET:
+                keys = tuple(effect.add or effect.set_ or {})
+                if not set(keys) <= runs.get(operation, frozenset()):
+                    return None
+            case Operation.REROLL:
+                if effect.reroll not in runs.get(operation, frozenset()):
+                    return None
+            case Operation.CANCELS:
+                pass
+            case _:
+                return None
+        if any(isinstance(amount, FactRef) for amount in effect.amounts):
+            return None
+        if effect.reads_x and not isinstance(self.x(rule, side), int):
+            return None
+        gate = self.gate(rule, side, at, effect)
+        if gate is None:
+            return None
+        carried = self.scopes[side][rule.id]
+        sources = tuple(Granted(reference.x, source.via) for reference, source in carried)
+        return [Operated(rule.id, effect, key, gate, sources, rule.parameter) for key in keys]
+
+    def gate(self, rule: Rule, side: Side, at: Step[Any], effect: Effect) -> Gate | None:
+        when: list[Check] = []
+        if effect.when is not None:
+            triggered = self.trigger(rule, side, at, effect.when)
+            gated = self.gates(rule, side, at, effect.when)
+            if triggered is None or gated is None:
+                return None
+            when = [*triggered, *gated]
+        unless = None
+        if effect.unless is not None:
+            unless = self.gates(rule, side, at, effect.unless)
+            if unless is None:
+                return None
+        return Gate.folded(tuple(when), None if unless is None else tuple(unless))
+
+    def trigger(self, rule: Rule, side: Side, at: Step[Any], when: When) -> list[Check] | None:
+        if when.step is None:
+            return []
+        step = self.nearest(when.step, when.by, side, at)
+        if step is None or when.needed is not None or isinstance(when.is_, FactRef):
+            return None
+        checks: list[Check] = []
+        if when.natural is not None:
+            checks.append(Shows(step.key, when.natural))
+        if when.is_ is not None:
+            checks.append(self.equals(rule, step, when.is_))
+        return checks or None
+
+    def gates(self, rule: Rule, side: Side, at: Step[Any], gates: Gates) -> list[Check] | None:
+        if gates.worn is not None or gates.carried_by is not None or gates.foe is not None:
+            return None
+        checks: list[Check] = []
+        if gates.with_ is not None:
+            wielded = self.fielded[side].wielded
+            checks.append(Constant(wielded is not None and _matches(gates.with_, wielded)))
+        if gates.attack is not None:
+            attack = gates.attack
+            for slug, wanted in (
+                ("magical-attacks", attack.magical),
+                ("flaming-attacks", attack.flaming),
+            ):
+                if wanted is not None:
+                    checks.append(Attacks(self.attacking(slug), wanted))
+        for fact in gates.facts:
+            check = self.fact(rule, side, at, fact)
+            if check is None:
+                return None
+            checks.append(check)
+        return checks
+
+    def fact(self, rule: Rule, side: Side, at: Step[Any], fact: FactGate) -> Check | None:
+        comparator, value = fact.compared
+        if comparator != "is" or isinstance(value, FactRef):
+            return None
+        if fact.fact in Printed:
+            step = self.nearest(Printed(fact.fact), fact.of, side, at)
+            return None if step is None else self.equals(rule, step, value)
+        name = str(fact.fact)
+        if fact.of is not None:
+            name = f"{side if fact.of is Role.THIS_MODEL else side.other}/{name}"
+        known = self.inputs.get(name)
+        return None if known is None else Equals(known, value)
+
+    def equals(self, rule: Rule, step: Step[Any], value: Hashable) -> Equals:
+        spec = self.specs[step]
+        if spec.outcomes is None or value not in spec.outcomes:
+            raise AttachError(
+                f"{rule.id} reads {value!r} from {self.program.paths[step]}, "
+                f"which outputs {sorted(map(str, spec.outcomes or ())) or 'no listed value'}"
+            )
+        return Equals(step.key, value)
+
+    def attacking(self, slug: str) -> str | None:
+        attacker = self.scopes[Side.ATTACKER]
+        return f"{self.holders[Side.ATTACKER]}/{slug}" if slug in attacker else None
+
+    def nearest(
+        self, name: Printed, role: Role | None, side: Side, at: Step[Any]
+    ) -> Step[Any] | None:
+        return _nearest(name, role, side, at, self.program, self.specs)
+
+
+def _named(
+    named: frozenset[str], gate: Gate, printed: frozenset[str], *values: Hashable
+) -> frozenset[str]:
+    return named if gate.test(values, frozenset()) else frozenset()
 
 
 def _holders(fielded: Mapping[Side, Fielded]) -> dict[Side, Holder]:
@@ -199,6 +471,21 @@ def _addresses(
     )
 
 
+def _nearest(
+    name: str,
+    role: Role | None,
+    side: Side,
+    at: Step[Any],
+    program: Program,
+    specs: Mapping[Step[Any], Spec],
+) -> Step[Any] | None:
+    visible = [item for item in reversed(program.visible[at]) if isinstance(item, Step)]
+    return next(
+        (each for each in visible if each.name == name and _role(side, specs[each]) is role),
+        None,
+    )
+
+
 def _triggers(
     effect: Effect,
     step: Step[Any],
@@ -212,13 +499,9 @@ def _triggers(
     for fact in (*effect.fact_gates, *effect.fact_refs):
         if fact.fact in Printed:
             read.append((fact.fact, fact.of))
-    visible = [item for item in reversed(program.visible[step]) if isinstance(item, Step)]
     found = []
     for name, role in read:
-        nearest = next(
-            (each for each in visible if each.name == name and _role(side, specs[each]) is role),
-            None,
-        )
+        nearest = _nearest(name, role, side, step, program, specs)
         if nearest is None:
             return None
         found.append(nearest)
@@ -239,29 +522,3 @@ def _granting(
                 held.add(named[source.via])
                 waiting.append(named[source.via])
     return held
-
-
-def _node(
-    rule: Rule,
-    holder: Holder,
-    carried: Carried,
-    landed: Mapping[Step[Any], list[Step[Any]]],
-    program: Program,
-) -> RuleNode:
-    xs = [reference.x for reference, _ in carried if reference.x is not None]
-    try:
-        x = None if rule.parameter is None else rule.parameter.combined(xs)
-    except ValueError as error:
-        raise AttachError(f"{rule.id} at {holder}: {error}") from error
-    landings = tuple(
-        Landing(at, triggers=tuple(sorted(set(landed[at]), key=program.steps.index)))
-        for at in sorted(landed, key=program.steps.index)
-    )
-    return RuleNode(
-        rule=rule.id,
-        name=rule.display(x),
-        holder=holder,
-        sources=tuple(source for _, source in carried),
-        landings=landings,
-        may=rule.graph is not None and rule.graph.may,
-    )

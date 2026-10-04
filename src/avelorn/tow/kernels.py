@@ -5,6 +5,7 @@ special rules.
 
 Sources (tow.whfb.app): the-shooting-phase/roll-to-hit-shooting,
 the-shooting-phase/roll-to-wound-shooting, the-shooting-phase/7-to-hit,
+the-shooting-phase/bs-of-6-or-higher, the-shooting-phase/to-hit-modifiers,
 the-shooting-phase/determining-armour-value,
 the-shooting-phase/armour-piercing,
 the-combat-phase/roll-to-hit-combat, model-profiles/leadership-tests.
@@ -40,9 +41,8 @@ def shooting_hit_target(ballistic_skill: int, modifier: int = 0) -> int:
     ``modifier`` follows the rulebook's sign convention: penalties are
     negative (e.g. -1 for long range), so they raise the target.
 
-    Note: the "BS 6 or higher" interaction with modifiers is not yet
-    modelled; unmodified high BS works (a target of 1 or less simply
-    means only a natural 1 fails).
+    This is legacy's reading of BS 6 or higher: a target of 1 or less, where
+    only a natural 1 fails. :func:`shooting_hit` rolls it as printed.
 
     Returns:
         The required roll; may exceed 6 (see :func:`hit_probability`).
@@ -146,6 +146,8 @@ class Confirm(StrEnum):
 
 CONFIRM_TARGETS = {7: 4, 8: 5, 9: 6}
 
+HIGH_BALLISTIC_SKILL = {6: 6, 7: 5, 8: 4, 9: 3, 10: 2}
+
 
 def d6(
     target: int, rerolls: Set[Die] = frozenset(), confirm: Confirm = Confirm.NEVER
@@ -183,6 +185,38 @@ def _throw(target: int, confirm: Confirm) -> Distribution[Die]:
         for die, p in landed:
             mass[die] = mass.get(die, Fraction(0)) + p
     return Distribution(mass)
+
+
+def shooting_hit(ballistic_skill: int, modifier: int = 0) -> Distribution[Die]:
+    """Roll one shot To Hit, exactly.
+
+    Below Ballistic Skill 6 the roll needs 7 minus BS, shifted by the modifier,
+    and a 7+ confirms on a second die. At 6 or higher the first roll needs 2+,
+    shifted by the modifier, and a miss is re-rolled against the chart's 6+ to
+    2+ with no modifier.
+
+    Returns:
+        The die as it lands, the re-roll's when there is one.
+
+    Raises:
+        ValueError: BS is off the chart, or a first roll at BS 6 or higher needs
+            7+, which the rules do not print.
+    """
+    if ballistic_skill < 6:
+        target = shooting_hit_target(ballistic_skill, modifier)
+        return d6(target, confirm=Confirm.SECOND_DIE)
+    again = HIGH_BALLISTIC_SKILL.get(ballistic_skill)
+    if again is None:
+        raise ValueError(f"BS {ballistic_skill} is off the printed chart")
+    first = 2 - modifier
+    if first > 6:
+        raise ValueError(f"BS {ballistic_skill} at {modifier:+d} needs {first}+ on its first roll")
+    retry = d6(again)
+
+    def rerolled(die: Die) -> Distribution[Die]:
+        return Distribution({die: Fraction(1)}) if die.success else retry
+
+    return d6(first).bind(rerolled)
 
 
 def success(dice: Distribution[Die]) -> Fraction:

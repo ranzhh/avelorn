@@ -1,5 +1,6 @@
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Hashable
+from dataclasses import dataclass
 from fractions import Fraction
 from pathlib import Path
 from typing import Any
@@ -11,15 +12,19 @@ from avelorn.core.graph import (
     Body,
     By,
     Carrier,
+    Change,
     Consequence,
     Contribution,
     Decision,
     Eligibility,
     GraphError,
     Holder,
+    Key,
     Landing,
+    Mark,
     Measurement,
     Operation,
+    Order,
     Program,
     Projection,
     Repeat,
@@ -64,6 +69,48 @@ def _one() -> Distribution[int]:
 
 def _six(face: int) -> int:
     return 1 if face == 6 else 0
+
+
+def _always(*values: Any) -> bool:
+    return True
+
+
+@dataclass(frozen=True)
+class _Shift:
+    """A toy change that moves a roll by ``by`` in each world where ``when`` holds."""
+
+    by: int
+    reads: tuple[Key, ...] = ()
+    when: Callable[..., bool] = _always
+    order: Order = Order.ADD
+
+    def settle(self, values: tuple[Any, ...], out: frozenset[str]) -> Hashable | None:
+        return self.by if self.when(*values) else None
+
+    def cancels(self, other: Change) -> bool:
+        return False
+
+    def view(self) -> dict[str, Any]:
+        return {"text": f"{self.by:+d}"}
+
+
+@dataclass(frozen=True)
+class _Cancel:
+    """A toy cancel that removes ``of`` in each world where ``when`` holds."""
+
+    of: Change
+    reads: tuple[Key, ...] = ()
+    when: Callable[..., bool] = _always
+    order: Order = Order.CANCEL
+
+    def settle(self, values: tuple[Any, ...], out: frozenset[str]) -> Hashable | None:
+        return "cancel" if self.when(*values) else None
+
+    def cancels(self, other: Change) -> bool:
+        return other is self.of
+
+    def view(self) -> dict[str, Any]:
+        return {"text": "cancel"}
 
 
 def test_a_roll_edge_carries_its_own_distribution() -> None:
@@ -325,6 +372,39 @@ def _no_inputs() -> Distribution[int]:
 
 def _two_inputs(first: int, second: int) -> Distribution[int]:
     return Distribution.pure(first + second)
+
+
+def _a_mark_read_first(source: Step[int], changed: Mark[tuple[Hashable, ...]]) -> Step[Any]:
+    return Measurement[int](
+        name="marked",
+        side="attacker",
+        inputs=(changed, source),
+        changed=changed,
+        kernel=_two_inputs,
+    )
+
+
+def _a_mark_on_an_eligibility(source: Step[int], changed: Mark[tuple[Hashable, ...]]) -> Step[Any]:
+    return Eligibility[str](
+        name="marked", side="attacker", inputs=(changed,), changed=changed, kernel=_a_bow
+    )
+
+
+@pytest.mark.parametrize(
+    ("marked", "message"),
+    [
+        (_a_mark_read_first, "marked/marked marks marked but does not read it last"),
+        (_a_mark_on_an_eligibility, "marked/marked marks marked, but it settles options"),
+    ],
+)
+def test_a_mark_the_kernel_does_not_read_last_is_refused(
+    marked: Callable[[Step[int], Mark[tuple[Hashable, ...]]], Step[Any]], message: str
+) -> None:
+    source = Measurement[int](name="source", side="attacker", kernel=_three)
+    step = marked(source, Mark[tuple[Hashable, ...]]("marked"))
+
+    with pytest.raises(GraphError, match=re.escape(message)):
+        Program.build("marked", _SIDES, (source, step))
 
 
 @pytest.mark.parametrize("kernel", [_no_inputs, _two_inputs])
@@ -979,6 +1059,7 @@ def _charge_reaction() -> tuple[_Reaction, Consequence[int], Projection[int], St
                                 operation=Operation.FORBID,
                                 inputs=(gap, movement),
                                 options=_every_weapon_when_too_close,
+                                text="forbid every weapon",
                             ),
                         ),
                     ),
@@ -989,6 +1070,7 @@ def _charge_reaction() -> tuple[_Reaction, Consequence[int], Projection[int], St
                                 operation=Operation.FORCE,
                                 inputs=(who,),
                                 options=_hold_once_anyone_fired,
+                                text="force hold",
                             ),
                         ),
                     ),
@@ -1060,6 +1142,7 @@ def test_a_world_whose_choice_is_forbidden_takes_the_printed_otherwise() -> None
         operation=Operation.FORBID,
         inputs=(gap, movement),
         options=_stand_and_shoot_when_too_close,
+        text="forbid stand-and-shoot",
     )
     program.attach(
         (
@@ -1101,7 +1184,7 @@ def _held(amends: _Amends) -> tuple[Program, Decision[str]]:
     )
     program = Program.build("charge", _SIDES, (gap, reaction))
     contributions = tuple(
-        Contribution(operation=operation, inputs=(gap,), options=options)
+        Contribution(operation=operation, inputs=(gap,), options=options, text=str(operation))
         for operation, options in amends
     )
     program.attach(
@@ -1174,7 +1257,10 @@ def test_a_closed_option_exists_only_where_a_rule_opens_it(
     )
     program = Program.build("charge", _SIDES, (gap, reaction))
     opener = Contribution(
-        operation=Operation.ALLOW, inputs=(gap,), options=_fire_and_flee_when_far
+        operation=Operation.ALLOW,
+        inputs=(gap,),
+        options=_fire_and_flee_when_far,
+        text="allow fire-and-flee",
     )
     if opened:
         program.attach(
@@ -1208,9 +1294,12 @@ def test_a_forbid_wins_over_an_allow_at_an_eligibility() -> None:
     who.show(weapons)
     program = Program.build("volley", _SIDES, (gap, movement, who))
     forbid = Contribution(
-        operation=Operation.FORBID, inputs=(gap, movement), options=_pistol_when_too_close
+        operation=Operation.FORBID,
+        inputs=(gap, movement),
+        options=_pistol_when_too_close,
+        text="forbid pistol",
     )
-    allow = Contribution(operation=Operation.ALLOW, options=_a_pistol)
+    allow = Contribution(operation=Operation.ALLOW, options=_a_pistol, text="allow pistol")
     program.attach(
         (
             RuleNode(
@@ -1269,7 +1358,11 @@ def test_a_rule_the_player_may_decline_applies_only_in_the_lane_that_takes_it() 
                 landings=(
                     Landing(
                         reaction,
-                        contributions=(Contribution(operation=Operation.FORCE, options=_hold),),
+                        contributions=(
+                            Contribution(
+                                operation=Operation.FORCE, options=_hold, text="force hold"
+                            ),
+                        ),
                     ),
                 ),
             ),
@@ -1292,8 +1385,24 @@ def test_a_rule_the_player_may_decline_applies_only_in_the_lane_that_takes_it() 
     ]
 
 
+def _marked_d6(changed: tuple[Hashable, ...]) -> Distribution[int]:
+    return _d6()
+
+
+def _marked_hit() -> Roll[int]:
+    changed = Mark[tuple[Hashable, ...]]("roll-to-hit")
+    return Roll[int](
+        name="roll-to-hit",
+        side="attacker",
+        inputs=(changed,),
+        changed=changed,
+        kernel=_marked_d6,
+        target=Scalar("t", 4),
+    )
+
+
 def test_one_rule_at_two_holders_is_two_nodes_judged_apart() -> None:
-    hit = Roll[int](name="roll-to-hit", side="attacker", kernel=_d6, target=Scalar("t", 4))
+    hit = _marked_hit()
     program = Program.build("volley", _SIDES, (hit,))
     program.attach(
         (
@@ -1302,7 +1411,7 @@ def test_one_rule_at_two_holders_is_two_nodes_judged_apart() -> None:
                 name="Hatred",
                 holder=_ATTACKER,
                 sources=_MODEL,
-                landings=(Landing(hit, moves=(1,)),),
+                landings=(Landing(hit, changes=(_Shift(1),)),),
             ),
             RuleNode(
                 rule="hatred",
@@ -1322,7 +1431,7 @@ def test_one_rule_at_two_holders_is_two_nodes_judged_apart() -> None:
 
 
 def test_a_node_granted_only_through_a_declined_node_is_honoured() -> None:
-    hit = Roll[int](name="roll-to-hit", side="attacker", kernel=_d6, target=Scalar("t", 4))
+    hit = _marked_hit()
     program = Program.build("volley", _SIDES, (hit,))
     program.attach(
         (
@@ -1340,7 +1449,7 @@ def test_a_node_granted_only_through_a_declined_node_is_honoured() -> None:
                 name="Enemy Fire",
                 holder=_TARGET,
                 sources=(Source(Carrier.EFFECT, via="target/spearmen/skirmish-formation"),),
-                landings=(Landing(hit, moves=(-1,)),),
+                landings=(Landing(hit, changes=(_Shift(-1),)),),
             ),
         )
     )
@@ -1350,6 +1459,259 @@ def test_a_node_granted_only_through_a_declined_node_is_honoured() -> None:
         (lane.choices[toggle], lane.verdicts("target/spearmen/enemy-fire", hit).mass)
         for lane in program.evaluate()
     ] == [(True, {Verdict.APPLIED: 1}), (False, {Verdict.HONOURED: 1})]
+
+
+def _hit_after(changed: tuple[int, ...]) -> Distribution[bool]:
+    needed = 4 - sum(changed)
+    return Distribution({True: Fraction(7 - needed, 6), False: Fraction(needed - 1, 6)})
+
+
+def _heads(face: int) -> bool:
+    return face == 1
+
+
+def _paired(first: Hashable, hit: bool) -> tuple[Hashable, ...]:
+    return first, hit
+
+
+def test_a_gated_change_moves_only_the_worlds_where_its_gate_holds() -> None:
+    coin = Measurement[int](name="coin", side="attacker", kernel=_coin)
+    changed = Mark[tuple[Hashable, ...]]("hit")
+    hit = Roll[bool](
+        name="hit",
+        side="attacker",
+        inputs=(changed,),
+        changed=changed,
+        kernel=_hit_after,
+        target=Scalar("t", 4),
+    )
+    both = Projection("both", (coin, hit), _paired, Monoid[tuple[Hashable, ...]](()))
+    hit.show(both)
+    program = Program.build("gated", _SIDES, (coin, hit))
+    aim = Landing(hit, changes=(_Shift(1, reads=(coin,), when=_heads),))
+    program.attach(
+        (RuleNode(rule="aim", name="Aim", holder=_ATTACKER, sources=_MODEL, landings=(aim,)),)
+    )
+
+    (lane,) = program.evaluate()
+
+    assert lane.verdicts("attacker/archers/aim", hit).mass == {
+        Verdict.APPLIED: _HALF,
+        Verdict.HONOURED: _HALF,
+    }
+    assert lane.read(hit, both).mass == {
+        (0, True): Fraction(1, 4),
+        (0, False): Fraction(1, 4),
+        (1, True): Fraction(1, 3),
+        (1, False): Fraction(1, 6),
+    }
+
+
+def _long(band: str) -> bool:
+    return band == "long"
+
+
+def test_a_cancel_removes_its_target_only_where_it_is_in_force() -> None:
+    band = Measurement[str](name="check-range", side="attacker", kernel=_band)
+    changed = Mark[tuple[Hashable, ...]]("hit")
+    hit = Roll[bool](
+        name="hit",
+        side="attacker",
+        inputs=(changed,),
+        changed=changed,
+        kernel=_hit_after,
+        target=Scalar("t", 4),
+    )
+    both = Projection("both", (band, hit), _paired, Monoid[tuple[Hashable, ...]](()))
+    hit.show(both)
+    program = Program.build("cancelled", _SIDES, (band, hit))
+    penalty = _Shift(-1)
+    cloak = _Cancel(penalty, reads=(band,), when=_long)
+    program.attach(
+        (
+            RuleNode(
+                rule="far",
+                name="Far",
+                holder=_ATTACKER,
+                sources=_MODEL,
+                landings=(Landing(hit, changes=(penalty,)),),
+            ),
+            RuleNode(
+                rule="cloak",
+                name="Cloak",
+                holder=_TARGET,
+                sources=_MODEL,
+                landings=(Landing(hit, changes=(cloak,)),),
+            ),
+        )
+    )
+
+    (lane,) = program.evaluate()
+
+    assert lane.verdicts("attacker/archers/far", hit).mass == {
+        Verdict.APPLIED: _HALF,
+        Verdict.CANCELLED: _HALF,
+    }
+    assert lane.verdicts("target/spearmen/cloak", hit).mass == {
+        Verdict.APPLIED: _HALF,
+        Verdict.HONOURED: _HALF,
+    }
+    assert lane.read(hit, both).mass == {
+        ("close", True): Fraction(1, 6),
+        ("close", False): Fraction(1, 3),
+        ("long", True): Fraction(1, 4),
+        ("long", False): Fraction(1, 4),
+    }
+
+
+def test_a_cancel_with_nothing_to_remove_is_honoured() -> None:
+    band = Measurement[str](name="check-range", side="attacker", kernel=_band)
+    changed = Mark[tuple[Hashable, ...]]("hit")
+    hit = Roll[bool](
+        name="hit",
+        side="attacker",
+        inputs=(changed,),
+        changed=changed,
+        kernel=_hit_after,
+        target=Scalar("t", 4),
+    )
+    program = Program.build("cancelled", _SIDES, (band, hit))
+    penalty = _Shift(-1, reads=(band,), when=_long)
+    program.attach(
+        (
+            RuleNode(
+                rule="far",
+                name="Far",
+                holder=_ATTACKER,
+                sources=_MODEL,
+                landings=(Landing(hit, changes=(penalty,)),),
+            ),
+            RuleNode(
+                rule="cloak",
+                name="Cloak",
+                holder=_TARGET,
+                sources=_MODEL,
+                landings=(Landing(hit, changes=(_Cancel(penalty),)),),
+            ),
+        )
+    )
+
+    (lane,) = program.evaluate()
+
+    assert lane.verdicts("attacker/archers/far", hit).mass == {
+        Verdict.CANCELLED: _HALF,
+        Verdict.HONOURED: _HALF,
+    }
+    assert lane.verdicts("target/spearmen/cloak", hit).mass == {
+        Verdict.APPLIED: _HALF,
+        Verdict.HONOURED: _HALF,
+    }
+
+
+def _hit_count(hit: bool) -> int:
+    return int(hit)
+
+
+def test_a_rule_declined_inside_a_repeat_moves_nothing_in_its_lane() -> None:
+    shots = Measurement[int](name="shots", side="attacker", kernel=_two)
+    coin = Roll[int](name="coin", side="attacker", kernel=_coin, target=Scalar("t", 1))
+    changed = Mark[tuple[Hashable, ...]]("hit")
+    hit = Roll[bool](
+        name="hit",
+        side="attacker",
+        inputs=(changed,),
+        changed=changed,
+        kernel=_hit_after,
+        target=Scalar("t", 4),
+    )
+    hits = Projection("hits", (hit,), _hit_count, Monoid(0))
+    hit.show(hits)
+    attack = Repeat(name="attack", times=shots, items=(coin, hit))
+    program = Program.build("aimed", _SIDES, (shots, attack))
+    aim = Landing(hit, changes=(_Shift(1, reads=(coin,), when=_heads),))
+    program.attach(
+        (
+            RuleNode(
+                rule="aim",
+                name="Aim",
+                holder=_ATTACKER,
+                sources=_MODEL,
+                landings=(aim,),
+                may=True,
+            ),
+        )
+    )
+    toggle = program.toggles["attacker", "aim"]
+
+    assert [
+        (
+            lane.choices[toggle],
+            lane.verdicts("attacker/archers/aim", hit).mass,
+            lane.read(hit, hits).mass,
+        )
+        for lane in program.evaluate()
+    ] == [
+        (
+            True,
+            {Verdict.APPLIED: _HALF, Verdict.HONOURED: _HALF},
+            {0: Fraction(25, 144), 1: Fraction(70, 144), 2: Fraction(49, 144)},
+        ),
+        (False, {Verdict.HONOURED: 1}, {0: Fraction(1, 4), 1: _HALF, 2: Fraction(1, 4)}),
+    ]
+
+
+def _one_or_two() -> Distribution[int]:
+    return Distribution({1: Fraction(1, 3), 2: Fraction(2, 3)})
+
+
+def _single(shots: int) -> bool:
+    return shots == 1
+
+
+def test_a_verdict_inside_a_repeat_weighs_the_worlds_that_enter_it() -> None:
+    shots = Measurement[int](name="shots", side="attacker", kernel=_one_or_two)
+    changed = Mark[tuple[Hashable, ...]]("hit")
+    hit = Roll[bool](
+        name="hit",
+        side="attacker",
+        inputs=(changed,),
+        changed=changed,
+        kernel=_hit_after,
+        target=Scalar("t", 4),
+    )
+    attack = Repeat(name="attack", times=shots, items=(hit,))
+    program = Program.build("aimed", _SIDES, (shots, attack))
+    aim = Landing(hit, changes=(_Shift(1, reads=(shots,), when=_single),))
+    program.attach(
+        (RuleNode(rule="aim", name="Aim", holder=_ATTACKER, sources=_MODEL, landings=(aim,)),)
+    )
+
+    (lane,) = program.evaluate()
+
+    assert lane.verdicts("attacker/archers/aim", hit).mass == {
+        Verdict.APPLIED: Fraction(1, 3),
+        Verdict.HONOURED: Fraction(2, 3),
+    }
+
+
+def _three_faces() -> Distribution[int]:
+    return Distribution({face: Fraction(1, 3) for face in (1, 2, 3)})
+
+
+def test_a_toggle_lane_keeps_its_masses_exact() -> None:
+    die = Roll[int](name="die", side="target", kernel=_three_faces, target=Scalar("t", 1))
+    face = die.output("face", Monoid(0))
+    die.show(face)
+    program = Program.build("toggled", _SIDES, (die,))
+    program.attach(
+        (RuleNode(rule="stubborn", name="Stubborn", holder=_TARGET, sources=_MODEL, may=True),)
+    )
+
+    third = Fraction(1, 3)
+    assert [lane.read(die, face).mass for lane in program.evaluate()] == [
+        {1: third, 2: third, 3: third},
+        {1: third, 2: third, 3: third},
+    ]
 
 
 def test_a_decision_inside_a_repeat_is_refused() -> None:
@@ -1393,17 +1755,38 @@ def _node(
     return RuleNode(rule="r", name="R", holder=holder, sources=sources, landings=landings, may=may)
 
 
+def _marked_three(changed: tuple[Hashable, ...]) -> Distribution[int]:
+    return _three()
+
+
 def _refusal(case: str) -> tuple[Program, tuple[RuleNode, ...]]:
     gap = Measurement[int](name="gap", side="target", kernel=_three_or_nine)
+    changed = Mark[tuple[Hashable, ...]]("aimed")
+    aimed = Measurement[int](
+        name="aimed", side="target", inputs=(changed,), changed=changed, kernel=_marked_three
+    )
     after = Measurement[int](name="after", side="target", kernel=_three_or_nine)
     who = Eligibility[str](name="who-can-shoot", side="target", kernel=_a_bow)
     reaction = Decision[str](
         name="charge-reactions", side="target", options={"hold": ()}, otherwise="hold"
     )
-    program = Program.build("charge", _SIDES, (gap, who, reaction, after))
+    program = Program.build("charge", _SIDES, (gap, aimed, who, reaction, after))
     nodes = {
+        "change-at-an-unmarked-step": (_node(Landing(gap, changes=(_Shift(1),))),),
+        "change-reads-a-later-step": (
+            _node(Landing(aimed, changes=(_Shift(1, reads=(after,)),))),
+        ),
         "force-at-an-eligibility": (
-            _node(Landing(who, (Contribution(operation=Operation.FORCE, options=_a_pistol),))),
+            _node(
+                Landing(
+                    who,
+                    (
+                        Contribution(
+                            operation=Operation.FORCE, options=_a_pistol, text="force pistol"
+                        ),
+                    ),
+                )
+            ),
         ),
         "contribution-arity": (
             _node(
@@ -1411,7 +1794,10 @@ def _refusal(case: str) -> tuple[Program, tuple[RuleNode, ...]]:
                     reaction,
                     (
                         Contribution(
-                            operation=Operation.ALLOW, inputs=(gap,), options=_no_printed_set
+                            operation=Operation.ALLOW,
+                            inputs=(gap,),
+                            options=_no_printed_set,
+                            text="allow nothing",
                         ),
                     ),
                 )
@@ -1423,14 +1809,26 @@ def _refusal(case: str) -> tuple[Program, tuple[RuleNode, ...]]:
                     reaction,
                     (
                         Contribution(
-                            operation=Operation.ALLOW, inputs=(after,), options=_charge_offered
+                            operation=Operation.ALLOW,
+                            inputs=(after,),
+                            options=_charge_offered,
+                            text="allow charge",
                         ),
                     ),
                 )
             ),
         ),
         "contribution-on-a-plain-step": (
-            _node(Landing(gap, (Contribution(operation=Operation.ALLOW, options=_a_pistol),))),
+            _node(
+                Landing(
+                    gap,
+                    (
+                        Contribution(
+                            operation=Operation.ALLOW, options=_a_pistol, text="allow pistol"
+                        ),
+                    ),
+                )
+            ),
         ),
         "repeated-id": (_node(), _node()),
         "no-source": (_node(sources=()),),
@@ -1445,6 +1843,8 @@ def _refusal(case: str) -> tuple[Program, tuple[RuleNode, ...]]:
 
 
 _REFUSALS = {
+    "change-at-an-unmarked-step": "r changes charge/gap, which marks no changes",
+    "change-reads-a-later-step": "r at charge/aimed reads after, not in scope",
     "force-at-an-eligibility": "forces charge/who-can-shoot, which only allow and forbid",
     "contribution-arity": "cannot accept the options and 1 inputs",
     "contribution-reads-a-later-step": "reads after, not in scope",
@@ -1472,7 +1872,9 @@ def test_a_rule_offering_an_option_the_decision_lacks_is_refused() -> None:
         name="charge-reactions", side="target", options={"hold": ()}, otherwise="hold"
     )
     program = Program.build("charge", _SIDES, (gap, reaction))
-    offer = Contribution(operation=Operation.ALLOW, inputs=(gap,), options=_charge_offered)
+    offer = Contribution(
+        operation=Operation.ALLOW, inputs=(gap,), options=_charge_offered, text="allow charge"
+    )
     program.attach(
         (
             RuleNode(
@@ -1489,7 +1891,7 @@ def test_a_rule_offering_an_option_the_decision_lacks_is_refused() -> None:
         program.evaluate()
 
 
-def _hit_on(range_band: str) -> Distribution[int]:
+def _hit_on(range_band: str, changed: tuple[Hashable, ...]) -> Distribution[int]:
     return _d6()
 
 
@@ -1504,10 +1906,12 @@ _range = Decision[str](
     options={"close": (), "long": ()},
     otherwise="close",
 )
+_to_hit_changed = Mark[tuple[Hashable, ...]]("roll-to-hit")
 _to_hit = Roll[int](
     name="roll-to-hit",
     side="attacker",
-    inputs=(_range,),
+    inputs=(_range, _to_hit_changed),
+    changed=_to_hit_changed,
     kernel=_hit_on,
     target=Scalar("to hit", 4),
 )
@@ -1549,12 +1953,15 @@ _volley.attach(
             sources=_MODEL,
             landings=(
                 Landing(_shots),
-                Landing(_to_hit, moves=(1,)),
+                Landing(_to_hit, changes=(_Shift(1),)),
                 Landing(
                     _aftermath,
                     contributions=(
                         Contribution(
-                            operation=Operation.FORCE, inputs=(_range,), options=_stand_when_close
+                            operation=Operation.FORCE,
+                            inputs=(_range,),
+                            options=_stand_when_close,
+                            text="force stand",
                         ),
                     ),
                 ),
@@ -1612,7 +2019,7 @@ def test_the_view_carries_the_blocks_and_the_stacked_readings() -> None:
     ]
     assert hits["inputs"] == ["volley/choose-range"]
     assert hits["target"] == {"label": "to hit", "value": 4}
-    assert hits["modifiers"] == [{"rule": "attacker/archers/volley-fire", "move": 1}]
+    assert hits["changes"] == [{"rule": "attacker/archers/volley-fire", "text": "+1"}]
     assert hits["edge"]["readings"][0]["outcomes"] == [
         {"value": 0, "p": 0.125},
         {"value": 1, "p": 0.375},
@@ -1656,8 +2063,8 @@ def test_the_view_matches_the_front_end_types() -> None:
         assert set(node["edge"]) == declared["Edge"]
         for reading in node["edge"]["readings"]:
             _reading_shape(reading, declared)
-        for modifier in node.get("modifiers", ()):
-            assert set(modifier) == declared["Modifier"]
+        for change in node["changes"]:
+            assert set(change) == declared["Change"]
     for block in view["blocks"]:
         assert set(block) == declared[_BLOCK_OF[block["kind"]]]
     for rule in view["rules"]:

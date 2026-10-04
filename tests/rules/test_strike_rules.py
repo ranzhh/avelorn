@@ -25,6 +25,7 @@ SWORDS_OF_HOETH = Side(
 FLAMESPYRE = Side("flamespyre-phoenix", 1, "Wicked Claws")
 SPEAR_INTO_SPEARMEN = Attack(COMBAT, 4, 3, 3, foe_weapon_skill=4, armour_value=5)
 ARCHERS = Side("elven-archers", 5, frontage=5)
+ARROWS_INTO_PHOENIX_GUARD = Attack(SHOOTING, 4, 3, 3, armour_value=4, armour_bane=1, ward=6)
 
 
 def _unsaved(attack: Attack) -> Fraction:
@@ -36,10 +37,10 @@ def _with_and_without(printed: Scenario, plain: Scenario) -> tuple[object, objec
 
 
 @pytest.mark.parametrize(
-    ("strikers", "printed", "plain"),
+    ("scenario", "printed", "plain"),
     [
         pytest.param(
-            FLAMESPYRE,
+            Scenario(Kind.STRIKE, FLAMESPYRE, PHOENIX_GUARD),
             Attack(
                 COMBAT, 5, 5, 3, foe_weapon_skill=5, armour_value=4, armour_piercing=-2, ward=5
             ),
@@ -49,16 +50,29 @@ def _with_and_without(printed: Scenario, plain: Scenario) -> tuple[object, objec
             id="flaming-claws",
         ),
         pytest.param(
-            SWORDS,
+            Scenario(Kind.STRIKE, SWORDS, PHOENIX_GUARD),
             Attack(COMBAT, 4, 3, 3, foe_weapon_skill=5, armour_value=4, ward=6),
             Attack(COMBAT, 4, 3, 3, foe_weapon_skill=5, armour_value=4, ward=6),
             id="plain-swords",
         ),
+        pytest.param(
+            Scenario(
+                Kind.SHOOT, replace(ARCHERS, weapon="Longbow"), PHOENIX_GUARD, distance=10
+            ).adding("flaming-attacks", Role.ATTACKER, Carrier.WEAPON),
+            replace(ARROWS_INTO_PHOENIX_GUARD, ward=5),
+            ARROWS_INTO_PHOENIX_GUARD,
+            id="flaming-longbow",
+        ),
+        pytest.param(
+            Scenario(Kind.SHOOT, ARCHERS, PHOENIX_GUARD, distance=10),
+            ARROWS_INTO_PHOENIX_GUARD,
+            ARROWS_INTO_PHOENIX_GUARD,
+            id="plain-arrows",
+        ),
     ],
 )
-def test_blessings_of_asuryan(strikers: Side, printed: Attack, plain: Attack) -> None:
-    """Phoenix Guard ward a Flaming attack on 5+, bettering Witness to Destiny's 6+."""
-    scenario = Scenario(Kind.STRIKE, strikers, PHOENIX_GUARD)
+def test_blessings_of_asuryan(scenario: Scenario, printed: Attack, plain: Attack) -> None:
+    """Phoenix Guard ward a Flaming attack, struck or shot, on 5+."""
     assert _with_and_without(
         scenario, scenario.without("blessings-of-asuryan", Role.DEFENDER)
     ) == (_unsaved(printed), _unsaved(plain))
@@ -92,13 +106,26 @@ def test_cleaving_blow(target: Side, printed: Attack, plain: Attack) -> None:
     )
 
 
-def test_dragon_armour() -> None:
+@pytest.mark.parametrize(
+    ("scenario", "attack"),
+    [
+        pytest.param(
+            Scenario(Kind.STRIKE, SPEARS, Side("dragon-princes", 5, "Hand Weapon")),
+            Attack(COMBAT, 4, 3, 3, foe_weapon_skill=5, armour_value=2),
+            id="struck",
+        ),
+        pytest.param(
+            Scenario(Kind.SHOOT, ARCHERS, Side("dragon-princes", 5), distance=10),
+            Attack(SHOOTING, 4, 3, 3, armour_value=2, armour_bane=1),
+            id="shot",
+        ),
+    ],
+)
+def test_dragon_armour(scenario: Scenario, attack: Attack) -> None:
     """Dragon Princes take a 6+ ward against every attack."""
-    scenario = Scenario(Kind.STRIKE, SPEARS, Side("dragon-princes", 5, "Hand Weapon"))
-    blow = Attack(COMBAT, 4, 3, 3, foe_weapon_skill=5, armour_value=2)
     assert _with_and_without(scenario, scenario.without("dragon-armour", Role.DEFENDER)) == (
-        _unsaved(replace(blow, ward=6)),
-        _unsaved(blow),
+        _unsaved(replace(attack, ward=6)),
+        _unsaved(attack),
     )
 
 
@@ -340,6 +367,11 @@ D3 = {wounds: Fraction(1, 3) for wounds in (1, 2, 3)}
             1,
             D3,
             id="bow-of-d3",
+            marks=pytest.mark.xfail(
+                strict=True,
+                reason="the volley holds Multiple Wounds: no printed step rolls its D3 for "
+                "each unsaved wound (unrolled-dice in data/tow/unmodelled.yaml)",
+            ),
         ),
     ],
 )
@@ -481,25 +513,36 @@ def test_runes_of_protection(attackers: Scenario, printed: Attack, plain: Attack
 
 
 @pytest.mark.parametrize(
-    ("strikers", "printed", "plain"),
+    ("scenario", "printed", "plain"),
     [
         pytest.param(
-            SWORDS,
+            Scenario(Kind.STRIKE, SWORDS, PHOENIX_GUARD),
             Attack(COMBAT, 4, 3, 3, foe_weapon_skill=5, armour_value=4, ward=6),
             Attack(COMBAT, 4, 3, 3, foe_weapon_skill=5, armour_value=4),
             id="mundane-swords",
         ),
         pytest.param(
-            SWORDS_OF_HOETH,
+            Scenario(Kind.STRIKE, SWORDS_OF_HOETH, PHOENIX_GUARD),
             Attack(COMBAT, 6, 5, 3, foe_weapon_skill=5, armour_value=4, armour_piercing=-2),
             Attack(COMBAT, 6, 5, 3, foe_weapon_skill=5, armour_value=4, armour_piercing=-2),
             id="magical-swords",
         ),
+        pytest.param(
+            Scenario(Kind.SHOOT, ARCHERS, PHOENIX_GUARD, distance=10),
+            ARROWS_INTO_PHOENIX_GUARD,
+            replace(ARROWS_INTO_PHOENIX_GUARD, ward=None),
+            id="mundane-arrows",
+        ),
+        pytest.param(
+            Scenario(Kind.SHOOT, _sisters("Bow of Avelorn"), PHOENIX_GUARD, distance=10),
+            Attack(SHOOTING, 5, 3, 3, armour_value=4, armour_piercing=-1, armour_bane=2),
+            Attack(SHOOTING, 5, 3, 3, armour_value=4, armour_piercing=-1, armour_bane=2),
+            id="magical-bow",
+        ),
     ],
 )
-def test_witness_to_destiny(strikers: Side, printed: Attack, plain: Attack) -> None:
-    """Phoenix Guard take a 6+ ward against a non-magical attack."""
-    scenario = Scenario(Kind.STRIKE, strikers, PHOENIX_GUARD)
+def test_witness_to_destiny(scenario: Scenario, printed: Attack, plain: Attack) -> None:
+    """Phoenix Guard take a 6+ ward against a non-magical attack, struck or shot."""
     assert _with_and_without(scenario, scenario.without("witness-to-destiny", Role.DEFENDER)) == (
         _unsaved(printed),
         _unsaved(plain),

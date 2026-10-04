@@ -9,7 +9,7 @@
     "/graph/volley": {
       "get": {
         "summary": "Evaluate the volley program with both sides' rules attached",
-        "description": "Ten Elven Archers shoot twenty Elven Spearmen at 12 inches.\n\nEach side's rules attach to the steps they reach. None of them changes a\nnumber yet.\n\nReturns:\n    The evaluated volley program.",
+        "description": "Ten Elven Archers shoot twenty Elven Spearmen at 12 inches.\n\nEach side's rules attach to the steps they reach.\n\nReturns:\n    The evaluated volley program.",
         "operationId": "graph_volley_graph_volley_get",
         "responses": {
           "200": {
@@ -453,7 +453,7 @@
           "reason"
         ],
         "title": "Acknowledgement",
-        "description": "One gap, known and left open, with why.\n\n``subject`` is how the gap is addressed: the rule's slug for a rule without\neffects (one entry covers every place referencing it), ``<unit>/<row>`` for a\nprofile row, the weapon or armour slug for printed notes, ``<unit>/<option>``\nfor an option, ``<rule>/<sequence>/<step>`` for an effect needing a step no\nprogram registers yet and for a volley effect no corpus side reaches, and the\nmechanic's slug for a mechanic a rule needs."
+        "description": "One gap, known and left open, with why.\n\n``subject`` is how the gap is addressed: the rule's slug for a rule without\neffects (one entry covers every place referencing it), ``<unit>/<row>`` for a\nprofile row, the weapon or armour slug for printed notes, ``<unit>/<option>``\nfor an option, ``<rule>/<sequence>/<step>`` for an effect needing a step no\nprogram registers yet, for a volley effect no corpus side reaches and for one\nthe volley's step cannot run, and the mechanic's slug for a mechanic a rule\nneeds."
       },
       "AmountParameter": {
         "properties": {
@@ -1401,6 +1401,7 @@
           "inert-option",
           "unattached-effect",
           "unreached-effect",
+          "held-effect",
           "missing-mechanic"
         ],
         "title": "GapKind",
