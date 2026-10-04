@@ -263,7 +263,7 @@ def _unreached(data: TOWRepository, referenced: set[str]) -> Iterator[tuple[GapK
                 if (sequence, effect.at.step) in have:
                     expected.add((slug, index, sequence, effect.at.step))
     reached: set[Effected] = set()
-    for contingent in _fieldings(data):
+    for _, contingent in fieldings(data):
         target = Fielded.of(contingent)
         shooters = [
             Fielded.of(contingent, weapon.name)
@@ -286,11 +286,16 @@ def _unreached(data: TOWRepository, referenced: set[str]) -> Iterator[tuple[GapK
         )
 
 
-def _fieldings(data: TOWRepository) -> Iterator[Contingent]:
+def fieldings(data: TOWRepository) -> Iterator[tuple[tuple[str, ...], Contingent]]:
+    """Every unit at its minimum size and default frontage, bare and with each option alone.
+
+    Yields:
+        The options bought, and the fielded unit.
+    """
     for slug, unit in sorted(data.units.items()):
         bought = [()] + [(option.name,) for option in unit.options if option.applies_to is None]
         for options in bought:
-            yield Contingent.deploy(slug, unit.unit_size.min, options, data=data)
+            yield options, Contingent.deploy(slug, unit.unit_size.min, options, data=data)
 
 
 def _inert(option: UnitOption) -> bool:
