@@ -45,6 +45,21 @@ def test_rule_yaml_is_valid(path: Path) -> None:
     assert rule.paragraphs
 
 
+@pytest.mark.parametrize("path", RULE_FILES, ids=lambda p: p.stem)
+def test_a_rule_reads_back_from_its_dump(path: Path) -> None:
+    """A rule dumped and read back is the same rule, its graph included."""
+    rule = load_yaml(path, Rule)
+    assert Rule.model_validate(rule.model_dump(mode="json", by_alias=True)) == rule
+
+
+def test_a_dumped_rule_reads_its_effects_from_its_graph() -> None:
+    """A dump whose effects drop its graph's legacy blocks does not load."""
+    path = next(path for path in RULE_FILES if path.stem == "armour-bane")
+    dumped = load_yaml(path, Rule).model_dump(mode="json", by_alias=True)
+    with pytest.raises(ValidationError, match="legacy blocks of its graph"):
+        Rule.model_validate({**dumped, "effects": []})
+
+
 def test_when_parses_a_subject_fact_beside_the_event() -> None:
     """A when carries subject facts (movement) beside the natural die event."""
     effect = _EFFECT.validate_python(

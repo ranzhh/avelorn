@@ -36,7 +36,6 @@ from pydantic import (
     ConfigDict,
     Field,
     ModelWrapValidatorHandler,
-    PrivateAttr,
     TypeAdapter,
     field_serializer,
     field_validator,
@@ -1379,6 +1378,11 @@ class RuleGraph(BaseModel):
         """The effects the graph reads, in the order written."""
         return tuple(clause.effect for clause in self.clauses if clause.effect is not None)
 
+    @property
+    def legacy(self) -> tuple[RuleEffect, ...]:
+        """The effects the legacy engine reads, in the order written."""
+        return tuple(clause.legacy for clause in self.clauses if clause.legacy is not None)
+
     def written(self) -> dict[str, object]:
         """The rule-level keys and effects as the file writes them.
 
@@ -1407,8 +1411,6 @@ class Rule(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    _graph: RuleGraph | None = PrivateAttr(default=None)
-
     @model_validator(mode="wrap")
     @classmethod
     def _read_graph(cls, data: object, handler: ModelWrapValidatorHandler[Self]) -> Self:
@@ -1419,35 +1421,20 @@ class Rule(BaseModel):
             return handler(data)
         if "when" in fields:
             raise ValueError("a rule written for the graph gates each effect with its own when")
+        if "graph" in fields:
+            raise ValueError("a rule file states its graph through its effects")
         written = fields.get("effects") or []
         if not isinstance(written, list):
             raise TypeError("effects is a list")
         clauses = tuple(Clause.read(effect) for effect in written)
         stated = {key: fields[key] for key in _RULE_KEYS if key in fields}
         graph = RuleGraph.model_validate({**stated, "clauses": clauses})
-        legacy = [clause.legacy for clause in graph.clauses if clause.legacy is not None]
         kept = {key: value for key, value in fields.items() if key not in _RULE_KEYS}
-        rule = handler({**kept, "effects": legacy})
+        rule = handler({**kept, "effects": list(graph.legacy), "graph": graph})
         readers = [effect for effect in graph.effects if effect.reads_x]
         if readers and (rule.parameter is None or rule.parameter.kind != "amount"):
             raise ValueError(f"an effect of {rule.name!r} reads an X the rule does not declare")
-        rule._graph = graph
         return rule
-
-    @property
-    def graph(self) -> RuleGraph | None:
-        """The rule as the graph reads it, when its file writes it so."""
-        return self._graph
-
-    def with_graph(self, graph: RuleGraph | None) -> Self:
-        """The rule, read by the graph as ``graph``.
-
-        Returns:
-            A copy carrying ``graph``.
-        """
-        copy = self.model_copy()
-        copy._graph = graph
-        return copy
 
     id: str  # stable slug, e.g. "armour-bane"
     name: str  # printed name, e.g. "Armour Bane (X)"
@@ -1463,6 +1450,7 @@ class Rule(BaseModel):
     # simplification is stated in data — maintainable, diffable against the
     # paragraphs — never composed as prose in the engine.
     notes: str | None = None
+    graph: RuleGraph | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -1496,6 +1484,14 @@ class Rule(BaseModel):
             merged.append({**effect, "when": combined})
         data["effects"] = merged
         return data
+
+    @model_validator(mode="after")
+    def _effects_follow_the_graph(self) -> "Rule":
+        if self.graph is not None and tuple(self.effects) != self.graph.legacy:
+            raise ValueError(
+                f"the effects of {self.name!r} are not the legacy blocks of its graph"
+            )
+        return self
 
     @model_validator(mode="after")
     def _a_parameter_prints_in_the_name(self) -> "Rule":

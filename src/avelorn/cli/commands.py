@@ -14,7 +14,7 @@ from avelorn.tow.coverage import Gap, coverage, rule_gap
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.reference import RuleRef
-from avelorn.tow.schema.rule import GrantEffect, Rule, RuleEffect
+from avelorn.tow.schema.rule import Clause, GrantEffect, Rule, RuleEffect
 from avelorn.tow.schema.unit import (
     BaseSize,
     Characteristic,
@@ -327,10 +327,16 @@ def show_rule(data: TOWRepository, slug: str) -> list[str]:
         lines.extend(["", *(f"  {line}" for line in _wrapped(rule.flavour))])
     for paragraph in rule.paragraphs:
         lines.extend(["", *_wrapped(paragraph)])
-    if rule.effects:
-        dumped = yaml.safe_dump(
-            [_effect_as_printed(effect, data) for effect in rule.effects], sort_keys=False
-        )
+    if rule.graph is None:
+        stated: dict[str, object] = {}
+        effects = [_effect_as_printed(effect, data) for effect in rule.effects]
+    else:
+        stated = {key: value for key, value in rule.graph.written().items() if key != "effects"}
+        effects = [_clause_as_printed(clause, data) for clause in rule.graph.clauses]
+    if stated:
+        lines.extend(["", *yaml.safe_dump(stated, sort_keys=False).rstrip().splitlines()])
+    if effects:
+        dumped = yaml.safe_dump(effects, sort_keys=False)
         lines.extend(["", "Effects:", *(f"  {line}" for line in dumped.rstrip().splitlines())])
     else:
         lines.extend(["", "Effects: none -- the engine holds this text and does not apply it"])
@@ -343,6 +349,18 @@ def _effect_as_printed(effect: RuleEffect, data: TOWRepository) -> dict[str, obj
     printed = effect.model_dump(mode="json", exclude_none=True)
     if isinstance(effect, GrantEffect):
         printed["grants"] = data.rules[effect.grants.rule].display(effect.grants.x)
+    return printed
+
+
+def _clause_as_printed(clause: Clause, data: TOWRepository) -> dict[str, object]:
+    printed = clause.written()
+    if clause.effect is not None and clause.effect.grants is not None:
+        granted = clause.effect.grants
+        printed["grants"] = data.rules[granted.rule].display(granted.x)
+    block = printed.get("legacy")
+    if isinstance(clause.legacy, GrantEffect) and isinstance(block, dict) and "grants" in block:
+        granted = clause.legacy.grants
+        printed["legacy"] = {**block, "grants": data.rules[granted.rule].display(granted.x)}
     return printed
 
 

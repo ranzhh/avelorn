@@ -140,6 +140,14 @@ def test_a_rule_is_served_whole(client: TestClient) -> None:
     assert body["notes"]
 
 
+def test_a_rule_is_served_with_its_graph(client: TestClient) -> None:
+    """Armour Bane's effect is served with the step it lands at."""
+    body = client.get("/rules/armour-bane").json()
+    assert [clause["effect"]["at"] for clause in body["graph"]["clauses"]] == [
+        {"step": "make-armour-saves", "by": "the-enemy", "in": None, "not_in": None}
+    ]
+
+
 def test_an_unknown_rule_slug_is_a_404(client: TestClient) -> None:
     """A slug no entry carries has nothing to read."""
     response = client.get("/rules/unprinted-rule")

@@ -455,6 +455,52 @@
         "title": "Acknowledgement",
         "description": "One gap, known and left open, with why.\n\n``subject`` is how the gap is addressed: the rule's slug for a rule without\neffects (one entry covers every place referencing it), ``<unit>/<row>`` for a\nprofile row, the weapon or armour slug for printed notes, ``<unit>/<option>``\nfor an option, ``<rule>/<step>`` for an effect landing on a step no program\nregisters yet, and the mechanic's slug for a mechanic a rule needs."
       },
+      "Address": {
+        "properties": {
+          "step": {
+            "$ref": "#/components/schemas/Step"
+          },
+          "by": {
+            "$ref": "#/components/schemas/Side"
+          },
+          "in": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StepSequence"
+              },
+              {
+                "$ref": "#/components/schemas/Step"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "In"
+          },
+          "not_in": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StepSequence"
+              },
+              {
+                "$ref": "#/components/schemas/Step"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Not In"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "step",
+          "by"
+        ],
+        "title": "Address",
+        "description": "A printed step and the role acting there, optionally narrowed to a block on its path.\n\n``in`` and ``not_in`` name a sequence the step is printed in, or a step\nwhose block runs it, as a Stand & Shoot volley runs inside stand-and-shoot."
+      },
       "AmountParameter": {
         "properties": {
           "kind": {
@@ -562,76 +608,6 @@
         "title": "Armour",
         "description": "An armour entry: a suit with its own value, or an addition."
       },
-      "ArmourGate": {
-        "properties": {
-          "name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "title": "ArmourGate",
-        "description": "A gate on a piece of armour a model wears \u2014 by name, among all it wears.\n\nThe ``worn`` peer of :class:`WeaponGate`, and the armour half of the\nequipment-in-use axis: Parry's \"equipped with ... a shield\" asks\n``{name: Shield}``. Two things separate it from the weapon gate, and both\ncome from the equipment itself. Armour has no family vocabulary \u2014 a piece is\nonly ever its printed name \u2014 so ``name`` is the sole property; and a model\nwears *several* pieces at once where it holds one weapon, so this is a\n:class:`MembershipGate`, satisfied by any piece worn that matches."
-      },
-      "AttackGate": {
-        "properties": {
-          "kind": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/AttackKind"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "magical": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Magical"
-          },
-          "flaming": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Flaming"
-          },
-          "at_long_range": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "At Long Range"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "title": "AttackGate",
-        "description": "A gate on the attack a model is the target of.\n\nThe incoming attack, from the defender's side: its ``kind`` (Lion Cloak\nfires only ``against ... shooting attacks``), whether it is ``magical``\n(Lion Cloak wants non-magical, the reason it does not help against a magical\nbow), and whether it is ``flaming`` \u2014 carries the Flaming Attacks rule.\nOrthogonal facts \u2014 a shooting or a close-combat attack may be either.\n``at_long_range`` is a fourth, and a mistake kept for now: see #179 and the\nnote on the field."
-      },
       "AttackKind": {
         "type": "string",
         "enum": [
@@ -646,7 +622,7 @@
           "when": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/When"
+                "$ref": "#/components/schemas/avelorn__tow__schema__rule__When"
               },
               {
                 "type": "null"
@@ -700,7 +676,7 @@
           "when": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/When"
+                "$ref": "#/components/schemas/avelorn__tow__schema__rule__When"
               },
               {
                 "type": "null"
@@ -747,7 +723,7 @@
           "when": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/When"
+                "$ref": "#/components/schemas/avelorn__tow__schema__rule__When"
               },
               {
                 "type": "null"
@@ -776,50 +752,62 @@
         "title": "BlowEffect",
         "description": "The rulebook's \"X Blow\" shape: a triggered strike the foe cannot save.\n\n\"If a model with this special rule rolls a natural 6 when making a roll\nTo Wound for an attack made in combat ... the enemy is not permitted an\narmour save (Ward saves can be attempted as normal)\": ``denies`` names\nthe save stages the foe may not attempt on the trigger branch, and\n``slays`` escalates the unsaved wound to the rulebook's Instant Kill\n(\"loses all of its remaining Wounds\") \u2014 Killing Blow sets both, Cleaving\nBlow denies alone. The ``when`` must carry the natural trigger, on a\nroll before the denied stage; that a die must show a face is also what\nkeeps the printed automatic-wound exception free \u2014 an automatic roll\nshows no die. Self-naming by ``denies``."
       },
-      "Bounded": {
+      "Cancels": {
         "properties": {
-          "amount": {
+          "rule": {
             "anyOf": [
-              {
-                "type": "integer"
-              },
               {
                 "type": "string",
-                "const": "X"
-              }
-            ],
-            "title": "Amount"
-          },
-          "maximum": {
-            "anyOf": [
-              {
-                "type": "integer"
+                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Maximum"
+            "title": "Rule"
           },
-          "minimum": {
+          "op": {
             "anyOf": [
               {
-                "type": "integer"
+                "$ref": "#/components/schemas/Operation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Quantity"
+              },
+              {
+                "$ref": "#/components/schemas/Characteristic"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Minimum"
+            "title": "Quantity"
           }
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "amount"
+        "title": "Cancels",
+        "description": "Which effects landing on the canceller's own address are removed."
+      },
+      "Carrier": {
+        "type": "string",
+        "enum": [
+          "model",
+          "weapon",
+          "armour",
+          "item",
+          "effect",
+          "core"
         ],
-        "title": "Bounded",
-        "description": "An amount with the printed bound on the value it moves.\n\nThe page prints a bound attached to the quantity it bounds, inside the\nparenthetical that follows it \u2014 \"improves its armour value by 1 (to a\nmaximum of 2+)\", \"a -1 modifier to their Strength characteristic (to a\nminimum of 1)\" \u2014 so the bound is written on the amount, not beside the\noperation. An operation moving two quantities then cannot lend one's\nbound to the other.\n\n``maximum`` is the printed limit on the modified value: a ceiling on a\ncharacteristic, the best attainable save (so numerically a floor) on an\narmour value. ``minimum`` is the floor a malus cannot push a\ncharacteristic below; an armour value needs none, its own floor being\nwhat ``maximum`` already names.\n\nWrite the amount plainly (``S: -1``) where the page prints no bound \u2014\nthe long form exists to carry one."
+        "title": "Carrier",
+        "description": "What carries a rule (what-special-rules-does-it-have)."
       },
       "Characteristic": {
         "type": "string",
@@ -852,7 +840,7 @@
           "distance": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Comparison"
+                "$ref": "#/components/schemas/avelorn__tow__schema__rule__Comparison"
               },
               {
                 "type": "null"
@@ -899,7 +887,7 @@
           "when": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/When"
+                "$ref": "#/components/schemas/avelorn__tow__schema__rule__When"
               },
               {
                 "type": "null"
@@ -921,6 +909,65 @@
         ],
         "title": "ChoiceEffect",
         "description": "Force the outcome of a decision that is otherwise rolled or chosen.\n\n``forces`` maps a :class:`Decision` to the :class:`~avelorn.tow.schema.psychology.Outcome`\nit takes instead of rolling \u2014 ``{break: fall-back-in-good-order}``. Keyed by\nthe decision exactly as a modifier's ``add`` is keyed by the quantity, so the\nseam that owns a decision reads its own key (\"is ``break`` mine, and forced\nto what?\") with no per-rule handler. The value is typed as the ``Outcome``\nbase; each decision's own results are a subclass (a break's are\n:class:`~avelorn.tow.schema.psychology.BreakOutcome`), resolved by slug, so\nthis generic effect names no decision. Self-naming by ``forces`` (the peer of\n``add`` / ``grants``); each model forbids the others' keys. Forbidding an\noption rather than forcing one is the sibling (a ``forbids`` key) for when\none lands."
+      },
+      "Clause": {
+        "properties": {
+          "effect": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Effect"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "legacy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModifierEffect"
+              },
+              {
+                "$ref": "#/components/schemas/RerollEffect"
+              },
+              {
+                "$ref": "#/components/schemas/GrantEffect"
+              },
+              {
+                "$ref": "#/components/schemas/ChoiceEffect"
+              },
+              {
+                "$ref": "#/components/schemas/AttackMarkEffect"
+              },
+              {
+                "$ref": "#/components/schemas/BarEffect"
+              },
+              {
+                "$ref": "#/components/schemas/BlowEffect"
+              },
+              {
+                "$ref": "#/components/schemas/WoundMultiplierEffect"
+              },
+              {
+                "$ref": "#/components/schemas/VolleyEffect"
+              },
+              {
+                "$ref": "#/components/schemas/ReplaceEffect"
+              },
+              {
+                "$ref": "#/components/schemas/HitsEffect"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legacy"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "Clause",
+        "description": "One effect as a rule file writes it.\n\nThe legacy form is the effect's ``legacy`` block, together with the add, set,\ngrants or hits the graph's form states when the block names no operation of\nits own. An effect without a ``legacy`` block is the graph's alone; one that\nis only a ``legacy`` block is the legacy engine's alone."
       },
       "CombatGate": {
         "properties": {
@@ -962,47 +1009,6 @@
         "type": "object",
         "title": "CombatGate",
         "description": "A gate on the close combat the model is fighting.\n\nFacts of the combat itself, not the model: ``first_round`` (Elven Reflexes,\nMartial Prowess), ``outnumbers`` \u2014 whether this side's Unit Strength\nbeats the foe's (Massed Infantry) \u2014 and ``was_charged``, whether the foe\ncharged the bearer this turn (Shieldwall's \"a turn in which it was\ncharged\"). Booleans today; the subject is where a round *number* or a\nflank/rear facing would join."
-      },
-      "Comparison": {
-        "properties": {
-          "equals": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Equals"
-          },
-          "at_least": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "At Least"
-          },
-          "at_most": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "At Most"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "title": "Comparison",
-        "description": "A predicate on one numeric property of an event: exactly one comparator.\n\nThe leaf of a gate path \u2014 ``charging.distance`` is constrained by\n``{at_least: 3}``, ``{at_most: 6}`` or ``{equals: 8}``. The comparator\nvocabulary is closed and append-only, the same discipline as\n:class:`Quantity`; a new one joins when a rule needs it. Exactly one\ncomparator is set \u2014 a leaf tests one thing."
       },
       "Coverage": {
         "properties": {
@@ -1114,6 +1120,297 @@
         "title": "DiceQuantity",
         "description": "A printed quantity decided by a dice roll: \"D6\", \"D3\", \"D3+1\".\n\nThe dice form of a rule's bracketed parameter \u2014 \"Often, this is\ndetermined by the roll of a dice\" (Stomp Attacks, Impact Hits). One\ndie plus a flat addend covers every printed instance; a wider form\n(2D6, say) joins when a rule prints one."
       },
+      "Effect": {
+        "properties": {
+          "when": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/avelorn__tow__schema__effect__When"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unless": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Unless"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "add": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "string",
+                      "const": "X"
+                    },
+                    {
+                      "$ref": "#/components/schemas/FactRef"
+                    },
+                    {
+                      "$ref": "#/components/schemas/avelorn__tow__schema__effect__Bounded"
+                    }
+                  ]
+                },
+                "type": "object",
+                "minProperties": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Add"
+          },
+          "set": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "string",
+                      "const": "X"
+                    },
+                    {
+                      "$ref": "#/components/schemas/FactRef"
+                    }
+                  ]
+                },
+                "type": "object",
+                "minProperties": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Set"
+          },
+          "reroll": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RerollOn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "deny": {
+            "anyOf": [
+              {
+                "type": "boolean",
+                "const": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deny"
+          },
+          "force": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                },
+                "type": "array",
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Force"
+          },
+          "substitute": {
+            "anyOf": [
+              {
+                "patternProperties": {
+                  "^[a-z0-9]+(?:-[a-z0-9]+)*$": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                  }
+                },
+                "type": "object",
+                "minProperties": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Substitute"
+          },
+          "allow": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                },
+                "type": "array",
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allow"
+          },
+          "forbid": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                },
+                "type": "array",
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forbid"
+          },
+          "bar": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bar"
+          },
+          "fill": {
+            "anyOf": [
+              {
+                "type": "boolean",
+                "const": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fill"
+          },
+          "hits": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string",
+                "const": "X"
+              },
+              {
+                "$ref": "#/components/schemas/FactRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hits"
+          },
+          "multiply": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string",
+                "const": "X"
+              },
+              {
+                "$ref": "#/components/schemas/FactRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Multiply"
+          },
+          "grants": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RuleRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cancels": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Cancels"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "of": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Side"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "to": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Side"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Address"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Limit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "Effect",
+        "description": "One printed effect.\n\n``of`` names whose characteristic an add or set changes, since a step reads\nthe characteristics of both models at once."
+      },
       "Entry": {
         "type": "string",
         "enum": [
@@ -1126,6 +1423,152 @@
         ],
         "title": "Entry",
         "description": "The kind of corpus entry a gap occurs in."
+      },
+      "FactGate": {
+        "properties": {
+          "is": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/components/schemas/FactRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is"
+          },
+          "at-least": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/components/schemas/FactRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At-Least"
+          },
+          "at-most": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/components/schemas/FactRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At-Most"
+          },
+          "more-than": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/components/schemas/FactRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "More-Than"
+          },
+          "fact": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+              },
+              {
+                "$ref": "#/components/schemas/Characteristic"
+              }
+            ],
+            "title": "Fact"
+          },
+          "of": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Side"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "fact"
+        ],
+        "title": "FactGate",
+        "description": "A fact compared against a value."
+      },
+      "FactRef": {
+        "properties": {
+          "fact": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+              },
+              {
+                "$ref": "#/components/schemas/Characteristic"
+              }
+            ],
+            "title": "Fact"
+          },
+          "of": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Side"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "fact"
+        ],
+        "title": "FactRef",
+        "description": "A fact read where the effect lands, relative to the bearer when it belongs to a side.\n\nA fact is a state fact, a step's output named by the step, a derived fact\nor a characteristic."
       },
       "Fight": {
         "properties": {
@@ -1289,28 +1732,6 @@
         "title": "FightSide",
         "description": "One side of a resolved round: what it fielded, what it lost, whether it held.\n\n``casualties`` is the marginal distribution of models this side loses in\nthe melee -- index ``k`` is the probability it loses exactly ``k`` -- and\n``expected_casualties`` its mean, which is the number an averaging\nsimulator would report and the one the distribution exists to replace.\nThe three Break-test figures are conditional on nothing: each is the\nprobability of that outcome *over the whole round*, so they sum to this\nside's chance of losing, and a side that mostly wins shows three small\nnumbers."
       },
-      "FoeGate": {
-        "properties": {
-          "troop_type": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/TroopType"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Troop Type"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "title": "FoeGate",
-        "description": "A gate on the foe of the attack the bearer is making.\n\nThe mirror of :class:`AttackGate` \u2014 that subject describes the attack a\nmodel *suffers*, this one the model its own attack lands on. Killing\nBlow and Cleaving Blow read the foe's troop type (\"enemy models whose\ntroop type is infantry or cavalry ...\"): ``troop_type`` is the printed\nlist, satisfied by any member. A printed category expands to its\nsub-types when the entry is authored \u2014 the rulebook's own reading\n(\"when the rules refer to Infantry units, Monstrous Infantry must also\nfollow\", troop-types-at-a-glance) \u2014 so the engine matches one closed\nvocabulary, never a category tree."
-      },
       "Footprint": {
         "properties": {
           "files": {
@@ -1410,7 +1831,7 @@
           "when": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/When"
+                "$ref": "#/components/schemas/avelorn__tow__schema__rule__When"
               },
               {
                 "type": "null"
@@ -1456,7 +1877,7 @@
           "when": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/When"
+                "$ref": "#/components/schemas/avelorn__tow__schema__rule__When"
               },
               {
                 "type": "null"
@@ -1501,12 +1922,32 @@
         "title": "Kind",
         "description": "What a printed name turns out to name.\n\nA caller following a reference needs the route as well as the slug, and the\ntwo cannot be inferred from the name: \"Daith's Reaper\" is filed both as a\nweapon and as the rule that weapon carries."
       },
+      "Limit": {
+        "properties": {
+          "per": {
+            "$ref": "#/components/schemas/Period"
+          },
+          "times": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Times"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "per",
+          "times"
+        ],
+        "title": "Limit",
+        "description": "How many times an effect may apply over a period."
+      },
       "ModifierEffect": {
         "properties": {
           "when": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/When"
+                "$ref": "#/components/schemas/avelorn__tow__schema__rule__When"
               },
               {
                 "type": "null"
@@ -1526,7 +1967,7 @@
                       "const": "X"
                     },
                     {
-                      "$ref": "#/components/schemas/Bounded"
+                      "$ref": "#/components/schemas/avelorn__tow__schema__rule__Bounded"
                     }
                   ]
                 },
@@ -1740,6 +2181,27 @@
         "title": "NaturalRoll",
         "description": "A natural face shown by one of the attack sequence's dice.\n\nThe *event* half of the trigger vocabulary \u2014 \"rolls a natural 6\nwhen making a roll To Wound\". Where ``when`` gates on engagement\nstate, known once before any die is cast (and possibly unknown),\nan event is decided branch by branch during resolution and is never\nunknown. ``roll`` must name a stage that rolls one die per attack \u2014\nthe stage's own :attr:`~avelorn.tow.schema.stage.Stage.dice` row,\nchecked at data load."
       },
+      "Operation": {
+        "type": "string",
+        "enum": [
+          "add",
+          "set",
+          "reroll",
+          "deny",
+          "force",
+          "substitute",
+          "allow",
+          "forbid",
+          "bar",
+          "fill",
+          "hits",
+          "multiply",
+          "grants",
+          "cancels"
+        ],
+        "title": "Operation",
+        "description": "What an effect does where it lands."
+      },
       "OptionDetail": {
         "properties": {
           "name": {
@@ -1936,6 +2398,16 @@
         "title": "PanicCause",
         "description": "Why a panic test was forced, named as the sections are printed."
       },
+      "Period": {
+        "type": "string",
+        "enum": [
+          "game",
+          "turn",
+          "round"
+        ],
+        "title": "Period",
+        "description": "What a limit counts uses over."
+      },
       "PrintedParameter": {
         "properties": {
           "kind": {
@@ -2119,7 +2591,7 @@
           "when": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/When"
+                "$ref": "#/components/schemas/avelorn__tow__schema__rule__When"
               },
               {
                 "type": "null"
@@ -2150,7 +2622,7 @@
           "when": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/When"
+                "$ref": "#/components/schemas/avelorn__tow__schema__rule__When"
               },
               {
                 "type": "null"
@@ -2197,6 +2669,21 @@
         ],
         "title": "RerollEffect",
         "description": "Re-roll a test, under the printed re-roll rules.\n\nThe re-roll operation, named by its own key \u2014 ``reroll: <stage>``, the\nself-naming peer of ``add`` and ``set`` (spelled without a hyphen so it is\na plain field, no alias). The operation *is* the key; its value is the test\nre-rolled, and the seam owning that stage consumes the grant directly (an\nattack roll by the dice walk, a panic test by the fold). A re-roll happens\nat most once whatever its source (\"no single dice can be re-rolled more than\nonce, regardless of the source\"), and a multi-dice roll re-rolls all its\ndice. There is no discriminator field: an effect that carries ``reroll`` is\none, exactly as one carrying ``add`` is a modifier (both models forbid the\nother's keys).\n\nA grant is restricted to the part of the roll it names, and which\nrestriction is legal depends on the stage's seam. ``causes`` restricts\na panic-test re-roll to specific panic causes (Valour of Ages re-rolls\nonly heavy casualties and fled through); empty means any cause.\n``on_natural`` restricts an attack-roll re-roll to the dice showing that\nnatural face (Ithilmar Weapons re-rolls rolls To Hit of a natural 1);\nNone re-rolls every covered die at the stage. The two restrictions are\nmutually exclusive \u2014 a panic test shows no natural face, an attack roll\nhas no panic cause \u2014 so each belongs to its own seam's stages.\n\n``of`` is the printed result restriction: which dice the grant covers,\n``failed`` (the default \u2014 \"may re-roll failed rolls To Hit\", and the\nonly re-roll a rational bearer takes of its own dice) or ``successful``\n(\"must re-roll successful Armour Saves\" \u2014 a re-roll imposed on the\nroller). ``enemy`` transcribes the sentence's subject when the roller\nis the other party: \"*Enemy units* must re-roll ...\" names the enemy's\ndie, where the default names the bearer's own. Whose die a stage rolls\nis the sequence's constant (:attr:`~avelorn.tow.schema.stage.Stage.rolled_by`),\nso the seat a grant applies from follows \u2014 an enemy-subject save\nre-roll fires on the attacks the bearer *makes*, a bearer-subject one\non the attacks it suffers. Both restrictions name a single die's\nresult or face, so they cover only stages rolling one die per attack."
+      },
+      "RerollOn": {
+        "type": "string",
+        "enum": [
+          "failed",
+          "successful",
+          "natural-1",
+          "natural-2",
+          "natural-3",
+          "natural-4",
+          "natural-5",
+          "natural-6"
+        ],
+        "title": "RerollOn",
+        "description": "Which dice at the landing a re-roll covers, by result or by natural face."
       },
       "RollResult": {
         "type": "string",
@@ -2338,6 +2825,16 @@
               }
             ],
             "title": "Notes"
+          },
+          "graph": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RuleGraph"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -2349,6 +2846,44 @@
         ],
         "title": "Rule",
         "description": "A rules-page entry (special rule or core rule), text verbatim.\n\nA rule file writes each effect for both engines (:class:`Clause`). The\nlegacy engine reads :attr:`effects`; the graph reads :attr:`graph`, which a\nrule built for the legacy engine alone does not have."
+      },
+      "RuleGraph": {
+        "properties": {
+          "clauses": {
+            "items": {
+              "$ref": "#/components/schemas/Clause"
+            },
+            "type": "array",
+            "title": "Clauses",
+            "default": []
+          },
+          "may": {
+            "type": "boolean",
+            "title": "May",
+            "default": false
+          },
+          "not_on": {
+            "items": {
+              "$ref": "#/components/schemas/ProfileRole"
+            },
+            "type": "array",
+            "title": "Not On",
+            "default": []
+          },
+          "needs": {
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+            },
+            "type": "array",
+            "title": "Needs",
+            "default": []
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "RuleGraph",
+        "description": "A rule as the graph reads it.\n\n``may`` marks a rule its player may decline. ``not_on`` names the profile\nrows the rule stops at, as \"but not its mount\" does. ``needs`` names the\nmechanics a printed clause needs that the engine lacks, each a ledger subject."
       },
       "RuleRef": {
         "anyOf": [
@@ -2489,6 +3024,14 @@
         "title": "ShootingGate",
         "description": "A gate on the volley the model is firing.\n\n``at_long_range`` is whether the target sits beyond half the weapon's\nmaximum range (Firing at Long Range); ``stand_and_shoot`` whether the\nvolley is a Stand & Shoot charge reaction (which Volley Fire forbids).\nThe subject is where a range band or a cover fact would join."
       },
+      "Side": {
+        "type": "string",
+        "enum": [
+          "this-model",
+          "the-enemy"
+        ],
+        "title": "Side"
+      },
       "Site": {
         "properties": {
           "entry": {
@@ -2519,6 +3062,91 @@
         ],
         "title": "Stage",
         "description": "The attack sequence's stages, one row per printed step.\n\nEach member is a row of the printed sequence: its name (verbatim),\n``rolled_by`` (whose dice the stage rolls \u2014 the attacker's To Hit and\nTo Wound, the target's saves and panic tests), and ``dice`` (what is\nrolled there). Declaration order is the printed order \u2014 the engine's\n\"can this die still shape that roll\" reads it directly."
+      },
+      "Step": {
+        "type": "string",
+        "enum": [
+          "who-can-shoot",
+          "check-line-of-sight",
+          "check-range",
+          "declare-target",
+          "how-many-shots",
+          "roll-to-hit",
+          "roll-to-wound",
+          "make-armour-saves",
+          "ward-saves",
+          "remove-casualties",
+          "make-panic-tests",
+          "fall-back-or-flee",
+          "who-can-charge",
+          "declare-charges",
+          "charge-reactions",
+          "hold",
+          "stand-and-shoot",
+          "flee-charge-reaction",
+          "determine-charge-range",
+          "the-charge-move",
+          "failed-charge",
+          "running-down-the-foe",
+          "redirecting-a-charge",
+          "choose-combat-and-determine-who-can-fight",
+          "who-can-fight",
+          "how-many-attacks",
+          "who-strikes-first",
+          "dividing-attacks",
+          "impact-hits",
+          "issuing-a-challenge",
+          "accepting-a-challenge",
+          "refusing-a-challenge",
+          "fight-on",
+          "stomp-attacks",
+          "calculate-combat-result",
+          "who-is-the-winner",
+          "break-test",
+          "loser-breaks-and-flees",
+          "loser-falls-back-in-good-order",
+          "loser-gives-ground",
+          "restrain-and-reform",
+          "change-facing",
+          "follow-up",
+          "pursuit",
+          "the-pursuit-move",
+          "overrun",
+          "catching-the-curs",
+          "pursuit-into-a-fresh-enemy",
+          "pursuit-off-the-battlefield",
+          "heavy-casualties",
+          "nearby-friend-destroyed",
+          "nearby-friend-flees-combat",
+          "fled-through",
+          "direction-of-flight",
+          "the-flee-move",
+          "fleeing-through-enemy-units",
+          "destruction-of-a-fleeing-unit",
+          "give-ground",
+          "fall-back-in-good-order",
+          "rally-fleeing-units",
+          "end-of-turn"
+        ],
+        "title": "Step",
+        "description": "A printed step.\n\nWard Saves is printed in the shooting sequence. It is listed under combat\ntoo, since Killing Blow and Cleaving Blow print that Ward saves can be\nattempted as normal in combat."
+      },
+      "StepSequence": {
+        "type": "string",
+        "enum": [
+          "shooting",
+          "charge",
+          "combat",
+          "combat-result",
+          "break",
+          "panic",
+          "flee",
+          "give-ground",
+          "strategy",
+          "turn"
+        ],
+        "title": "StepSequence",
+        "description": "A printed sequence, by the name an address gives it."
       },
       "TroopType": {
         "type": "string",
@@ -2764,6 +3392,72 @@
         "title": "UnitSummary",
         "description": "A datasheet as a listing shows it: what it costs, how it is fielded, who fields it.\n\n``armies`` is every army filing the datasheet, by slug, which a listing\ngroups by. It is plural because a slug may be filed under several -- a\nmount or a beast that more than one army takes -- so a unit belongs to as\nmany branches of a browser as field it."
       },
+      "Unless": {
+        "properties": {
+          "with": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/avelorn__tow__schema__effect__WeaponGate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "worn": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/avelorn__tow__schema__effect__ArmourGate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "carried_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Carrier"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "attack": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/avelorn__tow__schema__effect__AttackGate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "foe": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/avelorn__tow__schema__effect__FoeGate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "facts": {
+            "items": {
+              "$ref": "#/components/schemas/FactGate"
+            },
+            "type": "array",
+            "title": "Facts",
+            "default": []
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "Unless",
+        "description": "Gates that must settle false."
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -2856,7 +3550,7 @@
           "when": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/When"
+                "$ref": "#/components/schemas/avelorn__tow__schema__rule__When"
               },
               {
                 "type": "null"
@@ -3079,35 +3773,6 @@
         "title": "WeaponDetail",
         "description": "A weapon entry as reading one shows it, its rule names resolved per profile.\n\nPer profile rather than pooled, because a weapon with two of them need not\nprint the same rules on both -- a Brace of Drakefire Pistols carries Quick\nShot when fired and Extra Attacks in close combat."
       },
-      "WeaponGate": {
-        "properties": {
-          "type": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/WeaponType"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "title": "WeaponGate",
-        "description": "A gate on the weapon a model has in hand \u2014 by family or by name.\n\nThe typed home for \"wielding a bow\" / \"wielding this weapon\": ``type`` names a\nweapon family (:class:`~avelorn.tow.schema.weapon.WeaponType`, the seam #107\nadded), ``name`` a specific printed name. Arrows of Isha asks\n``{type: bow}``; Parry's \"a hand weapon\" asks ``{name: Hand Weapon}``. Both\nmay be set (a specific weapon of a family). At least one must be, or the gate\nconstrains nothing (``extra=forbid`` keeps a stray property a load error)."
-      },
       "WeaponStrength": {
         "properties": {
           "base": {
@@ -3182,7 +3847,672 @@
         "title": "WeaponType",
         "description": "A weapon's family in the Weapons of War chapter \u2014 a closed, append-only set.\n\nThe rulebook groups weapons into families a rule can speak to as one (\"any\nbow\" \u2014 a longbow, shortbow, warbow or the Bow of Avelorn). The source does\nnot carry the family as a field, and the individual weapon entries do not\nname it, so it is hand-authored here. A member joins, and a weapon is\nclassified, only when a rule needs to gate on the family \u2014 the same\njust-in-time discipline the rest of the vocabulary follows. Values are slugs,\nmatching the id convention of rules and weapons, so a future rule specific to\na weapon family can key on the family as it keys on a slug."
       },
-      "When": {
+      "Wieldable": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "fights": {
+            "type": "boolean",
+            "title": "Fights"
+          },
+          "shoots": {
+            "type": "boolean",
+            "title": "Shoots"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "slug",
+          "fights",
+          "shoots"
+        ],
+        "title": "Wieldable",
+        "description": "A weapon a block carries, and which phases can put it in hand.\n\nA bow has no Combat profile and a hand weapon no missile one, so a caller\nresolving a melee or a volley must not offer the wrong half. The facts\nbelong here rather than in the caller because they are read off the weapon\nentry, and a caller guessing from the name would be guessing."
+      },
+      "WoundMultiplierEffect": {
+        "properties": {
+          "when": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/avelorn__tow__schema__rule__When"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "multiplies": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "$ref": "#/components/schemas/DiceQuantity"
+              },
+              {
+                "type": "string",
+                "const": "X"
+              }
+            ],
+            "title": "Multiplies"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "multiplies"
+        ],
+        "title": "WoundMultiplierEffect",
+        "description": "The rulebook's Multiple Wounds shape: each unsaved wound is multiplied.\n\n\"Each unsaved wound inflicted by an attack with this special rule is\nmultiplied by the number shown in brackets\" \u2014 ``multiplies`` is that\nnumber: a printed constant, a :class:`DiceQuantity` (\"D3\", rolled\nseparately for each unsaved wound, so a distribution and never an\nexpectation), or the rule's \"X\" parameter, bound from the bracketed\nvalue exactly as an automatic-hits count is. The printed cap \u2014 \"excess wounds caused to a\nmodel will have no additional effect\", and they \"do not 'spill over'\nonto other models\" \u2014 is not authored here: it is the Remove Casualties\nfold's own knowledge, where a wound lands on a model with so many\nWounds remaining. Self-naming by ``multiplies``; each model forbids\nthe others' keys."
+      },
+      "avelorn__tow__schema__effect__ArmourGate": {
+        "properties": {
+          "armour": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "title": "Armour"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "armour"
+        ],
+        "title": "ArmourGate",
+        "description": "A piece of armour in use, after bars."
+      },
+      "avelorn__tow__schema__effect__AttackGate": {
+        "properties": {
+          "magical": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Magical"
+          },
+          "flaming": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flaming"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "AttackGate",
+        "description": "What the attack is, read from the attacking fighter's sources."
+      },
+      "avelorn__tow__schema__effect__Bounded": {
+        "properties": {
+          "amount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string",
+                "const": "X"
+              },
+              {
+                "$ref": "#/components/schemas/FactRef"
+              }
+            ],
+            "title": "Amount"
+          },
+          "maximum": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum"
+          },
+          "minimum": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "amount"
+        ],
+        "title": "Bounded",
+        "description": "An amount with the printed bound on the value it moves."
+      },
+      "avelorn__tow__schema__effect__Comparison": {
+        "properties": {
+          "is": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/components/schemas/FactRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is"
+          },
+          "at-least": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/components/schemas/FactRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At-Least"
+          },
+          "at-most": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/components/schemas/FactRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At-Most"
+          },
+          "more-than": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/components/schemas/FactRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "More-Than"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "Comparison",
+        "description": "One comparator and the value it compares against."
+      },
+      "avelorn__tow__schema__effect__FoeGate": {
+        "properties": {
+          "troop_type": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/TroopType"
+                },
+                "type": "array",
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Troop Type"
+          },
+          "army": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Army"
+          },
+          "has": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                },
+                "type": "array",
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Has"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FoeGate",
+        "description": "The enemy model, by troop type, army or a rule it has."
+      },
+      "avelorn__tow__schema__effect__WeaponGate": {
+        "properties": {
+          "type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WeaponType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "weapon": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weapon"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "WeaponGate",
+        "description": "The weapon the sequence is fought or shot with, by family or by slug."
+      },
+      "avelorn__tow__schema__effect__When": {
+        "properties": {
+          "with": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/avelorn__tow__schema__effect__WeaponGate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "worn": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/avelorn__tow__schema__effect__ArmourGate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "carried_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Carrier"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "attack": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/avelorn__tow__schema__effect__AttackGate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "foe": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/avelorn__tow__schema__effect__FoeGate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "facts": {
+            "items": {
+              "$ref": "#/components/schemas/FactGate"
+            },
+            "type": "array",
+            "title": "Facts",
+            "default": []
+          },
+          "step": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Step"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Side"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "natural": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 6.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Natural"
+          },
+          "is": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/components/schemas/FactRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is"
+          },
+          "needed": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/avelorn__tow__schema__effect__Comparison"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "When",
+        "description": "What fires an effect.\n\nThe trigger is ``step`` and ``by``. It may also read the ``natural`` face\nits die shows, the outcome it ``is`` or the score it ``needed``. The gates\nmust hold as well."
+      },
+      "avelorn__tow__schema__rule__ArmourGate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ArmourGate",
+        "description": "A gate on a piece of armour a model wears \u2014 by name, among all it wears.\n\nThe ``worn`` peer of :class:`WeaponGate`, and the armour half of the\nequipment-in-use axis: Parry's \"equipped with ... a shield\" asks\n``{name: Shield}``. Two things separate it from the weapon gate, and both\ncome from the equipment itself. Armour has no family vocabulary \u2014 a piece is\nonly ever its printed name \u2014 so ``name`` is the sole property; and a model\nwears *several* pieces at once where it holds one weapon, so this is a\n:class:`MembershipGate`, satisfied by any piece worn that matches."
+      },
+      "avelorn__tow__schema__rule__AttackGate": {
+        "properties": {
+          "kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AttackKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "magical": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Magical"
+          },
+          "flaming": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flaming"
+          },
+          "at_long_range": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At Long Range"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "AttackGate",
+        "description": "A gate on the attack a model is the target of.\n\nThe incoming attack, from the defender's side: its ``kind`` (Lion Cloak\nfires only ``against ... shooting attacks``), whether it is ``magical``\n(Lion Cloak wants non-magical, the reason it does not help against a magical\nbow), and whether it is ``flaming`` \u2014 carries the Flaming Attacks rule.\nOrthogonal facts \u2014 a shooting or a close-combat attack may be either.\n``at_long_range`` is a fourth, and a mistake kept for now: see #179 and the\nnote on the field."
+      },
+      "avelorn__tow__schema__rule__Bounded": {
+        "properties": {
+          "amount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string",
+                "const": "X"
+              }
+            ],
+            "title": "Amount"
+          },
+          "maximum": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum"
+          },
+          "minimum": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "amount"
+        ],
+        "title": "Bounded",
+        "description": "An amount with the printed bound on the value it moves.\n\nThe page prints a bound attached to the quantity it bounds, inside the\nparenthetical that follows it \u2014 \"improves its armour value by 1 (to a\nmaximum of 2+)\", \"a -1 modifier to their Strength characteristic (to a\nminimum of 1)\" \u2014 so the bound is written on the amount, not beside the\noperation. An operation moving two quantities then cannot lend one's\nbound to the other.\n\n``maximum`` is the printed limit on the modified value: a ceiling on a\ncharacteristic, the best attainable save (so numerically a floor) on an\narmour value. ``minimum`` is the floor a malus cannot push a\ncharacteristic below; an armour value needs none, its own floor being\nwhat ``maximum`` already names.\n\nWrite the amount plainly (``S: -1``) where the page prints no bound \u2014\nthe long form exists to carry one."
+      },
+      "avelorn__tow__schema__rule__Comparison": {
+        "properties": {
+          "equals": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equals"
+          },
+          "at_least": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At Least"
+          },
+          "at_most": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At Most"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "Comparison",
+        "description": "A predicate on one numeric property of an event: exactly one comparator.\n\nThe leaf of a gate path \u2014 ``charging.distance`` is constrained by\n``{at_least: 3}``, ``{at_most: 6}`` or ``{equals: 8}``. The comparator\nvocabulary is closed and append-only, the same discipline as\n:class:`Quantity`; a new one joins when a rule needs it. Exactly one\ncomparator is set \u2014 a leaf tests one thing."
+      },
+      "avelorn__tow__schema__rule__FoeGate": {
+        "properties": {
+          "troop_type": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/TroopType"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Troop Type"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FoeGate",
+        "description": "A gate on the foe of the attack the bearer is making.\n\nThe mirror of :class:`AttackGate` \u2014 that subject describes the attack a\nmodel *suffers*, this one the model its own attack lands on. Killing\nBlow and Cleaving Blow read the foe's troop type (\"enemy models whose\ntroop type is infantry or cavalry ...\"): ``troop_type`` is the printed\nlist, satisfied by any member. A printed category expands to its\nsub-types when the entry is authored \u2014 the rulebook's own reading\n(\"when the rules refer to Infantry units, Monstrous Infantry must also\nfollow\", troop-types-at-a-glance) \u2014 so the engine matches one closed\nvocabulary, never a category tree."
+      },
+      "avelorn__tow__schema__rule__WeaponGate": {
+        "properties": {
+          "type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WeaponType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "WeaponGate",
+        "description": "A gate on the weapon a model has in hand \u2014 by family or by name.\n\nThe typed home for \"wielding a bow\" / \"wielding this weapon\": ``type`` names a\nweapon family (:class:`~avelorn.tow.schema.weapon.WeaponType`, the seam #107\nadded), ``name`` a specific printed name. Arrows of Isha asks\n``{type: bow}``; Parry's \"a hand weapon\" asks ``{name: Hand Weapon}``. Both\nmay be set (a specific weapon of a family). At least one must be, or the gate\nconstrains nothing (``extra=forbid`` keeps a stray property a load error)."
+      },
+      "avelorn__tow__schema__rule__When": {
         "properties": {
           "combat": {
             "anyOf": [
@@ -3221,7 +4551,7 @@
           "wielding": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/WeaponGate"
+                "$ref": "#/components/schemas/avelorn__tow__schema__rule__WeaponGate"
               },
               {
                 "type": "null"
@@ -3231,7 +4561,7 @@
           "worn": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ArmourGate"
+                "$ref": "#/components/schemas/avelorn__tow__schema__rule__ArmourGate"
               },
               {
                 "type": "null"
@@ -3244,7 +4574,7 @@
                 "type": "boolean"
               },
               {
-                "$ref": "#/components/schemas/AttackGate"
+                "$ref": "#/components/schemas/avelorn__tow__schema__rule__AttackGate"
               },
               {
                 "type": "null"
@@ -3255,7 +4585,7 @@
           "foe": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/FoeGate"
+                "$ref": "#/components/schemas/avelorn__tow__schema__rule__FoeGate"
               },
               {
                 "type": "null"
@@ -3277,72 +4607,6 @@
         "type": "object",
         "title": "When",
         "description": "An effect's gate: the facts that must hold for it to apply.\n\nA typed tree, one field per subject \u2014 the combat the model is engaged in,\nits movement, the volley it fires, the attack it is the target of \u2014 each\ncarrying that subject's own facts, plus the ``natural`` dice event. A rule\nreads as ``subject -> property (-> comparator)``:\n``{combat: {first_round: true}}``, ``{target_of: {kind: shooting}}``.\n\n``combat`` and ``target_of`` are presence entities: ``combat: true`` gates\non being engaged in a close combat (Parry's \"whilst engaged in close\ncombat\"), a nested gate on being engaged *and* a property (Elven Reflexes's\nfirst round); ``target_of`` names the incoming attack. ``wielding`` and\n``worn`` are the equipment-in-use axis \u2014 the weapon a model is acting with\n(Arrows of Isha's \"any bow\", matched by family or name) and the armour it\nwears (Parry's shield, matched among every piece worn) \u2014 read off the\nengagement context by the dice walk and the folds alike, so a rule gates on\nits gear exactly as it gates on the engagement. A subject or property outside\nthese models is a data error at load (``extra=forbid``) \u2014 the closed\nvocabulary the flat Condition enum gave, now structural. Every set fact is\nconjoined; without a ``when`` the modifier applies to every attack."
-      },
-      "Wieldable": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "slug": {
-            "type": "string",
-            "title": "Slug"
-          },
-          "fights": {
-            "type": "boolean",
-            "title": "Fights"
-          },
-          "shoots": {
-            "type": "boolean",
-            "title": "Shoots"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "name",
-          "slug",
-          "fights",
-          "shoots"
-        ],
-        "title": "Wieldable",
-        "description": "A weapon a block carries, and which phases can put it in hand.\n\nA bow has no Combat profile and a hand weapon no missile one, so a caller\nresolving a melee or a volley must not offer the wrong half. The facts\nbelong here rather than in the caller because they are read off the weapon\nentry, and a caller guessing from the name would be guessing."
-      },
-      "WoundMultiplierEffect": {
-        "properties": {
-          "when": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/When"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "multiplies": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "$ref": "#/components/schemas/DiceQuantity"
-              },
-              {
-                "type": "string",
-                "const": "X"
-              }
-            ],
-            "title": "Multiplies"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "multiplies"
-        ],
-        "title": "WoundMultiplierEffect",
-        "description": "The rulebook's Multiple Wounds shape: each unsaved wound is multiplied.\n\n\"Each unsaved wound inflicted by an attack with this special rule is\nmultiplied by the number shown in brackets\" \u2014 ``multiplies`` is that\nnumber: a printed constant, a :class:`DiceQuantity` (\"D3\", rolled\nseparately for each unsaved wound, so a distribution and never an\nexpectation), or the rule's \"X\" parameter, bound from the bracketed\nvalue exactly as an automatic-hits count is. The printed cap \u2014 \"excess wounds caused to a\nmodel will have no additional effect\", and they \"do not 'spill over'\nonto other models\" \u2014 is not authored here: it is the Remove Casualties\nfold's own knowledge, where a wound lands on a model with so many\nWounds remaining. Self-naming by ``multiplies``; each model forbids\nthe others' keys."
       }
     }
   }

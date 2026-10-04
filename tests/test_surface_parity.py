@@ -117,6 +117,7 @@ def test_show_rule_covers_every_field_the_detail_endpoint_serves() -> None:
         "paragraphs": all(p.split()[0] in printed for p in rule.paragraphs),
         "effects": "fall-back-in-good-order" in printed,
         "notes": "Not covered:" in printed,
+        "graph": "step: break-test" in printed,
     }
     assert set(shown) == set(Rule.model_fields)
     assert [field for field, found in shown.items() if not found] == []

@@ -83,12 +83,12 @@ def test_weapon_writer_emits_every_schema_field() -> None:
 
 
 def test_rule_writer_emits_every_schema_field() -> None:
-    """Likewise for a rule: its parameter, effects and notes are hand-authored."""
+    """Likewise for a rule, whose hand-authored fields a page never states."""
     rule = REPO.rules["armour-bane"].model_copy(
         update={"notes": "What the engine does with it.", "flavour": "Piercing.", "page": 166}
     )
-    assert rule.parameter and rule.effects and rule.notes and rule.category
-    assert _written(rule_to_yaml(rule)) == set(Rule.model_fields)
+    assert all(getattr(rule, name) for name in Rule.model_fields)
+    assert Rule.model_validate(yaml.safe_load(rule_to_yaml(rule))) == rule
 
 
 def test_armour_writer_emits_every_schema_field() -> None:
