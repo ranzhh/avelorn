@@ -51,6 +51,15 @@ LANDS = {"at": {"step": "make-armour-saves", "by": "the-enemy"}}
         ({"at": {"step": "impact-hits", "by": "this-model"}, "hits": 0}, "at least one"),
         ({"at": {"step": "check-range", "by": "this-model"}, "multiply": 1}, "less than 2"),
         (
+            {
+                **LANDS,
+                "when": {"facts": [{"fact": "the-charge-move", "at-least": 3}]},
+                "deny": True,
+            },
+            "whose step",
+        ),
+        ({**LANDS, "add": {"armour-piercing": {"fact": "the-charge-move"}}}, "whose step"),
+        (
             {"at": {"step": "impact-hits", "by": "this-model", "in": "impact-hits"}, "hits": 1},
             "runs no",
         ),
@@ -75,6 +84,8 @@ LANDS = {"at": {"step": "make-armour-saves", "by": "the-enemy"}}
         "substitute at a measurement",
         "no hits",
         "multiplying by one",
+        "step fact gated without its side",
+        "step fact read without its side",
         "step inside its own block",
     ],
 )

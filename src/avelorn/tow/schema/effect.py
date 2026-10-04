@@ -58,6 +58,16 @@ class FactRef(BaseModel):
     fact: Slug | Characteristic
     of: Role | None = None
 
+    @model_validator(mode="after")
+    def _step_names_its_side(self) -> Self:
+        _owned(self.fact, self.of)
+        return self
+
+
+def _owned(fact: str, of: Role | None) -> None:
+    if fact in Step and of is None:
+        raise ValueError(f"{fact} is a step's output, so of names whose step it is")
+
 
 Amount = StrictInt | Literal["X"] | FactRef
 Value = StrictBool | StrictInt | StrictStr | FactRef
@@ -98,6 +108,11 @@ class FactGate(Comparison):
 
     fact: Slug | Characteristic
     of: Role | None = None
+
+    @model_validator(mode="after")
+    def _step_names_its_side(self) -> Self:
+        _owned(self.fact, self.of)
+        return self
 
 
 class WeaponMatch(BaseModel):
