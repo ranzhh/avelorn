@@ -23,6 +23,7 @@ from avelorn.core.graph import (
     Step,
     Tally,
 )
+from avelorn.tow.attach import attach_rules
 from avelorn.tow.data import DATA_DIR
 from avelorn.tow.kernels import Standing
 from avelorn.tow.schema.program import (
@@ -35,6 +36,7 @@ from avelorn.tow.schema.program import (
     StateFile,
     StepEntry,
 )
+from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.stage import Side
 from avelorn.tow.schema.unit import Characteristic
 from avelorn.tow.steps import (
@@ -80,14 +82,18 @@ class Input:
 
 @dataclass(frozen=True)
 class Loaded:
-    """A loaded program."""
+    """A loaded program, with the corpus rules it attaches from."""
 
     program: Program
     inputs: Mapping[str, Input]
     specs: Mapping[Step[Any], Spec]
+    rules: Mapping[str, Rule]
 
     def evaluate(self, knowns: Mapping[str, Hashable]) -> tuple["Evaluated", ...]:
         """Evaluate the program with every input given by name.
+
+        Each evaluation builds the program afresh and attaches the rules of the
+        sides fielded, so no two fieldings share a rule node.
 
         Returns:
             One evaluation per lane.
@@ -105,10 +111,18 @@ class Loaded:
             expected = self.inputs[name].type
             if type(value) is not expected:
                 raise ProgramError(f"{name} expects {expected.__name__}; got {value!r}")
+        fielded: dict[Side, Fielded] = {}
+        for side in map(Side, self.program.sides):
+            value = knowns[Fact("fielded", side).full]
+            if not isinstance(value, Fielded):
+                raise ProgramError(f"{side}/fielded expects Fielded; got {value!r}")
+            fielded[side] = value
+        program = _built(self.program.name, self.program.items, self.inputs)
+        program.attach(attach_rules(program, self.specs, fielded, self.rules).nodes)
         given = {self.inputs[name].state: value for name, value in knowns.items()}
         return tuple(
             Evaluated(self, lane, MappingProxyType(dict(knowns)))
-            for lane in self.program.evaluate(state=given)
+            for lane in program.evaluate(state=given)
         )
 
 
@@ -129,7 +143,7 @@ class Evaluated:
         Raises:
             ProgramError: no step has that path, or it did not run in this lane.
         """
-        program = self.loaded.program
+        program = self.lane.program
         step = next((step for step in program.steps if program.paths[step] == path), None)
         if step is None:
             raise ProgramError(f"{program.name} has no step at {path}")
@@ -191,7 +205,7 @@ class PartAt:
         """The characteristic in force at the step.
 
         Returns:
-            The operand; no rule is attached yet, so nothing changes it.
+            The operand; no attached rule changes it yet.
         """
         printed = self.fielded.characteristic(c)
         spec = self.at.evaluated.loaded.specs[self.at.step]
@@ -384,11 +398,18 @@ class _Builder:
         return ProgramError(f"{self.source}: {here}: {message}")
 
 
-def load_program(path: Path, state: Path = STATE) -> Loaded:
+def _built(name: str, items: tuple[Item, ...], inputs: Mapping[str, Input]) -> Program:
+    program = Program.build(name, tuple(map(str, Side)), items)
+    for given in inputs.values():
+        program.hold(given.state)
+    return program
+
+
+def load_program(path: Path, rules: Mapping[str, Rule], state: Path = STATE) -> Loaded:
     """Load and check a program file.
 
     Returns:
-        The built program and the inputs it needs.
+        The built program, the inputs it needs and the rules it attaches from.
 
     Raises:
         ProgramError: an entry does not load; the message names its path in the file.
@@ -399,10 +420,9 @@ def load_program(path: Path, state: Path = STATE) -> Loaded:
     for index, entry in enumerate(file.inputs):
         builder.take(entry, f"inputs[{index}]")
     items = builder.block(file.items, "items", {})
+    inputs = MappingProxyType(builder.inputs)
     try:
-        program = Program.build(file.program, tuple(map(str, Side)), items)
+        program = _built(file.program, items, inputs)
     except GraphError as error:
         raise ProgramError(f"{path.name}: {error}") from error
-    for given in builder.inputs.values():
-        program.hold(given.state)
-    return Loaded(program, MappingProxyType(builder.inputs), MappingProxyType(builder.specs))
+    return Loaded(program, inputs, MappingProxyType(builder.specs), rules)

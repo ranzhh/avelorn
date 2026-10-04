@@ -39,4 +39,14 @@ def test_the_volley_graph_serves_the_volley_program() -> None:
         "label": "needed",
         "outcomes": [{"value": "3+", "p": 1.0}],
     }
-    assert program["rules"] == []
+    assert [rule["id"] for rule in program["rules"]] == [
+        "attacker/elven-archers/armour-bane",
+        "attacker/elven-archers/close-order",
+        "attacker/elven-archers/detachment",
+        "attacker/elven-archers/firing-at-long-range",
+        "attacker/elven-archers/moving-and-shooting",
+        "attacker/elven-archers/volley-fire",
+        "target/elven-spearmen/close-order",
+        "target/elven-spearmen/regimental-unit",
+        "target/elven-spearmen/valour-of-ages",
+    ]

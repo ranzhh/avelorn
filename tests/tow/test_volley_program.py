@@ -18,7 +18,7 @@ from avelorn.tow.steps import Band, Fielded, Retreat
 from avelorn.tow.traits import Operand
 
 REPO = TOWRepository()
-VOLLEY_PROGRAM = load_program(VOLLEY)
+VOLLEY_PROGRAM = load_program(VOLLEY, REPO.rules)
 ARCHERS = REPO.units["elven-archers"]
 SPEARMEN = REPO.units["elven-spearmen"]
 LONGBOW = REPO.weapons["longbow"].missile_profile

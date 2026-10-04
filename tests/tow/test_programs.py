@@ -8,11 +8,14 @@ import pytest
 import yaml
 
 from avelorn.tow.contingent import Contingent
+from avelorn.tow.data import TOWRepository
 from avelorn.tow.kernels import Standing
 from avelorn.tow.programs import VOLLEY, ProgramError, load_program
 from avelorn.tow.steps import Fielded
 
 type Edit = Callable[[dict[str, Any]], None]
+
+REPO = TOWRepository()
 
 
 def _renamed_step(volley: dict[str, Any]) -> None:
@@ -138,14 +141,14 @@ def test_a_bad_entry_fails_the_load_at_its_path(edit: Edit, message: str, tmp_pa
     path.write_text(yaml.safe_dump(volley))
 
     with pytest.raises(ProgramError) as refused:
-        load_program(path)
+        load_program(path, REPO.rules)
 
     assert message in str(refused.value)
 
 
 def test_evaluating_without_every_input_is_refused() -> None:
     with pytest.raises(ProgramError, match="volley needs attacker/fielded, attacker/standing"):
-        load_program(VOLLEY).evaluate({"distance": 12})
+        load_program(VOLLEY, REPO.rules).evaluate({"distance": 12})
 
 
 def test_a_bool_given_as_an_int_is_refused() -> None:
@@ -164,4 +167,4 @@ def test_a_bool_given_as_an_int_is_refused() -> None:
     }
 
     with pytest.raises(ProgramError, match="distance expects int; got True"):
-        load_program(VOLLEY).evaluate(knowns)
+        load_program(VOLLEY, REPO.rules).evaluate(knowns)

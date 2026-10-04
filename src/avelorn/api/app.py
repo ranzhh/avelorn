@@ -68,16 +68,19 @@ def corpus() -> TOWRepository:
 Corpus = Annotated[TOWRepository, Depends(corpus)]
 
 
-@app.get("/graph/volley", summary="Evaluate the volley program with no rules attached")
+@app.get("/graph/volley", summary="Evaluate the volley program with both sides' rules attached")
 def graph_volley(data: Corpus) -> dict[str, object]:
-    """Ten Elven Archers shoot twenty Elven Spearmen at 12 inches, with no rules attached.
+    """Ten Elven Archers shoot twenty Elven Spearmen at 12 inches.
+
+    Each side's rules attach to the steps they reach. None of them changes a
+    number yet.
 
     Returns:
         The evaluated volley program.
     """
     archers = Contingent.deploy("elven-archers", 10, data=data, frontage=5)
     spearmen = Contingent.deploy("elven-spearmen", 20, data=data, frontage=5)
-    (volley,) = load_program(VOLLEY).evaluate(
+    (volley,) = load_program(VOLLEY, data.rules).evaluate(
         {
             "attacker/fielded": Fielded.of(archers, "Longbow"),
             "target/fielded": Fielded.of(spearmen),

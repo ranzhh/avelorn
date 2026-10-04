@@ -8,8 +8,8 @@
   "paths": {
     "/graph/volley": {
       "get": {
-        "summary": "Evaluate the volley program with no rules attached",
-        "description": "Ten Elven Archers shoot twenty Elven Spearmen at 12 inches, with no rules attached.\n\nReturns:\n    The evaluated volley program.",
+        "summary": "Evaluate the volley program with both sides' rules attached",
+        "description": "Ten Elven Archers shoot twenty Elven Spearmen at 12 inches.\n\nEach side's rules attach to the steps they reach. None of them changes a\nnumber yet.\n\nReturns:\n    The evaluated volley program.",
         "operationId": "graph_volley_graph_volley_get",
         "responses": {
           "200": {

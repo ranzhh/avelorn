@@ -26,7 +26,7 @@ approximated.
 """
 
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from contextlib import suppress
 from enum import StrEnum
 from typing import Annotated, Literal, NamedTuple, Self
@@ -163,6 +163,22 @@ class AmountParameter(BaseModel):
     def printed(self, x: int | str) -> str:
         return str(x)
 
+    def combined(self, xs: Sequence[int | str]) -> int | str:
+        """The X that several sources of the rule make together.
+
+        Returns:
+            The one X, or the sum of the numbers.
+
+        Raises:
+            ValueError: a dice roll is one of two or more.
+        """
+        numbers = [x for x in xs if isinstance(x, int)]
+        if len(xs) == 1:
+            return xs[0]
+        if len(numbers) < len(xs):
+            raise ValueError(f"X {list(xs)!r} sums a dice roll, which only one source may give")
+        return sum(numbers)
+
     @model_validator(mode="after")
     def _bounds_in_order(self) -> "AmountParameter":
         if self.min is not None and self.max is not None and self.min > self.max:
@@ -227,6 +243,21 @@ class SelectorParameter(BaseModel):
         """
         return self.values[self.value(x)].printed
 
+    def combined(self, xs: Sequence[int | str]) -> int | str:
+        """The union of the values several sources of the rule give.
+
+        Returns:
+            The one value they all give.
+
+        Raises:
+            ValueError: they give two values, a union an X cannot hold yet.
+        """
+        if len(set(xs)) > 1:
+            raise ValueError(
+                f"X {sorted(map(str, set(xs)))} unite two values, which one X cannot hold yet"
+            )
+        return xs[0]
+
 
 class PrintedParameter(BaseModel):
     """An X kept as the text its bracket prints: a text-only stub's, read by no effect."""
@@ -263,6 +294,21 @@ class PrintedParameter(BaseModel):
 
     def printed(self, x: int | str) -> str:
         return self.value(x)
+
+    def combined(self, xs: Sequence[int | str]) -> int | str:
+        """The X that several sources of the rule make together.
+
+        Returns:
+            The one X they all give.
+        """
+        return _one(xs)
+
+
+def _one(xs: Sequence[int | str]) -> int | str:
+    distinct = set(xs)
+    if len(distinct) != 1:
+        raise ValueError(f"X {sorted(map(str, distinct))} differ between sources")
+    return xs[0]
 
 
 Parameter = Annotated[
