@@ -45,13 +45,11 @@ _PANICKED = (StepSequence.SHOOTING, StepSequence.PANIC)
 
 
 class Step(StrEnum):
-    """A printed step, the sequences that print it, and its kind.
+    """A printed step.
 
-    Ward Saves is printed in the shooting sequence and runs in combat too: the
-    combat page settles wounds "as described in the Shooting section"
-    (the-combat-phase/roll-to-wound-and-make-armour-saves-combat), and Killing
-    Blow and Cleaving Blow print that Ward saves are attempted as normal
-    against a blow struck in combat.
+    Ward Saves is printed in the shooting sequence. It is listed under combat
+    too, since Killing Blow and Cleaving Blow print that Ward saves can be
+    attempted as normal in combat.
     """
 
     _value_: str
@@ -143,3 +141,4 @@ class Step(StrEnum):
     FALL_BACK_IN_GOOD_ORDER = "fall-back-in-good-order", _GIVE_GROUND, StepKind.ROLL
     RALLY_FLEEING_UNITS = "rally-fleeing-units", (StepSequence.STRATEGY,), StepKind.ROLL
     END_OF_TURN = "end-of-turn", (StepSequence.TURN,), StepKind.CONSEQUENCE
+
