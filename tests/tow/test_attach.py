@@ -3,6 +3,7 @@
 import re
 from collections.abc import Mapping
 from dataclasses import replace
+from fractions import Fraction
 
 import pytest
 
@@ -51,11 +52,16 @@ def _archers() -> Fielded:
     return Fielded.of(_deployed("elven-archers"), "Longbow")
 
 
-def _evaluated(target: Contingent, distance: int = 12) -> tuple[Evaluated, ...]:
-    archers = _deployed("elven-archers")
+def _evaluated(
+    target: Contingent,
+    distance: int = 12,
+    shooter: tuple[str, str] = ("elven-archers", "Longbow"),
+) -> tuple[Evaluated, ...]:
+    unit, weapon = shooter
+    archers = _deployed(unit)
     return VOLLEY_PROGRAM.evaluate(
         {
-            "attacker/fielded": Fielded.of(archers, "Longbow"),
+            "attacker/fielded": Fielded.of(archers, weapon),
             "target/fielded": Fielded.of(target),
             "distance": distance,
             "who-can-shoot": True,
@@ -153,6 +159,18 @@ def test_the_abyssal_cloak_replaces_the_long_range_penalty(
 
     assert _verdicts(evaluated, "attacker/elven-archers/firing-at-long-range") == {penalty: 1}
     assert _verdicts(evaluated, "target/merwyrm/abyssal-cloak") == {cloak: 1}
+
+
+def test_armour_bane_applies_to_the_shots_that_wound_on_a_natural_six() -> None:
+    (evaluated,) = _evaluated(
+        _deployed("elven-spearmen"), shooter=("sisters-of-avelorn", "Bow of Avelorn")
+    )
+    wounded_on_a_six = Fraction(5, 6) * Fraction(1, 6)
+
+    assert _verdicts(evaluated, "attacker/sisters-of-avelorn/armour-bane") == {
+        Verdict.APPLIED: wounded_on_a_six,
+        Verdict.HONOURED: 1 - wounded_on_a_six,
+    }
 
 
 def test_a_gate_reading_a_band_check_range_never_outputs_is_refused() -> None:

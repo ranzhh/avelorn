@@ -22,6 +22,7 @@ from avelorn.tow.changes import Folded, Payloads
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.engine.armour import defender_armour
 from avelorn.tow.kernels import (
+    UNARMOURED,
     Die,
     Standing,
     armour_save_target,
@@ -34,7 +35,7 @@ from avelorn.tow.kernels import (
     shooting_hit_target,
     wound_target,
 )
-from avelorn.tow.schema.effect import Operation
+from avelorn.tow.schema.effect import Operation, RerollOn
 from avelorn.tow.schema.quantity import Quantity
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.stage import Side
@@ -44,6 +45,15 @@ from avelorn.tow.schema.weapon import Weapon, WeaponProfile
 from avelorn.tow.traits import Carries, Profiled
 
 NO_ROLL = "-"
+
+_NATURAL = {
+    RerollOn.NATURAL_1: 1,
+    RerollOn.NATURAL_2: 2,
+    RerollOn.NATURAL_3: 3,
+    RerollOn.NATURAL_4: 4,
+    RerollOn.NATURAL_5: 5,
+    RerollOn.NATURAL_6: 6,
+}
 
 
 @dataclass(frozen=True, eq=False)
@@ -317,9 +327,23 @@ def _strength(attacker: Fielded) -> int:
     return strength.resolve(_printed(attacker, Characteristic.STRENGTH))
 
 
-def _thrown(target: int) -> Distribution[Die | None]:
+def _covers(on: RerollOn, die: Die) -> bool:
+    match on:
+        case RerollOn.FAILED:
+            return not die.success
+        case RerollOn.SUCCESSFUL:
+            return die.success
+    return die.natural == _NATURAL[on]
+
+
+def _covered(rerolls: frozenset[RerollOn]) -> frozenset[Die]:
+    dice = (Die(face, landed) for face in range(1, 7) for landed in (False, True))
+    return frozenset(die for die in dice if any(_covers(on, die) for on in rerolls))
+
+
+def _thrown(target: int, rerolls: frozenset[RerollOn] = frozenset()) -> Distribution[Die | None]:
     landed: dict[Die | None, Probability] = {}
-    for die, p in d6(target).mass.items():
+    for die, p in d6(target, _covered(rerolls)).mass.items():
         landed[die] = p
     return Distribution(landed)
 
@@ -400,22 +424,31 @@ def roll_to_wound(attacker: Fielded, target: Fielded, hit: Die) -> Distribution[
     return _thrown(needed)
 
 
-def _save_target(target: Fielded, attacker: Fielded) -> int | None:
-    return armour_save_target(target.armour, _missile(attacker).armour_piercing)
+def _save_target(target: Fielded, attacker: Fielded, payloads: Payloads) -> int | None:
+    piercing = _missile(attacker).armour_piercing - payloads.added(Quantity.ARMOUR_PIERCING)
+    armour = UNARMOURED if target.armour is None else target.armour
+    maxima, _ = payloads.bounds(Quantity.ARMOUR_VALUE)
+    improved = max((armour - payloads.added(Quantity.ARMOUR_VALUE), *maxima))
+    return armour_save_target(improved, piercing)
 
 
 def make_armour_saves(
-    target: Fielded, attacker: Fielded, wound: Die | None
+    target: Fielded, attacker: Fielded, wound: Die | None, changed: tuple[Hashable, ...]
 ) -> Distribution[Die | None]:
-    """Roll the armour save against a wound.
+    """Roll the armour save against a wound, as the rules in force change it.
+
+    Armour Piercing worsens the save by each amount added to it. The armour
+    value improves by each amount added, to no better than the best bound
+    printed, and a model with no armour counts as 7+ before it improves.
 
     Returns:
         The die as it lands, or None when no die is rolled.
     """
-    needed = _save_target(target, attacker)
+    payloads = Payloads.of(changed)
+    needed = _save_target(target, attacker, payloads)
     if not _succeeded(wound) or needed is None:
         return Distribution.pure(None)
-    return _thrown(needed)
+    return _thrown(needed, payloads.rerolls())
 
 
 def ward_saves(target: Fielded, wound: Die | None, save: Die | None) -> Distribution[Die | None]:
@@ -494,6 +527,7 @@ def _landed(die: Die | None) -> int:
 
 
 _ATTACKER = Fact("fielded", Side.ATTACKER)
+_PRINTED = Payloads(())
 _TARGET = Fact("fielded", Side.TARGET)
 _TARGET_STANDING = Fact("standing", Side.TARGET)
 _AGREED = Monoid[Hashable](NO_ROLL, _agreed)
@@ -568,11 +602,15 @@ _SPECS = (
         name="make-armour-saves",
         kind=Kind.ROLL,
         side=Side.TARGET,
-        reads=(_TARGET, _ATTACKER, Output("roll-to-wound")),
+        reads=(_TARGET, _ATTACKER, Output("roll-to-wound"), CHANGED),
         kernel=make_armour_saves,
+        runs={
+            Operation.ADD: frozenset({Quantity.ARMOUR_PIERCING, Quantity.ARMOUR_VALUE}),
+            Operation.REROLL: frozenset(RerollOn),
+        },
         target=Offered(
             (_TARGET, _ATTACKER),
-            lambda target, attacker: _shown(_save_target(target, attacker)),
+            lambda target, attacker: _shown(_save_target(target, attacker, _PRINTED)),
             _AGREED,
         ),
         readings={"saves": _counted("make-armour-saves")},

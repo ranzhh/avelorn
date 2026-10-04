@@ -9,8 +9,10 @@ from dataclasses import dataclass
 from typing import Any, ClassVar, Protocol
 
 from avelorn.core.graph import Change, Key, Order
+from avelorn.tow.kernels import Die
 from avelorn.tow.schema.effect import Bounded, Effect, Operation, RerollOn
 from avelorn.tow.schema.quantity import Quantity
+from avelorn.tow.schema.rule import Parameter
 from avelorn.tow.schema.unit import Characteristic
 
 type Changeable = Quantity | Characteristic
@@ -137,6 +139,23 @@ class Constant:
 
 
 @dataclass(frozen=True)
+class Shows:
+    """A die that landed on a natural face."""
+
+    die: Key
+    face: int
+
+    @property
+    def reads(self) -> tuple[Key, ...]:
+        """The die's step."""
+        return (self.die,)
+
+    def holds(self, read: Mapping[Key, Any], out: frozenset[str]) -> bool:
+        landed = read[self.die]
+        return isinstance(landed, Die) and landed.natural == self.face
+
+
+@dataclass(frozen=True)
 class Equals:
     """A step's outcome or a known, equal to a value."""
 
@@ -150,6 +169,18 @@ class Equals:
 
     def holds(self, read: Mapping[Key, Any], out: frozenset[str]) -> bool:
         return read[self.fact] == self.value
+
+
+@dataclass(frozen=True)
+class Attacks:
+    """An attack made with a rule of the attacker, or without it."""
+
+    node: str | None
+    wanted: bool
+    reads: ClassVar[tuple[Key, ...]] = ()
+
+    def holds(self, read: Mapping[Key, Any], out: frozenset[str]) -> bool:
+        return (self.node is not None and self.node not in out) is self.wanted
 
 
 @dataclass(frozen=True)
@@ -198,11 +229,12 @@ class Gate:
 
 @dataclass(frozen=True)
 class Granted:
-    """One source of a rule node.
+    """One source of a rule node, with the X it gives.
 
     ``via`` names the node that granted it.
     """
 
+    x: int | str | None
     via: str | None
 
 
@@ -210,7 +242,8 @@ class Granted:
 class Operated:
     """One operation of a rule node at a step.
 
-    An add or a set changes one ``key``.
+    An add or a set changes one ``key``. X is the rule's parameter combined over
+    the sources still in force.
     """
 
     rule: str
@@ -218,6 +251,7 @@ class Operated:
     key: Changeable | None
     gate: Gate
     sources: tuple[Granted, ...]
+    parameter: Parameter | None
 
     @property
     def order(self) -> Order:
@@ -235,12 +269,13 @@ class Operated:
         Returns:
             The payload, or None when no source is left or the gate fails.
         """
-        if all(source.via in out for source in self.sources):
+        left = tuple(source for source in self.sources if source.via not in out)
+        if not left or not self.gate.test(values, out):
             return None
-        return self.payload() if self.gate.test(values, out) else None
+        return self.payload(left)
 
-    def payload(self) -> Hashable:
-        """The payload the operation leaves in force.
+    def payload(self, sources: tuple[Granted, ...]) -> Hashable:
+        """The payload the operation leaves with ``sources`` in force.
 
         Returns:
             An added amount, a value set, a re-roll, or the cancel itself.
@@ -253,26 +288,28 @@ class Operated:
             case Operation.ADD if effect.add is not None and self.key is not None:
                 written = effect.add[self.key]
                 if isinstance(written, Bounded):
-                    amount = self.amount(written.amount)
+                    amount = self.amount(written.amount, sources)
                     return Added(self.key, amount, written.maximum, written.minimum)
-                return Added(self.key, self.amount(written))
+                return Added(self.key, self.amount(written, sources))
             case Operation.SET if effect.set_ is not None and self.key is not None:
-                return Fixed(self.key, self.amount(effect.set_[self.key]))
+                return Fixed(self.key, self.amount(effect.set_[self.key], sources))
             case Operation.REROLL if effect.reroll is not None:
                 return Rerolled(effect.reroll)
             case Operation.CANCELS if effect.cancels is not None:
                 return effect.cancels
         raise ValueError(f"{self.rule} {effect.operation}s nothing a step folds")
 
-    def amount(self, written: object) -> int:
-        """An amount as written.
+    def amount(self, written: object, sources: tuple[Granted, ...]) -> int:
+        """An amount as written, with X combined over ``sources``.
 
         Returns:
             The amount.
 
         Raises:
-            TypeError: the amount is no number.
+            TypeError: the amount is no number once X is read.
         """
+        if written == "X" and self.parameter is not None:
+            written = self.parameter.combined([each.x for each in sources if each.x is not None])
         if not isinstance(written, int):
             raise TypeError(f"{self.rule} adds {written!r}, which is no number")
         return written
@@ -283,10 +320,11 @@ class Operated:
             cancels is not None
             and isinstance(other, Operated)
             and other.effect.matches(other.rule, cancels)
+            and (cancels.quantity is None or cancels.quantity == other.key)
         )
 
     def view(self) -> dict[str, Any]:
-        payload = self.payload()
+        payload = self.payload(self.sources)
         match payload:
             case Added(key, amount, maximum, minimum):
                 bounds = "".join(

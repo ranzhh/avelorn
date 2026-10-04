@@ -21,13 +21,9 @@ from avelorn.tow.steps import Fielded, Retreat
 
 STRIPPED = frozenset(
     {
-        "armour-bane",
-        "arrows-of-isha",
         "blessings-of-asuryan",
         "deflect-shots",
         "dragon-armour",
-        "gromril-armour",
-        "lion-cloak",
         "runes-of-protection",
         "valour-of-ages",
         "veteran",

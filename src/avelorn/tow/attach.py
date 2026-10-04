@@ -21,7 +21,16 @@ from avelorn.core.graph import (
     State,
     Step,
 )
-from avelorn.tow.changes import Check, Equals, Gate, Granted, Operated
+from avelorn.tow.changes import (
+    Attacks,
+    Check,
+    Constant,
+    Equals,
+    Gate,
+    Granted,
+    Operated,
+    Shows,
+)
 from avelorn.tow.schema.effect import (
     Address,
     Effect,
@@ -267,14 +276,14 @@ class _Fielding:
                 return None
         if any(isinstance(amount, FactRef) for amount in effect.amounts):
             return None
-        if effect.reads_x:
+        if effect.reads_x and not isinstance(self.x(rule, side), int):
             return None
         gate = self.gate(rule, side, at, effect)
         if gate is None:
             return None
         carried = self.scopes[side][rule.id]
-        sources = tuple(Granted(source.via) for _, source in carried)
-        return [Operated(rule.id, effect, key, gate, sources) for key in keys]
+        sources = tuple(Granted(reference.x, source.via) for reference, source in carried)
+        return [Operated(rule.id, effect, key, gate, sources, rule.parameter) for key in keys]
 
     def gate(self, rule: Rule, side: Side, at: Step[Any], effect: Effect) -> Gate | None:
         when: list[Check] = []
@@ -295,17 +304,30 @@ class _Fielding:
         if when.step is None:
             return []
         step = self.nearest(when.step, when.by, side, at)
-        if step is None or when.is_ is None or isinstance(when.is_, FactRef):
-            return None
-        if when.natural is not None or when.needed is not None:
-            return None
-        return [self.equals(rule, step, when.is_)]
-
-    def gates(self, rule: Rule, side: Side, at: Step[Any], gates: Gates) -> list[Check] | None:
-        unread = (gates.with_, gates.worn, gates.carried_by, gates.attack, gates.foe)
-        if any(gate is not None for gate in unread):
+        if step is None or when.needed is not None or isinstance(when.is_, FactRef):
             return None
         checks: list[Check] = []
+        if when.natural is not None:
+            checks.append(Shows(step.key, when.natural))
+        if when.is_ is not None:
+            checks.append(self.equals(rule, step, when.is_))
+        return checks or None
+
+    def gates(self, rule: Rule, side: Side, at: Step[Any], gates: Gates) -> list[Check] | None:
+        if gates.worn is not None or gates.carried_by is not None or gates.foe is not None:
+            return None
+        checks: list[Check] = []
+        if gates.with_ is not None:
+            wielded = self.fielded[side].wielded
+            checks.append(Constant(wielded is not None and _matches(gates.with_, wielded)))
+        if gates.attack is not None:
+            attack = gates.attack
+            for slug, wanted in (
+                ("magical-attacks", attack.magical),
+                ("flaming-attacks", attack.flaming),
+            ):
+                if wanted is not None:
+                    checks.append(Attacks(self.attacking(slug), wanted))
         for fact in gates.facts:
             check = self.fact(rule, side, at, fact)
             if check is None:
@@ -334,6 +356,10 @@ class _Fielding:
                 f"which outputs {sorted(map(str, spec.outcomes or ())) or 'no listed value'}"
             )
         return Equals(step.key, value)
+
+    def attacking(self, slug: str) -> str | None:
+        attacker = self.scopes[Side.ATTACKER]
+        return f"{self.holders[Side.ATTACKER]}/{slug}" if slug in attacker else None
 
     def nearest(
         self, name: Printed, role: Role | None, side: Side, at: Step[Any]
