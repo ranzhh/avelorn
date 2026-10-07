@@ -13,7 +13,6 @@ from avelorn.tow.attach import AttachError
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.fielding import Fielding
-from avelorn.tow.kernels import Standing
 from avelorn.tow.programs import VOLLEY, Built, Evaluated, load_program
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import Clause, Rule, RuleGraph
@@ -53,14 +52,15 @@ def _evaluated(
 ) -> tuple[Evaluated, ...]:
     unit, weapon = shooter
     archers = _deployed(unit)
-    return _attached(Fielding.of(archers, weapon), Fielding.of(target)).evaluate(
+    shooting, shot = Fielding.of(archers, weapon), Fielding.of(target)
+    return _attached(shooting, shot).evaluate(
         {
             "distance": distance,
             "can-shoot": True,
             "line-of-sight": True,
             "attacker/moved": False,
-            "attacker/standing": Standing(archers.models, 0),
-            "target/standing": Standing(target.models, 0),
+            "attacker/standing": shooting.standing(archers.models),
+            "target/standing": shot.standing(target.models),
             "target/models-at-start-of-phase": target.models,
             "target/battle-strength": target.models,
         }

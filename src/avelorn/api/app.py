@@ -27,7 +27,6 @@ from avelorn.tow.coverage import Coverage, coverage
 from avelorn.tow.data import TOWRepository, default_repository
 from avelorn.tow.fielding import Fielding
 from avelorn.tow.game import TOWGame
-from avelorn.tow.kernels import Standing
 from avelorn.tow.muster import Complement
 from avelorn.tow.programs import VOLLEY, load_program
 from avelorn.tow.schema.armour import Armour
@@ -90,8 +89,8 @@ def graph_volley(data: Corpus) -> dict[str, object]:
                 "can-shoot": True,
                 "line-of-sight": True,
                 "attacker/moved": False,
-                "attacker/standing": Standing(archers.models, 0),
-                "target/standing": Standing(spearmen.models, 0),
+                "attacker/standing": fielded[Side.ATTACKER].standing(archers.models),
+                "target/standing": fielded[Side.TARGET].standing(spearmen.models),
                 "target/models-at-start-of-phase": spearmen.models,
                 "target/battle-strength": spearmen.models,
             }

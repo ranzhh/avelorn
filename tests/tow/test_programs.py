@@ -10,7 +10,6 @@ import yaml
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.fielding import Fielding
-from avelorn.tow.kernels import Standing
 from avelorn.tow.programs import VOLLEY, ProgramError, load_program
 from avelorn.tow.schema.stage import Side
 
@@ -193,8 +192,8 @@ def test_a_bool_given_as_an_int_is_refused() -> None:
         "can-shoot": True,
         "line-of-sight": True,
         "attacker/moved": False,
-        "attacker/standing": Standing(10, 0),
-        "target/standing": Standing(20, 0),
+        "attacker/standing": _fielded()[Side.ATTACKER].standing(10),
+        "target/standing": _fielded()[Side.TARGET].standing(20),
         "target/models-at-start-of-phase": 20,
         "target/battle-strength": 20,
     }

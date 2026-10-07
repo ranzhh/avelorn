@@ -10,7 +10,6 @@ from avelorn.core.registry import Registry
 from avelorn.tow.contingent import Charge, ChargeArc, Contingent, Movement
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.fielding import Fielding
-from avelorn.tow.kernels import Standing
 from avelorn.tow.phases.combat import (
     CombatPhase,
     FightResult,
@@ -233,8 +232,8 @@ def _volley(attacker: Contingent, defender: Contingent, scenario: Scenario) -> E
                 "can-shoot": True,
                 "line-of-sight": True,
                 "attacker/moved": attacker.movement.moved,
-                "attacker/standing": Standing(attacker.models, 0),
-                "target/standing": Standing(defender.models, 0),
+                "attacker/standing": fielded[stage.Side.ATTACKER].standing(attacker.models),
+                "target/standing": fielded[stage.Side.TARGET].standing(defender.models),
                 "target/models-at-start-of-phase": defender.models,
                 "target/battle-strength": defender.models,
             }

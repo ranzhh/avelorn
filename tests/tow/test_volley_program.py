@@ -12,7 +12,7 @@ from avelorn.core.distribution import Distribution, Monoid, Probability
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.fielding import Fielding, Part
-from avelorn.tow.kernels import Standing, save_probability
+from avelorn.tow.kernels import save_probability
 from avelorn.tow.phases.shooting import make_panic_tests, shoot
 from avelorn.tow.programs import VOLLEY, Evaluated, load_program
 from avelorn.tow.schema.stage import Side
@@ -78,8 +78,8 @@ def _volley(
         "can-shoot": can_shoot,
         "line-of-sight": line_of_sight,
         "attacker/moved": moved,
-        "attacker/standing": Standing(shooters, 0),
-        "target/standing": Standing(models, 0),
+        "attacker/standing": attacker.standing(shooters),
+        "target/standing": target.standing(models),
         "target/models-at-start-of-phase": models,
         "target/battle-strength": battle_strength,
     }
