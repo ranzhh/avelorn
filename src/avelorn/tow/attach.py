@@ -162,7 +162,7 @@ def attach_rules(
                 for step in program.steps:
                     if not _addresses(effect.at, step, side, program, specs):
                         continue
-                    triggers = _triggers(effect, step, side, program, specs)
+                    triggers = _triggers(effect, step, side, program)
                     if triggers is None:
                         kept.add((side, slug))
                         continue
@@ -395,7 +395,7 @@ class _Fielding:
     def nearest(
         self, name: Printed, role: Role | None, side: Side, at: Step[Any]
     ) -> Step[Any] | None:
-        return _nearest(name, role, side, at, self.program, self.specs)
+        return _nearest(name, role, side, at, self.program)
 
 
 def _named(
@@ -450,8 +450,8 @@ def _unreachable(
     return any(q in run for q in sequences) and all((q, at.step) not in printed for q in sequences)
 
 
-def _role(side: Side, spec: Spec) -> Role:
-    return Role.THIS_MODEL if spec.side is side else Role.THE_ENEMY
+def _role(side: Side, step: Step[Any]) -> Role:
+    return Role.THIS_MODEL if step.side == side else Role.THE_ENEMY
 
 
 def _addresses(
@@ -466,7 +466,7 @@ def _addresses(
     return (
         at.step == spec.name
         and spec.sequence in at.sequences
-        and at.by is _role(side, spec)
+        and at.by is _role(side, step)
         and (not isinstance(at.in_, Printed) or at.in_ in blocks)
         and (not isinstance(at.not_in, Printed) or at.not_in not in blocks)
     )
@@ -478,11 +478,10 @@ def _nearest(
     side: Side,
     at: Step[Any],
     program: Program,
-    specs: Mapping[Step[Any], Spec],
 ) -> Step[Any] | None:
     visible = [item for item in reversed(program.visible[at]) if isinstance(item, Step)]
     return next(
-        (each for each in visible if each.name == name and _role(side, specs[each]) is role),
+        (each for each in visible if each.name == name and _role(side, each) is role),
         None,
     )
 
@@ -492,7 +491,6 @@ def _triggers(
     step: Step[Any],
     side: Side,
     program: Program,
-    specs: Mapping[Step[Any], Spec],
 ) -> tuple[Step[Any], ...] | None:
     read: list[tuple[str, Role | None]] = []
     if effect.when is not None and effect.when.step is not None:
@@ -502,7 +500,7 @@ def _triggers(
             read.append((fact.fact, fact.of))
     found = []
     for name, role in read:
-        nearest = _nearest(name, role, side, step, program, specs)
+        nearest = _nearest(name, role, side, step, program)
         if nearest is None:
             return None
         found.append(nearest)
