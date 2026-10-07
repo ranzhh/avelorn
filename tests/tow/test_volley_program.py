@@ -230,7 +230,9 @@ def test_every_correction_pins_a_shooting_scenario(request: pytest.FixtureReques
     module = request.node.nodeid.split("::")[0]
     test = test_the_shooting_scenarios_match_legacy_shoot.__name__
 
-    assert set(CORRECTIONS) <= {f"{module}::{test}[{each.id}]" for each in _SCENARIOS}
+    pinned = {pin for pin in CORRECTIONS if pin.startswith(f"{module}::")}
+
+    assert pinned <= {f"{module}::{test}[{each.id}]" for each in _SCENARIOS}
 
 
 _SWEEP = list(
@@ -439,3 +441,27 @@ def test_the_volley_counts_its_shots(
 
     assert volley.at("volley/check-range").read("band").mass == {band: 1}
     assert volley.at("volley/how-many-shots").read("shots").mass == {shots: 1}
+
+
+@pytest.mark.parametrize(
+    ("moved", "standing", "parts"),
+    [
+        pytest.param(False, 10, "sentinel 1, elven-archer 7", id="volley-fire"),
+        pytest.param(True, 10, "sentinel 1, elven-archer 4", id="after-moving"),
+        pytest.param(False, 7, "sentinel 1, elven-archer 5", id="three-lost-off-the-back"),
+    ],
+)
+def test_a_champion_shoots_from_the_front_rank(moved: bool, standing: int, parts: str) -> None:
+    """Ten Archers five wide with a Sentinel: the Sentinel fires from the front rank."""
+    archers = Contingent.deploy("elven-archers", 10, ("Sentinel",), data=REPO, frontage=5)
+    spearmen = Contingent.deploy("elven-spearmen", 20, data=REPO, frontage=5)
+    volley = _volley(
+        Fielding.of(archers, "Longbow", ("Sentinel",)),
+        Fielding.of(spearmen),
+        shooters=standing,
+        models=20,
+        battle_strength=20,
+        moved=moved,
+    )
+
+    assert volley.at("volley/how-many-shots").read("parts").mass == {parts: 1}

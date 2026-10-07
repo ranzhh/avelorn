@@ -13,3 +13,38 @@
     The chance one shot hits after moving. Legacy needs 7 minus BS less the
     modifier, so BS 6 at -1 still hits on 2+. The chart's first roll needs 3+,
     and its re-roll of a miss at 6+ takes no modifier.
+- pin: tests/tow/test_volley_parity.py::test_a_champion_shoots_at_its_own_ballistic_skill[elven-archers+sentinel/longbow/5]
+  old: 2/3
+  new: 5/6
+  page: command-groups/champions-and-shooting
+  reason: >-
+    The champion's chance to hit. A champion shoots using its own
+    characteristics, so this is the Sentinel at BS 5, where legacy shoots it at the Archers' BS 4.
+- pin: tests/tow/test_volley_parity.py::test_a_champion_shoots_at_its_own_ballistic_skill[lothern-sea-guard+sea-master/warbow/5]
+  old: 2/3
+  new: 5/6
+  page: command-groups/champions-and-shooting
+  reason: >-
+    The champion's chance to hit. A champion shoots using its own
+    characteristics, so this is the Sea Master at BS 5, where legacy shoots it at the Sea Guard's BS 4.
+- pin: tests/tow/test_volley_parity.py::test_a_champion_shoots_at_its_own_ballistic_skill[shadow-warriors+shadow-walker/longbow/5]
+  old: 5/6
+  new: 31/36
+  page: command-groups/champions-and-shooting
+  reason: >-
+    The champion's chance to hit. A champion shoots using its own
+    characteristics, so this is the Shadow-walker at BS 6, hitting on 2+ and re-rolling a miss at 6+, where legacy shoots it at the Shadow Warriors' BS 5.
+- pin: tests/tow/test_volley_parity.py::test_a_champion_shoots_at_its_own_ballistic_skill[ships-company+midshipman/warbow/5]
+  old: 2/3
+  new: 5/6
+  page: command-groups/champions-and-shooting
+  reason: >-
+    The champion's chance to hit. A champion shoots using its own
+    characteristics, so this is the Midshipman at BS 5, where legacy shoots it at the Ship's Company's BS 4.
+- pin: tests/tow/test_volley_parity.py::test_a_champion_shoots_at_its_own_ballistic_skill[sisters-of-avelorn+high-sister/bow-of-avelorn/5]
+  old: 5/6
+  new: 31/36
+  page: command-groups/champions-and-shooting
+  reason: >-
+    The champion's chance to hit. A champion shoots using its own
+    characteristics, so this is the High Sister at BS 6, hitting on 2+ and re-rolling a miss at 6+, where legacy shoots it at the Sisters' BS 5.

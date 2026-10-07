@@ -113,13 +113,20 @@ class Fielding:
         raise KeyError(f"{self.unit} fields no part {id}")
 
     def sources(self) -> Iterator[tuple[RuleRef, Source]]:
-        """The rules every part of the side carries, with what gives each.
+        """The rules the side carries, with what gives each; every part carries the same.
 
         Yields:
             The reference, and its source.
+
+        Raises:
+            ValueError: the parts carry different rules.
         """
-        for part in self.parts:
-            yield from part.sources()
+        first, *rest = self.parts
+        carried = set(first.sources())
+        for part in rest:
+            if set(part.sources()) != carried:
+                raise ValueError(f"{self.unit}: {part.id} carries rules {first.id} does not")
+        yield from first.sources()
 
     @property
     def removal(self) -> tuple[tuple[str, int], ...]:
@@ -174,18 +181,24 @@ class Fielding:
         return max(values, default=None)
 
     @classmethod
-    def of(cls, contingent: Contingent, weapon: str | None = None) -> "Fielding":
-        """Field a contingent as its rank and file.
+    def of(
+        cls, contingent: Contingent, weapon: str | None = None, options: tuple[str, ...] = ()
+    ) -> "Fielding":
+        """Field a contingent as its rank and file, with a champion part for each champion bought.
 
-        The armour value folds from the armour worn. A ward comes only from rules,
-        so a part fielded from the corpus has none. The part carries the rules of
-        its datasheet, its troop type, and the profile its weapon shoots with.
+        ``options`` are the options the contingent was mustered with. A champion
+        stands in the front rank, so its part is placed first
+        (command-groups/position-within-the-unit). Every part carries the unit's
+        equipment and rules. The armour value folds from the armour worn. A ward
+        comes only from rules, so a part fielded from the corpus has none. A part
+        carries the rules of its datasheet, its troop type, and the profile its
+        weapon shoots with.
 
         Returns:
             The fielded side.
 
         Raises:
-            ValueError: ``weapon`` has no missile profile.
+            ValueError: ``weapon`` has no missile profile, or an option is not offered.
         """
         unit = contingent.unit
         carriers: tuple[Carries, ...] = (unit, unit.rank_and_file)
@@ -198,13 +211,29 @@ class Fielding:
                 raise ValueError(f"{weapon} has no missile profile; it cannot shoot")
             shot = profile.name or wielded.name
             carried += [pair for pair in wielded.sources() if pair[1].profile == shot]
-        part = Part(
-            id=slugified(unit.main.name),
-            row=unit.main,
-            count=contingent.models,
-            weapon=profile,
-            wielded=wielded,
-            armour=defender_armour(contingent.loadout.armour),
-            carried=tuple(carried),
+        offered = {option.name: option for option in unit.options}
+        unknown = [name for name in options if name not in offered]
+        if unknown:
+            raise ValueError(f"{unit.id} offers no option {', '.join(unknown)}")
+        rows = {row.name: row for row in unit.profiles}
+        champions = [
+            rows[profile_name]
+            for name in options
+            if (profile_name := offered[name].profile) is not None
+        ]
+        armour = defender_armour(contingent.loadout.armour)
+        counts = [(row, 1) for row in champions]
+        counts.append((unit.main, contingent.models - len(champions)))
+        parts = tuple(
+            Part(
+                id=slugified(row.name),
+                row=row,
+                count=count,
+                weapon=profile,
+                wielded=wielded,
+                armour=armour,
+                carried=tuple(carried),
+            )
+            for row, count in counts
         )
-        return cls(unit.id, (part,), contingent.frontage)
+        return cls(unit.id, parts, contingent.frontage)
