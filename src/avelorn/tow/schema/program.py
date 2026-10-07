@@ -1,8 +1,9 @@
 """Program file schema."""
 
 from enum import StrEnum
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
 from avelorn.tow.schema.stage import Side
 from avelorn.tow.schema.step import StepSequence
@@ -85,15 +86,34 @@ class KnownInput(BaseModel):
         return self.known if self.of is None else f"{self.of}/{self.known}"
 
 
+def _distinct(sides: list[Side]) -> list[Side]:
+    if len(set(sides)) < len(sides):
+        raise ValueError("a side is listed twice")
+    return sides
+
+
+Sides = Annotated[list[Side], Field(min_length=1), AfterValidator(_distinct)]
+
+
 class StepEntry(BaseModel):
-    """One step of a program."""
+    """One step of a program.
+
+    ``of`` names the side it acts for, its printed side by default. A list of
+    sides makes the step once for each, in order.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     step: str
+    of: Side | Sides | None = None
     sequence: StepSequence | None = None
     readings: list[str] = Field(default_factory=list)
     tallies: list[str] = Field(default_factory=list)
+
+    @property
+    def sides(self) -> tuple[Side | None, ...]:
+        """Each side the step is made for, in order."""
+        return tuple(self.of) if isinstance(self.of, list) else (self.of,)
 
 
 class Each(StrEnum):
@@ -103,15 +123,23 @@ class Each(StrEnum):
 
 
 class GroupEntry(BaseModel):
-    """A group of steps run once for each fighter of a side, as many times as its share."""
+    """A group of steps run once for each fighter of a side, as many times as its share.
+
+    A list of sides makes the group once for each, in order.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     group: str
     for_: Each = Field(alias="for")
-    of: Side
+    of: Side | Sides
     times: str
     items: list[StepEntry | str] = Field(min_length=1)
+
+    @property
+    def sides(self) -> tuple[Side, ...]:
+        """Each side the group is made for, in order."""
+        return tuple(self.of) if isinstance(self.of, list) else (self.of,)
 
 
 class ProgramFile(BaseModel):

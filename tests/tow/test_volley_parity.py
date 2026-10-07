@@ -217,7 +217,7 @@ def test_a_champion_shoots_at_its_own_ballistic_skill(
     legacy = shoot_unit(shooting, spearmen, phase_rules=IN_PLAY, distance=distance)
     built = VOLLEY_PROGRAM.built({Side.ATTACKER: fielded, Side.TARGET: Fielding.of(spearmen)})
     taken = _taken(built, shooting, spearmen, distance)
-    hits = taken.at(f"volley/attack/{champion.id}/roll-to-hit").read("hits").mass
+    hits = taken.at(f"volley/attacker/attack/{champion.id}/roll-to-hit").read("hits").mass
     correction = CORRECTIONS[request.node.nodeid]
 
     assert set(hits) == {0, 1}

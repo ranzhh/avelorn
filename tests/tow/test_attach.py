@@ -92,8 +92,8 @@ def test_a_bow_and_the_grant_to_it_make_one_armour_bane() -> None:
     )
     assert _landed(built, bane.id) == [
         (
-            "volley/attack/sister-of-avelorn/make-armour-saves",
-            ["volley/attack/sister-of-avelorn/roll-to-wound"],
+            "volley/attacker/attack/sister-of-avelorn/make-armour-saves",
+            ["volley/attacker/attack/sister-of-avelorn/roll-to-wound"],
         )
     ]
 
@@ -117,7 +117,7 @@ def test_the_abyssal_cloak_lands_on_the_shooter_roll_to_hit() -> None:
     built = _attached(_archers(), Fielding.of(_deployed("merwyrm")))
 
     assert _landed(built, "target/merwyrm/abyssal-cloak") == [
-        ("volley/attack/elven-archer/roll-to-hit", ["volley/check-range"])
+        ("volley/attacker/attack/elven-archer/roll-to-hit", ["volley/check-range"])
     ]
 
 

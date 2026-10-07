@@ -98,7 +98,9 @@ def test_a_volley_runs_on_the_program_with_the_corpus_rules() -> None:
     fired = GAME.shooting.volley(archers, spearmen, distance=20)
     legacy = shoot_unit(archers, spearmen, phase_rules=GAME.in_play[Phase.SHOOTING], distance=20)
 
-    assert fired.applied("volley/attack/elven-archer/roll-to-hit") == ("Firing at Long Range",)
+    assert fired.applied("volley/attacker/attack/elven-archer/roll-to-hit") == (
+        "Firing at Long Range",
+    )
     assert fired.p_unsaved == legacy.p_unsaved
 
 

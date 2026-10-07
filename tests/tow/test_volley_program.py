@@ -152,7 +152,7 @@ def _assert_matches_legacy(
             ward=ward,
             hit_modifier=hit_modifier,
         )
-        hit = _per_shot(evaluated, "volley/attack/archers/roll-to-hit", "hits", shots)
+        hit = _per_shot(evaluated, "volley/attacker/attack/archers/roll-to-hit", "hits", shots)
         unsaved = _per_shot(evaluated, "volley/remove-casualties", "unsaved", shots)
         assert hit != legacy.p_hit
         assert (legacy.p_hit, hit) == (correction.old, correction.new)
@@ -160,15 +160,15 @@ def _assert_matches_legacy(
         return
 
     hit_and_wounded = legacy.p_hit * legacy.p_wound
-    assert _read(evaluated, "volley/attack/archers/roll-to-hit", "hits") == _landed(
+    assert _read(evaluated, "volley/attacker/attack/archers/roll-to-hit", "hits") == _landed(
         shots, legacy.p_hit
     )
-    assert _read(evaluated, "volley/attack/archers/roll-to-wound", "wounds") == _landed(
+    assert _read(evaluated, "volley/attacker/attack/archers/roll-to-wound", "wounds") == _landed(
         shots, hit_and_wounded
     )
-    assert _read(evaluated, "volley/attack/archers/make-armour-saves", "saves") == _landed(
-        shots, hit_and_wounded * save_probability(legacy.save_target)
-    )
+    assert _read(
+        evaluated, "volley/attacker/attack/archers/make-armour-saves", "saves"
+    ) == _landed(shots, hit_and_wounded * save_probability(legacy.save_target))
     unsaved = evaluated.at("volley/remove-casualties").read("unsaved")
     assert unsaved.mass == Distribution.from_counts(legacy.distribution).mass
     assert _casualties(evaluated, models).mass == Distribution.from_counts(legacy.casualties).mass
@@ -354,7 +354,7 @@ def test_ballistic_skill_6_shows_its_chart_target_moved_by_the_rules_in_force() 
         moved=True,
     )
 
-    hit = volley.at("volley/attack/archers/roll-to-hit")
+    hit = volley.at("volley/attacker/attack/archers/roll-to-hit")
     assert (hit.read("printed").mass, hit.read("needed").mass) == (
         {"2+ then 6+": 1},
         {"3+ then 6+": 1},
@@ -373,7 +373,7 @@ def test_a_save_shows_every_target_armour_bane_leaves_in_force() -> None:
     )
     every_six, no_save_at_all = Fraction(31, 36) ** 5, Fraction(5, 36) ** 5
 
-    saves = volley.at("volley/attack/sister-of-avelorn/make-armour-saves")
+    saves = volley.at("volley/attacker/attack/sister-of-avelorn/make-armour-saves")
     assert saves.read("printed").mass == {"5+": 1}
     assert saves.read("needed").mass == {
         "6+": every_six,
@@ -383,7 +383,7 @@ def test_a_save_shows_every_target_armour_bane_leaves_in_force() -> None:
 
 
 def test_a_part_at_a_step_reads_its_characteristic_as_an_operand() -> None:
-    at = _corpus_volley(12).at("volley/attack/elven-archer/roll-to-wound")
+    at = _corpus_volley(12).at("volley/attacker/attack/elven-archer/roll-to-wound")
 
     assert at.part(Side.TARGET, "elven-spearman").characteristic(
         Characteristic.TOUGHNESS
@@ -395,7 +395,9 @@ def test_a_shooter_wounds_at_its_weapon_strength() -> None:
         _shooter(5, 4, 5, 0), _target(3, 1, None, None, 5), shooters=5, models=5, battle_strength=5
     )
 
-    archers = volley.at("volley/attack/archers/roll-to-wound").part(Side.ATTACKER, "archers")
+    archers = volley.at("volley/attacker/attack/archers/roll-to-wound").part(
+        Side.ATTACKER, "archers"
+    )
     assert archers.characteristic(Characteristic.STRENGTH) == Operand(Distribution.pure(5), 3)
 
 
@@ -409,7 +411,7 @@ def test_each_side_of_a_mirror_match_reads_its_own_part() -> None:
         battle_strength=10,
     )
 
-    at = volley.at("volley/attack/elven-archer/roll-to-wound")
+    at = volley.at("volley/attacker/attack/elven-archer/roll-to-wound")
     assert at.part(Side.ATTACKER, "elven-archer").characteristic(
         Characteristic.STRENGTH
     ) == Operand(Distribution.pure(3), 3)
