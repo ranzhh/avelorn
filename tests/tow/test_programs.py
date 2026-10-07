@@ -181,21 +181,6 @@ def _fielded() -> dict[Side, Fielding]:
     return {Side.ATTACKER: Fielding.of(archers, "Longbow"), Side.TARGET: Fielding.of(spearmen)}
 
 
-def test_an_entry_with_a_list_of_sides_is_built_once_for_each_in_order(tmp_path: Path) -> None:
-    volley = yaml.safe_load(VOLLEY.read_text())
-    volley["items"][0]["of"] = ["target", "attacker"]
-    path = tmp_path / "volley.yaml"
-    path.write_text(yaml.safe_dump(volley))
-
-    program = load_program(path, REPO.rules).built(_fielded()).program
-
-    assert [program.paths[step] for step in program.steps[:3]] == [
-        "volley/target/who-can-shoot",
-        "volley/attacker/who-can-shoot",
-        "volley/check-range",
-    ]
-
-
 def _attacks_counted_outside_a_slot(combat: dict[str, Any]) -> None:
     combat["items"].insert(2, {"step": "how-many-attacks", "of": "attacker"})
 

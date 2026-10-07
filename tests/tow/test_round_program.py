@@ -98,3 +98,26 @@ def test_an_entry_acting_for_the_target_swaps_the_sides() -> None:
     assert [program.paths[landing.at] for landing in reflexes.landings] == [
         "round/target/who-strikes-first"
     ]
+
+
+def test_a_list_of_sides_builds_the_entry_once_for_each_in_order() -> None:
+    """Both sides measure at the head; the target's casualties come off before the attacker's."""
+    spearman = _fielded("elven-spearmen", "Thrusting Spear", 1)
+
+    program = ROUND_PROGRAM.built({Side.ATTACKER: spearman, Side.TARGET: spearman}).program
+
+    paths = [program.paths[step] for step in program.steps]
+    assert paths[:4] == [
+        "round/attacker/who-can-fight",
+        "round/target/who-can-fight",
+        "round/attacker/who-strikes-first",
+        "round/target/who-strikes-first",
+    ]
+    assert [
+        path
+        for path in paths
+        if path.startswith("round/initiative-4/") and path.endswith("/remove-casualties")
+    ] == [
+        "round/initiative-4/target/remove-casualties",
+        "round/initiative-4/attacker/remove-casualties",
+    ]
