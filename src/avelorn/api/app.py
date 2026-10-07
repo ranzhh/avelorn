@@ -22,7 +22,7 @@ from typing import Annotated, Literal, NamedTuple
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from avelorn.tow.contingent import Charge, ChargeArc, Contingent
+from avelorn.tow.contingent import Charge, ChargeArc, Contingent, Movement
 from avelorn.tow.coverage import Coverage, coverage
 from avelorn.tow.data import TOWRepository, default_repository
 from avelorn.tow.fielding import Fielding
@@ -316,16 +316,8 @@ class Volley(BaseModel):
 
     shooter: Deployment
     target: Deployment
-    # How far the shot carries, in inches. Omitted, the long-range modifier
-    # cannot be settled either way, so it is left unapplied and said so in
-    # not_modelled rather than assumed to be short range.
-    distance: int | None = Field(default=None, ge=0)
-    # Situational to-hit modifiers the caller knows and the corpus cannot:
-    # cover, a large target, a unit that moved.
-    hit_modifier: int = 0
-    # The target's model count at the start of the battle, which governs the
-    # printed Fall Back or Flee split. Defaults to the size it is shot at --
-    # a unit that has taken no casualties yet.
+    distance: int = Field(ge=0)
+    moved: bool = False
     battle_strength: int | None = Field(default=None, ge=1)
 
 
@@ -333,10 +325,9 @@ class Volley(BaseModel):
 def volley(request: Volley, data: Corpus) -> VolleyReport:
     """Shoot one unit at another and resolve the panic its casualties cause.
 
-    One volley: shots are counted, rolled to hit and to wound, saved against,
-    and the survivors tally into a casualty distribution the target then tests
-    its nerve against. The to-hit target reported is the one the volley used,
-    with the range and movement modifiers already folded in.
+    ``distance`` is in inches; ``moved`` says the shooter moved this turn.
+    ``battle_strength`` is the target's size at the start of the battle, which
+    governs the Fall Back or Flee split; it defaults to the size it is shot at.
 
     A side the corpus cannot field is refused before any dice are walked: an
     unknown slug is a 404, and a size, option or weapon the datasheet does not
@@ -344,20 +335,24 @@ def volley(request: Volley, data: Corpus) -> VolleyReport:
     something with a missile profile.
 
     Returns:
-        The volley resolved: the effective targets, the wound and casualty
-        distributions, what the target's nerve does, and every rule the engine
-        held without applying.
+        The volley resolved: the scores each roll needs, the wound and casualty
+        distributions, what the target's nerve does, and every rule the volley
+        holds without applying.
     """
     game = TOWGame.assemble(data)
     shooter = _deploy(game, data, request.shooter, "shooter", MISSILE)
+    if request.moved:
+        shooter = shooter.after(Movement.march())
     target = _deploy(game, data, request.target, "target", MELEE)
     fired = game.shooting.volley(
-        shooter, target, distance=request.distance, hit_modifier=request.hit_modifier
+        shooter,
+        target,
+        distance=request.distance,
+        shooter_options=tuple(request.shooter.options),
+        target_options=tuple(request.target.options),
+        battle_strength=request.battle_strength,
     )
-    panicked = game.shooting.make_panic_tests(
-        fired, target, battle_strength=request.battle_strength
-    )
-    return VolleyReport.of(shooter, target, fired, panicked)
+    return VolleyReport.of(shooter, target, fired)
 
 
 @app.get("/weapons", summary="List every weapon entry in the corpus")

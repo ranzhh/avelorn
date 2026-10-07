@@ -171,7 +171,7 @@
     "/volley": {
       "post": {
         "summary": "Resolve one volley of shooting, and the panic it causes",
-        "description": "Shoot one unit at another and resolve the panic its casualties cause.\n\nOne volley: shots are counted, rolled to hit and to wound, saved against,\nand the survivors tally into a casualty distribution the target then tests\nits nerve against. The to-hit target reported is the one the volley used,\nwith the range and movement modifiers already folded in.\n\nA side the corpus cannot field is refused before any dice are walked: an\nunknown slug is a 404, and a size, option or weapon the datasheet does not\nallow is a 422 naming which side asked for it. The shooter must carry\nsomething with a missile profile.\n\nReturns:\n    The volley resolved: the effective targets, the wound and casualty\n    distributions, what the target's nerve does, and every rule the engine\n    held without applying.",
+        "description": "Shoot one unit at another and resolve the panic its casualties cause.\n\n``distance`` is in inches; ``moved`` says the shooter moved this turn.\n``battle_strength`` is the target's size at the start of the battle, which\ngoverns the Fall Back or Flee split; it defaults to the size it is shot at.\n\nA side the corpus cannot field is refused before any dice are walked: an\nunknown slug is a 404, and a size, option or weapon the datasheet does not\nallow is a 422 naming which side asked for it. The shooter must carry\nsomething with a missile profile.\n\nReturns:\n    The volley resolved: the scores each roll needs, the wound and casualty\n    distributions, what the target's nerve does, and every rule the volley\n    holds without applying.",
         "operationId": "volley_volley_post",
         "requestBody": {
           "content": {
@@ -2815,21 +2815,14 @@
             "$ref": "#/components/schemas/Deployment"
           },
           "distance": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0.0
-              },
-              {
-                "type": "null"
-              }
-            ],
+            "type": "integer",
+            "minimum": 0.0,
             "title": "Distance"
           },
-          "hit_modifier": {
-            "type": "integer",
-            "title": "Hit Modifier",
-            "default": 0
+          "moved": {
+            "type": "boolean",
+            "title": "Moved",
+            "default": false
           },
           "battle_strength": {
             "anyOf": [
@@ -2848,7 +2841,8 @@
         "type": "object",
         "required": [
           "shooter",
-          "target"
+          "target",
+          "distance"
         ],
         "title": "Volley",
         "description": "One unit shooting another, and what the shot has to travel through."
@@ -2891,50 +2885,21 @@
             "type": "integer",
             "title": "Shots"
           },
-          "hit_target": {
-            "type": "integer",
-            "title": "Hit Target"
+          "to_hit": {
+            "type": "string",
+            "title": "To Hit"
           },
-          "wound_target": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Wound Target"
+          "to_wound": {
+            "type": "string",
+            "title": "To Wound"
           },
-          "save_target": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Save Target"
+          "armour_save": {
+            "type": "string",
+            "title": "Armour Save"
           },
-          "ward_target": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ward Target"
-          },
-          "p_hit": {
-            "type": "number",
-            "title": "P Hit"
-          },
-          "p_wound": {
-            "type": "number",
-            "title": "P Wound"
+          "ward_save": {
+            "type": "string",
+            "title": "Ward Save"
           },
           "p_unsaved": {
             "type": "number",
@@ -2979,12 +2944,10 @@
           "shooter",
           "target",
           "shots",
-          "hit_target",
-          "wound_target",
-          "save_target",
-          "ward_target",
-          "p_hit",
-          "p_wound",
+          "to_hit",
+          "to_wound",
+          "armour_save",
+          "ward_save",
           "p_unsaved",
           "wounds",
           "casualties",
@@ -2994,7 +2957,7 @@
           "not_modelled"
         ],
         "title": "VolleyReport",
-        "description": "One volley of shooting, resolved exactly, and what it did to the target's nerve.\n\nThe targets are the ones the volley actually used, not the ones printed:\n``hit_target`` already carries the range and movement modifiers, which is\nwhy the same bow needs a 3+ up close and a 4+ beyond half range. A target\nis ``None`` where the stage does not apply -- no armour save to take, no\nward to attempt.\n\n``wounds`` is the distribution of unsaved wounds and ``casualties`` the\nmodels removed; they differ only when the volley would overkill the unit\nor its models have more than one Wound."
+        "description": "One volley of shooting, resolved exactly, and what it did to the target's nerve.\n\nEach score is the one the rank and file's roll needed in the volley, with\nevery rule in force folded in; scores that differ between attacks are joined\nwith \"or\", and \"-\" is a roll not made. ``wounds`` is the distribution of\nunsaved wounds and ``casualties`` the models removed; they differ only when\nthe volley would overkill the unit or its models have more than one Wound."
       },
       "Volleyed": {
         "properties": {

@@ -10,8 +10,6 @@
 	}
 
 	let { fight = null, volley = null }: Props = $props();
-
-	const plus = (n: number | null) => (n === null ? '—' : `${n}+`);
 </script>
 
 {#if fight}
@@ -83,10 +81,10 @@
 	<table class="grid">
 		<tbody>
 			<tr><td>shots</td><td class="num">{volley.shots}</td></tr>
-			<tr><td>to hit</td><td class="num">{plus(volley.hit_target)}</td></tr>
-			<tr><td>to wound</td><td class="num">{plus(volley.wound_target)}</td></tr>
-			<tr><td>armour save</td><td class="num">{plus(volley.save_target)}</td></tr>
-			<tr><td>ward</td><td class="num">{plus(volley.ward_target)}</td></tr>
+			<tr><td>to hit</td><td class="num">{volley.to_hit}</td></tr>
+			<tr><td>to wound</td><td class="num">{volley.to_wound}</td></tr>
+			<tr><td>armour save</td><td class="num">{volley.armour_save}</td></tr>
+			<tr><td>ward</td><td class="num">{volley.ward_save}</td></tr>
 			<tr><td>unsaved per shot</td><td class="num">{volley.p_unsaved.toFixed(4)}</td></tr>
 			<tr><td>wounds, mean</td><td class="num">{volley.expected_wounds.toFixed(2)}</td></tr>
 			<tr>

@@ -127,7 +127,7 @@
 					shooter: deployment(pair.mover, 'missile'),
 					target: deployment(pair.target, 'melee'),
 					distance: pair.inches,
-					hit_modifier: 0
+					moved: false
 				}
 			}
 		);

@@ -23,22 +23,24 @@ but a report over all of them: :mod:`avelorn.tow.coverage`.
 from collections import defaultdict
 from collections.abc import Sequence
 from enum import StrEnum
+from fractions import Fraction
 
 from pydantic import BaseModel, ConfigDict
 
-from avelorn.core.distribution import Probability
+from avelorn.core.distribution import Distribution, Probability
 from avelorn.core.registry import Registry
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.coverage import Site, rule_references
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.muster import Complement
 from avelorn.tow.phases.combat import BreakResult, CombatResult, FightResult, SideBreak
-from avelorn.tow.phases.shooting import PanicResult, ShootingResult
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.unit import TroopType, Unit, UnitOption, UnitSize
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile, WeaponType
+from avelorn.tow.steps import Retreat
+from avelorn.tow.volley import Volley
 
 
 class UnitSummary(BaseModel):
@@ -534,15 +536,11 @@ class Volleyed(BaseModel):
 class VolleyReport(BaseModel):
     """One volley of shooting, resolved exactly, and what it did to the target's nerve.
 
-    The targets are the ones the volley actually used, not the ones printed:
-    ``hit_target`` already carries the range and movement modifiers, which is
-    why the same bow needs a 3+ up close and a 4+ beyond half range. A target
-    is ``None`` where the stage does not apply -- no armour save to take, no
-    ward to attempt.
-
-    ``wounds`` is the distribution of unsaved wounds and ``casualties`` the
-    models removed; they differ only when the volley would overkill the unit
-    or its models have more than one Wound.
+    Each score is the one the rank and file's roll needed in the volley, with
+    every rule in force folded in; scores that differ between attacks are joined
+    with "or", and "-" is a roll not made. ``wounds`` is the distribution of
+    unsaved wounds and ``casualties`` the models removed; they differ only when
+    the volley would overkill the unit or its models have more than one Wound.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -550,12 +548,10 @@ class VolleyReport(BaseModel):
     shooter: Volleyed
     target: Volleyed
     shots: int
-    hit_target: int
-    wound_target: int | None
-    save_target: int | None
-    ward_target: int | None
-    p_hit: float
-    p_wound: float
+    to_hit: str
+    to_wound: str
+    armour_save: str
+    ward_save: str
     p_unsaved: float
     wounds: list[float]
     casualties: list[float]
@@ -565,18 +561,13 @@ class VolleyReport(BaseModel):
     not_modelled: list[str]
 
     @classmethod
-    def of(
-        cls,
-        shooter: Contingent,
-        target: Contingent,
-        volley: ShootingResult,
-        panicked: PanicResult,
-    ) -> "VolleyReport":
-        """Gather a resolved volley and its panic step into one answer.
+    def of(cls, shooter: Contingent, target: Contingent, volley: Volley) -> "VolleyReport":
+        """Gather a resolved volley into one answer.
 
         Returns:
             The report both surfaces show.
         """
+        retreat = volley.retreat.mass
         return cls(
             shooter=Volleyed(
                 unit=shooter.unit.id,
@@ -586,27 +577,30 @@ class VolleyReport(BaseModel):
             ),
             target=Volleyed(unit=target.unit.id, name=target.unit.name, size=target.models),
             shots=volley.shots,
-            hit_target=volley.hit_target,
-            wound_target=volley.wound_target,
-            save_target=volley.save_target,
-            ward_target=volley.ward_target,
-            p_hit=float(volley.p_hit),
-            p_wound=float(volley.p_wound),
+            to_hit=volley.needed("roll-to-hit"),
+            to_wound=volley.needed("roll-to-wound"),
+            armour_save=volley.needed("make-armour-saves"),
+            ward_save=volley.needed("ward-saves"),
             p_unsaved=float(volley.p_unsaved),
-            wounds=[float(mass) for mass in volley.distribution],
-            casualties=[float(mass) for mass in volley.casualties],
-            expected_wounds=float(volley.expected_wounds),
-            expected_casualties=float(volley.expected_casualties),
+            wounds=_listed(volley.unsaved),
+            casualties=_listed(volley.casualties),
+            expected_wounds=float(volley.unsaved.expect(Fraction)),
+            expected_casualties=float(volley.casualties.expect(Fraction)),
             panic=Panic(
-                tests=float(panicked.p_test),
-                holds=float(panicked.p_holds),
-                falls_back=float(panicked.p_falls_back),
-                flees=float(panicked.p_flees),
-                destroyed=float(panicked.p_destroyed),
-                reroll_from=panicked.reroll_from,
+                tests=float(volley.tested),
+                holds=float(retreat.get(Retreat.HOLDS, 0)),
+                falls_back=float(retreat.get(Retreat.FALLS_BACK_IN_GOOD_ORDER, 0)),
+                flees=float(retreat.get(Retreat.FLEES, 0)),
+                destroyed=float(retreat.get(Retreat.DESTROYED, 0)),
+                reroll_from=next(iter(volley.applied("volley/make-panic-tests")), None),
             ),
-            not_modelled=sorted(set(volley.notes)),
+            not_modelled=list(volley.held),
         )
+
+
+def _listed(distribution: Distribution[int]) -> list[float]:
+    top = max(distribution.mass, default=0)
+    return [float(distribution.mass.get(count, 0)) for count in range(top + 1)]
 
 
 class RuleSummary(BaseModel):

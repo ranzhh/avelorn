@@ -40,12 +40,13 @@ def test_a_shooter_looses_the_weapon_it_can_shoot_with(client: TestClient) -> No
         client,
         shooter={"unit": "elven-archers", "size": 10},
         target={"unit": "dwarf-warriors", "size": 20},
+        distance=12,
     )
     assert report["shooter"]["weapon"] == "Longbow"
     assert report["shots"] > 0
 
 
-def test_the_reported_hit_target_is_the_one_the_volley_used(client: TestClient) -> None:
+def test_the_reported_hit_score_is_the_one_the_volley_used(client: TestClient) -> None:
     """Beyond half range the same bow needs a worse roll, and fells fewer."""
     sides = {
         "shooter": {"unit": "elven-archers", "size": 10},
@@ -53,19 +54,18 @@ def test_the_reported_hit_target_is_the_one_the_volley_used(client: TestClient) 
     }
     close = volley(client, **sides, distance=12)
     far = volley(client, **sides, distance=25)
-    assert far["hit_target"] > close["hit_target"]
+    assert (close["to_hit"], far["to_hit"]) == ("3+", "4+")
     assert far["expected_casualties"] < close["expected_casualties"]
 
 
-def test_an_unknown_distance_is_left_unapplied_and_said_so(client: TestClient) -> None:
-    """The long-range modifier cannot be settled without a distance, so it is not guessed."""
+def test_a_shooter_that_moved_needs_a_worse_roll(client: TestClient) -> None:
+    """Moving and Shooting costs the archers one on the roll to hit."""
     sides = {
         "shooter": {"unit": "elven-archers", "size": 10},
         "target": {"unit": "dwarf-warriors", "size": 20},
+        "distance": 12,
     }
-    unknown = volley(client, **sides)
-    known = volley(client, **sides, distance=12)
-    assert len(unknown["not_modelled"]) > len(known["not_modelled"])
+    assert volley(client, **sides, moved=True)["to_hit"] == "4+"
 
 
 def test_the_outcome_is_a_distribution(client: TestClient) -> None:
@@ -130,6 +130,7 @@ def test_a_weapon_that_cannot_shoot_is_refused(client: TestClient) -> None:
         json={
             "shooter": {"unit": "elven-archers", "size": 10, "weapon": "Hand Weapon"},
             "target": {"unit": "dwarf-warriors", "size": 20},
+            "distance": 12,
         },
     )
     assert response.status_code == 422
@@ -143,6 +144,7 @@ def test_a_unit_carrying_nothing_to_shoot_with_is_refused(client: TestClient) ->
         json={
             "shooter": {"unit": "dwarf-warriors", "size": 10},
             "target": {"unit": "elven-archers", "size": 10},
+            "distance": 12,
         },
     )
     assert response.status_code == 422
@@ -156,6 +158,7 @@ def test_an_unknown_datasheet_is_a_404(client: TestClient) -> None:
         json={
             "shooter": {"unit": "goblins", "size": 10},
             "target": {"unit": "dwarf-warriors", "size": 20},
+            "distance": 12,
         },
     )
     assert response.status_code == 404
