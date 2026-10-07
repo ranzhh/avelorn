@@ -122,6 +122,17 @@ class Holding:
 
 
 @dataclass(frozen=True)
+class Striking:
+    """A read of the Initiative the step's slot strikes at, bound when the program is built.
+
+    It comes with the holdings, before every other read.
+    """
+
+
+STRIKING = Striking()
+
+
+@dataclass(frozen=True)
 class Output:
     """A read of an earlier step's output, by step name."""
 
@@ -143,22 +154,23 @@ class Changed:
 
 CHANGED = Changed()
 
-type Read = Holding | Fact | Output | Summed | Changed
+type Bound = Holding | Striking
+type Read = Holding | Striking | Fact | Output | Summed | Changed
 
 
-def holdings(reads: tuple[Read, ...]) -> tuple[Holding, ...]:
-    """The holdings that lead ``reads``.
+def bound(reads: tuple[Read, ...]) -> tuple[Bound, ...]:
+    """The reads bound when the program is built, which lead ``reads``.
 
     Returns:
-        Each leading holding, in order.
+        Each leading bound read, in order.
 
     Raises:
-        ValueError: a holding comes after another read.
+        ValueError: a bound read comes after another read.
     """
-    leading = tuple(takewhile(lambda read: isinstance(read, Holding), reads))
-    if any(isinstance(read, Holding) for read in reads[len(leading) :]):
-        raise ValueError(f"{reads}: a holding comes after another read")
-    return tuple(read for read in leading if isinstance(read, Holding))
+    leading = tuple(takewhile(lambda read: isinstance(read, Holding | Striking), reads))
+    if any(isinstance(read, Holding | Striking) for read in reads[len(leading) :]):
+        raise ValueError(f"{reads}: a bound read comes after another read")
+    return tuple(read for read in leading if isinstance(read, Holding | Striking))
 
 
 @dataclass(frozen=True)
@@ -230,7 +242,7 @@ class Spec:
             raise ValueError(f"{self.name}: shows a printed target exactly when rules change it")
         offered = (self.target, self.printed, *self.readings.values())
         for reads in (self.reads, *(each.reads for each in offered if each is not None)):
-            holdings(reads)
+            bound(reads)
 
     @property
     def key(self) -> tuple[StepSequence, str]:
@@ -249,7 +261,7 @@ class Spec:
         side: Side,
         sided: bool,
     ) -> Step[Any]:
-        """Build the step instance from its kernel, with its holdings bound, and its inputs.
+        """Build the step instance from its kernel, with its bound reads bound, and its inputs.
 
         ``side`` is the side the instance acts for, and ``sided`` marks an
         instance made once per side.

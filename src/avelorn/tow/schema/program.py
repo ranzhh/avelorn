@@ -142,6 +142,32 @@ class GroupEntry(BaseModel):
         return tuple(self.of) if isinstance(self.of, list) else (self.of,)
 
 
+class Slots(StrEnum):
+    """What a run of slots is numbered by."""
+
+    INITIATIVE = "initiative"
+
+
+class SlotsEntry(BaseModel):
+    """A run of slots, each opening no scope, one for each value from ``from`` to ``to``.
+
+    Each slot is named ``<slots>-<value>``, and its steps strike at that value.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    slots: Slots
+    from_: int = Field(alias="from", ge=1, le=10)
+    to: int = Field(ge=1, le=10)
+    items: list[GroupEntry | StepEntry | str] = Field(min_length=1)
+
+    @property
+    def values(self) -> range:
+        """Each slot's value, from ``from`` to ``to`` inclusive."""
+        step = -1 if self.to < self.from_ else 1
+        return range(self.from_, self.to + step, step)
+
+
 class ProgramFile(BaseModel):
     """A program file; ``fielded`` names the sides each build fields."""
 
@@ -151,4 +177,4 @@ class ProgramFile(BaseModel):
     sequence: StepSequence
     fielded: list[Side]
     inputs: list[FactInput | KnownInput]
-    items: list[GroupEntry | StepEntry | str] = Field(min_length=1)
+    items: list[GroupEntry | SlotsEntry | StepEntry | str] = Field(min_length=1)

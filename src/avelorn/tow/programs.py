@@ -1,6 +1,6 @@
 """Programs loaded from YAML."""
 
-from collections.abc import Hashable, Mapping
+from collections.abc import Hashable, Iterable, Mapping
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
@@ -22,6 +22,7 @@ from avelorn.core.graph import (
     Projection,
     Repeat,
     Sequence,
+    Slot,
     State,
     Step,
     Tally,
@@ -36,6 +37,7 @@ from avelorn.tow.schema.program import (
     GroupEntry,
     KnownInput,
     ProgramFile,
+    SlotsEntry,
     StateFact,
     StateFile,
     StepEntry,
@@ -54,8 +56,9 @@ from avelorn.tow.steps import (
     Output,
     Read,
     Spec,
+    Striking,
     Summed,
-    holdings,
+    bound,
     share,
 )
 from avelorn.tow.traits import Operand
@@ -301,13 +304,13 @@ type _Groups = dict[tuple[str, Side], list[tuple[Repeat, dict[str, Step[Any]]]]]
 class _Builder:
     """Builds a program file's items.
 
-    An entry is built once for each side its ``of`` lists. A step acting for
-    the side its spec does not swaps every role: what it holds, the side facts
-    it reads and writes, and whose outputs it reads. A group's fighters fill
-    the attacker's role, so a group of the target's fighters swaps the steps
-    inside it. A read finds a step of its own group by name, and any other step
-    by name and the side the reader acts for: a group's ``times`` by the
-    group's side.
+    An entry is built once for each side its ``of`` lists, and a run of slots
+    once for each value. A step acting for the side its spec does not swaps
+    every role: what it holds, the side facts it reads and writes, and whose
+    outputs it reads. A group's fighters fill the attacker's role, so a group
+    of the target's fighters swaps the steps inside it. A read finds a step of
+    its own group by name, and any other step by name and the side the reader
+    acts for: a group's ``times`` by the group's side.
     """
 
     source: str
@@ -318,6 +321,7 @@ class _Builder:
     states: dict[str, State[Any]] = field(default_factory=dict)
     fighter: tuple[Side, Part | None] | None = None
     swapped: bool = False
+    initiative: int | None = None
     specs: dict[Step[Any], Spec] = field(default_factory=dict)
     written: set[str] = field(default_factory=set)
 
@@ -348,7 +352,7 @@ class _Builder:
 
     def block(
         self,
-        entries: list[GroupEntry | StepEntry | str] | list[StepEntry | str],
+        entries: Iterable[GroupEntry | SlotsEntry | StepEntry | str],
         where: str,
         visible: _Scope,
     ) -> tuple[Item, ...]:
@@ -356,12 +360,24 @@ class _Builder:
         built: list[Item] = []
         for index, entry in enumerate(entries):
             here = f"{where}[{index}]"
+            if isinstance(entry, SlotsEntry):
+                built.extend(self.slots(entry, here, visible))
+                continue
             if isinstance(entry, GroupEntry):
                 built.extend(self.group(entry, of, here, visible, groups) for of in entry.sides)
                 continue
             named = StepEntry(step=entry) if isinstance(entry, str) else entry
             built.extend(self.step(named, of, here, visible, groups) for of in named.sides)
         return tuple(built)
+
+    def slots(self, entry: SlotsEntry, here: str, visible: _Scope) -> list[Slot]:
+        built: list[Slot] = []
+        for value in entry.values:
+            self.initiative = value
+            items = self.block(entry.items, f"{here}.items", visible)
+            built.append(Slot(name=f"{entry.slots}-{value}", items=items))
+        self.initiative = None
+        return built
 
     def role(self, side: Side) -> Side:
         return side.other if self.swapped else side
@@ -472,12 +488,24 @@ class _Builder:
 
     def held(
         self, reads: tuple[Read, ...], spec: Spec, here: str
-    ) -> tuple[Fielding | Part | None, ...]:
+    ) -> tuple[Fielding | Part | int | None, ...]:
         if spec.fighter and self.fighter is None:
             raise self.error(here, f"{spec.name} is made per fighter, outside a fighter's group")
         if not spec.fighter and self.fighter is not None:
             raise self.error(here, f"{spec.name} is made per side, inside a fighter's group")
-        return tuple(self.holding(holding, spec, here) for holding in holdings(reads))
+        values: list[Fielding | Part | int | None] = []
+        for read in bound(reads):
+            match read:
+                case Holding():
+                    values.append(self.holding(read, spec, here))
+                case Striking():
+                    values.append(self.striking(spec, here))
+        return tuple(values)
+
+    def striking(self, spec: Spec, here: str) -> int:
+        if self.initiative is None:
+            raise self.error(here, f"{spec.name} strikes at a slot's Initiative, outside a slot")
+        return self.initiative
 
     def holding(self, read: Holding, spec: Spec, here: str) -> Fielding | Part | None:
         side = self.role(read.of)
@@ -504,6 +532,8 @@ class _Builder:
         match read:
             case Holding():
                 raise self.error(here, f"{spec.name} reads the {read.of} after another input")
+            case Striking():
+                raise self.error(here, f"{spec.name} reads its slot after another input")
             case Fact():
                 return self.read(read, spec, here)
             case Output():
