@@ -44,31 +44,43 @@ class Part:
         yield from self.carried
 
 
-class Shots(NamedTuple):
-    """The shots each part fires."""
+class PerPart(NamedTuple):
+    """A number for each part of a side, in the side's part order."""
 
     parts: tuple[tuple[str, int], ...]
 
     @property
     def total(self) -> int:
-        """Every part's shots together."""
+        """Every part's number together."""
         return sum(count for _, count in self.parts)
 
     def of(self, part: str) -> int:
-        """The shots one part fires.
+        """One part's number.
 
         Returns:
-            Its shots.
+            Its number.
         """
         return dict(self.parts)[part]
 
     def __str__(self) -> str:
-        """Each part's shots, as text.
+        """Each part's number, as text.
 
         Returns:
-            The shots per part.
+            The number per part.
         """
         return ", ".join(f"{part} {count}" for part, count in self.parts)
+
+
+class Shots(PerPart):
+    """The shots each part fires."""
+
+
+class Attacks(PerPart):
+    """The attacks each part makes."""
+
+
+class Initiatives(PerPart):
+    """The Initiative each part strikes at."""
 
 
 @dataclass(frozen=True, eq=False)
@@ -182,7 +194,12 @@ class Fielding:
 
     @classmethod
     def of(
-        cls, contingent: Contingent, weapon: str | None = None, options: tuple[str, ...] = ()
+        cls,
+        contingent: Contingent,
+        weapon: str | None = None,
+        options: tuple[str, ...] = (),
+        *,
+        combat: bool = False,
     ) -> "Fielding":
         """Field a contingent as its rank and file, with a champion part for each champion bought.
 
@@ -192,21 +209,30 @@ class Fielding:
         equipment and rules. The armour value folds from the armour worn. A ward
         comes only from rules, so a part fielded from the corpus has none. A part
         carries the rules of its datasheet, its troop type, and the profile its
-        weapon shoots with.
+        weapon shoots with, or fights with in ``combat``. A round of combat
+        reads each part's count as its models at the start of the round.
 
         Returns:
             The fielded side.
 
         Raises:
-            ValueError: ``weapon`` has no missile profile, or an option is not offered.
+            ValueError: ``weapon`` has no profile to shoot or fight with, an option
+                is not offered, or a side fielded for combat names no weapon or
+                rides a mount.
         """
         unit = contingent.unit
+        if combat and weapon is None:
+            raise ValueError(f"{unit.id} is fielded for combat with no weapon to fight with")
+        if combat and unit.mount is not None:
+            raise ValueError(f"{unit.id} rides a mount, which a round of combat does not field")
         carriers: tuple[Carries, ...] = (unit, unit.rank_and_file)
         carried = [pair for carrier in carriers for pair in carrier.sources()]
         wielded = profile = None
         if weapon is not None:
             wielded = contingent.loadout.weapon(weapon)
-            profile = wielded.missile_profile
+            profile = wielded.combat_profile if combat else wielded.missile_profile
+            if profile is None and combat:
+                raise ValueError(f"{weapon} has no combat profile; it cannot fight")
             if profile is None:
                 raise ValueError(f"{weapon} has no missile profile; it cannot shoot")
             shot = profile.name or wielded.name
