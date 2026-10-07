@@ -389,32 +389,14 @@
 # held-effect: a corpus side carries the effect to a step that cannot run it yet.
 
 - kind: held-effect
-  subject: armour-bane/combat/make-armour-saves
-  reason: Moves Armour Piercing on a natural 6 To Wound in combat; the round holds it.
-- kind: held-effect
-  subject: blessings-of-asuryan/combat/ward-saves
-  reason: Sets the Ward save against Flaming attacks in combat; the round holds it.
-- kind: held-effect
   subject: cleaving-blow/combat/make-armour-saves
   reason: Denies the armour save in combat; the round holds it.
 - kind: held-effect
   subject: elven-reflexes/combat/who-strikes-first
   reason: Adds 1 to Initiative in the first round of a combat; the round holds it.
 - kind: held-effect
-  subject: enfeebling-cold/combat/roll-to-wound
-  reason: Lowers the enemy's Strength To Wound in combat; the round holds it.
-- kind: held-effect
   subject: fight-in-extra-rank/combat/who-can-fight
   reason: Lets the rank behind the fighting rank make a supporting attack; the round holds it.
-- kind: held-effect
-  subject: gromril-armour/combat/make-armour-saves
-  reason: Re-rolls a natural 1 on armour saves in combat; the round holds it.
-- kind: held-effect
-  subject: gromril-weapons/combat/make-armour-saves
-  reason: Sets the hand weapon's Armour Piercing in combat; the round holds it.
-- kind: held-effect
-  subject: ithilmar-weapons/combat/roll-to-hit
-  reason: Re-rolls a natural 1 To Hit in combat; the round holds it.
 - kind: held-effect
   subject: martial-prowess/combat/roll-to-hit
   reason: Raises Weapon Skill To Hit in combat, for both sides' attacks; the round holds it.
@@ -425,17 +407,11 @@
   subject: press-of-battle/combat/who-can-fight
   reason: Makes the fighting rank two ranks deep; the round holds it.
 - kind: held-effect
-  subject: runes-of-protection/combat/ward-saves
-  reason: Sets the Ward save in combat; the round holds it.
-- kind: held-effect
   subject: strike-first/combat/who-strikes-first
   reason: Sets Initiative to 10 and cancels Strike Last; the round holds it.
 - kind: held-effect
   subject: strike-last/combat/who-strikes-first
   reason: Sets Initiative to 1 and cancels Strike First; the round holds it.
-- kind: held-effect
-  subject: witness-to-destiny/combat/ward-saves
-  reason: Sets the Ward save in combat; the round holds it.
 
 # missing-mechanic: a printed clause needs a mechanic the engine lacks.
 

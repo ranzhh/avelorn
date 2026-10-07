@@ -6,7 +6,9 @@ from avelorn.core.distribution import Probability
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.fielding import Fielding
-from avelorn.tow.programs import ROUND, Evaluated, load_program
+from avelorn.tow.programs import ROUND, Evaluated, Loaded, load_program
+from avelorn.tow.schema.effect import Role
+from avelorn.tow.schema.rule import Clause, RuleGraph
 from avelorn.tow.schema.stage import Side
 
 REPO = TOWRepository()
@@ -18,8 +20,13 @@ def _fielded(unit: str, weapon: str, models: int, frontage: int | None = None) -
     return Fielding.of(contingent, weapon, combat=True)
 
 
-def _fought(attacker: Fielding, target: Fielding, attacker_standing: int = 1) -> Evaluated:
-    built = ROUND_PROGRAM.built({Side.ATTACKER: attacker, Side.TARGET: target})
+def _fought(
+    attacker: Fielding,
+    target: Fielding,
+    attacker_standing: int = 1,
+    program: Loaded = ROUND_PROGRAM,
+) -> Evaluated:
+    built = program.built({Side.ATTACKER: attacker, Side.TARGET: target})
     (evaluated,) = built.evaluate(
         {
             "attacker/standing": attacker.standing(attacker_standing),
@@ -121,3 +128,26 @@ def test_a_list_of_sides_builds_the_entry_once_for_each_in_order() -> None:
         "round/initiative-4/target/remove-casualties",
         "round/initiative-4/attacker/remove-casualties",
     ]
+
+
+def test_a_strength_change_of_the_model_struck_is_held_at_the_blow() -> None:
+    """Enfeebling Cold rewritten to lower the Merwyrm's own Strength leaves the Lions' blow alone.
+
+    The White Lions' roll To Wound folds the Strength of the Lions striking: their
+    great blade's 6 against Toughness 6 wounds on 4+.
+    """
+    printed = REPO.rules["enfeebling-cold"]
+    assert printed.graph is not None
+    (effect,) = printed.graph.effects
+    own = effect.model_copy(update={"of": Role.THIS_MODEL})
+    rules = {
+        **REPO.rules,
+        "enfeebling-cold": printed.with_graph(RuleGraph(clauses=(Clause(effect=own),))),
+    }
+    lions = _fielded("white-lions-of-chrace", "Chracian Great Blade", 1)
+    merwyrm = _fielded("merwyrm", "Lashing Talons", 1)
+
+    fought = _fought(lions, merwyrm, program=load_program(ROUND, rules))
+
+    wound = fought.at("round/initiative-5/attacker/attack/white-lion/roll-to-wound")
+    assert wound.read("needed").mass == {"4+": 1}

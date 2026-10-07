@@ -16,5 +16,9 @@ items:
         for: each-fighter
         of: [attacker, target]
         times: how-many-attacks
-        items: [roll-to-hit, roll-to-wound, make-armour-saves, ward-saves]
+        items:
+          - roll-to-hit
+          - roll-to-wound
+          - make-armour-saves
+          - {step: ward-saves, readings: [unsaved]}
       - {step: remove-casualties, of: [target, attacker], tallies: [attack], readings: [models]}

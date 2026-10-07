@@ -298,6 +298,8 @@ class _Fielding:
                 keys = tuple(effect.add or effect.set_ or {})
                 if not set(keys) <= runs.get(operation, frozenset()):
                     return None
+                if effect.of is not None and effect.of is not _role(side, at):
+                    return None
             case Operation.REROLL:
                 if effect.reroll not in runs.get(operation, frozenset()):
                     return None
