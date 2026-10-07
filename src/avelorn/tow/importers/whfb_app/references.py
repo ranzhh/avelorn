@@ -2,12 +2,12 @@
 
 from collections.abc import Callable, Iterable, Sequence
 
-from avelorn.tow.schema.reference import RuleRef
+from avelorn.tow.schema.reference import RuleRef, slugified
 from avelorn.tow.schema.rule import Rule, printed_base
 
 from .canon import canonical
 from .client import WhfbAppError
-from .parse import Refer, WhfbParseError, slugified
+from .parse import Refer, WhfbParseError
 
 
 class RuleReferences:

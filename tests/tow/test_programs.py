@@ -9,10 +9,10 @@ import yaml
 
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
+from avelorn.tow.fielding import Fielding
 from avelorn.tow.kernels import Standing
 from avelorn.tow.programs import VOLLEY, ProgramError, load_program
 from avelorn.tow.schema.stage import Side
-from avelorn.tow.steps import Fielded
 
 type Edit = Callable[[dict[str, Any]], None]
 
@@ -30,6 +30,10 @@ def _hit_after_wound(volley: dict[str, Any]) -> None:
 
 def _ward_outside_the_group(volley: dict[str, Any]) -> None:
     volley["items"].insert(4, "ward-saves")
+
+
+def _range_inside_the_group(volley: dict[str, Any]) -> None:
+    volley["items"][3]["items"].insert(0, "check-range")
 
 
 def _standing_not_given(volley: dict[str, Any]) -> None:
@@ -88,8 +92,14 @@ def _target_unfielded(volley: dict[str, Any]) -> None:
         ),
         pytest.param(
             _ward_outside_the_group,
-            "volley.yaml: items[4]: ward-saves reads roll-to-wound, which is not in scope",
-            id="output-read-outside-its-group",
+            "volley.yaml: items[4]: ward-saves is made per fighter, outside a fighter's group",
+            id="fighter-step-outside-its-group",
+        ),
+        pytest.param(
+            _range_inside_the_group,
+            "volley.yaml: items[3].items[0]: "
+            "check-range is made per side, inside a fighter's group",
+            id="side-step-inside-a-group",
         ),
         pytest.param(
             _standing_not_given,
@@ -157,10 +167,10 @@ def test_a_bad_entry_fails_the_load_at_its_path(edit: Edit, message: str, tmp_pa
     assert message in str(refused.value)
 
 
-def _fielded() -> dict[Side, Fielded]:
+def _fielded() -> dict[Side, Fielding]:
     archers = Contingent.deploy("elven-archers", 10, frontage=5)
     spearmen = Contingent.deploy("elven-spearmen", 20, frontage=5)
-    return {Side.ATTACKER: Fielded.of(archers, "Longbow"), Side.TARGET: Fielded.of(spearmen)}
+    return {Side.ATTACKER: Fielding.of(archers, "Longbow"), Side.TARGET: Fielding.of(spearmen)}
 
 
 def test_building_without_every_side_fielded_is_refused() -> None:

@@ -16,28 +16,30 @@ def test_the_volley_graph_serves_the_volley_program() -> None:
         "volley/who-can-shoot",
         "volley/check-range",
         "volley/how-many-shots",
-        "volley/attack/roll-to-hit",
-        "volley/attack/roll-to-wound",
-        "volley/attack/make-armour-saves",
-        "volley/attack/ward-saves",
+        "volley/attack/elven-archer/roll-to-hit",
+        "volley/attack/elven-archer/roll-to-wound",
+        "volley/attack/elven-archer/make-armour-saves",
+        "volley/attack/elven-archer/ward-saves",
         "volley/remove-casualties",
         "volley/heavy-casualties",
         "volley/make-panic-tests",
         "volley/fall-back-or-flee",
     ]
     assert program["blocks"] == [
+        {"path": "volley/attack", "kind": "sequence", "collapsed": False},
         {
-            "path": "volley/attack",
+            "path": "volley/attack/elven-archer",
             "kind": "repeat",
             "times": "volley/how-many-shots",
             "collapsed": False,
-        }
+        },
     ]
     assert program["nodes"][0]["changes"] == [
         {"rule": "attacker/elven-archers/volley-fire", "text": "allow half-of-each-rear-rank"}
     ]
     assert program["nodes"][2]["edge"]["readings"] == [
-        {"label": "shots", "outcomes": [{"value": 8, "p": 1.0}]}
+        {"label": "shots", "outcomes": [{"value": 8, "p": 1.0}]},
+        {"label": "parts", "outcomes": [{"value": "elven-archer 8", "p": 1.0}]},
     ]
     assert program["nodes"][3]["target"] == {
         "label": "needed",

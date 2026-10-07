@@ -9,6 +9,7 @@ from avelorn.core.distribution import Probability
 from avelorn.core.registry import Registry
 from avelorn.tow.contingent import Charge, ChargeArc, Contingent, Movement
 from avelorn.tow.data import TOWRepository
+from avelorn.tow.fielding import Fielding
 from avelorn.tow.kernels import Standing
 from avelorn.tow.phases.combat import (
     CombatPhase,
@@ -26,7 +27,7 @@ from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.weapon import Weapon
-from avelorn.tow.steps import Fielded, Retreat
+from avelorn.tow.steps import Retreat
 
 REPO = TOWRepository()
 
@@ -220,8 +221,8 @@ def resolve(scenario: Scenario) -> Outcome:
 def _volley(attacker: Contingent, defender: Contingent, scenario: Scenario) -> Evaluated:
     rules = {slug: rule for slug, rule in REPO.rules.items() if slug not in scenario.dropped}
     fielded = {
-        stage.Side.ATTACKER: Fielded.of(attacker, attacker.shooting_weapon().name),
-        stage.Side.TARGET: Fielded.of(defender),
+        stage.Side.ATTACKER: Fielding.of(attacker, attacker.shooting_weapon().name),
+        stage.Side.TARGET: Fielding.of(defender),
     }
     lanes = (
         load_program(VOLLEY, rules)

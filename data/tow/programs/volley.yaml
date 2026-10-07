@@ -13,8 +13,10 @@ inputs:
 items:
   - {step: who-can-shoot, readings: [ranks]}
   - {step: check-range, readings: [band]}
-  - {step: how-many-shots, readings: [shots]}
+  - {step: how-many-shots, readings: [shots, parts]}
   - group: attack
+    for: each-fighter
+    of: attacker
     times: how-many-shots
     items:
       - {step: roll-to-hit, readings: [hits]}

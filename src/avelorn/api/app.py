@@ -25,6 +25,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from avelorn.tow.contingent import Charge, ChargeArc, Contingent
 from avelorn.tow.coverage import Coverage, coverage
 from avelorn.tow.data import TOWRepository, default_repository
+from avelorn.tow.fielding import Fielding
 from avelorn.tow.game import TOWGame
 from avelorn.tow.kernels import Standing
 from avelorn.tow.muster import Complement
@@ -33,7 +34,6 @@ from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.stage import Side
 from avelorn.tow.schema.weapon import Weapon
-from avelorn.tow.steps import Fielded
 from avelorn.tow.views import (
     FightReport,
     MusteredUnit,
@@ -80,7 +80,7 @@ def graph_volley(data: Corpus) -> dict[str, object]:
     """
     archers = Contingent.deploy("elven-archers", 10, data=data, frontage=5)
     spearmen = Contingent.deploy("elven-spearmen", 20, data=data, frontage=5)
-    fielded = {Side.ATTACKER: Fielded.of(archers, "Longbow"), Side.TARGET: Fielded.of(spearmen)}
+    fielded = {Side.ATTACKER: Fielding.of(archers, "Longbow"), Side.TARGET: Fielding.of(spearmen)}
     (volley,) = (
         load_program(VOLLEY, data.rules)
         .built(fielded)

@@ -12,12 +12,12 @@ from avelorn.core.graph import Carrier, Source, Verdict
 from avelorn.tow.attach import AttachError
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
+from avelorn.tow.fielding import Fielding
 from avelorn.tow.kernels import Standing
 from avelorn.tow.programs import VOLLEY, Built, Evaluated, load_program
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import Clause, Rule, RuleGraph
 from avelorn.tow.schema.stage import Side
-from avelorn.tow.steps import Fielded
 
 REPO = TOWRepository()
 VOLLEY_PROGRAM = load_program(VOLLEY, REPO.rules)
@@ -27,7 +27,9 @@ def _deployed(slug: str) -> Contingent:
     return Contingent.deploy(slug, REPO.units[slug].unit_size.min, data=REPO)
 
 
-def _attached(attacker: Fielded, target: Fielded, rules: Mapping[str, Rule] = REPO.rules) -> Built:
+def _attached(
+    attacker: Fielding, target: Fielding, rules: Mapping[str, Rule] = REPO.rules
+) -> Built:
     loaded = VOLLEY_PROGRAM if rules is REPO.rules else load_program(VOLLEY, rules)
     return loaded.built({Side.ATTACKER: attacker, Side.TARGET: target})
 
@@ -40,8 +42,8 @@ def _landed(built: Built, node: str) -> list[tuple[str, list[str]]]:
     ]
 
 
-def _archers() -> Fielded:
-    return Fielded.of(_deployed("elven-archers"), "Longbow")
+def _archers() -> Fielding:
+    return Fielding.of(_deployed("elven-archers"), "Longbow")
 
 
 def _evaluated(
@@ -51,7 +53,7 @@ def _evaluated(
 ) -> tuple[Evaluated, ...]:
     unit, weapon = shooter
     archers = _deployed(unit)
-    return _attached(Fielded.of(archers, weapon), Fielded.of(target)).evaluate(
+    return _attached(Fielding.of(archers, weapon), Fielding.of(target)).evaluate(
         {
             "distance": distance,
             "can-shoot": True,
@@ -67,7 +69,7 @@ def _evaluated(
 
 def test_a_side_carries_the_rules_of_the_profile_it_shoots_with() -> None:
     maneaters = Contingent.deploy("maneaters", 2, ["Brace of Ogre Pistols"], data=REPO)
-    fielded = Fielded.of(maneaters, "Brace of Ogre Pistols")
+    fielded = Fielding.of(maneaters, "Brace of Ogre Pistols")
     ranged = Source(Carrier.WEAPON, "brace-of-ogre-pistols", "Ranged")
 
     assert [pair for pair in fielded.sources() if pair[1].carrier is Carrier.WEAPON] == [
@@ -78,8 +80,8 @@ def test_a_side_carries_the_rules_of_the_profile_it_shoots_with() -> None:
 
 
 def test_a_bow_and_the_grant_to_it_make_one_armour_bane() -> None:
-    sisters = Fielded.of(_deployed("sisters-of-avelorn"), "Bow of Avelorn")
-    built = _attached(sisters, Fielded.of(_deployed("elven-archers")))
+    sisters = Fielding.of(_deployed("sisters-of-avelorn"), "Bow of Avelorn")
+    built = _attached(sisters, Fielding.of(_deployed("elven-archers")))
     bane = built.program.rules["attacker/sisters-of-avelorn/armour-bane"]
     bow = Source(Carrier.WEAPON, "bow-of-avelorn", "Bow of Avelorn")
 
@@ -89,12 +91,15 @@ def test_a_bow_and_the_grant_to_it_make_one_armour_bane() -> None:
         Source(bow.carrier, bow.item, bow.profile, "attacker/sisters-of-avelorn/arrows-of-isha"),
     )
     assert _landed(built, bane.id) == [
-        ("volley/attack/make-armour-saves", ["volley/attack/roll-to-wound"])
+        (
+            "volley/attack/sister-of-avelorn/make-armour-saves",
+            ["volley/attack/sister-of-avelorn/roll-to-wound"],
+        )
     ]
 
 
 def test_only_the_side_taking_the_panic_test_holds_valour_of_ages() -> None:
-    built = _attached(_archers(), Fielded.of(_deployed("elven-spearmen")))
+    built = _attached(_archers(), Fielding.of(_deployed("elven-spearmen")))
 
     assert [
         (node, _landed(built, node))
@@ -109,15 +114,15 @@ def test_only_the_side_taking_the_panic_test_holds_valour_of_ages() -> None:
 
 
 def test_the_abyssal_cloak_lands_on_the_shooter_roll_to_hit() -> None:
-    built = _attached(_archers(), Fielded.of(_deployed("merwyrm")))
+    built = _attached(_archers(), Fielding.of(_deployed("merwyrm")))
 
     assert _landed(built, "target/merwyrm/abyssal-cloak") == [
-        ("volley/attack/roll-to-hit", ["volley/check-range"])
+        ("volley/attack/elven-archer/roll-to-hit", ["volley/check-range"])
     ]
 
 
 def test_volley_fire_lands_on_who_can_shoot() -> None:
-    built = _attached(_archers(), Fielded.of(_deployed("elven-spearmen")))
+    built = _attached(_archers(), Fielding.of(_deployed("elven-spearmen")))
 
     assert _landed(built, "attacker/elven-archers/volley-fire") == [("volley/who-can-shoot", [])]
 
@@ -203,22 +208,21 @@ def test_a_gate_reading_a_band_check_range_never_outputs_is_refused() -> None:
     ):
         _attached(
             _archers(),
-            Fielded.of(_deployed("elven-spearmen")),
+            Fielding.of(_deployed("elven-spearmen")),
             {**REPO.rules, "firing-at-long-range": misread},
         )
 
 
 def test_a_rule_with_no_x_carried_twice_to_a_landing_that_runs_is_refused() -> None:
     archers = _archers()
-    twice = replace(
-        archers,
-        carried=(*archers.carried, (RuleRef(rule="moving-and-shooting"), Source(Carrier.MODEL))),
-    )
+    (part,) = archers.parts
+    extra = (RuleRef(rule="moving-and-shooting"), Source(Carrier.MODEL))
+    twice = replace(archers, parts=(replace(part, carried=(*part.carried, extra)),))
 
     with pytest.raises(
         AttachError, match="moving-and-shooting at attacker/elven-archers has 2 sources"
     ):
-        _attached(twice, Fielded.of(_deployed("elven-spearmen")))
+        _attached(twice, Fielding.of(_deployed("elven-spearmen")))
 
 
 def test_each_fielding_evaluates_with_its_own_rule_nodes() -> None:

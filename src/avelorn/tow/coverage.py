@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict
 
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
+from avelorn.tow.fielding import Fielding
 from avelorn.tow.programs import VOLLEY, load_program
 from avelorn.tow.schema.effect import Effect
 from avelorn.tow.schema.ledger import Acknowledgement, GapKind
@@ -28,7 +29,7 @@ from avelorn.tow.schema.rule import GrantEffect, Rule
 from avelorn.tow.schema.stage import Side
 from avelorn.tow.schema.step import Step, StepSequence
 from avelorn.tow.schema.unit import OptionKind, UnitOption
-from avelorn.tow.steps import STEPS, Fielded
+from avelorn.tow.steps import STEPS
 
 type Effected = tuple[str, int, StepSequence, str]
 
@@ -265,9 +266,9 @@ def _volley_gaps(data: TOWRepository, referenced: set[str]) -> Iterator[tuple[Ga
     reached: set[Effected] = set()
     held: set[Effected] = set()
     for _, contingent in fieldings(data):
-        target = Fielded.of(contingent)
+        target = Fielding.of(contingent)
         shooters = [
-            Fielded.of(contingent, weapon.name)
+            Fielding.of(contingent, weapon.name)
             for weapon in contingent.loadout.weapons
             if weapon.missile_profile is not None
         ]

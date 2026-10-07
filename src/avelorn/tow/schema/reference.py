@@ -5,11 +5,21 @@ one as ``{rule: <slug>, X: <value>}``. X is unsigned; the rule's printed name
 carries any sign, and the rule's ``parameter`` says what X may be.
 """
 
+import re
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 Slug = Annotated[str, Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")]
+
+
+def slugified(text: str) -> str:
+    """Slugify a name the way the site builds entry slugs.
+
+    Returns:
+        Lowercase text with non-alphanumeric runs collapsed to hyphens.
+    """
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
 
 
 class RuleRef(BaseModel):
