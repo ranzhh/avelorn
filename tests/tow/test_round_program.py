@@ -2,7 +2,7 @@
 
 from fractions import Fraction
 
-from avelorn.core.distribution import Probability
+from avelorn.core.distribution import Distribution, Probability
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.fielding import Fielding
@@ -10,6 +10,8 @@ from avelorn.tow.programs import ROUND, Evaluated, Loaded, load_program
 from avelorn.tow.schema.effect import Role
 from avelorn.tow.schema.rule import Clause, RuleGraph
 from avelorn.tow.schema.stage import Side
+from avelorn.tow.schema.unit import Characteristic
+from avelorn.tow.traits import Operand
 
 REPO = TOWRepository()
 ROUND_PROGRAM = load_program(ROUND, REPO.rules)
@@ -128,6 +130,23 @@ def test_a_list_of_sides_builds_the_entry_once_for_each_in_order() -> None:
         "round/initiative-4/target/remove-casualties",
         "round/initiative-4/attacker/remove-casualties",
     ]
+
+
+def test_the_target_s_part_reads_its_weapon_strength_at_its_own_blow() -> None:
+    """A Swordmaster striking back wounds at the Sword of Hoeth's S+2, so 5, not its printed 3.
+
+    At its own roll To Wound the Swordmaster plays the attacker.
+    """
+    spearman = _fielded("elven-spearmen", "Thrusting Spear", 1)
+    swordmaster = _fielded("swordmasters-of-hoeth", "Sword of Hoeth", 1)
+
+    wound = _fought(spearman, swordmaster).at(
+        "round/initiative-6/target/attack/swordmaster/roll-to-wound"
+    )
+
+    assert wound.part(Side.TARGET, "swordmaster").characteristic(
+        Characteristic.STRENGTH
+    ) == Operand(Distribution.pure(5), 3)
 
 
 def test_a_strength_change_of_the_model_struck_is_held_at_the_blow() -> None:
