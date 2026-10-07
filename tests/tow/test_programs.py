@@ -75,6 +75,10 @@ def _target_unfielded(volley: dict[str, Any]) -> None:
     volley["fielded"] = ["attacker"]
 
 
+def _a_side_s_step_inside_the_group(volley: dict[str, Any]) -> None:
+    volley["items"][3]["items"][0] = {"step": "roll-to-hit", "for": "each-side"}
+
+
 @pytest.mark.parametrize(
     ("edit", "message"),
     [
@@ -152,6 +156,12 @@ def _target_unfielded(volley: dict[str, Any]) -> None:
             "which volley.yaml does not field",
             id="side-not-fielded",
         ),
+        pytest.param(
+            _a_side_s_step_inside_the_group,
+            "volley.yaml: items[3].items[0]: "
+            "roll-to-hit is made once per side, inside a fighter's group",
+            id="each-side-inside-a-group",
+        ),
     ],
 )
 def test_a_bad_entry_fails_the_load_at_its_path(edit: Edit, message: str, tmp_path: Path) -> None:
@@ -170,6 +180,23 @@ def _fielded() -> dict[Side, Fielding]:
     archers = Contingent.deploy("elven-archers", 10, frontage=5)
     spearmen = Contingent.deploy("elven-spearmen", 20, frontage=5)
     return {Side.ATTACKER: Fielding.of(archers, "Longbow"), Side.TARGET: Fielding.of(spearmen)}
+
+
+def test_an_entry_for_each_side_is_made_once_for_each_side(tmp_path: Path) -> None:
+    """Each copy acts for its own side and is named for it; the volley's own stays unnamed."""
+    volley = yaml.safe_load(VOLLEY.read_text())
+    volley["items"].insert(0, {"step": "who-can-shoot", "for": "each-side"})
+    path = tmp_path / "volley.yaml"
+    path.write_text(yaml.safe_dump(volley))
+
+    program = load_program(path, REPO.rules).built(_fielded()).program
+
+    made = {program.paths[step]: step.side for step in program.steps}
+    assert {at: side for at, side in made.items() if at.endswith("/who-can-shoot")} == {
+        "volley/attacker/who-can-shoot": "attacker",
+        "volley/target/who-can-shoot": "target",
+        "volley/who-can-shoot": "attacker",
+    }
 
 
 def test_building_without_every_side_fielded_is_refused() -> None:

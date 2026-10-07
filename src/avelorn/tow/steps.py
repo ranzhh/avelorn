@@ -245,8 +245,14 @@ class Spec:
         writes: State[Any] | None,
         changed: Mark[tuple[Hashable, ...]] | None,
         printed: Reading | None,
+        *,
+        side: Side,
+        sided: bool,
     ) -> Step[Any]:
         """Build the step instance from its kernel, with its holdings bound, and its inputs.
+
+        ``side`` is the side the instance acts for, and ``sided`` marks an
+        instance made once per side.
 
         Returns:
             The step, of the class its kind names.
@@ -254,12 +260,13 @@ class Spec:
         Raises:
             ValueError: a roll is built with no target.
         """
-        side = str(self.side)
+        acts = str(side)
         match self.kind:
             case Kind.MEASUREMENT:
                 return Measurement(
                     name=self.name,
-                    side=side,
+                    side=acts,
+                    sided=sided,
                     inputs=inputs,
                     kernel=kernel,
                     writes=writes,
@@ -267,12 +274,18 @@ class Spec:
                 )
             case Kind.ELIGIBILITY:
                 return Eligibility(
-                    name=self.name, side=side, inputs=inputs, kernel=kernel, writes=writes
+                    name=self.name,
+                    side=acts,
+                    sided=sided,
+                    inputs=inputs,
+                    kernel=kernel,
+                    writes=writes,
                 )
             case Kind.CONSEQUENCE:
                 return Consequence(
                     name=self.name,
-                    side=side,
+                    side=acts,
+                    sided=sided,
                     inputs=inputs,
                     kernel=kernel,
                     writes=writes,
@@ -283,7 +296,8 @@ class Spec:
                     raise ValueError(f"{self.name} rolls with no target shown")
                 return Roll(
                     name=self.name,
-                    side=side,
+                    side=acts,
+                    sided=sided,
                     inputs=inputs,
                     kernel=kernel,
                     writes=writes,

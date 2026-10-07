@@ -1,6 +1,7 @@
 """Program file schema."""
 
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -85,25 +86,31 @@ class KnownInput(BaseModel):
         return self.known if self.of is None else f"{self.of}/{self.known}"
 
 
+class Each(StrEnum):
+    """What an entry is made once for."""
+
+    FIGHTER = "each-fighter"
+    SIDE = "each-side"
+
+
 class StepEntry(BaseModel):
-    """One step of a program."""
+    """One step of a program; a step for each side is made once per side."""
 
     model_config = ConfigDict(extra="forbid")
 
     step: str
+    for_: Literal[Each.SIDE] | None = Field(default=None, alias="for")
     sequence: StepSequence | None = None
     readings: list[str] = Field(default_factory=list)
     tallies: list[str] = Field(default_factory=list)
 
 
-class Each(StrEnum):
-    """What a group of steps runs once for."""
-
-    FIGHTER = "each-fighter"
-
-
 class GroupEntry(BaseModel):
-    """A group of steps run once for each fighter of a side, as many times as its share."""
+    """A group of steps run once for each fighter of a side, as many times as its share.
+
+    A group for each side is made once per side, each copy run for the fighters
+    of the side it acts for.
+    """
 
     model_config = ConfigDict(extra="forbid")
 

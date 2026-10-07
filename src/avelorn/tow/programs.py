@@ -31,6 +31,7 @@ from avelorn.tow.data import DATA_DIR
 from avelorn.tow.fielding import Fielding, Part
 from avelorn.tow.kernels import Standings
 from avelorn.tow.schema.program import (
+    Each,
     FactInput,
     FactType,
     GroupEntry,
@@ -275,8 +276,17 @@ def _parsed[ModelT: BaseModel](path: Path, model: type[ModelT]) -> ModelT:
         raise ProgramError(f"{path.name}: {error}") from error
 
 
+type _Groups = dict[str, list[tuple[Repeat, dict[str, Step[Any]]]]]
+
+
 @dataclass
 class _Builder:
+    """Builds a program file's items.
+
+    ``side`` is the side an entry made once per side is being built for. Its
+    copy for the target swaps every role, and its own entries are named for it.
+    """
+
     source: str
     file: ProgramFile
     facts: Mapping[str, StateFact]
@@ -284,6 +294,7 @@ class _Builder:
     fielded: Mapping[Side, Fielding] | None
     states: dict[str, State[Any]] = field(default_factory=dict)
     fighter: tuple[Side, Part | None] | None = None
+    side: Side | None = None
     specs: dict[Step[Any], Spec] = field(default_factory=dict)
     written: set[str] = field(default_factory=set)
 
@@ -318,48 +329,78 @@ class _Builder:
         where: str,
         visible: dict[str, Step[Any]],
     ) -> tuple[Item, ...]:
-        groups: dict[str, list[tuple[Repeat, dict[str, Step[Any]]]]] = {}
+        groups: _Groups = {}
         built: list[Item] = []
         for index, entry in enumerate(entries):
             here = f"{where}[{index}]"
-            if isinstance(entry, GroupEntry):
-                built.append(self.group(entry, here, visible, groups))
-                continue
             named = StepEntry(step=entry) if isinstance(entry, str) else entry
-            step = self.step(named, here, visible, groups)
-            visible[step.name] = step
-            built.append(step)
+            if named.for_ is not Each.SIDE:
+                built.append(self.entry(named, here, visible, groups, sided=False))
+                continue
+            if self.fighter is not None:
+                name = named.group if isinstance(named, GroupEntry) else named.step
+                raise self.error(here, f"{name} is made once per side, inside a fighter's group")
+            for side in Side:
+                self.side = side
+                built.append(self.entry(named, here, visible, groups, sided=True))
+            self.side = None
         return tuple(built)
+
+    def entry(
+        self,
+        entry: GroupEntry | StepEntry,
+        here: str,
+        visible: dict[str, Step[Any]],
+        groups: _Groups,
+        *,
+        sided: bool,
+    ) -> Item:
+        if isinstance(entry, GroupEntry):
+            return self.group(entry, here, visible, groups, sided=sided)
+        return self.step(entry, here, visible, groups, sided=sided)
+
+    def own(self, name: str) -> str:
+        return name if self.side is None else f"{self.side}/{name}"
+
+    def scoped[T](self, name: str, scope: Mapping[str, T]) -> T | None:
+        return scope.get(self.own(name), scope.get(name))
+
+    def role(self, side: Side) -> Side:
+        return side.other if self.side is Side.TARGET else side
 
     def group(
         self,
         entry: GroupEntry,
         here: str,
         visible: dict[str, Step[Any]],
-        groups: dict[str, list[tuple[Repeat, dict[str, Step[Any]]]]],
+        groups: _Groups,
+        *,
+        sided: bool,
     ) -> Sequence:
-        times = visible.get(entry.times)
+        times = self.scoped(entry.times, visible)
         if times is None:
             raise self.error(
                 here, f"{entry.group} runs {entry.times} times, which is not in scope"
             )
         if self.fighter is not None:
             raise self.error(here, f"{entry.group} runs inside another fighter's group")
+        of = self.role(entry.of)
         fighters: tuple[Part | None, ...] = (
-            (None,) if self.fielded is None else self.fielded[entry.of].parts
+            (None,) if self.fielded is None else self.fielded[of].parts
         )
         repeats: list[Repeat] = []
         for fighter in fighters:
-            self.fighter = (entry.of, fighter)
+            self.fighter = (of, fighter)
             inner = dict(visible)
             items = self.block(entry.items, f"{here}.items", inner)
             part = None if fighter is None else fighter.id
             counted = Projection("times", (times.key,), partial(share, part), _ZERO)
             repeat = Repeat(name=part or "fighter", times=counted, items=items)
-            groups.setdefault(entry.group, []).append((repeat, inner))
+            groups.setdefault(self.own(entry.group), []).append((repeat, inner))
             repeats.append(repeat)
         self.fighter = None
-        return Sequence(name=entry.group, items=tuple(repeats))
+        side = str(of) if sided else None
+        return Sequence(name=entry.group, items=tuple(repeats), side=side)
 
     def step(
         self,
@@ -367,6 +408,8 @@ class _Builder:
         here: str,
         visible: dict[str, Step[Any]],
         groups: Mapping[str, list[tuple[Repeat, dict[str, Step[Any]]]]],
+        *,
+        sided: bool,
     ) -> Step[Any]:
         sequence = entry.sequence or self.file.sequence
         spec = STEPS.get((sequence, entry.step))
@@ -386,14 +429,15 @@ class _Builder:
         if spec.printed is not None:
             printed = self.projection("printed", spec.printed, spec, here, visible, tally, changed)
         writes = None if spec.writes is None else self.write(spec.writes, here)
-        step = spec.build(kernel, inputs, target, writes, changed, printed)
+        side = self.role(spec.side)
+        step = spec.build(kernel, inputs, target, writes, changed, printed, side=side, sided=sided)
         self.specs[step] = spec
-        own = {**visible, spec.name: step}
+        visible[self.own(spec.name) if sided else spec.name] = step
         for name in entry.readings:
             offered = spec.readings.get(name)
             if offered is None:
                 raise self.error(here, f"{spec.name} offers no reading {name}")
-            step.show(self.projection(name, offered, spec, here, own, tally, changed))
+            step.show(self.projection(name, offered, spec, here, visible, tally, changed))
         return step
 
     def tally(
@@ -411,9 +455,10 @@ class _Builder:
             raise self.error(here, f"{spec.name} needs the groups it tallies")
         counts: dict[Repeat, Projection[int]] = {}
         for name in entry.tallies:
-            if name not in groups:
+            tallied = self.scoped(name, groups)
+            if tallied is None:
                 raise self.error(here, f"{spec.name} tallies {name}, no group before it here")
-            for group, inner in groups[name]:
+            for group, inner in tallied:
                 counts[group] = self.counted(spec.counts, spec, here, inner)
         return Tally(spec.counts.label, counts)
 
@@ -448,16 +493,14 @@ class _Builder:
             raise self.error(here, f"{spec.name} is made per fighter, outside a fighter's group")
         if not spec.fighter and self.fighter is not None:
             raise self.error(here, f"{spec.name} is made per side, inside a fighter's group")
-        bound: list[Fielding | Part | None] = []
-        for holding in holdings(reads):
-            if holding.of not in self.file.fielded:
-                raise self.error(
-                    here, f"{spec.name} reads the {holding.of}, which {self.source} does not field"
-                )
-            bound.append(self.holding(holding.of))
-        return tuple(bound)
+        return tuple(self.holding(holding, spec, here) for holding in holdings(reads))
 
-    def holding(self, side: Side) -> Fielding | Part | None:
+    def holding(self, read: Holding, spec: Spec, here: str) -> Fielding | Part | None:
+        side = self.role(read.of)
+        if side not in self.file.fielded:
+            raise self.error(
+                here, f"{spec.name} reads the {side}, which {self.source} does not field"
+            )
         if self.fielded is None:
             return None
         if self.fighter is None:
@@ -491,13 +534,16 @@ class _Builder:
                 return changed
 
     def output(self, read: Output, spec: Spec, here: str, visible: Mapping[str, Step[Any]]) -> Key:
-        step = visible.get(read.step)
+        step = self.scoped(read.step, visible)
         if step is None:
             raise self.error(here, f"{spec.name} reads {read.step}, which is not in scope")
         return step.key
 
+    def facing(self, fact: Fact) -> Fact:
+        return fact if fact.of is None else Fact(fact.name, self.role(fact.of))
+
     def read(self, fact: Fact, spec: Spec, here: str) -> State[Any]:
-        name = fact.full
+        name = self.facing(fact).full
         if name in self.inputs:
             return self.inputs[name].state
         if name in self.written:
@@ -505,7 +551,7 @@ class _Builder:
         raise self.error(here, f"{spec.name} reads {name}, which is no input and is not written")
 
     def write(self, fact: Fact, here: str) -> State[Any]:
-        name = fact.full
+        name = self.facing(fact).full
         stated = self.facts.get(fact.name)
         if stated is None or fact.of is None:
             raise self.error(here, f"writes {name}, which {STATE.name} does not list")
