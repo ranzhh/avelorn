@@ -1,0 +1,20 @@
+program: round
+sequence: combat
+fielded: [attacker, target]
+inputs:
+  - {fact: standing, of: attacker}
+  - {fact: standing, of: target}
+items:
+  - {step: who-can-fight, of: [attacker, target]}
+  - {step: who-strikes-first, of: [attacker, target]}
+  - slots: initiative
+    from: 10
+    to: 1
+    items:
+      - {step: how-many-attacks, of: [attacker, target], readings: [attacks]}
+      - group: attack
+        for: each-fighter
+        of: [attacker, target]
+        times: how-many-attacks
+        items: [roll-to-hit, roll-to-wound, make-armour-saves, ward-saves]
+      - {step: remove-casualties, of: [target, attacker], tallies: [attack], readings: [models]}

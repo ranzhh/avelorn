@@ -10,7 +10,7 @@ import yaml
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.fielding import Fielding
-from avelorn.tow.programs import VOLLEY, ProgramError, load_program
+from avelorn.tow.programs import ROUND, VOLLEY, ProgramError, load_program
 from avelorn.tow.schema.stage import Side
 
 type Edit = Callable[[dict[str, Any]], None]
@@ -194,6 +194,45 @@ def test_an_entry_with_a_list_of_sides_is_built_once_for_each_in_order(tmp_path:
         "volley/attacker/who-can-shoot",
         "volley/check-range",
     ]
+
+
+def _attacks_counted_outside_a_slot(combat: dict[str, Any]) -> None:
+    combat["items"].insert(2, {"step": "how-many-attacks", "of": "attacker"})
+
+
+def _no_who_can_fight_for_the_target(combat: dict[str, Any]) -> None:
+    combat["items"][0]["of"] = "attacker"
+
+
+@pytest.mark.parametrize(
+    ("edit", "message"),
+    [
+        pytest.param(
+            _attacks_counted_outside_a_slot,
+            "round.yaml: items[2]: "
+            "how-many-attacks strikes at a slot's Initiative, outside a slot",
+            id="initiative-outside-a-slot",
+        ),
+        pytest.param(
+            _no_who_can_fight_for_the_target,
+            "round.yaml: items[2].items[0]: "
+            "how-many-attacks reads who-can-fight, which is not in scope",
+            id="no-step-for-the-reader-s-side",
+        ),
+    ],
+)
+def test_a_bad_round_entry_fails_the_load_at_its_path(
+    edit: Edit, message: str, tmp_path: Path
+) -> None:
+    combat = yaml.safe_load(ROUND.read_text())
+    edit(combat)
+    path = tmp_path / "round.yaml"
+    path.write_text(yaml.safe_dump(combat))
+
+    with pytest.raises(ProgramError) as refused:
+        load_program(path, REPO.rules)
+
+    assert message in str(refused.value)
 
 
 def test_building_without_every_side_fielded_is_refused() -> None:

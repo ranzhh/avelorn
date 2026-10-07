@@ -65,6 +65,7 @@ from avelorn.tow.traits import Operand
 
 STATE = DATA_DIR / "tow" / "state.yaml"
 VOLLEY = DATA_DIR / "tow" / "programs" / "volley.yaml"
+ROUND = DATA_DIR / "tow" / "programs" / "round.yaml"
 
 TYPES: Mapping[FactType, type] = MappingProxyType(
     {

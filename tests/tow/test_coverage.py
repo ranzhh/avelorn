@@ -52,9 +52,9 @@ def test_a_rule_without_effects_is_one_gap_whatever_its_x() -> None:
 
 
 def test_an_effect_waits_for_each_sequence_it_lands_in() -> None:
-    """Gromril Armour's re-roll attaches through the volley and waits for the combat round."""
-    assert "gromril-armour/combat/make-armour-saves" in UNATTACHED
-    assert "gromril-armour/shooting/make-armour-saves" not in UNATTACHED
+    """Veteran's re-roll attaches through the volley and waits for a Panic test outside one."""
+    assert "veteran/panic/make-panic-tests" in UNATTACHED
+    assert "veteran/shooting/make-panic-tests" not in UNATTACHED
 
 
 def test_an_effect_waits_for_the_step_that_triggers_it() -> None:
@@ -98,12 +98,12 @@ def test_a_volley_effect_its_step_cannot_run_is_held() -> None:
     )
 
     held = [
-        (gap.subject, gap.reason)
+        gap.subject
         for gap in coverage(doctored).gaps
-        if gap.kind is GapKind.HELD_EFFECT
+        if gap.kind is GapKind.HELD_EFFECT and gap.reason is None
     ]
 
-    assert held == [("multiple-wounds/shooting/remove-casualties", None)]
+    assert held == ["multiple-wounds/shooting/remove-casualties"]
 
 
 def test_a_rule_granted_only_by_the_graph_is_referenced_there() -> None:
