@@ -149,6 +149,22 @@ def test_the_target_s_part_reads_its_weapon_strength_at_its_own_blow() -> None:
     ) == Operand(Distribution.pure(5), 3)
 
 
+def test_the_target_s_magical_blows_meet_no_runes_of_protection() -> None:
+    """The Swordmasters' magical blows meet no 6+ ward from the Ironbreakers they strike back at.
+
+    The Runes of Protection ward only a non-magical attack, and the attack is the
+    Swordmasters' own, not the Ironbreakers'.
+    """
+    ironbreaker = _fielded("ironbreakers", "Hand Weapon", 1)
+    swordmaster = _fielded("swordmasters-of-hoeth", "Sword of Hoeth", 1)
+
+    ward = _fought(ironbreaker, swordmaster).at(
+        "round/initiative-6/target/attack/swordmaster/ward-saves"
+    )
+
+    assert ward.read("needed").mass == {"-": 1}
+
+
 def test_a_strength_change_of_the_model_struck_is_held_at_the_blow() -> None:
     """Enfeebling Cold rewritten to lower the Merwyrm's own Strength leaves the Lions' blow alone.
 
