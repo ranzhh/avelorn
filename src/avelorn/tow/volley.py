@@ -25,7 +25,7 @@ class Volley:
         return self.evaluated.at(path).read(reading)
 
     def _fired(self, step: str) -> str:
-        return f"volley/attack/{self.shooter.hit.id}/{step}"
+        return f"volley/attacker/attack/{self.shooter.hit.id}/{step}"
 
     @property
     def shots(self) -> int:

@@ -3,6 +3,7 @@
 from collections.abc import Callable, Hashable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
+from functools import partial
 from itertools import takewhile
 from types import MappingProxyType
 from typing import Any
@@ -20,10 +21,11 @@ from avelorn.core.graph import (
     Step,
 )
 from avelorn.tow.changes import Folded, Payloads
-from avelorn.tow.fielding import Fielding, Part, Shots
+from avelorn.tow.fielding import Attacks, Fielding, Initiatives, Part, PerPart, Shots
 from avelorn.tow.kernels import (
     HIGH_BALLISTIC_SKILL,
     UNARMOURED,
+    Confirm,
     Die,
     Standings,
     armour_save_target,
@@ -32,6 +34,7 @@ from avelorn.tow.kernels import (
     falls_back_in_good_order,
     heavy_casualties,
     leadership_test,
+    melee_hit_target,
     shooting_hit,
     shooting_hit_target,
     wound_target,
@@ -48,6 +51,7 @@ NO_ROLL = "-"
 
 FRONT_RANK = "front-rank"
 HALF_OF_EACH_REAR_RANK = "half-of-each-rear-rank"
+FIGHTING_RANK = "fighting-rank"
 
 _NATURAL = {
     RerollOn.NATURAL_1: 1,
@@ -122,6 +126,17 @@ class Holding:
 
 
 @dataclass(frozen=True)
+class Striking:
+    """A read of the Initiative the step's slot strikes at, bound when the program is built.
+
+    It comes with the holdings, before every other read.
+    """
+
+
+STRIKING = Striking()
+
+
+@dataclass(frozen=True)
 class Output:
     """A read of an earlier step's output, by step name."""
 
@@ -143,22 +158,23 @@ class Changed:
 
 CHANGED = Changed()
 
-type Read = Holding | Fact | Output | Summed | Changed
+type Bound = Holding | Striking
+type Read = Holding | Striking | Fact | Output | Summed | Changed
 
 
-def holdings(reads: tuple[Read, ...]) -> tuple[Holding, ...]:
-    """The holdings that lead ``reads``.
+def bound(reads: tuple[Read, ...]) -> tuple[Bound, ...]:
+    """The reads bound when the program is built, which lead ``reads``.
 
     Returns:
-        Each leading holding, in order.
+        Each leading bound read, in order.
 
     Raises:
-        ValueError: a holding comes after another read.
+        ValueError: a bound read comes after another read.
     """
-    leading = tuple(takewhile(lambda read: isinstance(read, Holding), reads))
-    if any(isinstance(read, Holding) for read in reads[len(leading) :]):
-        raise ValueError(f"{reads}: a holding comes after another read")
-    return tuple(read for read in leading if isinstance(read, Holding))
+    leading = tuple(takewhile(lambda read: isinstance(read, Holding | Striking), reads))
+    if any(isinstance(read, Holding | Striking) for read in reads[len(leading) :]):
+        raise ValueError(f"{reads}: a bound read comes after another read")
+    return tuple(read for read in leading if isinstance(read, Holding | Striking))
 
 
 @dataclass(frozen=True)
@@ -230,7 +246,7 @@ class Spec:
             raise ValueError(f"{self.name}: shows a printed target exactly when rules change it")
         offered = (self.target, self.printed, *self.readings.values())
         for reads in (self.reads, *(each.reads for each in offered if each is not None)):
-            holdings(reads)
+            bound(reads)
 
     @property
     def key(self) -> tuple[StepSequence, str]:
@@ -245,8 +261,14 @@ class Spec:
         writes: State[Any] | None,
         changed: Mark[tuple[Hashable, ...]] | None,
         printed: Reading | None,
+        *,
+        side: Side,
+        sided: bool,
     ) -> Step[Any]:
-        """Build the step instance from its kernel, with its holdings bound, and its inputs.
+        """Build the step instance from its kernel, with its bound reads bound, and its inputs.
+
+        ``side`` is the side the instance acts for, and ``sided`` marks an
+        instance made once per side.
 
         Returns:
             The step, of the class its kind names.
@@ -254,12 +276,13 @@ class Spec:
         Raises:
             ValueError: a roll is built with no target.
         """
-        side = str(self.side)
+        acts = str(side)
         match self.kind:
             case Kind.MEASUREMENT:
                 return Measurement(
                     name=self.name,
-                    side=side,
+                    side=acts,
+                    sided=sided,
                     inputs=inputs,
                     kernel=kernel,
                     writes=writes,
@@ -267,12 +290,18 @@ class Spec:
                 )
             case Kind.ELIGIBILITY:
                 return Eligibility(
-                    name=self.name, side=side, inputs=inputs, kernel=kernel, writes=writes
+                    name=self.name,
+                    side=acts,
+                    sided=sided,
+                    inputs=inputs,
+                    kernel=kernel,
+                    writes=writes,
                 )
             case Kind.CONSEQUENCE:
                 return Consequence(
                     name=self.name,
-                    side=side,
+                    side=acts,
+                    sided=sided,
                     inputs=inputs,
                     kernel=kernel,
                     writes=writes,
@@ -283,7 +312,8 @@ class Spec:
                     raise ValueError(f"{self.name} rolls with no target shown")
                 return Roll(
                     name=self.name,
-                    side=side,
+                    side=acts,
+                    sided=sided,
                     inputs=inputs,
                     kernel=kernel,
                     writes=writes,
@@ -300,14 +330,14 @@ def _printed(part: Profiled[int | None], c: Characteristic) -> int:
     return value
 
 
-def _missile(attacker: Part) -> WeaponProfile:
+def _profile(attacker: Part) -> WeaponProfile:
     if attacker.weapon is None:
-        raise ValueError(f"{attacker.id} shoots with no missile weapon")
+        raise ValueError(f"{attacker.id} attacks with no weapon")
     return attacker.weapon
 
 
 def _strength(attacker: Part) -> int:
-    strength = _missile(attacker).strength
+    strength = _profile(attacker).strength
     if strength.base is not None:
         return strength.base
     return strength.resolve(_printed(attacker, Characteristic.STRENGTH))
@@ -436,17 +466,17 @@ def how_many_shots(
     return Distribution.pure(Shots(tuple(fired.items())))
 
 
-def share(part: str | None, shots: Shots) -> int:
-    """One part's shots, or every part's when no part is named.
+def share(part: str | None, counted: PerPart) -> int:
+    """One part's shots or attacks, or every part's when no part is named.
 
     Returns:
-        The shots.
+        The count.
     """
-    return shots.total if part is None else shots.of(part)
+    return counted.total if part is None else counted.of(part)
 
 
-def _total(shots: Shots) -> int:
-    return shots.total
+def _total(counted: PerPart) -> int:
+    return counted.total
 
 
 def _hit_needed(attacker: Part, payloads: Payloads) -> str:
@@ -484,7 +514,7 @@ def roll_to_wound(attacker: Part, target: Part, hit: Die) -> Distribution[Die | 
 
 
 def _save_target(target: Part, attacker: Part, payloads: Payloads) -> int | None:
-    piercing = _missile(attacker).armour_piercing - payloads.added(Quantity.ARMOUR_PIERCING)
+    piercing = _profile(attacker).armour_piercing - payloads.added(Quantity.ARMOUR_PIERCING)
     armour = UNARMOURED if target.armour is None else target.armour
     maxima, _ = payloads.bounds(Quantity.ARMOUR_VALUE)
     improved = max((armour - payloads.added(Quantity.ARMOUR_VALUE), *maxima))
@@ -581,6 +611,73 @@ def fall_back_or_flee(
     return Distribution.pure(Retreat.FLEES)
 
 
+def who_can_fight() -> Distribution[frozenset[str]]:
+    """Name the ranks that fight, as printed.
+
+    Returns:
+        The fighting rank alone.
+    """
+    return Distribution.pure(frozenset({FIGHTING_RANK}))
+
+
+def who_strikes_first(attacker: Fielding) -> Distribution[Initiatives]:
+    """Read the Initiative each part strikes at, as printed.
+
+    Returns:
+        Each part's Initiative.
+    """
+    printed = ((part.id, _printed(part, Characteristic.INITIATIVE)) for part in attacker.parts)
+    return Distribution.pure(Initiatives(tuple(printed)))
+
+
+def how_many_attacks(
+    attacker: Fielding,
+    initiative: int,
+    ranks: frozenset[str],
+    initiatives: Initiatives,
+    standing: Standings,
+) -> Distribution[Attacks]:
+    """Count the attacks of each part that strikes at the slot's Initiative.
+
+    The fighting rank is the front rank of the side as fielded at the start of
+    the round, its models placed part by part. A casualty suffered since comes
+    off the fighting rank and takes its attacks with it (FAQ v1.5.3), and each
+    model left there makes its Attacks.
+
+    Returns:
+        The attacks of each part.
+
+    Raises:
+        ValueError: Who Can Fight names anything but the fighting rank.
+    """
+    if ranks != {FIGHTING_RANK}:
+        raise ValueError(f"{attacker.unit} fights with {_listed(ranks)}; only one rank is counted")
+    placed = [part for part in attacker.parts for _ in range(part.count)][: attacker.frontage]
+    made: dict[str, int] = {}
+    for part in attacker.parts:
+        lost = part.count - standing.of(part.id).models
+        fighting = max(placed.count(part) - lost, 0)
+        striking = initiatives.of(part.id) == initiative
+        made[part.id] = fighting * _printed(part, Characteristic.ATTACKS) if striking else 0
+    return Distribution.pure(Attacks(tuple(made.items())))
+
+
+def _melee_hit_target(attacker: Part, target: Part) -> int:
+    return melee_hit_target(
+        _printed(attacker, Characteristic.WEAPON_SKILL),
+        _printed(target, Characteristic.WEAPON_SKILL),
+    )
+
+
+def roll_to_hit_in_combat(attacker: Part, target: Part) -> Distribution[Die]:
+    """Roll one attack To Hit, Weapon Skill against the target's on the chart.
+
+    Returns:
+        The die as it lands; a natural 6 always hits.
+    """
+    return d6(_melee_hit_target(attacker, target), confirm=Confirm.ALWAYS)
+
+
 def _itself[T](value: T) -> T:
     return value
 
@@ -623,6 +720,37 @@ def _offer(
 
 def _counted(step: str) -> Offered:
     return Offered((Output(step),), _landed, _COUNT)
+
+
+_WOUND_NEEDED = Offered(
+    (_ATTACKER, _TARGET),
+    lambda attacker, target: _shown(_wound_target(attacker, target)),
+    _UNITED,
+)
+_SAVE_PRINTED = Offered(
+    (_TARGET, _ATTACKER),
+    lambda target, attacker: _shown(_save_target(target, attacker, _PRINTED)),
+    _UNITED,
+)
+_WARD_PRINTED = Offered((_TARGET,), lambda target: _shown(target.ward), _UNITED)
+
+
+def _removing(sequence: StepSequence) -> Spec:
+    return Spec(
+        sequence=sequence,
+        name="remove-casualties",
+        kind=Kind.CONSEQUENCE,
+        side=Side.TARGET,
+        reads=(_TARGET, _TARGET_STANDING, SUMMED),
+        kernel=_remove_casualties,
+        writes=_TARGET_STANDING,
+        counts=Counted("unsaved wounds", _UNSAVED, _unsaved),
+        readings={
+            "unsaved": Offered((SUMMED,), _itself, _COUNT),
+            "models": _offer("remove-casualties", _models, _COUNT),
+            "wounds-lost": _offer("remove-casualties", _wounds_lost, _COUNT),
+        },
+    )
 
 
 _SPECS = (
@@ -690,11 +818,7 @@ _SPECS = (
         reads=(_ATTACKER, _TARGET, Output("roll-to-hit")),
         kernel=roll_to_wound,
         in_force={(Side.ATTACKER, Characteristic.STRENGTH): _strength},
-        target=Offered(
-            (_ATTACKER, _TARGET),
-            lambda attacker, target: _shown(_wound_target(attacker, target)),
-            _UNITED,
-        ),
+        target=_WOUND_NEEDED,
         readings={"wounds": _counted("roll-to-wound")},
     ),
     Spec(
@@ -716,11 +840,7 @@ _SPECS = (
             ),
             _UNITED,
         ),
-        printed=Offered(
-            (_TARGET, _ATTACKER),
-            lambda target, attacker: _shown(_save_target(target, attacker, _PRINTED)),
-            _UNITED,
-        ),
+        printed=_SAVE_PRINTED,
         readings={"saves": _counted("make-armour-saves")},
     ),
     Spec(
@@ -737,27 +857,13 @@ _SPECS = (
             lambda target, changed: _shown(_ward(target, Payloads.of(changed))),
             _UNITED,
         ),
-        printed=Offered((_TARGET,), lambda target: _shown(target.ward), _UNITED),
+        printed=_WARD_PRINTED,
         readings={
             "saves": _counted("ward-saves"),
             "unsaved": Offered(_UNSAVED, _unsaved, _COUNT),
         },
     ),
-    Spec(
-        sequence=StepSequence.SHOOTING,
-        name="remove-casualties",
-        kind=Kind.CONSEQUENCE,
-        side=Side.TARGET,
-        reads=(_TARGET, _TARGET_STANDING, SUMMED),
-        kernel=_remove_casualties,
-        writes=_TARGET_STANDING,
-        counts=Counted("unsaved wounds", _UNSAVED, _unsaved),
-        readings={
-            "unsaved": Offered((SUMMED,), _itself, _COUNT),
-            "models": _offer("remove-casualties", _models, _COUNT),
-            "wounds-lost": _offer("remove-casualties", _wounds_lost, _COUNT),
-        },
-    ),
+    _removing(StepSequence.SHOOTING),
     Spec(
         sequence=StepSequence.PANIC,
         name="heavy-casualties",
@@ -793,6 +899,94 @@ _SPECS = (
         kernel=fall_back_or_flee,
         readings={"retreat": _offer("fall-back-or-flee")},
     ),
+    Spec(
+        sequence=StepSequence.COMBAT,
+        name="who-can-fight",
+        kind=Kind.ELIGIBILITY,
+        side=Side.ATTACKER,
+        reads=(),
+        kernel=who_can_fight,
+        readings={"ranks": _offer("who-can-fight", _listed)},
+    ),
+    Spec(
+        sequence=StepSequence.COMBAT,
+        name="who-strikes-first",
+        kind=Kind.MEASUREMENT,
+        side=Side.ATTACKER,
+        reads=(_ATTACKER,),
+        kernel=who_strikes_first,
+        readings={"initiatives": _offer("who-strikes-first", str)},
+    ),
+    Spec(
+        sequence=StepSequence.COMBAT,
+        name="how-many-attacks",
+        kind=Kind.MEASUREMENT,
+        side=Side.ATTACKER,
+        reads=(
+            _ATTACKER,
+            STRIKING,
+            Output("who-can-fight"),
+            Output("who-strikes-first"),
+            Fact("standing", Side.ATTACKER),
+        ),
+        kernel=how_many_attacks,
+        readings={
+            "attacks": _offer("how-many-attacks", _total, _COUNT),
+            "parts": _offer("how-many-attacks", str),
+        },
+    ),
+    Spec(
+        sequence=StepSequence.COMBAT,
+        name="roll-to-hit",
+        kind=Kind.ROLL,
+        fighter=True,
+        side=Side.ATTACKER,
+        reads=(_ATTACKER, _TARGET),
+        kernel=roll_to_hit_in_combat,
+        target=Offered(
+            (_ATTACKER, _TARGET),
+            lambda attacker, target: _shown(_melee_hit_target(attacker, target)),
+            _UNITED,
+        ),
+        readings={"hits": _counted("roll-to-hit")},
+    ),
+    Spec(
+        sequence=StepSequence.COMBAT,
+        name="roll-to-wound",
+        kind=Kind.ROLL,
+        fighter=True,
+        side=Side.ATTACKER,
+        reads=(_ATTACKER, _TARGET, Output("roll-to-hit")),
+        kernel=roll_to_wound,
+        target=_WOUND_NEEDED,
+        readings={"wounds": _counted("roll-to-wound")},
+    ),
+    Spec(
+        sequence=StepSequence.COMBAT,
+        name="make-armour-saves",
+        kind=Kind.ROLL,
+        fighter=True,
+        side=Side.TARGET,
+        reads=(_TARGET, _ATTACKER, Output("roll-to-wound")),
+        kernel=partial(make_armour_saves, changed=()),
+        target=_SAVE_PRINTED,
+        readings={"saves": _counted("make-armour-saves")},
+    ),
+    Spec(
+        sequence=StepSequence.COMBAT,
+        name="ward-saves",
+        kind=Kind.ROLL,
+        fighter=True,
+        side=Side.TARGET,
+        reads=(_TARGET, Output("roll-to-wound"), Output("make-armour-saves")),
+        kernel=partial(ward_saves, changed=()),
+        target=_WARD_PRINTED,
+        readings={
+            "saves": _counted("ward-saves"),
+            "unsaved": Offered(_UNSAVED, _unsaved, _COUNT),
+        },
+    ),
+    _removing(StepSequence.COMBAT),
 )
 
 STEPS: Mapping[tuple[StepSequence, str], Spec] = MappingProxyType(

@@ -8,7 +8,7 @@ one report.
 
 The scan reads the corpus, not the rule registry, since a rule nothing
 references is no gap. The core rules of the phases are the exception: every side
-has them, so a volley effect of theirs that nothing reaches is one.
+has them, so a program effect of theirs that nothing reaches is one.
 """
 
 from collections import defaultdict
@@ -20,7 +20,7 @@ from pydantic import BaseModel, ConfigDict
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.fielding import Fielding
-from avelorn.tow.programs import VOLLEY, load_program
+from avelorn.tow.programs import ROUND, VOLLEY, load_program
 from avelorn.tow.schema.effect import Effect
 from avelorn.tow.schema.ledger import Acknowledgement, GapKind
 from avelorn.tow.schema.phase import Phase
@@ -218,7 +218,7 @@ def _scan(data: TOWRepository) -> Iterator[tuple[GapKind, str, Site]]:
             yield kind, reference.rule, site
     for slug in sorted(referenced):
         yield from _graph_gaps(slug, data.rules[slug])
-    yield from _volley_gaps(data, referenced)
+    yield from _program_gaps(data, referenced)
     for slug, unit in sorted(data.units.items()):
         for row in unit.unread_rows:
             yield GapKind.PROFILE_ROW_UNREAD, f"{slug}/{row.name}", Site(entry=Entry.UNIT, id=slug)
@@ -237,55 +237,79 @@ def _scan(data: TOWRepository) -> Iterator[tuple[GapKind, str, Site]]:
             yield GapKind.PRINTED_NOTES, slug, Site(entry=Entry.ARMOUR, id=slug)
 
 
-def _volley_gaps(data: TOWRepository, referenced: set[str]) -> Iterator[tuple[GapKind, str, Site]]:
-    """Every volley effect that no corpus side carries into the volley's numbers.
+type Facing = tuple[Fielding, Fielding, frozenset[str]]
 
-    An effect is expected in each sequence where the volley has its step, when
-    the volley has every step it reads. Each unit at its minimum size, bare and
-    with each option alone, faces itself: once per missile weapon it wields as
-    the shooter, and always as the target. A side that carries an effect to a
-    step that cannot run it leaves the effect held.
+_BOTH = frozenset(map(str, Side))
+
+
+def _program_gaps(
+    data: TOWRepository, referenced: set[str]
+) -> Iterator[tuple[GapKind, str, Site]]:
+    """Every effect a program registers that no corpus side carries into its numbers.
+
+    An effect is expected where a program has its step and every step it reads.
+    Each unit faces itself in the volley and in the round. An effect that lands
+    on a step that cannot run it is held.
 
     Yields:
         The gap's kind, ``<rule>/<sequence>/<step>``, and the rule as its site.
     """
-    volley = load_program(VOLLEY, data.rules)
-    specs = volley.specs
-    have = {spec.key for spec in specs}
-    names = {spec.name for spec in specs}
     core = {slug for slug, rule in data.rules.items() if rule.category in set(Phase)}
     expected: set[Effected] = set()
-    for slug in sorted(referenced | core):
-        graph = data.rules[slug].graph
-        for index, effect in enumerate(() if graph is None else graph.effects):
-            if effect.at is None or not all(step in names for step in _read_steps(effect)):
-                continue
-            for sequence in effect.at.sequences:
-                if (sequence, effect.at.step) in have:
-                    expected.add((slug, index, sequence, effect.at.step))
     reached: set[Effected] = set()
     held: set[Effected] = set()
-    for _, contingent in fieldings(data):
-        target = Fielding.of(contingent)
-        shooters = [
-            Fielding.of(contingent, weapon.name)
-            for weapon in contingent.loadout.weapons
-            if weapon.missile_profile is not None
-        ]
-        facing = [(target, {str(Side.TARGET)})]
-        facing += [(shooter, {str(side) for side in Side}) for shooter in shooters]
-        for attacker, counted in facing:
-            built = volley.built({Side.ATTACKER: attacker, Side.TARGET: target})
-            attached = built.attachment
-            for reaches, found in ((attached.reaches, reached), (attached.held, held)):
-                for reach in reaches:
-                    if reach.holder.side in counted:
-                        spec = built.specs[reach.at]
-                        found.add((reach.rule, reach.effect, spec.sequence, spec.name))
+    for path, facings in ((VOLLEY, _shooting), (ROUND, _fighting)):
+        program = load_program(path, data.rules)
+        have = {spec.key for spec in program.specs}
+        names = {spec.name for spec in program.specs}
+        for slug in sorted(referenced | core):
+            graph = data.rules[slug].graph
+            for index, effect in enumerate(() if graph is None else graph.effects):
+                if effect.at is None or not all(step in names for step in _read_steps(effect)):
+                    continue
+                for sequence in effect.at.sequences:
+                    if (sequence, effect.at.step) in have:
+                        expected.add((slug, index, sequence, effect.at.step))
+        for _, contingent in fieldings(data):
+            for attacker, target, counted in facings(contingent):
+                built = program.built({Side.ATTACKER: attacker, Side.TARGET: target})
+                attached = built.attachment
+                for reaches, found in ((attached.reaches, reached), (attached.held, held)):
+                    for reach in reaches:
+                        if reach.holder.side in counted:
+                            spec = built.specs[reach.at]
+                            found.add((reach.rule, reach.effect, spec.sequence, spec.name))
     gaps = ((GapKind.UNREACHED_EFFECT, expected - reached), (GapKind.HELD_EFFECT, held))
     for kind, effects in gaps:
         for slug, _, sequence, step in sorted(effects):
             yield kind, f"{slug}/{sequence}/{step}", Site(entry=Entry.RULE, id=slug)
+
+
+def _shooting(contingent: Contingent) -> Iterator[Facing]:
+    """The unit shot at, then shooting each missile weapon it carries at itself.
+
+    Yields:
+        The attacker, the target, and the sides counted.
+    """
+    target = Fielding.of(contingent)
+    yield target, target, frozenset({str(Side.TARGET)})
+    for weapon in contingent.loadout.weapons:
+        if weapon.missile_profile is not None:
+            yield Fielding.of(contingent, weapon.name), target, _BOTH
+
+
+def _fighting(contingent: Contingent) -> Iterator[Facing]:
+    """The unit fighting itself with each weapon it carries, unless it rides a mount.
+
+    Yields:
+        The attacker, the target, and the sides counted.
+    """
+    if contingent.unit.mount is not None:
+        return
+    for weapon in contingent.loadout.weapons:
+        if weapon.combat_profile is not None:
+            fighter = Fielding.of(contingent, weapon.name, combat=True)
+            yield fighter, fighter, _BOTH
 
 
 def fieldings(data: TOWRepository) -> Iterator[tuple[tuple[str, ...], Contingent]]:

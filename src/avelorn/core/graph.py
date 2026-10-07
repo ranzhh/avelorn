@@ -240,10 +240,21 @@ class Step[Out: Hashable](ABC):
     readings: list[Reading] = field(default_factory=list)
     writes: State[Out] | None = None
     changed: Mark[tuple[Hashable, ...]] | None = None
+    sided: bool = False
 
     @property
     def key(self) -> Key:
         return self if self.writes is None else self.writes
+
+    def path(self, prefix: str) -> str:
+        """Where the step is declared under ``prefix``.
+
+        A step made once per side names the side it acts for.
+
+        Returns:
+            The step's path.
+        """
+        return f"{prefix}/{self.side}/{self.name}" if self.sided else f"{prefix}/{self.name}"
 
     @abstractmethod
     def settled(self, world: World, lane: "Lane") -> Distribution[Settled]: ...
@@ -322,7 +333,7 @@ class Step[Out: Hashable](ABC):
         )
 
     def declare(self, program: "Program", prefix: str, visible: list["Item"]) -> None:
-        path = f"{prefix}/{self.name}"
+        path = self.path(prefix)
         for source in self.inputs:
             if isinstance(source, Step) and source not in visible:
                 raise GraphError(f"{path} inputs {source.name}, which is not in scope")
@@ -460,7 +471,7 @@ class Amendment:
 class Amended[O: Hashable, Out: Hashable](Step[Out], ABC):
     def declare(self, program: "Program", prefix: str, visible: list["Item"]) -> None:
         if self.changed is not None:
-            path = f"{prefix}/{self.name}"
+            path = self.path(prefix)
             raise GraphError(f"{path} marks {self.changed.name}, but it settles options")
         super().declare(program, prefix, visible)
 
@@ -553,7 +564,7 @@ class Decision[Out: Hashable](Amended[Out, Out]):
         return self.shown()
 
     def declare(self, program: "Program", prefix: str, visible: list["Item"]) -> None:
-        path = f"{prefix}/{self.name}"
+        path = self.path(prefix)
         if self.writes is not None:
             raise GraphError(f"{path} writes {self.writes.name}, but a decision holds its option")
         for printed in (self.otherwise, *self.closed):
@@ -666,9 +677,21 @@ class Block(ABC):
     scoped: ClassVar[bool] = True
     name: str
     items: tuple[Item, ...]
+    side: str | None = None
+
+    def path(self, prefix: str) -> str:
+        """Where the block is declared under ``prefix``.
+
+        A block made once per side names the side it acts for.
+
+        Returns:
+            The block's path.
+        """
+        named = self.name if self.side is None else f"{self.side}/{self.name}"
+        return f"{prefix}/{named}"
 
     def declare(self, program: "Program", prefix: str, visible: list[Item]) -> None:
-        path = f"{prefix}/{self.name}"
+        path = self.path(prefix)
         self.check(path, visible)
         program.take(self, path)
         inner = list(visible) if self.scoped else visible
