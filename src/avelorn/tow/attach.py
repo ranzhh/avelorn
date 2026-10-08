@@ -32,6 +32,7 @@ from avelorn.tow.changes import (
     Equals,
     Gate,
     Granted,
+    MoreThan,
     Operated,
     Shows,
 )
@@ -371,16 +372,23 @@ class _Fielding:
 
     def fact(self, rule: Rule, side: Side, at: Step[Any], fact: FactGate) -> Check | None:
         comparator, value = fact.compared
-        if comparator != "is" or isinstance(value, FactRef):
+        if isinstance(value, FactRef):
             return None
         if fact.fact in Printed:
             step = self.nearest(Printed(fact.fact), fact.of, side, at)
-            return None if step is None else self.equals(rule, step, value)
+            if step is None or comparator != "is":
+                return None
+            return self.equals(rule, step, value)
         name = str(fact.fact)
         if fact.of is not None:
             name = f"{side if fact.of is Role.THIS_MODEL else side.other}/{name}"
         known = self.inputs.get(name)
-        return None if known is None else Equals(known, value)
+        match comparator:
+            case "is" if known is not None:
+                return Equals(known, value)
+            case "more-than" if known is not None and isinstance(value, int):
+                return MoreThan(known, value)
+        return None
 
     def equals(self, rule: Rule, step: Step[Any], value: Hashable) -> Equals:
         spec = self.specs[step]

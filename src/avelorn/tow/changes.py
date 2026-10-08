@@ -172,6 +172,22 @@ class Equals:
 
 
 @dataclass(frozen=True)
+class MoreThan:
+    """A known, more than a number."""
+
+    fact: Key
+    value: int
+
+    @property
+    def reads(self) -> tuple[Key, ...]:
+        """The known compared."""
+        return (self.fact,)
+
+    def holds(self, read: Mapping[Key, Any], out: frozenset[str]) -> bool:
+        return read[self.fact] > self.value
+
+
+@dataclass(frozen=True)
 class Attacks:
     """An attack made with a rule of the attacker, or without it."""
 
