@@ -1,6 +1,8 @@
 """A round of close combat on the graph."""
 
+from collections.abc import Mapping
 from fractions import Fraction
+from typing import NamedTuple
 
 import pytest
 
@@ -8,7 +10,7 @@ from avelorn.core.distribution import Probability
 from avelorn.core.graph import Decision
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.fielding import Fielding
+from avelorn.tow.fielding import SHIELD, Fielding, Held
 from avelorn.tow.programs import ROUND, Evaluated, Loaded, load_program
 from avelorn.tow.schema.effect import Role
 from avelorn.tow.schema.rule import Clause, RuleGraph
@@ -22,31 +24,74 @@ WITHOUT_MARTIAL_PROWESS = load_program(
 )
 
 
-def _fielded(unit: str, weapon: str, models: int, frontage: int | None = None) -> Fielding:
-    contingent = Contingent.field(REPO.units[unit], models, data=REPO, frontage=frontage)
-    return Fielding.of(contingent, weapon, combat=True)
+class _Armed(NamedTuple):
+    """A side fielded for combat, and what it holds to fight."""
+
+    side: Fielding
+    held: Held
+
+
+def _fielded(
+    unit: str,
+    weapon: str,
+    models: int,
+    frontage: int | None = None,
+    equipment: tuple[str, ...] = (),
+    shield: bool = True,
+) -> _Armed:
+    datasheet = REPO.units[unit]
+    armed = datasheet.model_copy(update={"equipment": [*datasheet.equipment, *equipment]})
+    contingent = Contingent.field(armed, models, data=REPO, frontage=frontage)
+    worn = {piece.id for piece in contingent.loadout.armour}
+    shields = {SHIELD} & worn if shield else set()
+    held = Held({contingent.loadout.weapon(weapon).id, *shields})
+    return _Armed(Fielding.of(contingent, combat=True), held)
+
+
+def _lanes(
+    attacker: _Armed,
+    target: _Armed,
+    attacker_standing: int = 1,
+    program: Loaded = ROUND_PROGRAM,
+    attacker_charges: int = 0,
+    rounds_fought: int = 1,
+    wielding: bool = False,
+) -> tuple[Evaluated, ...]:
+    built = program.built({Side.ATTACKER: attacker.side, Side.TARGET: target.side})
+    choices = {Side.ATTACKER: attacker.held, Side.TARGET: target.held}
+    return built.evaluate(
+        {
+            "attacker/standing": attacker.side.standing(attacker_standing),
+            "target/standing": target.side.standing(sum(p.count for p in target.side.parts)),
+            "attacker/rounds-fought": rounds_fought,
+            "target/rounds-fought": rounds_fought,
+            "attacker/charges-made": attacker_charges,
+            "target/charges-made": 0,
+        },
+        choices if wielding else {},
+    )
+
+
+def _held(fought: Evaluated) -> Mapping[Side, frozenset[str]]:
+    return {
+        Side(decision.side): option
+        for decision, option in fought.lane.choices.items()
+        if decision.name == "choose-combat-and-determine-who-can-fight"
+    }
 
 
 def _fought(
-    attacker: Fielding,
-    target: Fielding,
+    attacker: _Armed,
+    target: _Armed,
     attacker_standing: int = 1,
     program: Loaded = ROUND_PROGRAM,
     attacker_charges: int = 0,
     rounds_fought: int = 1,
 ) -> Evaluated:
-    built = program.built({Side.ATTACKER: attacker, Side.TARGET: target})
-    (evaluated,) = built.evaluate(
-        {
-            "attacker/standing": attacker.standing(attacker_standing),
-            "target/standing": target.standing(sum(part.count for part in target.parts)),
-            "attacker/rounds-fought": rounds_fought,
-            "target/rounds-fought": rounds_fought,
-            "attacker/charges-made": attacker_charges,
-            "target/charges-made": 0,
-        }
+    (fought,) = _lanes(
+        attacker, target, attacker_standing, program, attacker_charges, rounds_fought, True
     )
-    return evaluated
+    return fought
 
 
 def _falls(fought: Evaluated, side: Side) -> Probability:
@@ -169,7 +214,7 @@ def test_martial_prowess_moves_weapon_skill_striking_and_struck(
     """
     spearmen = _fielded("elven-spearmen", "Hand Weapon", 10, frontage=10)
     dwarfs = _fielded(foe, "Hand Weapon", 10, frontage=10)
-    (dwarf,) = dwarfs.parts
+    (dwarf,) = dwarfs.side.parts
 
     fought = _fought(
         spearmen, dwarfs, attacker_standing=10, program=program, rounds_fought=rounds_fought
@@ -183,7 +228,7 @@ def test_martial_prowess_moves_weapon_skill_striking_and_struck(
 
 def test_a_list_of_sides_builds_the_entry_once_for_each_in_order() -> None:
     """Both sides decide and measure at the head; the target's casualties come off first."""
-    spearman = _fielded("elven-spearmen", "Thrusting Spear", 1)
+    spearman = _fielded("elven-spearmen", "Thrusting Spear", 1).side
 
     program = ROUND_PROGRAM.built({Side.ATTACKER: spearman, Side.TARGET: spearman}).program
 
@@ -208,9 +253,9 @@ def test_a_list_of_sides_builds_the_entry_once_for_each_in_order() -> None:
 
 def test_a_side_chooses_each_weapon_it_carries_with_or_without_its_shield() -> None:
     """Elven Spearmen given great weapons may fight with any weapon they carry, shield or not."""
-    datasheet = REPO.units["elven-spearmen"]
-    armed = datasheet.model_copy(update={"equipment": [*datasheet.equipment, "Great Weapon"]})
-    spearmen = Fielding.of(Contingent.field(armed, 10, data=REPO), "Great Weapon", combat=True)
+    spearmen = _fielded(
+        "elven-spearmen", "Great Weapon", 10, equipment=("Great Weapon",), shield=False
+    )
 
     choice = _fought(spearmen, spearmen).at(
         "round/target/choose-combat-and-determine-who-can-fight"
@@ -231,19 +276,23 @@ def test_a_rule_two_carried_weapons_give_is_in_force_once_in_each_option() -> No
     """Spearmen given a great weapon and a halberd attach Requires Two Hands, which both give.
 
     No option holds both weapons, so each sees the rule once, as each sees
-    Fight in Extra Rank from the spear or the halberd once. Swinging the great
-    weapon, the Spearmen take it without their shield.
+    Fight in Extra Rank from the spear or the halberd once. Neither weapon
+    fights beside the shield, and every other option is a lane.
     """
-    datasheet = REPO.units["elven-spearmen"]
-    two_handed = ["Great Weapon", "Ceremonial Halberd"]
-    armed = datasheet.model_copy(update={"equipment": [*datasheet.equipment, *two_handed]})
-    spearmen = Fielding.of(Contingent.field(armed, 1, data=REPO), "Great Weapon", combat=True)
+    two_handed = ("Great Weapon", "Ceremonial Halberd")
+    spearman = _fielded("elven-spearmen", "Great Weapon", 1, equipment=two_handed, shield=False)
+    dwarf = _fielded("dwarf-warriors", "Hand Weapon", 1)
 
-    choice = _fought(spearmen, spearmen).at(
-        "round/target/choose-combat-and-determine-who-can-fight"
-    )
+    lanes = _lanes(dwarf, spearman)
 
-    assert {str(taken.option) for taken in choice.read("taken").mass} == {"great-weapon"}
+    assert {str(_held(each)[Side.TARGET]) for each in lanes} == {
+        "hand-weapon",
+        "hand-weapon+shield",
+        "thrusting-spear",
+        "thrusting-spear+shield",
+        "great-weapon",
+        "ceremonial-halberd",
+    }
 
 
 def test_the_target_s_part_reads_its_weapon_strength_at_its_own_blow() -> None:
@@ -260,6 +309,30 @@ def test_the_target_s_part_reads_its_weapon_strength_at_its_own_blow() -> None:
     )
 
     assert wound.read("needed").mass == {"2+": 1}
+
+
+def test_each_weapon_a_side_may_fight_with_is_a_lane() -> None:
+    """Spearmen given great weapons and struck by a Dwarf Warrior save as their choice allows.
+
+    Light armour alone saves on 6+, with the shield on 5+, and with a hand
+    weapon and shield Parry makes it 4+. Requires Two Hands leaves no lane
+    for the great weapon with the shield.
+    """
+    spearman = _fielded(
+        "elven-spearmen", "Great Weapon", 1, equipment=("Great Weapon",), shield=False
+    )
+    dwarf = _fielded("dwarf-warriors", "Hand Weapon", 1)
+
+    lanes = _lanes(dwarf, spearman)
+
+    saves = "round/initiative-2/attacker/attack/dwarf-warrior/make-armour-saves"
+    assert {str(_held(each)[Side.TARGET]): _needed(each, saves) for each in lanes} == {
+        "hand-weapon": {"6+"},
+        "hand-weapon+shield": {"4+"},
+        "thrusting-spear": {"6+"},
+        "thrusting-spear+shield": {"5+"},
+        "great-weapon": {"6+"},
+    }
 
 
 def test_the_target_s_magical_blows_meet_no_runes_of_protection() -> None:

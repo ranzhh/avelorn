@@ -269,21 +269,22 @@ class Fielding:
         equipment and rules. The armour value folds from the armour worn. A ward
         comes only from rules, so a part fielded from the corpus has none. A part
         carries the rules of its datasheet, its troop type, and the profile its
-        weapon shoots with, or in ``combat`` every weapon's combat profile. A
-        round of combat reads each part's count as its models at the start of
-        the round.
+        weapon shoots with. In ``combat`` it fixes no weapon, since the side
+        chooses at Step 1.1, and carries the rules of each weapon's combat
+        profile. A round of combat reads each part's count as its models at the
+        start of the round.
 
         Returns:
             The fielded side.
 
         Raises:
-            ValueError: ``weapon`` has no profile to shoot or fight with, an option
-                is not offered, or a side fielded for combat names no weapon or
-                rides a mount.
+            ValueError: ``weapon`` has no profile to shoot with, an option is not
+                offered, or a side fielded for combat names a weapon or rides a
+                mount.
         """
         unit = contingent.unit
-        if combat and weapon is None:
-            raise ValueError(f"{unit.id} is fielded for combat with no weapon to fight with")
+        if combat and weapon is not None:
+            raise ValueError(f"{unit.id} chooses its weapon at Step 1.1, not when fielded")
         if combat and unit.mount is not None:
             raise ValueError(f"{unit.id} rides a mount, which a round of combat does not field")
         carriers: tuple[Carries, ...] = (unit, unit.rank_and_file)
@@ -292,14 +293,11 @@ class Fielding:
         wielded = profile = None
         if weapon is not None:
             wielded = contingent.loadout.weapon(weapon)
-            profile = wielded.combat_profile if combat else wielded.missile_profile
-            if profile is None and combat:
-                raise ValueError(f"{weapon} has no combat profile; it cannot fight")
+            profile = wielded.missile_profile
             if profile is None:
                 raise ValueError(f"{weapon} has no missile profile; it cannot shoot")
             shot = profile.name or wielded.name
-            if not combat:
-                carried += [pair for pair in wielded.sources() if pair[1].profile == shot]
+            carried += [pair for pair in wielded.sources() if pair[1].profile == shot]
         if combat:
             carried += [pair for each in weapons for pair in _fought(each)]
         offered = {option.name: option for option in unit.options}

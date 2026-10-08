@@ -9,7 +9,7 @@ from avelorn.core.distribution import Distribution, Probability
 from avelorn.core.registry import Registry
 from avelorn.tow.contingent import Charge, ChargeArc, Contingent, Movement
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.fielding import Fielding
+from avelorn.tow.fielding import SHIELD, Fielding, Held
 from avelorn.tow.phases.combat import (
     CombatPhase,
     FightResult,
@@ -73,7 +73,11 @@ class Ref:
 
 @dataclass(frozen=True)
 class Side:
-    """A datasheet fielded at ``models``; ``charged`` is the inches of a front-arc charge."""
+    """A datasheet fielded at ``models``; ``charged`` is the inches of a front-arc charge.
+
+    In combat it fights with ``weapon``, and with its shield when it wears one
+    unless ``shield`` is False.
+    """
 
     unit: str
     models: int
@@ -85,6 +89,7 @@ class Side:
     rules: tuple[Ref, ...] = ()
     weapon_rules: tuple[Ref, ...] = ()
     dropped: frozenset[str] = frozenset()
+    shield: bool = True
 
 
 @dataclass(frozen=True)
@@ -248,8 +253,12 @@ def _volley(attacker: Contingent, defender: Contingent, scenario: Scenario) -> E
 
 def _round(attacker: Contingent, defender: Contingent, scenario: Scenario) -> Evaluated:
     fielded = {
-        stage.Side.ATTACKER: Fielding.of(attacker, attacker.in_hand().name, combat=True),
-        stage.Side.TARGET: Fielding.of(defender, defender.in_hand().name, combat=True),
+        stage.Side.ATTACKER: Fielding.of(attacker, combat=True),
+        stage.Side.TARGET: Fielding.of(defender, combat=True),
+    }
+    held = {
+        stage.Side.ATTACKER: _held(scenario.attacker, attacker),
+        stage.Side.TARGET: _held(scenario.defender, defender),
     }
     rounds_fought = 0 if scenario.first_round else 1
     return _taken(
@@ -263,9 +272,16 @@ def _round(attacker: Contingent, defender: Contingent, scenario: Scenario) -> Ev
                 "target/rounds-fought": rounds_fought,
                 "attacker/charges-made": int(scenario.attacker.charged is not None),
                 "target/charges-made": int(scenario.defender.charged is not None),
-            }
+            },
+            held,
         )
     )
+
+
+def _held(side: Side, contingent: Contingent) -> Held:
+    worn = {piece.id for piece in contingent.loadout.armour}
+    shield = {SHIELD} & worn if side.shield else set()
+    return Held({contingent.in_hand().id, *shield})
 
 
 def _rules(scenario: Scenario) -> dict[str, Rule]:

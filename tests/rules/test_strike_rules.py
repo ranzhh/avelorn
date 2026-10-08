@@ -1,11 +1,14 @@
 """Each rule that changes one side's blows in close combat, struck with and without it."""
 
+import re
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import replace
 from fractions import Fraction
 
 import pytest
 from oracle.procedure import Attack, Phase, ReRoll, casualties, one_attack
 
+from avelorn.tow.programs import ProgramError
 from rules.scenario import Carrier, Kind, Role, Scenario, Side, resolve
 
 COMBAT, SHOOTING = Phase.COMBAT, Phase.SHOOTING
@@ -443,42 +446,55 @@ def test_parry(scenario: Scenario, printed: Attack, plain: Attack) -> None:
     )
 
 
-TWO_HANDED = Side("elven-spearmen", 10, "Great Weapon", equipment=("Great Weapon",))
+TWO_HANDED = Side("elven-spearmen", 10, "Great Weapon", equipment=("Great Weapon",), shield=False)
+SHIELD_REFUSED = (
+    "great-weapon+shield is not allowed at round/target/choose-combat-and-determine-who-can-fight"
+)
 
 
 @pytest.mark.parametrize(
-    ("scenario", "printed", "plain"),
+    ("scenario", "shielded", "printed", "plain"),
     [
         pytest.param(
             Scenario(Kind.STRIKE, SPEARS, TWO_HANDED),
+            pytest.raises(ProgramError, match=re.escape(SHIELD_REFUSED)),
             replace(SPEAR_INTO_SPEARMEN, armour_value=6),
             SPEAR_INTO_SPEARMEN,
             id="struck-wielding-it",
         ),
         pytest.param(
-            Scenario(Kind.STRIKE, SPEARS, replace(TWO_HANDED, weapon="Hand Weapon")),
+            Scenario(Kind.STRIKE, SPEARS, replace(TWO_HANDED, weapon="Hand Weapon", shield=True)),
+            nullcontext(),
             replace(SPEAR_INTO_SPEARMEN, armour_value=4),
             replace(SPEAR_INTO_SPEARMEN, armour_value=4),
             id="struck-wielding-a-hand-weapon",
         ),
         pytest.param(
             Scenario(Kind.SHOOT, ARCHERS, TWO_HANDED, distance=10),
+            nullcontext(),
             ARROWS_INTO_SPEARMEN,
             ARROWS_INTO_SPEARMEN,
             id="shot",
         ),
     ],
 )
-def test_requires_two_hands(scenario: Scenario, printed: Attack, plain: Attack) -> None:
+def test_requires_two_hands(
+    scenario: Scenario,
+    shielded: AbstractContextManager[object],
+    printed: Attack,
+    plain: Attack,
+) -> None:
     """Spearmen swinging a great weapon cannot use their shield in combat: 6+ rather than 5+.
 
-    Fighting with a hand weapon instead, the shield stands and parries; against
-    shooting it counts whatever is in hand.
+    Taking the shield with the great weapon is refused; without the rule they
+    take it. Fighting with a hand weapon instead, the shield stands and parries;
+    against shooting it counts whatever is in hand.
     """
-    assert _with_and_without(scenario, scenario.without("requires-two-hands", Role.DEFENDER)) == (
-        _unsaved(printed),
-        _unsaved(plain),
-    )
+    with_shield = replace(scenario, defender=replace(scenario.defender, shield=True))
+    with shielded:
+        resolve(with_shield)
+    without = with_shield.without("requires-two-hands", Role.DEFENDER)
+    assert _with_and_without(scenario, without) == (_unsaved(printed), _unsaved(plain))
 
 
 HOETH_INTO_IRONBREAKERS = Attack(
