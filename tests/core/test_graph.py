@@ -390,9 +390,14 @@ def _a_mark_read_first(source: Step[int], changed: Mark[tuple[Hashable, ...]]) -
     )
 
 
-def _a_mark_on_an_eligibility(source: Step[int], changed: Mark[tuple[Hashable, ...]]) -> Step[Any]:
-    return Eligibility[str](
-        name="marked", side="attacker", inputs=(changed,), changed=changed, kernel=_a_bow
+def _a_mark_on_a_decision(source: Step[int], changed: Mark[tuple[Hashable, ...]]) -> Step[Any]:
+    return Decision[str](
+        name="marked",
+        side="attacker",
+        inputs=(changed,),
+        changed=changed,
+        options={"hold": (), "flee": ()},
+        otherwise="hold",
     )
 
 
@@ -400,7 +405,7 @@ def _a_mark_on_an_eligibility(source: Step[int], changed: Mark[tuple[Hashable, .
     ("marked", "message"),
     [
         (_a_mark_read_first, "marked/marked marks marked but does not read it last"),
-        (_a_mark_on_an_eligibility, "marked/marked marks marked, but it settles options"),
+        (_a_mark_on_a_decision, "marked/marked marks marked, but a decision settles options"),
     ],
 )
 def test_a_mark_the_kernel_does_not_read_last_is_refused(
@@ -1391,6 +1396,50 @@ def test_a_forbid_wins_over_an_allow_at_an_eligibility() -> None:
         Verdict.HONOURED: _HALF,
     }
     assert lane.verdicts("target/spearmen/brace-of-pistols", who).mass == {Verdict.APPLIED: 1}
+
+
+def _ranks(changed: tuple[int, ...]) -> Distribution[frozenset[str]]:
+    return Distribution.pure(frozenset(f"rank-{rank}" for rank in range(1, 2 + sum(changed))))
+
+
+def _the_rank_behind(printed: frozenset[str]) -> frozenset[str]:
+    return frozenset({f"rank-{len(printed) + 1}-supports"})
+
+
+def test_an_eligibility_applies_an_add_before_its_allows() -> None:
+    changed = Mark[tuple[Hashable, ...]]("who-can-fight")
+    who = Eligibility[str](
+        name="who-can-fight", side="attacker", inputs=(changed,), changed=changed, kernel=_ranks
+    )
+    ranks = who.output("ranks", Monoid(frozenset[str]()))
+    who.show(ranks)
+    program = Program.build("round", _SIDES, (who,))
+    support = Contribution(
+        operation=Operation.ALLOW, options=_the_rank_behind, text="allow the rank behind"
+    )
+    program.attach(
+        (
+            RuleNode(
+                rule="deeper",
+                name="Deeper",
+                holder=_ATTACKER,
+                sources=_MODEL,
+                landings=(Landing(who, changes=(_Shift(1),)),),
+            ),
+            RuleNode(
+                rule="support",
+                name="Support",
+                holder=_ATTACKER,
+                sources=_MODEL,
+                landings=(Landing(who, contributions=(support,)),),
+            ),
+        )
+    )
+    (lane,) = program.evaluate()
+
+    assert lane.read(who, ranks).mass == {frozenset({"rank-1", "rank-2", "rank-3-supports"}): 1}
+    verdicts = [lane.verdicts(f"attacker/archers/{rule}", who) for rule in ("deeper", "support")]
+    assert [each.mass for each in verdicts] == [{Verdict.APPLIED: 1}, {Verdict.APPLIED: 1}]
 
 
 def _hold(printed: frozenset[str]) -> frozenset[str]:

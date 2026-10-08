@@ -51,7 +51,7 @@ NO_ROLL = "-"
 
 FRONT_RANK = "front-rank"
 HALF_OF_EACH_REAR_RANK = "half-of-each-rear-rank"
-FIGHTING_RANK = "fighting-rank"
+SUPPORTING_ATTACK = "supporting-attack"
 
 _NATURAL = {
     RerollOn.NATURAL_1: 1,
@@ -297,6 +297,7 @@ class Spec:
                     inputs=inputs,
                     kernel=kernel,
                     writes=writes,
+                    changed=changed,
                 )
             case Kind.CONSEQUENCE:
                 return Consequence(
@@ -647,13 +648,18 @@ def fall_back_or_flee(
     return Distribution.pure(Retreat.FLEES)
 
 
-def who_can_fight() -> Distribution[frozenset[str]]:
-    """Name the ranks that fight, as printed.
+def _rank(number: int) -> str:
+    return f"rank-{number}"
+
+
+def who_can_fight(changed: tuple[Hashable, ...]) -> Distribution[frozenset[str]]:
+    """Name each rank of the fighting rank: the front rank, and one more for each rank added.
 
     Returns:
-        The fighting rank alone.
+        The ranks that fight.
     """
-    return Distribution.pure(frozenset({FIGHTING_RANK}))
+    deep = 1 + Payloads.of(changed).added(Quantity.FIGHTING_RANKS)
+    return Distribution.pure(frozenset(_rank(number) for number in range(1, deep + 1)))
 
 
 def who_strikes_first(
@@ -683,26 +689,35 @@ def how_many_attacks(
 ) -> Distribution[Attacks]:
     """Count the attacks of each part that strikes at the slot's Initiative.
 
-    The fighting rank is the front rank of the side as fielded at the start of
-    the round, its models placed part by part. A casualty suffered since comes
-    off the fighting rank and takes its attacks with it (FAQ v1.5.3), and each
-    model left there makes its Attacks.
+    The ranks stand as the side was fielded at the start of the round, its
+    models placed part by part. Each model in a rank Who Can Fight names makes
+    its Attacks. With a supporting attack, each model in the rank behind makes
+    one. A casualty suffered since comes off the fighting rank first, then the
+    supporting rank, and takes its attacks with it (FAQ v1.5.3).
 
     Returns:
         The attacks of each part.
 
     Raises:
-        ValueError: Who Can Fight names anything but the fighting rank.
+        ValueError: Who Can Fight names a rank that is not counted.
     """
-    if ranks != {FIGHTING_RANK}:
-        raise ValueError(f"{attacker.unit} fights with {_listed(ranks)}; only one rank is counted")
-    placed = [part for part in attacker.parts for _ in range(part.count)][: attacker.frontage]
+    fighting = ranks - {SUPPORTING_ATTACK}
+    deep = len(fighting)
+    if fighting != {_rank(number) for number in range(1, deep + 1)}:
+        raise ValueError(f"{attacker.unit} fights with {_listed(ranks)}, which are not counted")
+    width = attacker.frontage
+    last = deep + int(SUPPORTING_ATTACK in ranks)
+    placed = [part for part in attacker.parts for _ in range(part.count)]
+    front, support = placed[: deep * width], placed[deep * width : last * width]
     made: dict[str, int] = {}
     for part in attacker.parts:
         lost = part.count - standing.of(part.id).models
-        fighting = max(placed.count(part) - lost, 0)
+        in_front = max(front.count(part) - lost, 0)
+        supporting = max(support.count(part) - max(lost - front.count(part), 0), 0)
         striking = initiatives.of(part.id) == initiative
-        made[part.id] = fighting * _printed(part, Characteristic.ATTACKS) if striking else 0
+        made[part.id] = (
+            in_front * _printed(part, Characteristic.ATTACKS) + supporting if striking else 0
+        )
     return Distribution.pure(Attacks(tuple(made.items())))
 
 
@@ -963,8 +978,9 @@ _SPECS = (
         name="who-can-fight",
         kind=Kind.ELIGIBILITY,
         side=Side.ATTACKER,
-        reads=(),
+        reads=(CHANGED,),
         kernel=who_can_fight,
+        runs={Operation.ADD: frozenset({Quantity.FIGHTING_RANKS})},
         readings={"ranks": _offer("who-can-fight", _listed)},
     ),
     Spec(
