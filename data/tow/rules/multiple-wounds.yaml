@@ -17,7 +17,7 @@ paragraphs:
     this special rule counts for Overkill. Excess wounds do not 'spill over' onto other models in the unit.
 # Neither cap clause is authored here. Both belong to Remove Casualties, where
 # a wound meets a model with so many Wounds left.
-needs: [unrolled-dice, challenges]
+needs: [challenges]
 effects:
   - multiply: X
     at: {step: remove-casualties, by: the-enemy}

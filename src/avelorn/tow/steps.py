@@ -3,6 +3,7 @@
 from collections.abc import Callable, Hashable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
+from fractions import Fraction
 from functools import partial
 from itertools import takewhile
 from types import MappingProxyType
@@ -30,6 +31,7 @@ from avelorn.tow.kernels import (
     Standings,
     armour_save_target,
     back_rank,
+    back_rank_multiplied,
     d6,
     falls_back_in_good_order,
     heavy_casualties,
@@ -41,6 +43,7 @@ from avelorn.tow.kernels import (
 )
 from avelorn.tow.schema.effect import Operation, RerollOn
 from avelorn.tow.schema.quantity import Quantity
+from avelorn.tow.schema.rule import DiceQuantity
 from avelorn.tow.schema.stage import Side
 from avelorn.tow.schema.step import StepKind, StepSequence
 from avelorn.tow.schema.unit import Characteristic
@@ -202,7 +205,8 @@ class Spec:
     A ``fighter`` step is made once per fighter: its holdings are the fighter's
     part and the part of the model hit. Any other step holds whole sides.
     ``runs`` names what the kernel folds of each operation a rule lands there;
-    a characteristic it folds is the acting model's. ``outcomes`` lists every
+    a characteristic it folds is the acting model's, and a multiply names
+    nothing, since it changes no quantity. ``outcomes`` lists every
     value the step can output. A roll whose rules change it shows its
     ``target`` in force and its ``printed`` target.
     """
@@ -603,10 +607,22 @@ def _unsaved(wound: Die | None, save: Die | None, ward: Die | None) -> int:
     return int(_succeeded(wound) and not _succeeded(save) and not _succeeded(ward))
 
 
+def _lost(by: int | DiceQuantity) -> Distribution[int]:
+    if isinstance(by, int):
+        return Distribution.pure(by)
+    return Distribution({face + by.plus: Fraction(1, by.sides) for face in range(1, by.sides + 1)})
+
+
 def _remove_casualties(
-    target: Fielding, standing: Standings, wounds: int
+    target: Fielding, standing: Standings, wounds: int, changed: tuple[Hashable, ...]
 ) -> Distribution[Standings]:
-    return Distribution.pure(back_rank(standing, wounds, target.removal))
+    match Payloads.of(changed).multiplied():
+        case ():
+            return Distribution.pure(back_rank(standing, wounds, target.removal))
+        case (by,):
+            return back_rank_multiplied(standing, wounds, _lost(by), target.removal)
+        case many:
+            raise ValueError(f"{target.unit}'s unsaved wounds are multiplied {len(many)} times")
 
 
 def _heavy_casualties(standing: Standings, at_start_of_phase: int) -> Distribution[bool]:
@@ -855,8 +871,9 @@ def _removing(sequence: StepSequence) -> Spec:
         name="remove-casualties",
         kind=Kind.CONSEQUENCE,
         side=Side.TARGET,
-        reads=(_TARGET, _TARGET_STANDING, SUMMED),
+        reads=(_TARGET, _TARGET_STANDING, SUMMED, CHANGED),
         kernel=_remove_casualties,
+        runs={Operation.MULTIPLY: frozenset()},
         writes=_TARGET_STANDING,
         counts=Counted("unsaved wounds", _UNSAVED, _unsaved),
         readings={

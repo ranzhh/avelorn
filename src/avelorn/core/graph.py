@@ -53,6 +53,7 @@ class Order(IntEnum):
     SET = 2
     ADD = 3
     REROLL = 4
+    MULTIPLY = 5
 
 
 def _shown(value: object) -> int | str:

@@ -12,7 +12,7 @@ from avelorn.core.graph import Change, Key, Order
 from avelorn.tow.kernels import Die
 from avelorn.tow.schema.effect import Bounded, Effect, Operation, RerollOn
 from avelorn.tow.schema.quantity import Quantity
-from avelorn.tow.schema.rule import Parameter
+from avelorn.tow.schema.rule import DiceQuantity, Parameter
 from avelorn.tow.schema.unit import Characteristic
 
 type Changeable = Quantity | Characteristic
@@ -23,6 +23,7 @@ _ORDERS = {
     Operation.SET: Order.SET,
     Operation.ADD: Order.ADD,
     Operation.REROLL: Order.REROLL,
+    Operation.MULTIPLY: Order.MULTIPLY,
 }
 
 
@@ -51,7 +52,14 @@ class Rerolled:
     on: RerollOn
 
 
-type Payload = Added | Fixed | Rerolled
+@dataclass(frozen=True)
+class Multiplied:
+    """What each unsaved wound is multiplied by: a number, or a dice roll made for each wound."""
+
+    by: int | DiceQuantity
+
+
+type Payload = Added | Fixed | Rerolled | Multiplied
 
 
 @dataclass(frozen=True)
@@ -72,7 +80,7 @@ class Payloads:
         """
         payloads: list[Payload] = []
         for payload in written:
-            if not isinstance(payload, Added | Fixed | Rerolled):
+            if not isinstance(payload, Added | Fixed | Rerolled | Multiplied):
                 raise TypeError(f"{payload!r} is no payload a step folds")
             payloads.append(payload)
         return cls(tuple(payloads))
@@ -113,6 +121,14 @@ class Payloads:
             Each re-roll's dice, once.
         """
         return frozenset(each.on for each in self.payloads if isinstance(each, Rerolled))
+
+    def multiplied(self) -> tuple[int | DiceQuantity, ...]:
+        """Read what the unsaved wounds are multiplied by.
+
+        Returns:
+            Every multiplier, in the order written.
+        """
+        return tuple(each.by for each in self.payloads if isinstance(each, Multiplied))
 
     def _adds(self, key: Changeable) -> tuple[Added, ...]:
         return tuple(each for each in self.payloads if isinstance(each, Added) and each.key == key)
@@ -298,7 +314,7 @@ class Operated:
         """The payload the operation leaves with ``sources`` in force.
 
         Returns:
-            An added amount, a value set, a re-roll, or the cancel itself.
+            An added amount, a value set, a re-roll, a multiplier, or the cancel itself.
 
         Raises:
             ValueError: the operation is not one a step folds.
@@ -315,6 +331,8 @@ class Operated:
                 return Fixed(self.key, self.amount(effect.set_[self.key], sources))
             case Operation.REROLL if effect.reroll is not None:
                 return Rerolled(effect.reroll)
+            case Operation.MULTIPLY if effect.multiply is not None:
+                return Multiplied(self.multiplier(effect.multiply, sources))
             case Operation.CANCELS if effect.cancels is not None:
                 return effect.cancels
         raise ValueError(f"{self.rule} {effect.operation}s nothing a step folds")
@@ -332,6 +350,22 @@ class Operated:
             written = self.parameter.combined([each.x for each in sources if each.x is not None])
         if not isinstance(written, int):
             raise TypeError(f"{self.rule} adds {written!r}, which is no number")
+        return written
+
+    def multiplier(self, written: object, sources: tuple[Granted, ...]) -> int | DiceQuantity:
+        """A multiplier as written, with X combined over ``sources``.
+
+        Returns:
+            The number, or the dice rolled for each wound.
+
+        Raises:
+            TypeError: the multiplier is no number and no dice roll once X is read.
+        """
+        if written == "X" and self.parameter is not None:
+            xs = [each.x for each in sources if each.x is not None]
+            written = self.parameter.value(self.parameter.combined(xs))
+        if not isinstance(written, int | DiceQuantity):
+            raise TypeError(f"{self.rule} multiplies by {written!r}, which is no number or roll")
         return written
 
     def cancels(self, other: Change) -> bool:
@@ -357,6 +391,8 @@ class Operated:
                 return {"text": f"{key} {value}"}
             case Rerolled(on):
                 return {"text": f"re-roll {on}"}
+            case Multiplied(by):
+                return {"text": f"multiply by {by}"}
         cancels = self.effect.cancels
         named = () if cancels is None else (cancels.rule, cancels.op, cancels.quantity)
         return {"text": " ".join(["cancels", *(str(each) for each in named if each is not None)])}

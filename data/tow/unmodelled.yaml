@@ -394,9 +394,6 @@
 - kind: held-effect
   subject: martial-prowess/combat/roll-to-hit
   reason: Raises Weapon Skill To Hit in combat, for both sides' attacks; the round holds it.
-- kind: held-effect
-  subject: multiple-wounds/combat/remove-casualties
-  reason: Multiplies unsaved wounds in combat; the round holds it.
 
 # missing-mechanic: a printed clause needs a mechanic the engine lacks.
 
@@ -444,9 +441,6 @@
 - kind: missing-mechanic
   subject: terrain
   reason: Terrain is not modelled, so Volley Fire's hill variant, where the front two ranks shoot, never arises.
-- kind: missing-mechanic
-  subject: unrolled-dice
-  reason: No printed step rolls the dice X of Multiple Wounds for each unsaved wound (DESIGN-GRAPH Open 7).
 - kind: missing-mechanic
   subject: weapon-runes
   reason: Weapon runes are not modelled, so Gromril Weapons never meets a hand weapon inscribed with runes.

@@ -4,10 +4,11 @@ from dataclasses import replace
 
 import pytest
 
+from avelorn.core.distribution import Distribution
 from avelorn.core.graph import Carrier, Source
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.fielding import Fielding, Part
-from avelorn.tow.kernels import Standing, Standings, back_rank
+from avelorn.tow.kernels import Standing, Standings, back_rank, back_rank_multiplied
 from avelorn.tow.schema.reference import RuleRef
 
 REPO = TOWRepository()
@@ -39,6 +40,26 @@ def test_casualties_come_off_the_rank_and_file_before_the_champion(
     left = back_rank(side.standing(4), wounds, side.removal)
 
     assert left == Standings((("maneater", maneaters), ("maneater-captain", captain)))
+
+
+@pytest.mark.parametrize(
+    ("wounds", "maneaters", "captain"),
+    [
+        pytest.param(5, Standing(1, 2), Standing(1, 0), id="two-maneaters-fall-the-excess-lost"),
+        pytest.param(7, Standing(0, 0), Standing(1, 2), id="the-captain-is-hurt-last"),
+    ],
+)
+def test_a_multiplied_wound_never_spills_onto_the_next_model(
+    wounds: int, maneaters: Standing, captain: Standing
+) -> None:
+    """Each wound worth two Wounds fells a three-Wound Maneater in two, the Captain last."""
+    side = _maneaters()
+
+    left = back_rank_multiplied(side.standing(4), wounds, Distribution.pure(2), side.removal)
+
+    assert left == Distribution.pure(
+        Standings((("maneater", maneaters), ("maneater-captain", captain)))
+    )
 
 
 def test_a_side_whose_parts_carry_different_rules_is_refused() -> None:

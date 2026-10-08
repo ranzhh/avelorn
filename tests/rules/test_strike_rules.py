@@ -27,7 +27,6 @@ SPEAR_INTO_SPEARMEN = Attack(COMBAT, 4, 3, 3, foe_weapon_skill=4, armour_value=5
 ARCHERS = Side("elven-archers", 5, frontage=5)
 ARROWS_INTO_PHOENIX_GUARD = Attack(SHOOTING, 4, 3, 3, armour_value=4, armour_bane=1, ward=6)
 PARRY = "Parry needs the weapon choice at Step 1.1"
-MULTIPLIED = "Multiple Wounds needs the wounds multiplied at Remove Casualties"
 
 
 def _unsaved(attack: Attack) -> Fraction:
@@ -367,7 +366,6 @@ D3 = {wounds: Fraction(1, 3) for wounds in (1, 2, 3)}
             2,
             {2: Fraction(1)},
             id="maw-of-two-no-spill-over",
-            marks=pytest.mark.xfail(strict=True, reason=MULTIPLIED),
         ),
         pytest.param(
             LONE_SWORD.adding("multiple-wounds", Role.ATTACKER, Carrier.WEAPON, x=3),
@@ -376,7 +374,6 @@ D3 = {wounds: Fraction(1, 3) for wounds in (1, 2, 3)}
             1,
             {3: Fraction(1)},
             id="sword-of-three",
-            marks=pytest.mark.xfail(strict=True, reason=MULTIPLIED),
         ),
         pytest.param(
             LONE_BOW.adding("multiple-wounds", Role.ATTACKER, Carrier.WEAPON, x="D3"),
@@ -385,11 +382,6 @@ D3 = {wounds: Fraction(1, 3) for wounds in (1, 2, 3)}
             1,
             D3,
             id="bow-of-d3",
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason="the volley holds Multiple Wounds: no printed step rolls its D3 for "
-                "each unsaved wound (unrolled-dice in data/tow/unmodelled.yaml)",
-            ),
         ),
     ],
 )
