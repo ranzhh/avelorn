@@ -261,6 +261,8 @@ def _round(attacker: Contingent, defender: Contingent, scenario: Scenario) -> Ev
                 "target/standing": fielded[stage.Side.TARGET].standing(defender.models),
                 "attacker/rounds-fought": rounds_fought,
                 "target/rounds-fought": rounds_fought,
+                "attacker/charges-made": int(scenario.attacker.charged is not None),
+                "target/charges-made": int(scenario.defender.charged is not None),
             }
         )
     )

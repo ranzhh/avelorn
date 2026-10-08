@@ -27,6 +27,7 @@ def _fought(
     target: Fielding,
     attacker_standing: int = 1,
     program: Loaded = ROUND_PROGRAM,
+    attacker_charges: int = 0,
 ) -> Evaluated:
     built = program.built({Side.ATTACKER: attacker, Side.TARGET: target})
     (evaluated,) = built.evaluate(
@@ -35,6 +36,8 @@ def _fought(
             "target/standing": target.standing(sum(part.count for part in target.parts)),
             "attacker/rounds-fought": 1,
             "target/rounds-fought": 1,
+            "attacker/charges-made": attacker_charges,
+            "target/charges-made": 0,
         }
     )
     return evaluated
@@ -76,15 +79,15 @@ def test_the_higher_initiative_strikes_first() -> None:
 
 
 def test_a_fighting_rank_model_that_falls_takes_its_attacks() -> None:
-    """Fifteen Spearmen five wide that lost three this round throw 2 attacks, not 5.
+    """Fifteen Spearmen five wide that charged and lost three this round throw 2 attacks, not 5.
 
-    Who Can Fight prints the fighting rank alone, and a casualty suffered in the
-    round comes off it before the rear rank (FAQ v1.5.3).
+    On the turn they charged, Who Can Fight names the front rank alone, and a
+    casualty suffered in the round comes off it before the rear rank (FAQ v1.5.3).
     """
     spearmen = _fielded("elven-spearmen", "Thrusting Spear", 15, frontage=5)
     dwarf = _fielded("dwarf-warriors", "Hand Weapon", 1)
 
-    fought = _fought(spearmen, dwarf, attacker_standing=12)
+    fought = _fought(spearmen, dwarf, attacker_standing=12, attacker_charges=1)
 
     attacks = fought.at("round/initiative-4/attacker/how-many-attacks").read("attacks")
     assert attacks.mass == {2: 1}
