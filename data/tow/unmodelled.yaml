@@ -388,10 +388,6 @@
 
 # held-effect: a corpus side carries the effect to a step that cannot run it yet.
 
-- kind: held-effect
-  subject: martial-prowess/combat/roll-to-hit
-  reason: Raises Weapon Skill To Hit in combat, for both sides' attacks; the round holds it.
-
 # missing-mechanic: a printed clause needs a mechanic the engine lacks.
 
 - kind: missing-mechanic

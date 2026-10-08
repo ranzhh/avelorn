@@ -742,8 +742,8 @@ def how_many_attacks(
 
 def _melee_hit_target(attacker: Part, target: Part, payloads: Payloads) -> int:
     return melee_hit_target(
-        _printed(attacker, Characteristic.WEAPON_SKILL),
-        _printed(target, Characteristic.WEAPON_SKILL),
+        _moved(attacker, Characteristic.WEAPON_SKILL, payloads, Side.ATTACKER),
+        _moved(target, Characteristic.WEAPON_SKILL, payloads, Side.TARGET),
         payloads.added(Quantity.TO_HIT),
     )
 
@@ -753,7 +753,8 @@ def roll_to_hit_in_combat(
 ) -> Distribution[Die]:
     """Roll one attack To Hit, Weapon Skill against the target's on the chart.
 
-    The roll moves by the rules in force and is re-rolled as they allow.
+    Each Weapon Skill moves by the amounts added to that model's, and the roll
+    moves by the rules in force and is re-rolled as they allow.
 
     Returns:
         The die as it lands; a natural 6 always hits.
@@ -1043,7 +1044,16 @@ _SPECS = (
         side=Side.ATTACKER,
         reads=(_ATTACKER, _TARGET, CHANGED),
         kernel=roll_to_hit_in_combat,
-        runs={Operation.ADD: frozenset({Quantity.TO_HIT}), Operation.REROLL: _ALL_REROLLS},
+        runs={
+            Operation.ADD: frozenset(
+                {
+                    Quantity.TO_HIT,
+                    (Side.ATTACKER, Characteristic.WEAPON_SKILL),
+                    (Side.TARGET, Characteristic.WEAPON_SKILL),
+                }
+            ),
+            Operation.REROLL: _ALL_REROLLS,
+        },
         target=Offered(
             (_ATTACKER, _TARGET, CHANGED),
             lambda attacker, target, changed: _shown(

@@ -5,11 +5,16 @@ entry in ``data/tow/unmodelled.yaml`` saying why it stays open, and an entry no
 gap needs any more is stale. `avelorn coverage` prints the same report.
 """
 
+import copy
+
 import yaml
 
+from avelorn.core.registry import Registry
 from avelorn.tow.coverage import Entry, Site, coverage
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.schema.ledger import GapKind
+from avelorn.tow.schema.rule import Clause, RuleGraph
+from avelorn.tow.schema.unit import Characteristic
 
 REPO = TOWRepository()
 REPORT = coverage(REPO)
@@ -71,8 +76,20 @@ def test_a_volley_effect_waits_for_a_side_that_carries_it_there() -> None:
 
 
 def test_an_effect_its_step_cannot_run_is_held() -> None:
-    """Martial Prowess reaches Roll To Hit in combat, which folds no Weapon Skill yet."""
-    held = {gap.subject for gap in REPORT.gaps if gap.kind is GapKind.HELD_EFFECT}
+    """Martial Prowess rewritten to set Weapon Skill is held at Roll To Hit in combat.
+
+    That step runs no set, and the Elven Spearmen alone carry the rule there.
+    """
+    printed = REPO.rules["martial-prowess"]
+    assert printed.graph is not None
+    striking = printed.graph.effects[0]
+    fixed = striking.model_copy(update={"add": None, "set_": {Characteristic.WEAPON_SKILL: 5}})
+    rewritten = printed.with_graph(RuleGraph(clauses=(Clause(effect=fixed),)))
+    data = copy.copy(REPO)
+    data.rules = Registry({**REPO.rules, rewritten.id: rewritten}.values(), kind="rule")
+    data.units = Registry([REPO.units["elven-spearmen"]], kind="unit")
+    report = coverage(data)
+    held = {gap.subject for gap in report.gaps if gap.kind is GapKind.HELD_EFFECT}
     assert "martial-prowess/combat/roll-to-hit" in held
 
 

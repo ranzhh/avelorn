@@ -2,6 +2,8 @@
 
 from fractions import Fraction
 
+import pytest
+
 from avelorn.core.distribution import Distribution, Probability
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
@@ -11,10 +13,14 @@ from avelorn.tow.schema.effect import Role
 from avelorn.tow.schema.rule import Clause, RuleGraph
 from avelorn.tow.schema.stage import Side
 from avelorn.tow.schema.unit import Characteristic
+from avelorn.tow.steps import NO_ROLL
 from avelorn.tow.traits import Operand
 
 REPO = TOWRepository()
 ROUND_PROGRAM = load_program(ROUND, REPO.rules)
+WITHOUT_MARTIAL_PROWESS = load_program(
+    ROUND, {**REPO.rules, "martial-prowess": REPO.rules["martial-prowess"].with_graph(None)}
+)
 
 
 def _fielded(unit: str, weapon: str, models: int, frontage: int | None = None) -> Fielding:
@@ -28,14 +34,15 @@ def _fought(
     attacker_standing: int = 1,
     program: Loaded = ROUND_PROGRAM,
     attacker_charges: int = 0,
+    rounds_fought: int = 1,
 ) -> Evaluated:
     built = program.built({Side.ATTACKER: attacker, Side.TARGET: target})
     (evaluated,) = built.evaluate(
         {
             "attacker/standing": attacker.standing(attacker_standing),
             "target/standing": target.standing(sum(part.count for part in target.parts)),
-            "attacker/rounds-fought": 1,
-            "target/rounds-fought": 1,
+            "attacker/rounds-fought": rounds_fought,
+            "target/rounds-fought": rounds_fought,
             "attacker/charges-made": attacker_charges,
             "target/charges-made": 0,
         }
@@ -45,6 +52,11 @@ def _fought(
 
 def _falls(fought: Evaluated, side: Side) -> Probability:
     return fought.at(f"round/initiative-1/{side}/remove-casualties").read("models").mass[0]
+
+
+def _needed(fought: Evaluated, path: str) -> set[str]:
+    shown = fought.at(path).read("needed").mass
+    return {str(each) for each in shown} - {NO_ROLL}
 
 
 def test_equal_initiative_strikes_at_once() -> None:
@@ -112,6 +124,62 @@ def test_an_entry_acting_for_the_target_swaps_the_sides() -> None:
     assert [program.paths[landing.at] for landing in reflexes.landings] == [
         "round/target/who-strikes-first"
     ]
+
+
+@pytest.mark.parametrize(
+    ("foe", "program", "rounds_fought", "striking", "needed"),
+    [
+        pytest.param("longbeards", ROUND_PROGRAM, 0, 5, ({"4+"}, {"4+"}), id="ws5-first-round"),
+        pytest.param("longbeards", ROUND_PROGRAM, 1, 4, ({"4+"}, {"3+"}), id="ws5-later-round"),
+        pytest.param(
+            "longbeards",
+            WITHOUT_MARTIAL_PROWESS,
+            0,
+            5,
+            ({"4+"}, {"3+"}),
+            id="ws5-without-the-rule",
+        ),
+        pytest.param(
+            "dwarf-warriors", ROUND_PROGRAM, 0, 5, ({"3+"}, {"4+"}), id="ws4-first-round"
+        ),
+        pytest.param(
+            "dwarf-warriors",
+            WITHOUT_MARTIAL_PROWESS,
+            0,
+            5,
+            ({"4+"}, {"4+"}),
+            id="ws4-without-the-rule",
+        ),
+    ],
+)
+def test_martial_prowess_moves_weapon_skill_striking_and_struck(
+    foe: str,
+    program: Loaded,
+    rounds_fought: int,
+    striking: int,
+    needed: tuple[set[str], set[str]],
+) -> None:
+    """Elven Spearmen count as WS5 in the first round, striking and struck, ten a side in a rank.
+
+    On the chart WS5 against WS5 Longbeards hits on 4+ both ways. At WS4, in a
+    later round or without the rule, the Spearmen still hit WS5 on 4+, and the
+    Longbeards' WS5 hits WS4 on 3+. Against WS4 Dwarf Warriors the Spearmen hit
+    on 3+ at WS5 and on 4+ at WS4, and are hit on 4+ either way. The Spearmen
+    strike at Initiative 5 in the first round and at 4 after it; a foe felled
+    before its blow at 2 rolls nothing.
+    """
+    spearmen = _fielded("elven-spearmen", "Hand Weapon", 10, frontage=10)
+    dwarfs = _fielded(foe, "Hand Weapon", 10, frontage=10)
+    (dwarf,) = dwarfs.parts
+
+    fought = _fought(
+        spearmen, dwarfs, attacker_standing=10, program=program, rounds_fought=rounds_fought
+    )
+
+    assert (
+        _needed(fought, f"round/initiative-{striking}/attacker/attack/elven-spearman/roll-to-hit"),
+        _needed(fought, f"round/initiative-2/target/attack/{dwarf.id}/roll-to-hit"),
+    ) == needed
 
 
 def test_a_list_of_sides_builds_the_entry_once_for_each_in_order() -> None:
