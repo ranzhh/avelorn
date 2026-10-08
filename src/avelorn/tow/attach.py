@@ -305,13 +305,17 @@ class _Fielding:
             case Operation.REROLL:
                 if effect.reroll not in runs.get(operation, frozenset()):
                     return None
+            case Operation.MULTIPLY:
+                if operation not in runs:
+                    return None
             case Operation.CANCELS:
                 pass
             case _:
                 return None
         if any(isinstance(amount, FactRef) for amount in effect.amounts):
             return None
-        if effect.reads_x and not isinstance(self.x(rule, side), int):
+        multiplies = operation is Operation.MULTIPLY
+        if effect.reads_x and not multiplies and not isinstance(self.x(rule, side), int):
             return None
         gate = self.gate(rule, side, at, effect)
         if gate is None:

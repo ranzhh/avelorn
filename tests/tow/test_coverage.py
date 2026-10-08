@@ -74,23 +74,23 @@ def test_a_volley_effect_waits_for_a_side_that_carries_it_there() -> None:
     assert "armour-bane/shooting/make-armour-saves" not in UNREACHED
 
 
-def test_a_volley_effect_its_step_cannot_run_is_held() -> None:
-    """Multiple Wounds on a longbow reaches Remove Casualties, which multiplies no wound yet."""
+def test_an_effect_its_step_cannot_run_is_held() -> None:
+    """Killing Blow on a hand weapon reaches Make Armour Saves, which denies no save yet."""
     doctored = copy.copy(REPO)
-    wounding = RuleRef(rule="multiple-wounds", X=2)
+    slaying = RuleRef(rule="killing-blow")
     doctored.weapons = Registry(
         [
             weapon.model_copy(
                 update={
                     "profiles": [
                         profile.model_copy(
-                            update={"special_rules": [*profile.special_rules, wounding]}
+                            update={"special_rules": [*profile.special_rules, slaying]}
                         )
                         for profile in weapon.profiles
                     ]
                 }
             )
-            if weapon.id == "longbow"
+            if weapon.id == "hand-weapon"
             else weapon
             for weapon in REPO.weapons.values()
         ],
@@ -103,7 +103,7 @@ def test_a_volley_effect_its_step_cannot_run_is_held() -> None:
         if gap.kind is GapKind.HELD_EFFECT and gap.reason is None
     ]
 
-    assert held == ["multiple-wounds/shooting/remove-casualties"]
+    assert held == ["killing-blow/combat/make-armour-saves"]
 
 
 def test_a_rule_granted_only_by_the_graph_is_referenced_there() -> None:
