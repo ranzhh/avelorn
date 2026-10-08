@@ -1,4 +1,4 @@
-"""A round of close combat on the graph, with no rule applied."""
+"""A round of close combat on the graph."""
 
 from fractions import Fraction
 
@@ -33,6 +33,8 @@ def _fought(
         {
             "attacker/standing": attacker.standing(attacker_standing),
             "target/standing": target.standing(sum(part.count for part in target.parts)),
+            "attacker/rounds-fought": 1,
+            "target/rounds-fought": 1,
         }
     )
     return evaluated
@@ -169,7 +171,8 @@ def test_a_strength_change_of_the_model_struck_is_held_at_the_blow() -> None:
     """Enfeebling Cold rewritten to lower the Merwyrm's own Strength leaves the Lions' blow alone.
 
     The White Lions' roll To Wound folds the Strength of the Lions striking: their
-    great blade's 6 against Toughness 6 wounds on 4+.
+    great blade's 6 against Toughness 6 wounds on 4+. The blade strikes last, and
+    the Merwyrm's four Attacks before it leave one of a rank of five standing.
     """
     printed = REPO.rules["enfeebling-cold"]
     assert printed.graph is not None
@@ -179,10 +182,10 @@ def test_a_strength_change_of_the_model_struck_is_held_at_the_blow() -> None:
         **REPO.rules,
         "enfeebling-cold": printed.with_graph(RuleGraph(clauses=(Clause(effect=own),))),
     }
-    lions = _fielded("white-lions-of-chrace", "Chracian Great Blade", 1)
+    lions = _fielded("white-lions-of-chrace", "Chracian Great Blade", 5, frontage=5)
     merwyrm = _fielded("merwyrm", "Lashing Talons", 1)
 
-    fought = _fought(lions, merwyrm, program=load_program(ROUND, rules))
+    fought = _fought(lions, merwyrm, attacker_standing=5, program=load_program(ROUND, rules))
 
-    wound = fought.at("round/initiative-5/attacker/attack/white-lion/roll-to-wound")
+    wound = fought.at("round/initiative-1/attacker/attack/white-lion/roll-to-wound")
     assert wound.read("needed").mass == {"4+": 1}

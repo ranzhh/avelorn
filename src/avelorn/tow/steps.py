@@ -338,8 +338,15 @@ def _profile(attacker: Part) -> WeaponProfile:
 
 
 def _moved(part: Part, c: Characteristic, payloads: Payloads) -> int:
+    match payloads.fixed(c):
+        case ():
+            start = _printed(part, c)
+        case (fixed,):
+            start = fixed
+        case fixed:
+            raise ValueError(f"{part.id}'s {c} is set {len(fixed)} times")
     maxima, minima = payloads.bounds(c)
-    return min((max((_printed(part, c) + payloads.added(c), *minima)), *maxima))
+    return min((max((start + payloads.added(c), *minima)), *maxima))
 
 
 def _strength(attacker: Part, payloads: Payloads) -> int:
@@ -649,14 +656,22 @@ def who_can_fight() -> Distribution[frozenset[str]]:
     return Distribution.pure(frozenset({FIGHTING_RANK}))
 
 
-def who_strikes_first(attacker: Fielding) -> Distribution[Initiatives]:
-    """Read the Initiative each part strikes at, as printed.
+def who_strikes_first(
+    attacker: Fielding, changed: tuple[Hashable, ...]
+) -> Distribution[Initiatives]:
+    """Read the Initiative each part strikes at, moved by the rules in force.
+
+    A value set replaces the printed one before any amount is added, and the
+    sum stays within the bounds printed.
 
     Returns:
         Each part's Initiative.
     """
-    printed = ((part.id, _printed(part, Characteristic.INITIATIVE)) for part in attacker.parts)
-    return Distribution.pure(Initiatives(tuple(printed)))
+    payloads = Payloads.of(changed)
+    moved = (
+        (part.id, _moved(part, Characteristic.INITIATIVE, payloads)) for part in attacker.parts
+    )
+    return Distribution.pure(Initiatives(tuple(moved)))
 
 
 def how_many_attacks(
@@ -957,8 +972,12 @@ _SPECS = (
         name="who-strikes-first",
         kind=Kind.MEASUREMENT,
         side=Side.ATTACKER,
-        reads=(_ATTACKER,),
+        reads=(_ATTACKER, CHANGED),
         kernel=who_strikes_first,
+        runs={
+            Operation.SET: frozenset({Characteristic.INITIATIVE}),
+            Operation.ADD: frozenset({Characteristic.INITIATIVE}),
+        },
         readings={"initiatives": _offer("who-strikes-first", str)},
     ),
     Spec(

@@ -47,10 +47,15 @@ class Kind(StrEnum):
 
 ROUNDS = frozenset({Kind.FIGHT, Kind.BREAK})
 
+IN_A_ROUND = ROUNDS | {Kind.STRIKE}
+
 
 class Role(StrEnum):
     ATTACKER = "attacker"
     DEFENDER = "defender"
+
+
+_SIDES = {Role.ATTACKER: stage.Side.ATTACKER, Role.DEFENDER: stage.Side.TARGET}
 
 
 class Carrier(StrEnum):
@@ -84,7 +89,11 @@ class Side:
 
 @dataclass(frozen=True)
 class Scenario:
-    """Two sides and what the attacker does; in a Stand & Shoot the defender fires."""
+    """Two sides and what the attacker does; in a Stand & Shoot the defender fires.
+
+    A fight or a break test names whether its round is the combat's first. A
+    strike may, and with ``first_round`` unset its round is not the first.
+    """
 
     kind: Kind
     attacker: Side
@@ -153,7 +162,6 @@ class Outcome:
     casualties: Mapping[int, Probability] = field(default_factory=dict)
     attacker_casualties: Mapping[int, Probability] = field(default_factory=dict)
     initiative: Mapping[Role, int] = field(default_factory=dict)
-    first: Role | None = None
     margin: Mapping[int, Probability] = field(default_factory=dict)
     breaks: Mapping[Role, Break] = field(default_factory=dict)
     panic: Panic | None = None
@@ -168,12 +176,14 @@ def resolve(scenario: Scenario) -> Outcome:
         The outcome its kind decides.
 
     Raises:
-        ValueError: a round with no ``first_round``, another kind with one, a Stand &
-            Shoot whose attacker did not charge, or a dropped chapter rule that is
-            not one.
+        ValueError: a fight or break with no ``first_round``, a kind fought in no round
+            with one, a Stand & Shoot whose attacker did not charge, or a dropped
+            chapter rule that is not one.
     """
-    if (scenario.kind in ROUNDS) != (scenario.first_round is not None):
-        raise ValueError(f"first_round is an input of a fight or break, not of {scenario.kind}")
+    if scenario.kind in ROUNDS and scenario.first_round is None:
+        raise ValueError(f"a {scenario.kind} needs first_round")
+    if scenario.kind not in IN_A_ROUND and scenario.first_round is not None:
+        raise ValueError(f"first_round is an input of a round, not of {scenario.kind}")
     unknown = scenario.dropped - {
         rule.id for phase in CHAPTERS for rule in _chapter(phase).values()
     }
@@ -194,7 +204,7 @@ def resolve(scenario: Scenario) -> Outcome:
             fought = fight(
                 attacker, defender, first_round=scenario.first_round, phase_rules=combat
             )
-            outcome = _fought(fought, attacker)
+            outcome = _fought(fought)
             if scenario.kind is Kind.FIGHT:
                 return outcome
             broken = break_test(combat_result(fought), attacker, defender)
@@ -210,7 +220,7 @@ def resolve(scenario: Scenario) -> Outcome:
             reaction = engagement.react(StandAndShoot())
             assert reaction is not None
             fought = CombatPhase(in_play=combat).fight(engagement)
-            return replace(_fought(fought, engagement.a), attacks=reaction.shots)
+            return replace(_fought(fought), attacks=reaction.shots)
 
 
 def _volley(attacker: Contingent, defender: Contingent, scenario: Scenario) -> Evaluated:
@@ -241,6 +251,7 @@ def _round(attacker: Contingent, defender: Contingent, scenario: Scenario) -> Ev
         stage.Side.ATTACKER: Fielding.of(attacker, attacker.in_hand().name, combat=True),
         stage.Side.TARGET: Fielding.of(defender, defender.in_hand().name, combat=True),
     }
+    rounds_fought = 0 if scenario.first_round else 1
     return _taken(
         load_program(ROUND, _rules(scenario))
         .built(fielded)
@@ -248,6 +259,8 @@ def _round(attacker: Contingent, defender: Contingent, scenario: Scenario) -> Ev
             {
                 "attacker/standing": fielded[stage.Side.ATTACKER].standing(attacker.models),
                 "target/standing": fielded[stage.Side.TARGET].standing(defender.models),
+                "attacker/rounds-fought": rounds_fought,
+                "target/rounds-fought": rounds_fought,
             }
         )
     )
@@ -283,10 +296,12 @@ def _struck(fought: Evaluated, models: int) -> Outcome:
     The chance an attack goes unsaved is the unsaved wounds expected over the
     attacks expected. The attacks are reported when they are certain, and are
     None when the defender's blows back may fell attackers before they strike.
-    The casualties are the target's in the round.
+    The casualties are the target's in the round. Each side's Initiative is the
+    first slot its attacks land in.
 
     Returns:
-        The attacker's attacks, its unsaved chance per attack, and the target's casualties.
+        The attacker's attacks, its unsaved chance per attack, the target's
+        casualties and each side's Initiative.
     """
     attacks = [
         fought.at(f"round/initiative-{slot}/attacker/how-many-attacks").read("attacks")
@@ -305,6 +320,17 @@ def _struck(fought: Evaluated, models: int) -> Outcome:
         attacks=_certain(attacks),
         unsaved=unsaved / sum(made.expect(lambda n: n) for made in attacks),
         casualties={count: p for count, p in lost.mass.items() if p},
+        initiative={role: _initiative(fought, side) for role, side in _SIDES.items()},
+    )
+
+
+def _initiative(fought: Evaluated, side: stage.Side) -> int:
+    return max(
+        slot
+        for slot in INITIATIVES
+        if fought.at(f"round/initiative-{slot}/{side}/how-many-attacks")
+        .read("attacks")
+        .prob(lambda attacks: attacks > 0)
     )
 
 
@@ -327,18 +353,10 @@ def _panicked(volley: Evaluated) -> Panic:
     )
 
 
-def _fought(fought: FightResult, attacker: Contingent) -> Outcome:
-    first = None
-    if fought.first_striker is not None:
-        first = Role.ATTACKER if fought.first_striker is attacker else Role.DEFENDER
+def _fought(fought: FightResult) -> Outcome:
     return Outcome(
         casualties=_pmf(fought.b_casualties),
         attacker_casualties=_pmf(fought.a_casualties),
-        initiative={
-            Role.ATTACKER: fought.a_initiative.value,
-            Role.DEFENDER: fought.b_initiative.value,
-        },
-        first=first,
         margin={lead: p for lead, p in combat_result(fought).margin.items() if p},
     )
 
