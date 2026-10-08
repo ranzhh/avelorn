@@ -62,6 +62,20 @@ class Part:
                 holdings.append(Held({weapon.id, SHIELD}))
         return tuple(holdings)
 
+    def weapon_with(self, held: Held) -> WeaponProfile:
+        """The combat profile of the weapon in ``held``.
+
+        Returns:
+            The profile.
+
+        Raises:
+            ValueError: ``held`` holds no weapon the models carry, or more than one.
+        """
+        match [each.combat_profile for each in self.weapons if each.id in held]:
+            case [WeaponProfile() as profile]:
+                return profile
+        raise ValueError(f"{self.id} holds {held}, not one weapon it carries")
+
     def armour_with(self, held: Held) -> int | None:
         """The armour value folded from the pieces in use with ``held``: a shield only when held.
 

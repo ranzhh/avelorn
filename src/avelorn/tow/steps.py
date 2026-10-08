@@ -4,7 +4,6 @@ from collections.abc import Callable, Hashable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from fractions import Fraction
-from functools import partial
 from itertools import takewhile
 from types import MappingProxyType
 from typing import Any, ClassVar
@@ -142,9 +141,14 @@ STRIKING = Striking()
 
 @dataclass(frozen=True)
 class Output:
-    """A read of an earlier step's output, by step name."""
+    """A read of an earlier step's output, by step name.
+
+    ``of`` names whose step it is, as the spec names the sides; by default the
+    side the spec acts for.
+    """
 
     step: str
+    of: Side | None = None
 
 
 @dataclass(frozen=True)
@@ -377,15 +381,15 @@ def _moved(part: Part, c: Characteristic, payloads: Payloads, of: Side) -> int:
     return min((max((start + payloads.added(c, of), *minima)), *maxima))
 
 
-def _strength(attacker: Part, payloads: Payloads) -> int:
-    strength = _profile(attacker).strength
+def _strength(weapon: WeaponProfile, attacker: Part, payloads: Payloads) -> int:
+    strength = weapon.strength
     if strength.base is not None:
         return strength.base
     return strength.resolve(_moved(attacker, Characteristic.STRENGTH, payloads, Side.ATTACKER))
 
 
 def _printed_strength(attacker: Part) -> int:
-    return _strength(attacker, _PRINTED)
+    return _strength(_profile(attacker), attacker, _PRINTED)
 
 
 def _covers(on: RerollOn, die: Die) -> bool:
@@ -542,59 +546,77 @@ def roll_to_hit(attacker: Part, changed: tuple[Hashable, ...]) -> Distribution[D
     return shooting_hit(_printed(attacker, Characteristic.BALLISTIC_SKILL), modifier)
 
 
-def _wound_target(attacker: Part, target: Part, payloads: Payloads) -> int | None:
-    strength = _strength(attacker, payloads)
+def _wound_target(
+    weapon: WeaponProfile, attacker: Part, target: Part, payloads: Payloads
+) -> int | None:
+    strength = _strength(weapon, attacker, payloads)
     return wound_target(strength, _printed(target, Characteristic.TOUGHNESS))
 
 
-def roll_to_wound(
-    attacker: Part, target: Part, hit: Die, changed: tuple[Hashable, ...]
+def _wounded(
+    weapon: WeaponProfile, attacker: Part, target: Part, hit: Die, changed: tuple[Hashable, ...]
 ) -> Distribution[Die | None]:
-    """Roll a hit To Wound, Strength in force against Toughness, re-rolled as the rules allow.
-
-    The attacker's Strength moves by each amount added to it, within the
-    bounds printed, before its weapon's Strength reads it.
-
-    Returns:
-        The die as it lands, or None when no die is rolled.
-    """
     payloads = Payloads.of(changed)
-    needed = _wound_target(attacker, target, payloads)
+    needed = _wound_target(weapon, attacker, target, payloads)
     if not hit.success or needed is None:
         return Distribution.pure(None)
     return _thrown(needed, payloads.rerolls())
 
 
-def _piercing(attacker: Part, payloads: Payloads) -> int:
+def roll_to_wound(attacker: Part, target: Part, hit: Die) -> Distribution[Die | None]:
+    """Roll a hit To Wound, the shot weapon's Strength against Toughness.
+
+    Returns:
+        The die as it lands, or None when no die is rolled.
+    """
+    return _wounded(_profile(attacker), attacker, target, hit, ())
+
+
+def roll_to_wound_in_combat(
+    attacker: Part, target: Part, hit: Die, held: Held, changed: tuple[Hashable, ...]
+) -> Distribution[Die | None]:
+    """Roll a blow To Wound, the Strength of the weapon in ``held`` against Toughness.
+
+    The attacker's Strength moves by each amount added to it, within the
+    bounds printed, before its weapon's Strength reads it, and the roll is
+    re-rolled as the rules allow.
+
+    Returns:
+        The die as it lands, or None when no die is rolled.
+    """
+    return _wounded(attacker.weapon_with(held), attacker, target, hit, changed)
+
+
+def _piercing(weapon: WeaponProfile, payloads: Payloads) -> int:
     match payloads.fixed(Quantity.ARMOUR_PIERCING):
         case ():
-            printed = _profile(attacker).armour_piercing
+            printed = weapon.armour_piercing
         case (fixed,):
             printed = -fixed
         case fixed:
-            raise ValueError(f"{attacker.id}'s Armour Piercing is set {len(fixed)} times")
+            raise ValueError(f"Armour Piercing is set {len(fixed)} times")
     return printed - payloads.added(Quantity.ARMOUR_PIERCING)
 
 
-def _save_target(worn: int | None, attacker: Part, payloads: Payloads) -> int | None:
+def _save_target(worn: int | None, weapon: WeaponProfile, payloads: Payloads) -> int | None:
     if payloads.denied():
         return None
-    piercing = _piercing(attacker, payloads)
+    piercing = _piercing(weapon, payloads)
     armour = UNARMOURED if worn is None else worn
     maxima, _ = payloads.bounds(Quantity.ARMOUR_VALUE)
     improved = max((armour - payloads.added(Quantity.ARMOUR_VALUE), *maxima))
     return armour_save_target(improved, piercing)
 
 
-def _save_needed(worn: int | None, attacker: Part, changed: tuple[Hashable, ...]) -> str:
-    return _shown(_save_target(worn, attacker, Payloads.of(changed)))
+def _save_needed(worn: int | None, weapon: WeaponProfile, changed: tuple[Hashable, ...]) -> str:
+    return _shown(_save_target(worn, weapon, Payloads.of(changed)))
 
 
 def _saved(
-    worn: int | None, attacker: Part, wound: Die | None, changed: tuple[Hashable, ...]
+    worn: int | None, weapon: WeaponProfile, wound: Die | None, changed: tuple[Hashable, ...]
 ) -> Distribution[Die | None]:
     payloads = Payloads.of(changed)
-    needed = _save_target(worn, attacker, payloads)
+    needed = _save_target(worn, weapon, payloads)
     if not _succeeded(wound) or needed is None:
         return Distribution.pure(None)
     return _thrown(needed, payloads.rerolls())
@@ -613,20 +635,27 @@ def make_armour_saves(
     Returns:
         The die as it lands, or None when no die is rolled.
     """
-    return _saved(target.armour, attacker, wound, changed)
+    return _saved(target.armour, _profile(attacker), wound, changed)
 
 
 def make_armour_saves_in_combat(
-    target: Part, attacker: Part, wound: Die | None, held: Held, changed: tuple[Hashable, ...]
+    target: Part,
+    attacker: Part,
+    wound: Die | None,
+    held: Held,
+    striking: Held,
+    changed: tuple[Hashable, ...],
 ) -> Distribution[Die | None]:
     """Roll the armour save against a blow, from the armour the struck side uses with ``held``.
 
-    A shield counts only when held; the rest reads as :func:`make_armour_saves`.
+    A shield counts only when held, and the Armour Piercing is the weapon's
+    the attacker is ``striking`` with; the rest reads as
+    :func:`make_armour_saves`.
 
     Returns:
         The die as it lands, or None when no die is rolled.
     """
-    return _saved(target.armour_with(held), attacker, wound, changed)
+    return _saved(target.armour_with(held), attacker.weapon_with(striking), wound, changed)
 
 
 def ward_saves(
@@ -844,6 +873,7 @@ _PRINTED = Payloads(())
 _TARGET = Holding(Side.TARGET)
 _TARGET_STANDING = Fact("standing", Side.TARGET)
 _HELD = Output("choose-combat-and-determine-who-can-fight")
+_STRIKING = Output("choose-combat-and-determine-who-can-fight", Side.ATTACKER)
 _UNITED = Monoid[Hashable](_UNSHOWN, _united)
 _COUNT = Monoid(0)
 _UNSAVED = (Output("roll-to-wound"), Output("make-armour-saves"), Output("ward-saves"))
@@ -861,7 +891,7 @@ def _counted(step: str) -> Offered:
 
 _WOUND_NEEDED = Offered(
     (_ATTACKER, _TARGET),
-    lambda attacker, target: _shown(_wound_target(attacker, target, _PRINTED)),
+    lambda attacker, target: _shown(_wound_target(_profile(attacker), attacker, target, _PRINTED)),
     _UNITED,
 )
 _ALL_REROLLS = frozenset(RerollOn)
@@ -889,12 +919,14 @@ def _shot_saving() -> Spec:
         runs=_SAVE_RUNS,
         target=Offered(
             (_TARGET, _ATTACKER, CHANGED),
-            lambda target, attacker, changed: _save_needed(target.armour, attacker, changed),
+            lambda target, attacker, changed: _save_needed(
+                target.armour, _profile(attacker), changed
+            ),
             _UNITED,
         ),
         printed=Offered(
             (_TARGET, _ATTACKER),
-            lambda target, attacker: _save_needed(target.armour, attacker, ()),
+            lambda target, attacker: _save_needed(target.armour, _profile(attacker), ()),
             _UNITED,
         ),
         readings={"saves": _counted("make-armour-saves")},
@@ -908,19 +940,21 @@ def _struck_saving() -> Spec:
         kind=Kind.ROLL,
         fighter=True,
         side=Side.TARGET,
-        reads=(_TARGET, _ATTACKER, Output("roll-to-wound"), _HELD, CHANGED),
+        reads=(_TARGET, _ATTACKER, Output("roll-to-wound"), _HELD, _STRIKING, CHANGED),
         kernel=make_armour_saves_in_combat,
         runs=_SAVE_RUNS,
         target=Offered(
-            (_TARGET, _ATTACKER, _HELD, CHANGED),
-            lambda target, attacker, held, changed: _save_needed(
-                target.armour_with(held), attacker, changed
+            (_TARGET, _ATTACKER, _HELD, _STRIKING, CHANGED),
+            lambda target, attacker, held, striking, changed: _save_needed(
+                target.armour_with(held), attacker.weapon_with(striking), changed
             ),
             _UNITED,
         ),
         printed=Offered(
-            (_TARGET, _ATTACKER, _HELD),
-            lambda target, attacker, held: _save_needed(target.armour_with(held), attacker, ()),
+            (_TARGET, _ATTACKER, _HELD, _STRIKING),
+            lambda target, attacker, held, striking: _save_needed(
+                target.armour_with(held), attacker.weapon_with(striking), ()
+            ),
             _UNITED,
         ),
         readings={"saves": _counted("make-armour-saves")},
@@ -1032,7 +1066,7 @@ _SPECS = (
         fighter=True,
         side=Side.ATTACKER,
         reads=(_ATTACKER, _TARGET, Output("roll-to-hit")),
-        kernel=partial(roll_to_wound, changed=()),
+        kernel=roll_to_wound,
         in_force={(Side.ATTACKER, Characteristic.STRENGTH): _printed_strength},
         target=_WOUND_NEEDED,
         readings={"wounds": _counted("roll-to-wound")},
@@ -1160,21 +1194,26 @@ _SPECS = (
         kind=Kind.ROLL,
         fighter=True,
         side=Side.ATTACKER,
-        reads=(_ATTACKER, _TARGET, Output("roll-to-hit"), CHANGED),
-        kernel=roll_to_wound,
-        in_force={(Side.ATTACKER, Characteristic.STRENGTH): _printed_strength},
+        reads=(_ATTACKER, _TARGET, Output("roll-to-hit"), _HELD, CHANGED),
+        kernel=roll_to_wound_in_combat,
         runs={
             Operation.ADD: frozenset({(Side.ATTACKER, Characteristic.STRENGTH)}),
             Operation.REROLL: _ALL_REROLLS,
         },
         target=Offered(
-            (_ATTACKER, _TARGET, CHANGED),
-            lambda attacker, target, changed: _shown(
-                _wound_target(attacker, target, Payloads.of(changed))
+            (_ATTACKER, _TARGET, _HELD, CHANGED),
+            lambda attacker, target, held, changed: _shown(
+                _wound_target(attacker.weapon_with(held), attacker, target, Payloads.of(changed))
             ),
             _UNITED,
         ),
-        printed=_WOUND_NEEDED,
+        printed=Offered(
+            (_ATTACKER, _TARGET, _HELD),
+            lambda attacker, target, held: _shown(
+                _wound_target(attacker.weapon_with(held), attacker, target, _PRINTED)
+            ),
+            _UNITED,
+        ),
         readings={"wounds": _counted("roll-to-wound")},
     ),
     _struck_saving(),

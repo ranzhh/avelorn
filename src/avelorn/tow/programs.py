@@ -616,7 +616,7 @@ class _Builder:
                 return changed
 
     def output(self, read: Output, spec: Spec, here: str, visible: _Scope) -> Key:
-        step = visible.find(read.step, self.role(spec.side))
+        step = visible.find(read.step, self.role(spec.side if read.of is None else read.of))
         if step is None:
             raise self.error(here, f"{spec.name} reads {read.step}, which is not in scope")
         return step.key
