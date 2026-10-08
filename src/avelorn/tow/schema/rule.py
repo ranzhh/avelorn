@@ -104,6 +104,14 @@ class DiceQuantity(BaseModel):
         sides: Literal[3, 6] = 3 if match.group("sides") == "3" else 6
         return cls(sides=sides, plus=int(match.group("plus") or 0))
 
+    def __str__(self) -> str:
+        """The quantity as printed.
+
+        Returns:
+            The text :meth:`parse` reads.
+        """
+        return f"D{self.sides}" + (f"+{self.plus}" if self.plus else "")
+
 
 class AmountParameter(BaseModel):
     """An X that is a number, or a dice roll where ``dice`` allows one.
