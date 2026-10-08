@@ -250,6 +250,12 @@ class _Fielding:
                     return None
                 contributions.append(contribution)
                 continue
+            if isinstance(at, Decision) and effect.operation is Operation.BAR:
+                barred = self.barred(rule, side, at, effect)
+                if barred is None:
+                    return None
+                contributions.append(barred)
+                continue
             operated = self.operated(rule, side, at, effect)
             if operated is None:
                 return None
@@ -275,6 +281,29 @@ class _Fielding:
             operation=operation,
             options=partial(_named, frozenset(named), gate),
             text=f"{operation} {', '.join(sorted(named))}",
+            inputs=gate.reads,
+        )
+
+    def barred(
+        self, rule: Rule, side: Side, at: Decision[Any], effect: Effect
+    ) -> Contribution[Any] | None:
+        carriers = {
+            source.item
+            for _, source in self.scopes[side][rule.id]
+            if source.carrier is Carrier.WEAPON
+        }
+        if effect.bar is None or effect.limit is not None or not carriers:
+            return None
+        gate = self.gate(rule, side, at, effect)
+        if gate is None or any(isinstance(check, Attacks) for check in gate.checks):
+            return None
+        named = frozenset(
+            option for option in at.options if effect.bar in option and carriers & option
+        )
+        return Contribution(
+            operation=GraphOperation.FORBID,
+            options=partial(_named, named, gate),
+            text=f"{GraphOperation.FORBID} {', '.join(sorted(map(str, named)))}",
             inputs=gate.reads,
         )
 
@@ -438,8 +467,8 @@ class _Fielding:
 
 
 def _named(
-    named: frozenset[str], gate: Gate, printed: frozenset[str], *values: Hashable
-) -> frozenset[str]:
+    named: frozenset[Hashable], gate: Gate, printed: frozenset[Hashable], *values: Hashable
+) -> frozenset[Hashable]:
     return named if gate.test(values, frozenset()) else frozenset()
 
 

@@ -62,6 +62,16 @@ class Part:
                 holdings.append(Held({weapon.id, SHIELD}))
         return tuple(holdings)
 
+    def armour_with(self, held: Held) -> int | None:
+        """The armour value folded from the pieces in use with ``held``: a shield only when held.
+
+        Returns:
+            The armour value, or None when unarmoured.
+        """
+        return defender_armour(
+            [piece for piece in self.worn if piece.id != SHIELD or SHIELD in held]
+        )
+
     def characteristic(self, c: Characteristic) -> int | None:
         """The part's printed value for a characteristic.
 

@@ -454,9 +454,6 @@ TWO_HANDED = Side("elven-spearmen", 10, "Great Weapon", equipment=("Great Weapon
             replace(SPEAR_INTO_SPEARMEN, armour_value=6),
             SPEAR_INTO_SPEARMEN,
             id="struck-wielding-it",
-            marks=pytest.mark.xfail(
-                strict=True, reason="Requires Two Hands needs its bar to forbid the shield"
-            ),
         ),
         pytest.param(
             Scenario(Kind.STRIKE, SPEARS, replace(TWO_HANDED, weapon="Hand Weapon")),

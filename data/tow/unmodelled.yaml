@@ -382,10 +382,6 @@
 
 # held-effect: a corpus side carries the effect to a step that cannot run it yet.
 
-- kind: held-effect
-  subject: requires-two-hands/combat/choose-combat-and-determine-who-can-fight
-  reason: Bars the shield at Step 1.1, which forbids no option yet.
-
 # missing-mechanic: a printed clause needs a mechanic the engine lacks.
 
 - kind: missing-mechanic
