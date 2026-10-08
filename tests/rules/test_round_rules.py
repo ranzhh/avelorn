@@ -172,7 +172,7 @@ def test_martial_prowess(foe: str, first_round: bool, blow: Attack, back: Attack
     """
     swords = Side("elven-spearmen", 10, "Hand Weapon", frontage=10)
     dwarfs = Side(foe, 10, "Hand Weapon", frontage=10)
-    scenario = Scenario(Kind.FIGHT, swords, dwarfs, first_round=first_round)
+    scenario = Scenario(Kind.STRIKE, swords, dwarfs, first_round=first_round)
     skill = 5 if first_round else 4
     printed = resolve(scenario)
     plain = resolve(scenario.without("martial-prowess", Role.ATTACKER))

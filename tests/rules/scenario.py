@@ -199,7 +199,7 @@ def resolve(scenario: Scenario) -> Outcome:
             volley = _volley(attacker, defender, scenario)
             return replace(_shot(volley, defender.models), panic=_panicked(volley))
         case Kind.STRIKE:
-            return _struck(_round(attacker, defender, scenario), defender.models)
+            return _struck(_round(attacker, defender, scenario), attacker.models, defender.models)
         case Kind.FIGHT | Kind.BREAK:
             fought = fight(
                 attacker, defender, first_round=scenario.first_round, phase_rules=combat
@@ -292,17 +292,18 @@ def _shot(volley: Evaluated, models: int) -> Outcome:
     )
 
 
-def _struck(fought: Evaluated, models: int) -> Outcome:
+def _struck(fought: Evaluated, attackers: int, models: int) -> Outcome:
     """The attacker's blows in a round, read from its own attack groups.
 
     The chance an attack goes unsaved is the unsaved wounds expected over the
     attacks expected. The attacks are reported when they are certain, and are
     None when the defender's blows back may fell attackers before they strike.
-    The casualties are the target's in the round. Each side's Initiative is the
-    first slot its attacks land in.
+    The casualties are each side's in the round, of the ``attackers`` and the
+    ``models`` it fielded. Each side's Initiative is the first slot its attacks
+    land in.
 
     Returns:
-        The attacker's attacks, its unsaved chance per attack, the target's
+        The attacker's attacks, its unsaved chance per attack, each side's
         casualties and each side's Initiative.
     """
     attacks = [
@@ -316,14 +317,19 @@ def _struck(fought: Evaluated, models: int) -> Outcome:
         for slot in INITIATIVES
         for part in fought.built.fielded[stage.Side.ATTACKER].parts
     )
-    left = fought.at("round/initiative-1/target/remove-casualties").read("models")
-    lost = left.map(lambda standing: models - standing)
     return Outcome(
         attacks=_certain(attacks),
         unsaved=unsaved / sum(made.expect(lambda n: n) for made in attacks),
-        casualties={count: p for count, p in lost.mass.items() if p},
+        casualties=_lost(fought, stage.Side.TARGET, models),
+        attacker_casualties=_lost(fought, stage.Side.ATTACKER, attackers),
         initiative={role: _initiative(fought, side) for role, side in _SIDES.items()},
     )
+
+
+def _lost(fought: Evaluated, side: stage.Side, models: int) -> dict[int, Probability]:
+    left = fought.at(f"round/initiative-1/{side}/remove-casualties").read("models")
+    lost = left.map(lambda standing: models - standing)
+    return {count: p for count, p in lost.mass.items() if p}
 
 
 def _initiative(fought: Evaluated, side: stage.Side) -> int:
