@@ -15,6 +15,7 @@ import logging
 from collections.abc import Set
 from enum import StrEnum
 from fractions import Fraction
+from functools import partial
 from itertools import product
 from typing import NamedTuple, cast
 
@@ -390,6 +391,41 @@ def back_rank(standings: Standings, wounds: int, order: tuple[tuple[str, int], .
         left[part] = remove_casualties(standing, landed, wounds_per_model)
         wounds -= landed
     return Standings(tuple((part, left[part]) for part, _ in standings.parts))
+
+
+def back_rank_multiplied(
+    standings: Standings,
+    wounds: int,
+    lost: Distribution[int],
+    order: tuple[tuple[str, int], ...],
+) -> Distribution[Standings]:
+    """Remove casualties as :func:`back_rank` does, one unsaved wound at a time.
+
+    Each wound makes the model being worked on lose the Wounds ``lost`` gives,
+    drawn afresh for each wound, up to the Wounds it has left. The excess is
+    lost, never spilt onto the next model (special-rules/multiple-wounds).
+
+    Returns:
+        Each part's standing once every wound is removed.
+    """
+    left = Distribution.pure(standings)
+    for _ in range(wounds):
+        left = left.bind(partial(_lose, lost=lost, order=order))
+    return left
+
+
+def _lose(
+    standings: Standings, lost: Distribution[int], order: tuple[tuple[str, int], ...]
+) -> Distribution[Standings]:
+    worked_on = next(
+        (
+            wounds_per_model - standings.of(part).wounds_lost
+            for part, wounds_per_model in order
+            if standings.of(part).models
+        ),
+        0,
+    )
+    return lost.map(lambda each: back_rank(standings, min(each, worked_on), order))
 
 
 def heavy_casualties(models: int, at_start_of_phase: int) -> bool:
