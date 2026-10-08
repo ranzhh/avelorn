@@ -305,7 +305,7 @@ class _Fielding:
             case Operation.REROLL:
                 if effect.reroll not in runs.get(operation, frozenset()):
                     return None
-            case Operation.MULTIPLY:
+            case Operation.DENY | Operation.MULTIPLY:
                 if operation not in runs:
                     return None
             case Operation.CANCELS:
@@ -353,12 +353,17 @@ class _Fielding:
         return checks or None
 
     def gates(self, rule: Rule, side: Side, at: Step[Any], gates: Gates) -> list[Check] | None:
-        if gates.worn is not None or gates.carried_by is not None or gates.foe is not None:
+        if gates.worn is not None or gates.carried_by is not None:
             return None
         checks: list[Check] = []
         if gates.with_ is not None:
             wielded = self.fielded[side].hit.wielded
             checks.append(Constant(wielded is not None and _matches(gates.with_, wielded)))
+        if gates.foe is not None:
+            foe = gates.foe
+            if foe.troop_type is None or foe.army is not None or foe.has is not None:
+                return None
+            checks.append(Constant(self.fielded[side.other].troop_type in foe.troop_type))
         if gates.attack is not None:
             attack = gates.attack
             for slug, wanted in (

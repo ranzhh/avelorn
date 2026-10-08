@@ -18,7 +18,10 @@ MANEATERS = REPO.units["maneaters"]
 def _maneaters() -> Fielding:
     maneater, captain = MANEATERS.profiles
     return Fielding(
-        "maneaters", (Part("maneater", maneater, 3), Part("maneater-captain", captain, 1)), 4
+        "maneaters",
+        MANEATERS.troop_type,
+        (Part("maneater", maneater, 3), Part("maneater-captain", captain, 1)),
+        4,
     )
 
 

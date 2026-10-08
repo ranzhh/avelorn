@@ -9,7 +9,7 @@ from avelorn.tow.contingent import Contingent
 from avelorn.tow.engine.armour import defender_armour
 from avelorn.tow.kernels import Standing, Standings
 from avelorn.tow.schema.reference import RuleRef, slugified
-from avelorn.tow.schema.unit import Characteristic, Profile, ProfileRole
+from avelorn.tow.schema.unit import Characteristic, Profile, ProfileRole, TroopType
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile
 from avelorn.tow.traits import Carries
 
@@ -85,9 +85,10 @@ class Initiatives(PerPart):
 
 @dataclass(frozen=True, eq=False)
 class Fielding:
-    """A side on the table: its parts in placement order, front to back."""
+    """A side on the table, of one troop type: its parts in placement order, front to back."""
 
     unit: str
+    troop_type: TroopType
     parts: tuple[Part, ...]
     frontage: int
 
@@ -262,4 +263,4 @@ class Fielding:
             )
             for row, count in counts
         )
-        return cls(unit.id, parts, contingent.frontage)
+        return cls(unit.id, unit.troop_type, parts, contingent.frontage)

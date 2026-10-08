@@ -22,6 +22,7 @@ _ORDERS = {
     Operation.CANCELS: Order.CANCEL,
     Operation.SET: Order.SET,
     Operation.ADD: Order.ADD,
+    Operation.DENY: Order.DENY,
     Operation.REROLL: Order.REROLL,
     Operation.MULTIPLY: Order.MULTIPLY,
 }
@@ -46,6 +47,11 @@ class Fixed:
 
 
 @dataclass(frozen=True)
+class Denied:
+    """A roll taken away: the step rolls no die."""
+
+
+@dataclass(frozen=True)
 class Rerolled:
     """The dice of a step that a re-roll covers."""
 
@@ -59,7 +65,7 @@ class Multiplied:
     by: int | DiceQuantity
 
 
-type Payload = Added | Fixed | Rerolled | Multiplied
+type Payload = Added | Fixed | Denied | Rerolled | Multiplied
 
 
 @dataclass(frozen=True)
@@ -80,7 +86,7 @@ class Payloads:
         """
         payloads: list[Payload] = []
         for payload in written:
-            if not isinstance(payload, Added | Fixed | Rerolled | Multiplied):
+            if not isinstance(payload, Added | Fixed | Denied | Rerolled | Multiplied):
                 raise TypeError(f"{payload!r} is no payload a step folds")
             payloads.append(payload)
         return cls(tuple(payloads))
@@ -113,6 +119,14 @@ class Payloads:
         return tuple(
             each.value for each in self.payloads if isinstance(each, Fixed) and each.key == key
         )
+
+    def denied(self) -> bool:
+        """Whether a deny is in force.
+
+        Returns:
+            True when the step rolls no die.
+        """
+        return any(isinstance(each, Denied) for each in self.payloads)
 
     def rerolls(self) -> frozenset[RerollOn]:
         """Read the dice the re-rolls in force cover.
@@ -314,7 +328,7 @@ class Operated:
         """The payload the operation leaves with ``sources`` in force.
 
         Returns:
-            An added amount, a value set, a re-roll, a multiplier, or the cancel itself.
+            An added amount, a value set, a deny, a re-roll, a multiplier, or the cancel itself.
 
         Raises:
             ValueError: the operation is not one a step folds.
@@ -329,6 +343,8 @@ class Operated:
                 return Added(self.key, self.amount(written, sources))
             case Operation.SET if effect.set_ is not None and self.key is not None:
                 return Fixed(self.key, self.amount(effect.set_[self.key], sources))
+            case Operation.DENY if effect.deny:
+                return Denied()
             case Operation.REROLL if effect.reroll is not None:
                 return Rerolled(effect.reroll)
             case Operation.MULTIPLY if effect.multiply is not None:
@@ -389,6 +405,8 @@ class Operated:
                 return {"text": f"{amount:+d} {key}{bounds}"}
             case Fixed(key, value):
                 return {"text": f"{key} {value}"}
+            case Denied():
+                return {"text": "deny"}
             case Rerolled(on):
                 return {"text": f"re-roll {on}"}
             case Multiplied(by):
