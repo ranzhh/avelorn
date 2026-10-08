@@ -469,12 +469,6 @@ class Amendment:
 
 @dataclass(frozen=True, eq=False, kw_only=True)
 class Amended[O: Hashable, Out: Hashable](Step[Out], ABC):
-    def declare(self, program: "Program", prefix: str, visible: list["Item"]) -> None:
-        if self.changed is not None:
-            path = self.path(prefix)
-            raise GraphError(f"{path} marks {self.changed.name}, but it settles options")
-        super().declare(program, prefix, visible)
-
     def needs(self, program: "Program") -> tuple[Key, ...]:
         amendments = program.amending(self)
         own = super().needs(program)
@@ -509,15 +503,20 @@ class Amended[O: Hashable, Out: Hashable](Step[Out], ABC):
 
 @dataclass(frozen=True, eq=False, kw_only=True)
 class Eligibility[O: Hashable](Amended[O, frozenset[O]]):
+    """Who may act: the kernel reads the step's changes, then allow and forbid edit its output."""
+
     kind = "measurement"
     kernel: Kernel[frozenset[O]]
 
     def settled(self, world: World, lane: "Lane") -> Distribution[Settled]:
-        def amended(printed: frozenset[O]) -> Settled:
-            allowed, applied = self.settle(printed, world, lane)
-            return Settled(world.holding(self.key, allowed), applied)
+        changed = self.changing(world, lane)
 
-        return self.kernel(*self.arguments(world)).map(amended)
+        def amended(printed: frozenset[O]) -> Settled:
+            allowed, applied = self.settle(printed, changed.world, lane)
+            entered = changed.world.holding(self.key, allowed)
+            return replace(changed, world=entered, applied=changed.applied | applied)
+
+        return self.kernel(*self.arguments(changed.world)).map(amended)
 
 
 @dataclass(frozen=True)
@@ -565,6 +564,8 @@ class Decision[Out: Hashable](Amended[Out, Out]):
 
     def declare(self, program: "Program", prefix: str, visible: list["Item"]) -> None:
         path = self.path(prefix)
+        if self.changed is not None:
+            raise GraphError(f"{path} marks {self.changed.name}, but a decision settles options")
         if self.writes is not None:
             raise GraphError(f"{path} writes {self.writes.name}, but a decision holds its option")
         for printed in (self.otherwise, *self.closed):
