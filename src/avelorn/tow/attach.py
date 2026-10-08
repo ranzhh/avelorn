@@ -60,6 +60,7 @@ type Carried = tuple[tuple[RuleRef, Source], ...]
 type Reached = list[tuple[int, Effect, tuple[Step[Any], ...]]]
 
 _PHASES = frozenset(Phase)
+_AMENDS = frozenset({Operation.ALLOW, Operation.FORBID})
 
 
 class AttachError(AvelornError):
@@ -240,7 +241,7 @@ class _Fielding:
         contributions: list[Contribution[Any]] = []
         changes: list[Change] = []
         for _, effect, _ in reached:
-            if isinstance(at, Eligibility):
+            if isinstance(at, Eligibility) and effect.operation in _AMENDS:
                 contribution = self.contribution(rule, side, at, effect)
                 if contribution is None:
                     return None
