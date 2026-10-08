@@ -392,9 +392,6 @@
   subject: cleaving-blow/combat/make-armour-saves
   reason: Denies the armour save in combat; the round holds it.
 - kind: held-effect
-  subject: elven-reflexes/combat/who-strikes-first
-  reason: Adds 1 to Initiative in the first round of a combat; the round holds it.
-- kind: held-effect
   subject: fight-in-extra-rank/combat/who-can-fight
   reason: Lets the rank behind the fighting rank make a supporting attack; the round holds it.
 - kind: held-effect
@@ -406,12 +403,6 @@
 - kind: held-effect
   subject: press-of-battle/combat/who-can-fight
   reason: Makes the fighting rank two ranks deep; the round holds it.
-- kind: held-effect
-  subject: strike-first/combat/who-strikes-first
-  reason: Sets Initiative to 10 and cancels Strike Last; the round holds it.
-- kind: held-effect
-  subject: strike-last/combat/who-strikes-first
-  reason: Sets Initiative to 1 and cancels Strike First; the round holds it.
 
 # missing-mechanic: a printed clause needs a mechanic the engine lacks.
 

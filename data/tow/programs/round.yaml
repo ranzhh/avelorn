@@ -4,6 +4,8 @@ fielded: [attacker, target]
 inputs:
   - {fact: standing, of: attacker}
   - {fact: standing, of: target}
+  - {fact: rounds-fought, of: attacker}
+  - {fact: rounds-fought, of: target}
 items:
   - {step: who-can-fight, of: [attacker, target]}
   - {step: who-strikes-first, of: [attacker, target]}
