@@ -249,8 +249,12 @@ GROMRIL_ARMOUR = """  - reroll: natural-1
             "rule gromril-weapons: no weapon entry hand-weapn",
         ),
         (
-            [("rules/parry.yaml", "{armour: shield}", "{armour: shiel}")],
-            "rule parry: no armour entry shiel",
+            [("rules/requires-two-hands.yaml", "bar: shield", "bar: shiel")],
+            "rule requires-two-hands: no armour entry shiel",
+        ),
+        (
+            [("rules/parry.yaml", "holds: [hand-weapon, shield]", "holds: [hand-weapn, shield]")],
+            "rule parry: no weapon or armour entry hand-weapn",
         ),
         (
             [("rules/killing-blow.yaml", "multiply: {fact: W, of: the-enemy}", "multiply: X")],
@@ -301,6 +305,7 @@ GROMRIL_ARMOUR = """  - reroll: natural-1
         "grant-no-rule",
         "no-weapon",
         "no-armour",
+        "no-equipment",
         "undeclared-x",
         "fact-without-side",
         "int-fact-against-flag",

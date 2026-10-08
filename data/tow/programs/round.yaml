@@ -9,6 +9,7 @@ inputs:
   - {fact: charges-made, of: attacker}
   - {fact: charges-made, of: target}
 items:
+  - {step: choose-combat-and-determine-who-can-fight, of: [attacker, target]}
   - {step: who-can-fight, of: [attacker, target]}
   - {step: who-strikes-first, of: [attacker, target]}
   - slots: initiative

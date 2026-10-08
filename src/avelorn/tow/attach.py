@@ -15,6 +15,7 @@ from avelorn.core.graph import (
     Carrier,
     Change,
     Contribution,
+    Decision,
     Eligibility,
     Holder,
     Landing,
@@ -32,6 +33,7 @@ from avelorn.tow.changes import (
     Equals,
     Gate,
     Granted,
+    Holds,
     MoreThan,
     Operated,
     Shows,
@@ -55,7 +57,7 @@ from avelorn.tow.schema.stage import Side
 from avelorn.tow.schema.step import Step as Printed
 from avelorn.tow.schema.step import StepSequence
 from avelorn.tow.schema.weapon import Weapon
-from avelorn.tow.steps import Spec
+from avelorn.tow.steps import Choice, Spec
 
 type Carried = tuple[tuple[RuleRef, Source], ...]
 type Reached = list[tuple[int, Effect, tuple[Step[Any], ...]]]
@@ -126,7 +128,7 @@ def rules_in_scope(
 
 def attach_rules(
     program: Program,
-    specs: Mapping[Step[Any], Spec],
+    specs: Mapping[Step[Any], Spec | Choice],
     fielded: Mapping[Side, Fielding],
     rules: Mapping[str, Rule],
     inputs: Mapping[str, State[Any]],
@@ -184,7 +186,7 @@ def attach_rules(
 @dataclass(frozen=True)
 class _Fielding:
     program: Program
-    specs: Mapping[Step[Any], Spec]
+    specs: Mapping[Step[Any], Spec | Choice]
     fielded: Mapping[Side, Fielding]
     rules: Mapping[str, Rule]
     inputs: Mapping[str, State[Any]]
@@ -290,7 +292,10 @@ class _Fielding:
     def operated(
         self, rule: Rule, side: Side, at: Step[Any], effect: Effect
     ) -> list[Operated] | None:
-        runs = self.specs[at].runs
+        spec = self.specs[at]
+        if not isinstance(spec, Spec):
+            return None
+        runs = spec.runs
         operation = effect.operation
         if effect.limit is not None or not runs:
             return None
@@ -358,6 +363,8 @@ class _Fielding:
             checks.append(Shows(step.key, when.natural))
         if when.is_ is not None:
             checks.append(self.equals(rule, step, when.is_))
+        if when.holds is not None:
+            checks.append(Holds(step.key, frozenset(when.holds)))
         return checks or None
 
     def gates(self, rule: Rule, side: Side, at: Step[Any], gates: Gates) -> list[Check] | None:
@@ -409,10 +416,13 @@ class _Fielding:
 
     def equals(self, rule: Rule, step: Step[Any], value: Hashable) -> Equals:
         spec = self.specs[step]
-        if spec.outcomes is None or value not in spec.outcomes:
+        outcomes = spec.outcomes if isinstance(spec, Spec) else None
+        if isinstance(step, Decision):
+            outcomes = frozenset(step.options)
+        if outcomes is None or value not in outcomes:
             raise AttachError(
                 f"{rule.id} reads {value!r} from {self.program.paths[step]}, "
-                f"which outputs {sorted(map(str, spec.outcomes or ())) or 'no listed value'}"
+                f"which outputs {sorted(map(str, outcomes or ())) or 'no listed value'}"
             )
         return Equals(step.key, value)
 
@@ -488,7 +498,7 @@ def _addresses(
     step: Step[Any],
     side: Side,
     program: Program,
-    specs: Mapping[Step[Any], Spec],
+    specs: Mapping[Step[Any], Spec | Choice],
 ) -> bool:
     spec = specs[step]
     blocks = program.paths[step].split("/")[:-1]

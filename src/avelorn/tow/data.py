@@ -234,6 +234,8 @@ class TOWRepository:
         armoury = Registry(load_yaml_dir(self._data_dir / "tow/armour", Armour), kind="armour")
         named = [(slug, e.armour) for slug, rule in self.rules.items() for e in _effects(rule)]
         _named("armour", named, armoury)
+        held = [(slug, e.held) for slug, rule in self.rules.items() for e in _effects(rule)]
+        _named("weapon or armour", held, {*self.weapons, *armoury})
         return armoury
 
     @cached_property

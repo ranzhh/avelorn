@@ -7,7 +7,7 @@ from fractions import Fraction
 from functools import partial
 from itertools import takewhile
 from types import MappingProxyType
-from typing import Any
+from typing import Any, ClassVar
 
 from avelorn.core.distribution import Distribution, Kernel, Monoid, Probability
 from avelorn.core.graph import (
@@ -22,7 +22,7 @@ from avelorn.core.graph import (
     Step,
 )
 from avelorn.tow.changes import Folded, Payloads
-from avelorn.tow.fielding import Attacks, Fielding, Initiatives, Part, PerPart, Shots
+from avelorn.tow.fielding import Attacks, Fielding, Held, Initiatives, Part, PerPart, Shots
 from avelorn.tow.kernels import (
     HIGH_BALLISTIC_SKILL,
     UNARMOURED,
@@ -96,6 +96,7 @@ class Kind(StrEnum):
 
     MEASUREMENT = "measurement"
     ELIGIBILITY = "eligibility"
+    DECISION = "decision"
     ROLL = "roll"
     CONSEQUENCE = "consequence"
 
@@ -279,10 +280,12 @@ class Spec:
             The step, of the class its kind names.
 
         Raises:
-            ValueError: a roll is built with no target.
+            ValueError: a roll is built with no target, or a decision from a spec.
         """
         acts = str(side)
         match self.kind:
+            case Kind.DECISION:
+                raise ValueError(f"{self.name}: a decision is built from a Choice")
             case Kind.MEASUREMENT:
                 return Measurement(
                     name=self.name,
@@ -327,6 +330,26 @@ class Spec:
                     printed=printed,
                     changed=changed,
                 )
+
+
+@dataclass(frozen=True, kw_only=True)
+class Choice:
+    """A printed decision, made for a side.
+
+    ``options`` names every option from the side when the program is built,
+    and the first is the one taken otherwise.
+    """
+
+    sequence: StepSequence
+    name: str
+    side: Side
+    options: Callable[[Fielding], tuple[Hashable, ...]]
+    kind: ClassVar[Kind] = Kind.DECISION
+
+    @property
+    def key(self) -> tuple[StepSequence, str]:
+        """The registry key: the sequence and the step name."""
+        return self.sequence, self.name
 
 
 def _printed(part: Profiled[int | None], c: Characteristic) -> int:
@@ -666,6 +689,10 @@ def fall_back_or_flee(
     return Distribution.pure(Retreat.FLEES)
 
 
+def _holdings(side: Fielding) -> tuple[Held, ...]:
+    return side.hit.holdings
+
+
 def _rank(number: int) -> str:
     return f"rank-{number}"
 
@@ -995,6 +1022,12 @@ _SPECS = (
         kernel=fall_back_or_flee,
         readings={"retreat": _offer("fall-back-or-flee")},
     ),
+    Choice(
+        sequence=StepSequence.COMBAT,
+        name="choose-combat-and-determine-who-can-fight",
+        side=Side.ATTACKER,
+        options=_holdings,
+    ),
     Spec(
         sequence=StepSequence.COMBAT,
         name="who-can-fight",
@@ -1096,6 +1129,6 @@ _SPECS = (
     _removing(StepSequence.COMBAT),
 )
 
-STEPS: Mapping[tuple[StepSequence, str], Spec] = MappingProxyType(
+STEPS: Mapping[tuple[StepSequence, str], Spec | Choice] = MappingProxyType(
     {spec.key: spec for spec in _SPECS}
 )

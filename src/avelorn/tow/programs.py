@@ -13,6 +13,7 @@ from pydantic import BaseModel, ValidationError
 from avelorn.core.distribution import Distribution, Monoid
 from avelorn.core.errors import AvelornError
 from avelorn.core.graph import (
+    Decision,
     GraphError,
     Item,
     Key,
@@ -26,10 +27,11 @@ from avelorn.core.graph import (
     State,
     Step,
     Tally,
+    World,
 )
 from avelorn.tow.attach import Attachment, attach_rules
 from avelorn.tow.data import DATA_DIR
-from avelorn.tow.fielding import Fielding, Part
+from avelorn.tow.fielding import SHIELD, Fielding, Held, Part
 from avelorn.tow.kernels import Standings
 from avelorn.tow.schema.program import (
     FactInput,
@@ -49,6 +51,7 @@ from avelorn.tow.steps import (
     CHANGED,
     STEPS,
     Changed,
+    Choice,
     Counted,
     Fact,
     Holding,
@@ -102,7 +105,7 @@ class Loaded:
     file: ProgramFile
     facts: Mapping[str, StateFact]
     inputs: Mapping[str, Input]
-    specs: tuple[Spec, ...]
+    specs: tuple[Spec | Choice, ...]
     rules: Mapping[str, Rule]
 
     @property
@@ -153,12 +156,15 @@ class Built:
 
     inputs: Mapping[str, Input]
     program: Program
-    specs: Mapping[Step[Any], Spec]
+    specs: Mapping[Step[Any], Spec | Choice]
     fielded: Mapping[Side, Fielding]
     attachment: Attachment
 
     def evaluate(self, knowns: Mapping[str, Hashable]) -> tuple["Evaluated", ...]:
         """Evaluate the program with every input given by name.
+
+        Each side's weapon choice takes the weapon it was fielded with, and its
+        shield where the shield is worn and allowed.
 
         Returns:
             One evaluation per lane.
@@ -179,8 +185,37 @@ class Built:
         given = {self.inputs[name].state: value for name, value in knowns.items()}
         return tuple(
             Evaluated(self, lane, MappingProxyType(dict(knowns)))
-            for lane in self.program.evaluate(state=given)
+            for lane in self.program.evaluate(self.fought_with(), given)
         )
+
+    def fought_with(self) -> dict[Decision[Any], Held]:
+        """The option each side's weapon choice takes, from what the side was fielded with.
+
+        Returns:
+            Each decision's option.
+        """
+        return {
+            step: self.held(step)
+            for step, spec in self.specs.items()
+            if isinstance(spec, Choice) and isinstance(step, Decision)
+        }
+
+    def held(self, decision: Decision[Any]) -> Held:
+        """The weapon a side was fielded with, and its shield where worn and allowed.
+
+        Returns:
+            The option.
+
+        Raises:
+            ProgramError: the side is fielded with no weapon.
+        """
+        wielded = self.fielded[Side(decision.side)].hit.wielded
+        if wielded is None:
+            raise ProgramError(f"the {decision.side} decides with no weapon fielded")
+        lane = Lane(program=self.program, given={}, joint=Distribution.pure(World()))
+        allowed, _ = decision.settle(decision.printed, World(), lane)
+        shielded = Held({wielded.id, SHIELD})
+        return shielded if shielded in allowed else Held({wielded.id})
 
 
 @dataclass(frozen=True)
@@ -264,10 +299,15 @@ class PartAt:
 
         Returns:
             The operand, before any rule attached there changes it.
+
+        Raises:
+            ProgramError: the step is a decision, which reads no characteristic.
         """
         printed = self.part.characteristic(c)
         step = self.at.step
         spec = self.at.evaluated.built.specs[step]
+        if not isinstance(spec, Spec):
+            raise ProgramError(f"{self.at.evaluated.lane.program.paths[step]} is a decision")
         role = self.side if Side(step.side) is spec.side else self.side.other
         resolve = spec.in_force.get((role, c))
         value = printed if resolve is None else resolve(self.part)
@@ -313,7 +353,8 @@ class _Builder:
     outputs it reads. A group's fighters fill the attacker's role, so a group
     of the target's fighters swaps the steps inside it. A read finds a step of
     its own group by name, and any other step by name and the side the reader
-    acts for: a group's ``times`` by the group's side.
+    acts for: a group's ``times`` by the group's side. With no side fielded, a
+    group holds the one fighter None and a decision offers the one option None.
     """
 
     source: str
@@ -325,7 +366,7 @@ class _Builder:
     fighter: tuple[Side, Part | None] | None = None
     swapped: bool = False
     initiative: int | None = None
-    specs: dict[Step[Any], Spec] = field(default_factory=dict)
+    specs: dict[Step[Any], Spec | Choice] = field(default_factory=dict)
     written: set[str] = field(default_factory=set)
 
     def build(self) -> Program:
@@ -420,6 +461,8 @@ class _Builder:
         spec = STEPS.get((sequence, entry.step))
         if spec is None:
             raise self.error(here, f"{entry.step} is no step of the {sequence} sequence")
+        if isinstance(spec, Choice):
+            return self.decision(spec, entry, of, here, visible)
         if self.fighter is None:
             self.swapped = of is not None and of is not spec.side
         elif of is not None:
@@ -449,6 +492,28 @@ class _Builder:
                 raise self.error(here, f"{spec.name} offers no reading {name}")
             step.show(self.projection(name, offered, spec, here, visible, tally, changed))
         return step
+
+    def decision(
+        self, choice: Choice, entry: StepEntry, of: Side | None, here: str, visible: _Scope
+    ) -> Decision[Any]:
+        if self.fighter is not None:
+            raise self.error(here, f"{choice.name} is decided for a side, not inside a group")
+        if entry.readings or entry.tallies:
+            raise self.error(here, f"{choice.name} shows no reading and sums no group")
+        acts = choice.side if of is None else of
+        if acts not in self.file.fielded:
+            raise self.error(here, f"{choice.name} decides for the {acts}, which is not fielded")
+        options = (None,) if self.fielded is None else choice.options(self.fielded[acts])
+        decision = Decision[Any](
+            name=choice.name,
+            side=str(acts),
+            sided=of is not None,
+            options={option: () for option in options},
+            otherwise=options[0],
+        )
+        self.specs[decision] = choice
+        visible.add(decision, acts)
+        return decision
 
     def tally(self, spec: Spec, entry: StepEntry, here: str, groups: _Groups) -> Tally[int] | None:
         if spec.counts is None:

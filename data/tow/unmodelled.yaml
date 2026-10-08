@@ -331,12 +331,6 @@
   subject: massed-infantry/combat-result/calculate-combat-result
   reason: Lands on Calculate Combat Result; no program registers it until the combat round lands (item 14).
 - kind: unattached-effect
-  subject: parry/combat/choose-combat-and-determine-who-can-fight
-  reason: Reads the weapon chosen at Step 1.1; no program registers it until the combat round lands (item 14).
-- kind: unattached-effect
-  subject: requires-two-hands/combat/choose-combat-and-determine-who-can-fight
-  reason: Lands on Step 1.1, where the weapon is chosen; no program registers it until the combat round lands (item 14).
-- kind: unattached-effect
   subject: shieldwall/break/break-test
   reason: Lands on the Break Test; no program registers it until the steps from the Break Test on land (item 19).
 - kind: unattached-effect
@@ -387,6 +381,10 @@
   reason: Only the Great Eagle's Serrated Maw carries it, a combat profile, so no corpus side shoots with it.
 
 # held-effect: a corpus side carries the effect to a step that cannot run it yet.
+
+- kind: held-effect
+  subject: requires-two-hands/combat/choose-combat-and-determine-who-can-fight
+  reason: Bars the shield at Step 1.1, which forbids no option yet.
 
 # missing-mechanic: a printed clause needs a mechanic the engine lacks.
 

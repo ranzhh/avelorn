@@ -217,6 +217,22 @@ class Equals:
 
 
 @dataclass(frozen=True)
+class Holds:
+    """A decision's option, holding every piece of equipment named."""
+
+    option: Key
+    held: frozenset[str]
+
+    @property
+    def reads(self) -> tuple[Key, ...]:
+        """The decision read."""
+        return (self.option,)
+
+    def holds(self, read: Mapping[Key, Any], out: frozenset[str]) -> bool:
+        return self.held <= read[self.option]
+
+
+@dataclass(frozen=True)
 class MoreThan:
     """A known, more than a number."""
 
