@@ -269,8 +269,9 @@ class Fielding:
         equipment and rules. The armour value folds from the armour worn. A ward
         comes only from rules, so a part fielded from the corpus has none. A part
         carries the rules of its datasheet, its troop type, and the profile its
-        weapon shoots with, or fights with in ``combat``. A round of combat
-        reads each part's count as its models at the start of the round.
+        weapon shoots with, or in ``combat`` every weapon's combat profile. A
+        round of combat reads each part's count as its models at the start of
+        the round.
 
         Returns:
             The fielded side.
@@ -287,6 +288,7 @@ class Fielding:
             raise ValueError(f"{unit.id} rides a mount, which a round of combat does not field")
         carriers: tuple[Carries, ...] = (unit, unit.rank_and_file)
         carried = [pair for carrier in carriers for pair in carrier.sources()]
+        weapons = tuple(w for w in contingent.loadout.weapons if w.combat_profile is not None)
         wielded = profile = None
         if weapon is not None:
             wielded = contingent.loadout.weapon(weapon)
@@ -296,7 +298,10 @@ class Fielding:
             if profile is None:
                 raise ValueError(f"{weapon} has no missile profile; it cannot shoot")
             shot = profile.name or wielded.name
-            carried += [pair for pair in wielded.sources() if pair[1].profile == shot]
+            if not combat:
+                carried += [pair for pair in wielded.sources() if pair[1].profile == shot]
+        if combat:
+            carried += [pair for each in weapons for pair in _fought(each)]
         offered = {option.name: option for option in unit.options}
         unknown = [name for name in options if name not in offered]
         if unknown:
@@ -308,7 +313,6 @@ class Fielding:
             if (profile_name := offered[name].profile) is not None
         ]
         armour = defender_armour(contingent.loadout.armour)
-        weapons = tuple(w for w in contingent.loadout.weapons if w.combat_profile is not None)
         counts = [(row, 1) for row in champions]
         counts.append((unit.main, contingent.models - len(champions)))
         parts = tuple(
@@ -326,3 +330,9 @@ class Fielding:
             for row, count in counts
         )
         return cls(unit.id, unit.troop_type, parts, contingent.frontage)
+
+
+def _fought(weapon: Weapon) -> list[tuple[RuleRef, Source]]:
+    profile = weapon.combat_profile
+    fights = None if profile is None else profile.name or weapon.name
+    return [pair for pair in weapon.sources() if pair[1].profile == fights]

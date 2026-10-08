@@ -4,7 +4,7 @@ A payload is what one operation leaves in force at a step. A step's kernel
 reads the payloads under its mark through :class:`Payloads`.
 """
 
-from collections.abc import Hashable, Mapping
+from collections.abc import Hashable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any, ClassVar, Protocol
 
@@ -249,15 +249,98 @@ class MoreThan:
 
 
 @dataclass(frozen=True)
+class Granted:
+    """One source of a rule node, with the X it gives.
+
+    ``via`` names the node that granted it, and ``weapon`` the weapon it rides
+    on when the side chooses which to fight with.
+    """
+
+    x: int | str | None
+    via: str | None
+    weapon: str | None = None
+
+
+@dataclass(frozen=True)
+class Sources:
+    """The sources of a rule node at one holder.
+
+    A source riding a weapon is in force only while the bearer's choice
+    ``held`` holds that weapon; any other source is in force throughout.
+    """
+
+    granted: tuple[Granted, ...]
+    held: Key | None = None
+
+    @property
+    def weapons(self) -> frozenset[str]:
+        """The weapons the sources ride on."""
+        return frozenset(each.weapon for each in self.granted if each.weapon is not None)
+
+    @property
+    def reads(self) -> tuple[Key, ...]:
+        """The bearer's choice, when a source rides a weapon."""
+        return (self.held,) if self.held is not None and self.weapons else ()
+
+    def in_force(self, read: Mapping[Key, Any], out: frozenset[str]) -> tuple[Granted, ...]:
+        """The sources in force in one world: not granted by a node left out, and held.
+
+        Returns:
+            Each source in force.
+        """
+        held = frozenset() if self.held is None or not self.weapons else read[self.held]
+        return tuple(
+            each
+            for each in self.granted
+            if each.via not in out and (each.weapon is None or each.weapon in held)
+        )
+
+    def at_once(self, options: Iterable[frozenset[str]]) -> int:
+        """The most sources in force together, over the options the bearer may hold.
+
+        Returns:
+            The count; every source when the bearer chooses nothing.
+        """
+        return max(
+            (
+                sum(each.weapon is None or each.weapon in option for each in self.granted)
+                for option in options
+            ),
+            default=len(self.granted),
+        )
+
+
+@dataclass(frozen=True)
+class HasSource:
+    """A rule node with a source in force."""
+
+    sources: Sources
+
+    @property
+    def reads(self) -> tuple[Key, ...]:
+        """What the sources read."""
+        return self.sources.reads
+
+    def holds(self, read: Mapping[Key, Any], out: frozenset[str]) -> bool:
+        return bool(self.sources.in_force(read, out))
+
+
+@dataclass(frozen=True)
 class Attacks:
-    """An attack made with a rule of the attacker, or without it."""
+    """An attack made with a rule of the attacker, while one of its ``sources`` is in force."""
 
     node: str | None
     wanted: bool
-    reads: ClassVar[tuple[Key, ...]] = ()
+    sources: Sources = Sources(())
+
+    @property
+    def reads(self) -> tuple[Key, ...]:
+        """What the sources read."""
+        return self.sources.reads
 
     def holds(self, read: Mapping[Key, Any], out: frozenset[str]) -> bool:
-        return (self.node is not None and self.node not in out) is self.wanted
+        attacking = self.node is not None and self.node not in out
+        return (attacking and bool(self.sources.in_force(read, out))) is self.wanted
 
 
 @dataclass(frozen=True)
@@ -309,23 +392,12 @@ class Gate:
 
 
 @dataclass(frozen=True)
-class Granted:
-    """One source of a rule node, with the X it gives.
-
-    ``via`` names the node that granted it.
-    """
-
-    x: int | str | None
-    via: str | None
-
-
-@dataclass(frozen=True)
 class Operated:
     """One operation of a rule node at a step.
 
     An add or a set changes one ``key``; a characteristic is the one of the
     model on side ``of``, as the step's spec names the sides. X is the rule's
-    parameter combined over the sources still in force.
+    parameter combined over the sources in force.
     """
 
     rule: str
@@ -333,7 +405,7 @@ class Operated:
     key: Changeable | None
     of: Side | None
     gate: Gate
-    sources: tuple[Granted, ...]
+    sources: Sources
     parameter: Parameter | None
 
     @property
@@ -343,8 +415,8 @@ class Operated:
 
     @property
     def reads(self) -> tuple[Key, ...]:
-        """What the gate reads."""
-        return self.gate.reads
+        """What the gate and the sources read."""
+        return tuple(dict.fromkeys((*self.gate.reads, *self.sources.reads)))
 
     def settle(self, values: tuple[Any, ...], out: frozenset[str]) -> Hashable | None:
         """The payload in force in one world.
@@ -352,8 +424,10 @@ class Operated:
         Returns:
             The payload, or None when no source is left or the gate fails.
         """
-        left = tuple(source for source in self.sources if source.via not in out)
-        if not left or not self.gate.test(values, out):
+        read = dict(zip(self.reads, values, strict=True))
+        left = self.sources.in_force(read, out)
+        gated = tuple(read[key] for key in self.gate.reads)
+        if not left or not self.gate.test(gated, out):
             return None
         return self.payload(left)
 
@@ -427,7 +501,7 @@ class Operated:
         )
 
     def view(self) -> dict[str, Any]:
-        payload = self.payload(self.sources)
+        payload = self.payload(self.sources.granted)
         match payload:
             case Added(key, amount, maximum, minimum):
                 bounds = "".join(

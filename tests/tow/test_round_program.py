@@ -227,6 +227,25 @@ def test_a_side_chooses_each_weapon_it_carries_with_or_without_its_shield() -> N
     ]
 
 
+def test_a_rule_two_carried_weapons_give_is_in_force_once_in_each_option() -> None:
+    """Spearmen given a great weapon and a halberd attach Requires Two Hands, which both give.
+
+    No option holds both weapons, so each sees the rule once, as each sees
+    Fight in Extra Rank from the spear or the halberd once. Swinging the great
+    weapon, the Spearmen take it without their shield.
+    """
+    datasheet = REPO.units["elven-spearmen"]
+    two_handed = ["Great Weapon", "Ceremonial Halberd"]
+    armed = datasheet.model_copy(update={"equipment": [*datasheet.equipment, *two_handed]})
+    spearmen = Fielding.of(Contingent.field(armed, 1, data=REPO), "Great Weapon", combat=True)
+
+    choice = _fought(spearmen, spearmen).at(
+        "round/target/choose-combat-and-determine-who-can-fight"
+    )
+
+    assert {str(taken.option) for taken in choice.read("taken").mass} == {"great-weapon"}
+
+
 def test_the_target_s_part_reads_its_weapon_strength_at_its_own_blow() -> None:
     """A Swordmaster striking back wounds at the Sword of Hoeth's S+2, so 5, not its printed 3.
 

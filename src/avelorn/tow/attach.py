@@ -18,6 +18,7 @@ from avelorn.core.graph import (
     Decision,
     Eligibility,
     Holder,
+    Key,
     Landing,
     Program,
     RuleNode,
@@ -33,10 +34,12 @@ from avelorn.tow.changes import (
     Equals,
     Gate,
     Granted,
+    HasSource,
     Holds,
     MoreThan,
     Operated,
     Shows,
+    Sources,
 )
 from avelorn.tow.fielding import Fielding
 from avelorn.tow.schema.effect import (
@@ -139,7 +142,8 @@ def attach_rules(
     attach fails with an :class:`AttachError` on a rule whose sources at one
     holder give X values that do not combine, on a gate comparing a step with a
     value it never outputs, and on a rule with no X carried twice to a landing
-    that runs.
+    that runs. Where a side chooses its weapon, twice means in one option: the
+    model's own sources and those of the weapons that option holds.
 
     Returns:
         The nodes, ordered by side then slug, every effect that reached a step,
@@ -260,9 +264,10 @@ class _Fielding:
             if operated is None:
                 return None
             changes.extend(operated)
-        if rule.parameter is None and len(carried) > 1:
+        together = self.together(rule, side, at)
+        if rule.parameter is None and together > 1:
             raise AttachError(
-                f"{rule.id} at {self.holders[side]} has {len(carried)} sources, "
+                f"{rule.id} at {self.holders[side]} has {together} sources in force at once, "
                 f"and no X to combine them, at {self.program.paths[at]}"
             )
         return tuple(contributions), tuple(changes)
@@ -276,6 +281,9 @@ class _Fielding:
         gate = self.gate(rule, side, at, effect)
         if gate is None or any(isinstance(check, Attacks) for check in gate.checks):
             return None
+        sources = self.sources(rule.id, side, self.choice(side, at))
+        if sources.reads:
+            gate = Gate((*gate.when, HasSource(sources)), gate.unless)
         operation = GraphOperation.ALLOW if effect.allow else GraphOperation.FORBID
         return Contribution(
             operation=operation,
@@ -287,11 +295,7 @@ class _Fielding:
     def barred(
         self, rule: Rule, side: Side, at: Decision[Any], effect: Effect
     ) -> Contribution[Any] | None:
-        carriers = {
-            source.item
-            for _, source in self.scopes[side][rule.id]
-            if source.carrier is Carrier.WEAPON
-        }
+        carriers = self.sources(rule.id, side, at).weapons
         if effect.bar is None or effect.limit is not None or not carriers:
             return None
         gate = self.gate(rule, side, at, effect)
@@ -354,8 +358,7 @@ class _Fielding:
         gate = self.gate(rule, side, at, effect)
         if gate is None:
             return None
-        carried = self.scopes[side][rule.id]
-        sources = tuple(Granted(reference.x, source.via) for reference, source in carried)
+        sources = self.sources(rule.id, side, self.choice(side, at))
         return [
             Operated(rule.id, effect, key, whose, gate, sources, rule.parameter) for key in keys
         ]
@@ -401,8 +404,14 @@ class _Fielding:
             return None
         checks: list[Check] = []
         if gates.with_ is not None:
+            chosen = self.choice(side, at)
             wielded = self.fielded[side].hit.wielded
-            checks.append(Constant(wielded is not None and _matches(gates.with_, wielded)))
+            if chosen is None:
+                checks.append(Constant(wielded is not None and _matches(gates.with_, wielded)))
+            elif gates.with_.weapon is None or gates.with_.type is not None:
+                return None
+            else:
+                checks.append(Holds(chosen, frozenset({gates.with_.weapon})))
         if gates.foe is not None:
             foe = gates.foe
             if foe.troop_type is None or foe.army is not None or foe.has is not None:
@@ -415,7 +424,7 @@ class _Fielding:
                 ("flaming-attacks", attack.flaming),
             ):
                 if wanted is not None:
-                    checks.append(Attacks(self.attacking(slug, at), wanted))
+                    checks.append(self.attacking(slug, at, wanted))
         for fact in gates.facts:
             check = self.fact(rule, side, at, fact)
             if check is None:
@@ -455,10 +464,32 @@ class _Fielding:
             )
         return Equals(step.key, value)
 
-    def attacking(self, slug: str, at: Step[Any]) -> str | None:
+    def attacking(self, slug: str, at: Step[Any], wanted: bool) -> Attacks:
         acting = Side(at.side)
         side = acting if self.specs[at].side is Side.ATTACKER else acting.other
-        return f"{self.holders[side]}/{slug}" if slug in self.scopes[side] else None
+        if slug not in self.scopes[side]:
+            return Attacks(None, wanted)
+        node = f"{self.holders[side]}/{slug}"
+        return Attacks(node, wanted, self.sources(slug, side, self.choice(side, at)))
+
+    def together(self, rule: Rule, side: Side, at: Step[Any]) -> int:
+        own = isinstance(self.specs[at], Choice) and at.side == side
+        decision = at if own else self.choice(side, at)
+        options = decision.options if isinstance(decision, Decision) else ()
+        return self.sources(rule.id, side, decision).at_once(options)
+
+    def sources(self, slug: str, side: Side, chosen: Key | None) -> Sources:
+        granted = tuple(
+            Granted(reference.x, source.via, None if chosen is None else _rides(source))
+            for reference, source in self.scopes[side][slug]
+        )
+        return Sources(granted, chosen)
+
+    def choice(self, side: Side, at: Step[Any]) -> Key | None:
+        chosen = self.nearest(
+            Printed.CHOOSE_COMBAT_AND_DETERMINE_WHO_CAN_FIGHT, Role.THIS_MODEL, side, at
+        )
+        return None if chosen is None else chosen.key
 
     def nearest(
         self, name: Printed, role: Role | None, side: Side, at: Step[Any]
@@ -470,6 +501,10 @@ def _named(
     named: frozenset[Hashable], gate: Gate, printed: frozenset[Hashable], *values: Hashable
 ) -> frozenset[Hashable]:
     return named if gate.test(values, frozenset()) else frozenset()
+
+
+def _rides(source: Source) -> str | None:
+    return source.item if source.carrier is Carrier.WEAPON else None
 
 
 def _holders(fielded: Mapping[Side, Fielding]) -> dict[Side, Holder]:
