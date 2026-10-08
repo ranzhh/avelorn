@@ -87,11 +87,6 @@ def test_blessings_of_asuryan(scenario: Scenario, printed: Attack, plain: Attack
             Attack(COMBAT, 6, 3, 3, foe_weapon_skill=4, armour_value=5, cleaving_blow=True),
             Attack(COMBAT, 6, 3, 3, foe_weapon_skill=4, armour_value=5),
             id="regular-infantry",
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason="Cleaving Blow needs a denied save and the foe's troop type "
-                "at Make Armour Saves",
-            ),
         ),
         pytest.param(
             Side("maneaters", 3, "Hand Weapon"),

@@ -42,7 +42,9 @@ def _shooter(shots: int, ballistic_skill: int, strength: int, armour_piercing: i
     bow = LONGBOW.model_copy(
         update={"strength": WeaponStrength(base=strength), "armour_piercing": armour_piercing}
     )
-    return Fielding("archers", (Part("archers", row, shots, weapon=bow),), shots)
+    return Fielding(
+        "archers", ARCHERS.troop_type, (Part("archers", row, shots, weapon=bow),), shots
+    )
 
 
 def _target(
@@ -58,7 +60,7 @@ def _target(
         }
     )
     part = Part("spearmen", row, models, armour=armour, ward=ward)
-    return Fielding("spearmen", (part,), 5)
+    return Fielding("spearmen", SPEARMEN.troop_type, (part,), 5)
 
 
 def _volley(

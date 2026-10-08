@@ -389,9 +389,6 @@
 # held-effect: a corpus side carries the effect to a step that cannot run it yet.
 
 - kind: held-effect
-  subject: cleaving-blow/combat/make-armour-saves
-  reason: Denies the armour save in combat; the round holds it.
-- kind: held-effect
   subject: martial-prowess/combat/roll-to-hit
   reason: Raises Weapon Skill To Hit in combat, for both sides' attacks; the round holds it.
 

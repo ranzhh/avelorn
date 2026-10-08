@@ -5,15 +5,11 @@ entry in ``data/tow/unmodelled.yaml`` saying why it stays open, and an entry no
 gap needs any more is stale. `avelorn coverage` prints the same report.
 """
 
-import copy
-
 import yaml
 
-from avelorn.core.registry import Registry
 from avelorn.tow.coverage import Entry, Site, coverage
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.schema.ledger import GapKind
-from avelorn.tow.schema.reference import RuleRef
 
 REPO = TOWRepository()
 REPORT = coverage(REPO)
@@ -75,35 +71,9 @@ def test_a_volley_effect_waits_for_a_side_that_carries_it_there() -> None:
 
 
 def test_an_effect_its_step_cannot_run_is_held() -> None:
-    """Killing Blow on a hand weapon reaches Make Armour Saves, which denies no save yet."""
-    doctored = copy.copy(REPO)
-    slaying = RuleRef(rule="killing-blow")
-    doctored.weapons = Registry(
-        [
-            weapon.model_copy(
-                update={
-                    "profiles": [
-                        profile.model_copy(
-                            update={"special_rules": [*profile.special_rules, slaying]}
-                        )
-                        for profile in weapon.profiles
-                    ]
-                }
-            )
-            if weapon.id == "hand-weapon"
-            else weapon
-            for weapon in REPO.weapons.values()
-        ],
-        kind="weapon",
-    )
-
-    held = [
-        gap.subject
-        for gap in coverage(doctored).gaps
-        if gap.kind is GapKind.HELD_EFFECT and gap.reason is None
-    ]
-
-    assert held == ["killing-blow/combat/make-armour-saves"]
+    """Martial Prowess reaches Roll To Hit in combat, which folds no Weapon Skill yet."""
+    held = {gap.subject for gap in REPORT.gaps if gap.kind is GapKind.HELD_EFFECT}
+    assert "martial-prowess/combat/roll-to-hit" in held
 
 
 def test_a_rule_granted_only_by_the_graph_is_referenced_there() -> None:
