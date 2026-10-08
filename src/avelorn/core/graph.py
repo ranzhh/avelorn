@@ -52,8 +52,9 @@ class Order(IntEnum):
     CANCEL = 1
     SET = 2
     ADD = 3
-    REROLL = 4
-    MULTIPLY = 5
+    DENY = 4
+    REROLL = 5
+    MULTIPLY = 6
 
 
 def _shown(value: object) -> int | str:

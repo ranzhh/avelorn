@@ -305,7 +305,7 @@ class _Fielding:
             case Operation.REROLL:
                 if effect.reroll not in runs.get(operation, frozenset()):
                     return None
-            case Operation.MULTIPLY:
+            case Operation.DENY | Operation.MULTIPLY:
                 if operation not in runs:
                     return None
             case Operation.CANCELS:

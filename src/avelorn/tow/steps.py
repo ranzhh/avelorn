@@ -205,8 +205,8 @@ class Spec:
     A ``fighter`` step is made once per fighter: its holdings are the fighter's
     part and the part of the model hit. Any other step holds whole sides.
     ``runs`` names what the kernel folds of each operation a rule lands there;
-    a characteristic it folds is the acting model's, and a multiply names
-    nothing, since it changes no quantity. ``outcomes`` lists every
+    a characteristic it folds is the acting model's, and a deny or a multiply
+    names nothing, since neither changes a quantity. ``outcomes`` lists every
     value the step can output. A roll whose rules change it shows its
     ``target`` in force and its ``printed`` target.
     """
@@ -554,6 +554,8 @@ def _piercing(attacker: Part, payloads: Payloads) -> int:
 
 
 def _save_target(target: Part, attacker: Part, payloads: Payloads) -> int | None:
+    if payloads.denied():
+        return None
     piercing = _piercing(attacker, payloads)
     armour = UNARMOURED if target.armour is None else target.armour
     maxima, _ = payloads.bounds(Quantity.ARMOUR_VALUE)
@@ -569,7 +571,7 @@ def make_armour_saves(
     Armour Piercing starts from any value set for it, and worsens the save by
     each amount added to it. The armour value improves by each amount added,
     to no better than the best bound printed, and a model with no armour
-    counts as 7+ before it improves.
+    counts as 7+ before it improves. A denied save is not rolled.
 
     Returns:
         The die as it lands, or None when no die is rolled.
@@ -824,6 +826,7 @@ def _armour_saving(sequence: StepSequence) -> Spec:
         runs={
             Operation.ADD: frozenset({Quantity.ARMOUR_PIERCING, Quantity.ARMOUR_VALUE}),
             Operation.SET: frozenset({Quantity.ARMOUR_PIERCING}),
+            Operation.DENY: frozenset(),
             Operation.REROLL: _ALL_REROLLS,
         },
         target=Offered(
