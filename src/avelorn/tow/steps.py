@@ -201,9 +201,10 @@ class Spec:
 
     A ``fighter`` step is made once per fighter: its holdings are the fighter's
     part and the part of the model hit. Any other step holds whole sides.
-    ``runs`` names what the kernel folds of each operation a rule lands there.
-    ``outcomes`` lists every value the step can output. A roll whose rules
-    change it shows its ``target`` in force and its ``printed`` target.
+    ``runs`` names what the kernel folds of each operation a rule lands there;
+    a characteristic it folds is the acting model's. ``outcomes`` lists every
+    value the step can output. A roll whose rules change it shows its
+    ``target`` in force and its ``printed`` target.
     """
 
     sequence: StepSequence
@@ -336,11 +337,20 @@ def _profile(attacker: Part) -> WeaponProfile:
     return attacker.weapon
 
 
-def _strength(attacker: Part) -> int:
+def _moved(part: Part, c: Characteristic, payloads: Payloads) -> int:
+    maxima, minima = payloads.bounds(c)
+    return min((max((_printed(part, c) + payloads.added(c), *minima)), *maxima))
+
+
+def _strength(attacker: Part, payloads: Payloads) -> int:
     strength = _profile(attacker).strength
     if strength.base is not None:
         return strength.base
-    return strength.resolve(_printed(attacker, Characteristic.STRENGTH))
+    return strength.resolve(_moved(attacker, Characteristic.STRENGTH, payloads))
+
+
+def _printed_strength(attacker: Part) -> int:
+    return _strength(attacker, _PRINTED)
 
 
 def _covers(on: RerollOn, die: Die) -> bool:
@@ -497,24 +507,42 @@ def roll_to_hit(attacker: Part, changed: tuple[Hashable, ...]) -> Distribution[D
     return shooting_hit(_printed(attacker, Characteristic.BALLISTIC_SKILL), modifier)
 
 
-def _wound_target(attacker: Part, target: Part) -> int | None:
-    return wound_target(_strength(attacker), _printed(target, Characteristic.TOUGHNESS))
+def _wound_target(attacker: Part, target: Part, payloads: Payloads) -> int | None:
+    strength = _strength(attacker, payloads)
+    return wound_target(strength, _printed(target, Characteristic.TOUGHNESS))
 
 
-def roll_to_wound(attacker: Part, target: Part, hit: Die) -> Distribution[Die | None]:
-    """Roll a hit To Wound, Strength against Toughness.
+def roll_to_wound(
+    attacker: Part, target: Part, hit: Die, changed: tuple[Hashable, ...]
+) -> Distribution[Die | None]:
+    """Roll a hit To Wound, Strength in force against Toughness, re-rolled as the rules allow.
+
+    The attacker's Strength moves by each amount added to it, within the
+    bounds printed, before its weapon's Strength reads it.
 
     Returns:
         The die as it lands, or None when no die is rolled.
     """
-    needed = _wound_target(attacker, target)
+    payloads = Payloads.of(changed)
+    needed = _wound_target(attacker, target, payloads)
     if not hit.success or needed is None:
         return Distribution.pure(None)
-    return _thrown(needed)
+    return _thrown(needed, payloads.rerolls())
+
+
+def _piercing(attacker: Part, payloads: Payloads) -> int:
+    match payloads.fixed(Quantity.ARMOUR_PIERCING):
+        case ():
+            printed = _profile(attacker).armour_piercing
+        case (fixed,):
+            printed = -fixed
+        case fixed:
+            raise ValueError(f"{attacker.id}'s Armour Piercing is set {len(fixed)} times")
+    return printed - payloads.added(Quantity.ARMOUR_PIERCING)
 
 
 def _save_target(target: Part, attacker: Part, payloads: Payloads) -> int | None:
-    piercing = _profile(attacker).armour_piercing - payloads.added(Quantity.ARMOUR_PIERCING)
+    piercing = _piercing(attacker, payloads)
     armour = UNARMOURED if target.armour is None else target.armour
     maxima, _ = payloads.bounds(Quantity.ARMOUR_VALUE)
     improved = max((armour - payloads.added(Quantity.ARMOUR_VALUE), *maxima))
@@ -526,9 +554,10 @@ def make_armour_saves(
 ) -> Distribution[Die | None]:
     """Roll the armour save against a wound, as the rules in force change it.
 
-    Armour Piercing worsens the save by each amount added to it. The armour
-    value improves by each amount added, to no better than the best bound
-    printed, and a model with no armour counts as 7+ before it improves.
+    Armour Piercing starts from any value set for it, and worsens the save by
+    each amount added to it. The armour value improves by each amount added,
+    to no better than the best bound printed, and a model with no armour
+    counts as 7+ before it improves.
 
     Returns:
         The die as it lands, or None when no die is rolled.
@@ -662,20 +691,27 @@ def how_many_attacks(
     return Distribution.pure(Attacks(tuple(made.items())))
 
 
-def _melee_hit_target(attacker: Part, target: Part) -> int:
+def _melee_hit_target(attacker: Part, target: Part, payloads: Payloads) -> int:
     return melee_hit_target(
         _printed(attacker, Characteristic.WEAPON_SKILL),
         _printed(target, Characteristic.WEAPON_SKILL),
+        payloads.added(Quantity.TO_HIT),
     )
 
 
-def roll_to_hit_in_combat(attacker: Part, target: Part) -> Distribution[Die]:
+def roll_to_hit_in_combat(
+    attacker: Part, target: Part, changed: tuple[Hashable, ...]
+) -> Distribution[Die]:
     """Roll one attack To Hit, Weapon Skill against the target's on the chart.
+
+    The roll moves by the rules in force and is re-rolled as they allow.
 
     Returns:
         The die as it lands; a natural 6 always hits.
     """
-    return d6(_melee_hit_target(attacker, target), confirm=Confirm.ALWAYS)
+    payloads = Payloads.of(changed)
+    needed = _melee_hit_target(attacker, target, payloads)
+    return d6(needed, _covered(payloads.rerolls()), confirm=Confirm.ALWAYS)
 
 
 def _itself[T](value: T) -> T:
@@ -724,15 +760,63 @@ def _counted(step: str) -> Offered:
 
 _WOUND_NEEDED = Offered(
     (_ATTACKER, _TARGET),
-    lambda attacker, target: _shown(_wound_target(attacker, target)),
+    lambda attacker, target: _shown(_wound_target(attacker, target, _PRINTED)),
     _UNITED,
 )
-_SAVE_PRINTED = Offered(
-    (_TARGET, _ATTACKER),
-    lambda target, attacker: _shown(_save_target(target, attacker, _PRINTED)),
-    _UNITED,
-)
-_WARD_PRINTED = Offered((_TARGET,), lambda target: _shown(target.ward), _UNITED)
+_ALL_REROLLS = frozenset(RerollOn)
+
+
+def _armour_saving(sequence: StepSequence) -> Spec:
+    return Spec(
+        sequence=sequence,
+        name="make-armour-saves",
+        kind=Kind.ROLL,
+        fighter=True,
+        side=Side.TARGET,
+        reads=(_TARGET, _ATTACKER, Output("roll-to-wound"), CHANGED),
+        kernel=make_armour_saves,
+        runs={
+            Operation.ADD: frozenset({Quantity.ARMOUR_PIERCING, Quantity.ARMOUR_VALUE}),
+            Operation.SET: frozenset({Quantity.ARMOUR_PIERCING}),
+            Operation.REROLL: _ALL_REROLLS,
+        },
+        target=Offered(
+            (_TARGET, _ATTACKER, CHANGED),
+            lambda target, attacker, changed: _shown(
+                _save_target(target, attacker, Payloads.of(changed))
+            ),
+            _UNITED,
+        ),
+        printed=Offered(
+            (_TARGET, _ATTACKER),
+            lambda target, attacker: _shown(_save_target(target, attacker, _PRINTED)),
+            _UNITED,
+        ),
+        readings={"saves": _counted("make-armour-saves")},
+    )
+
+
+def _warding(sequence: StepSequence) -> Spec:
+    return Spec(
+        sequence=sequence,
+        name="ward-saves",
+        kind=Kind.ROLL,
+        fighter=True,
+        side=Side.TARGET,
+        reads=(_TARGET, Output("roll-to-wound"), Output("make-armour-saves"), CHANGED),
+        kernel=ward_saves,
+        runs={Operation.SET: frozenset({Quantity.WARD_SAVE})},
+        target=Offered(
+            (_TARGET, CHANGED),
+            lambda target, changed: _shown(_ward(target, Payloads.of(changed))),
+            _UNITED,
+        ),
+        printed=Offered((_TARGET,), lambda target: _shown(target.ward), _UNITED),
+        readings={
+            "saves": _counted("ward-saves"),
+            "unsaved": Offered(_UNSAVED, _unsaved, _COUNT),
+        },
+    )
 
 
 def _removing(sequence: StepSequence) -> Spec:
@@ -816,53 +900,13 @@ _SPECS = (
         fighter=True,
         side=Side.ATTACKER,
         reads=(_ATTACKER, _TARGET, Output("roll-to-hit")),
-        kernel=roll_to_wound,
-        in_force={(Side.ATTACKER, Characteristic.STRENGTH): _strength},
+        kernel=partial(roll_to_wound, changed=()),
+        in_force={(Side.ATTACKER, Characteristic.STRENGTH): _printed_strength},
         target=_WOUND_NEEDED,
         readings={"wounds": _counted("roll-to-wound")},
     ),
-    Spec(
-        sequence=StepSequence.SHOOTING,
-        name="make-armour-saves",
-        kind=Kind.ROLL,
-        fighter=True,
-        side=Side.TARGET,
-        reads=(_TARGET, _ATTACKER, Output("roll-to-wound"), CHANGED),
-        kernel=make_armour_saves,
-        runs={
-            Operation.ADD: frozenset({Quantity.ARMOUR_PIERCING, Quantity.ARMOUR_VALUE}),
-            Operation.REROLL: frozenset(RerollOn),
-        },
-        target=Offered(
-            (_TARGET, _ATTACKER, CHANGED),
-            lambda target, attacker, changed: _shown(
-                _save_target(target, attacker, Payloads.of(changed))
-            ),
-            _UNITED,
-        ),
-        printed=_SAVE_PRINTED,
-        readings={"saves": _counted("make-armour-saves")},
-    ),
-    Spec(
-        sequence=StepSequence.SHOOTING,
-        name="ward-saves",
-        kind=Kind.ROLL,
-        fighter=True,
-        side=Side.TARGET,
-        reads=(_TARGET, Output("roll-to-wound"), Output("make-armour-saves"), CHANGED),
-        kernel=ward_saves,
-        runs={Operation.SET: frozenset({Quantity.WARD_SAVE})},
-        target=Offered(
-            (_TARGET, CHANGED),
-            lambda target, changed: _shown(_ward(target, Payloads.of(changed))),
-            _UNITED,
-        ),
-        printed=_WARD_PRINTED,
-        readings={
-            "saves": _counted("ward-saves"),
-            "unsaved": Offered(_UNSAVED, _unsaved, _COUNT),
-        },
-    ),
+    _armour_saving(StepSequence.SHOOTING),
+    _warding(StepSequence.SHOOTING),
     _removing(StepSequence.SHOOTING),
     Spec(
         sequence=StepSequence.PANIC,
@@ -941,11 +985,19 @@ _SPECS = (
         kind=Kind.ROLL,
         fighter=True,
         side=Side.ATTACKER,
-        reads=(_ATTACKER, _TARGET),
+        reads=(_ATTACKER, _TARGET, CHANGED),
         kernel=roll_to_hit_in_combat,
+        runs={Operation.ADD: frozenset({Quantity.TO_HIT}), Operation.REROLL: _ALL_REROLLS},
         target=Offered(
+            (_ATTACKER, _TARGET, CHANGED),
+            lambda attacker, target, changed: _shown(
+                _melee_hit_target(attacker, target, Payloads.of(changed))
+            ),
+            _UNITED,
+        ),
+        printed=Offered(
             (_ATTACKER, _TARGET),
-            lambda attacker, target: _shown(_melee_hit_target(attacker, target)),
+            lambda attacker, target: _shown(_melee_hit_target(attacker, target, _PRINTED)),
             _UNITED,
         ),
         readings={"hits": _counted("roll-to-hit")},
@@ -956,36 +1008,25 @@ _SPECS = (
         kind=Kind.ROLL,
         fighter=True,
         side=Side.ATTACKER,
-        reads=(_ATTACKER, _TARGET, Output("roll-to-hit")),
+        reads=(_ATTACKER, _TARGET, Output("roll-to-hit"), CHANGED),
         kernel=roll_to_wound,
-        target=_WOUND_NEEDED,
+        in_force={(Side.ATTACKER, Characteristic.STRENGTH): _printed_strength},
+        runs={
+            Operation.ADD: frozenset({Characteristic.STRENGTH}),
+            Operation.REROLL: _ALL_REROLLS,
+        },
+        target=Offered(
+            (_ATTACKER, _TARGET, CHANGED),
+            lambda attacker, target, changed: _shown(
+                _wound_target(attacker, target, Payloads.of(changed))
+            ),
+            _UNITED,
+        ),
+        printed=_WOUND_NEEDED,
         readings={"wounds": _counted("roll-to-wound")},
     ),
-    Spec(
-        sequence=StepSequence.COMBAT,
-        name="make-armour-saves",
-        kind=Kind.ROLL,
-        fighter=True,
-        side=Side.TARGET,
-        reads=(_TARGET, _ATTACKER, Output("roll-to-wound")),
-        kernel=partial(make_armour_saves, changed=()),
-        target=_SAVE_PRINTED,
-        readings={"saves": _counted("make-armour-saves")},
-    ),
-    Spec(
-        sequence=StepSequence.COMBAT,
-        name="ward-saves",
-        kind=Kind.ROLL,
-        fighter=True,
-        side=Side.TARGET,
-        reads=(_TARGET, Output("roll-to-wound"), Output("make-armour-saves")),
-        kernel=partial(ward_saves, changed=()),
-        target=_WARD_PRINTED,
-        readings={
-            "saves": _counted("ward-saves"),
-            "unsaved": Offered(_UNSAVED, _unsaved, _COUNT),
-        },
-    ),
+    _armour_saving(StepSequence.COMBAT),
+    _warding(StepSequence.COMBAT),
     _removing(StepSequence.COMBAT),
 )
 

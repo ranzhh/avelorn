@@ -117,7 +117,11 @@ SPEARS_INTO_SPEARMEN = Attack(Phase.COMBAT, 4, 3, 3, foe_weapon_skill=4, armour_
             id="shooting",
         ),
         pytest.param(
-            Scenario(Kind.STRIKE, Side("elven-spearmen", 5, "Thrusting Spear"), SPEARMEN),
+            Scenario(
+                Kind.STRIKE,
+                Side("elven-spearmen", 5, "Thrusting Spear"),
+                replace(SPEARMEN, weapon="Thrusting Spear"),
+            ),
             Role.DEFENDER,
             SPEARS_INTO_SPEARMEN,
             SPEARS_INTO_SPEARMEN,

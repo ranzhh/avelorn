@@ -260,14 +260,16 @@ class PartAt:
     part: Part
 
     def characteristic(self, c: Characteristic) -> Operand[int | None]:
-        """The characteristic in force at the step.
+        """The characteristic in force at the step, read for the role the part plays there.
 
         Returns:
-            The operand; no attached rule changes it yet.
+            The operand, before any rule attached there changes it.
         """
         printed = self.part.characteristic(c)
-        spec = self.at.evaluated.built.specs[self.at.step]
-        resolve = spec.in_force.get((self.side, c))
+        step = self.at.step
+        spec = self.at.evaluated.built.specs[step]
+        role = self.side if Side(step.side) is spec.side else self.side.other
+        resolve = spec.in_force.get((role, c))
         value = printed if resolve is None else resolve(self.part)
         return Operand(Distribution.pure(value), printed)
 

@@ -5,7 +5,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 
-from avelorn.core.distribution import Probability
+from avelorn.core.distribution import Distribution, Probability
 from avelorn.core.registry import Registry
 from avelorn.tow.contingent import Charge, ChargeArc, Contingent, Movement
 from avelorn.tow.data import TOWRepository
@@ -17,10 +17,9 @@ from avelorn.tow.phases.combat import (
     break_test,
     combat_result,
     fight,
-    strike_unit,
 )
 from avelorn.tow.phases.movement import StandAndShoot, charge
-from avelorn.tow.programs import VOLLEY, Evaluated, load_program
+from avelorn.tow.programs import ROUND, VOLLEY, Evaluated, load_program
 from avelorn.tow.schema import stage
 from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.reference import RuleRef
@@ -32,9 +31,11 @@ REPO = TOWRepository()
 
 CHAPTERS = (Phase.SHOOTING, Phase.COMBAT)
 
+INITIATIVES = range(10, 0, -1)
+
 
 class Kind(StrEnum):
-    """What the attacker does; STRIKE is the attacker's attacks alone, with no blows back."""
+    """What the attacker does; STRIKE is the attacker's blows in a round."""
 
     SHOOT = "shoot"
     STRIKE = "strike"
@@ -159,9 +160,9 @@ class Outcome:
 
 
 def resolve(scenario: Scenario) -> Outcome:
-    """Resolve ``scenario``: a volley and its Panic test on the graph, the rest on legacy.
+    """Resolve ``scenario``: a volley, its Panic test or a strike on the graph, the rest on legacy.
 
-    The volley is read in the lane where every rule a player may decline is taken.
+    A program is read in the lane where every rule a player may decline is taken.
 
     Returns:
         The outcome its kind decides.
@@ -188,12 +189,7 @@ def resolve(scenario: Scenario) -> Outcome:
             volley = _volley(attacker, defender, scenario)
             return replace(_shot(volley, defender.models), panic=_panicked(volley))
         case Kind.STRIKE:
-            struck = strike_unit(attacker, defender)
-            return Outcome(
-                attacks=struck.attacks,
-                unsaved=struck.p_unsaved,
-                casualties=_pmf(struck.casualties),
-            )
+            return _struck(_round(attacker, defender, scenario), defender.models)
         case Kind.FIGHT | Kind.BREAK:
             fought = fight(
                 attacker, defender, first_round=scenario.first_round, phase_rules=combat
@@ -218,13 +214,12 @@ def resolve(scenario: Scenario) -> Outcome:
 
 
 def _volley(attacker: Contingent, defender: Contingent, scenario: Scenario) -> Evaluated:
-    rules = {slug: rule for slug, rule in REPO.rules.items() if slug not in scenario.dropped}
     fielded = {
         stage.Side.ATTACKER: Fielding.of(attacker, attacker.shooting_weapon().name),
         stage.Side.TARGET: Fielding.of(defender),
     }
-    lanes = (
-        load_program(VOLLEY, rules)
+    return _taken(
+        load_program(VOLLEY, _rules(scenario))
         .built(fielded)
         .evaluate(
             {
@@ -239,10 +234,34 @@ def _volley(attacker: Contingent, defender: Contingent, scenario: Scenario) -> E
             }
         )
     )
+
+
+def _round(attacker: Contingent, defender: Contingent, scenario: Scenario) -> Evaluated:
+    fielded = {
+        stage.Side.ATTACKER: Fielding.of(attacker, attacker.in_hand().name, combat=True),
+        stage.Side.TARGET: Fielding.of(defender, defender.in_hand().name, combat=True),
+    }
+    return _taken(
+        load_program(ROUND, _rules(scenario))
+        .built(fielded)
+        .evaluate(
+            {
+                "attacker/standing": fielded[stage.Side.ATTACKER].standing(attacker.models),
+                "target/standing": fielded[stage.Side.TARGET].standing(defender.models),
+            }
+        )
+    )
+
+
+def _rules(scenario: Scenario) -> dict[str, Rule]:
+    return {slug: rule for slug, rule in REPO.rules.items() if slug not in scenario.dropped}
+
+
+def _taken(lanes: tuple[Evaluated, ...]) -> Evaluated:
     (taken,) = (
-        volley
-        for volley in lanes
-        if all(volley.lane.choices[toggle] for toggle in volley.lane.program.toggles.values())
+        each
+        for each in lanes
+        if all(each.lane.choices[toggle] for toggle in each.lane.program.toggles.values())
     )
     return taken
 
@@ -256,6 +275,44 @@ def _shot(volley: Evaluated, models: int) -> Outcome:
         unsaved=removed.read("unsaved").expect(lambda unsaved: unsaved) / shots,
         casualties={count: p for count, p in lost.mass.items() if p},
     )
+
+
+def _struck(fought: Evaluated, models: int) -> Outcome:
+    """The attacker's blows in a round, read from its own attack groups.
+
+    The chance an attack goes unsaved is the unsaved wounds expected over the
+    attacks expected. The attacks are reported when they are certain, and are
+    None when the defender's blows back may fell attackers before they strike.
+    The casualties are the target's in the round.
+
+    Returns:
+        The attacker's attacks, its unsaved chance per attack, and the target's casualties.
+    """
+    attacks = [
+        fought.at(f"round/initiative-{slot}/attacker/how-many-attacks").read("attacks")
+        for slot in INITIATIVES
+    ]
+    unsaved = sum(
+        fought.at(f"round/initiative-{slot}/attacker/attack/{part.id}/ward-saves")
+        .read("unsaved")
+        .expect(lambda wounds: wounds)
+        for slot in INITIATIVES
+        for part in fought.built.fielded[stage.Side.ATTACKER].parts
+    )
+    left = fought.at("round/initiative-1/target/remove-casualties").read("models")
+    lost = left.map(lambda standing: models - standing)
+    return Outcome(
+        attacks=_certain(attacks),
+        unsaved=unsaved / sum(made.expect(lambda n: n) for made in attacks),
+        casualties={count: p for count, p in lost.mass.items() if p},
+    )
+
+
+def _certain(attacks: list[Distribution[int]]) -> int | None:
+    counts = [tuple(made.mass) for made in attacks]
+    if any(len(count) != 1 for count in counts):
+        return None
+    return sum(count for (count,) in counts)
 
 
 def _panicked(volley: Evaluated) -> Panic:

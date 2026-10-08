@@ -298,6 +298,8 @@ class _Fielding:
                 keys = tuple(effect.add or effect.set_ or {})
                 if not set(keys) <= runs.get(operation, frozenset()):
                     return None
+                if effect.of is not None and effect.of is not _role(side, at):
+                    return None
             case Operation.REROLL:
                 if effect.reroll not in runs.get(operation, frozenset()):
                     return None
@@ -358,7 +360,7 @@ class _Fielding:
                 ("flaming-attacks", attack.flaming),
             ):
                 if wanted is not None:
-                    checks.append(Attacks(self.attacking(slug), wanted))
+                    checks.append(Attacks(self.attacking(slug, at), wanted))
         for fact in gates.facts:
             check = self.fact(rule, side, at, fact)
             if check is None:
@@ -388,9 +390,10 @@ class _Fielding:
             )
         return Equals(step.key, value)
 
-    def attacking(self, slug: str) -> str | None:
-        attacker = self.scopes[Side.ATTACKER]
-        return f"{self.holders[Side.ATTACKER]}/{slug}" if slug in attacker else None
+    def attacking(self, slug: str, at: Step[Any]) -> str | None:
+        acting = Side(at.side)
+        side = acting if self.specs[at].side is Side.ATTACKER else acting.other
+        return f"{self.holders[side]}/{slug}" if slug in self.scopes[side] else None
 
     def nearest(
         self, name: Printed, role: Role | None, side: Side, at: Step[Any]
