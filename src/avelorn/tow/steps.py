@@ -32,6 +32,7 @@ from avelorn.tow.kernels import (
     armour_save_target,
     back_rank,
     back_rank_multiplied,
+    break_odds,
     d6,
     falls_back_in_good_order,
     heavy_casualties,
@@ -88,6 +89,15 @@ class Fought(StrEnum):
     WON = "won"
     DRAWN = "drawn"
     LOST = "lost"
+
+
+class BreakTest(StrEnum):
+    """A Break test's result, by the names rules give the printed three."""
+
+    NOT_TAKEN = "not-taken"
+    GIVES_GROUND = "gives-ground"
+    FALLS_BACK_IN_GOOD_ORDER = "fall-back-in-good-order"
+    BREAKS = "breaks"
 
 
 class Retreat(StrEnum):
@@ -963,6 +973,54 @@ def _lead(score: int, enemy_score: int) -> int:
     return score - enemy_score
 
 
+def _leadership_in_force(
+    side: Fielding, standing: Standings, changed: tuple[Hashable, ...]
+) -> int | None:
+    value = side.highest(Characteristic.LEADERSHIP, standing)
+    added = Payloads.of(changed).added(Characteristic.LEADERSHIP, Side.ATTACKER)
+    return None if value is None else value + added
+
+
+def _leadership_shown(side: Fielding, standing: Standings, changed: tuple[Hashable, ...]) -> str:
+    value = _leadership_in_force(side, standing, changed)
+    return NO_ROLL if value is None else str(value)
+
+
+def break_test(
+    attacker: Fielding,
+    standing: Standings,
+    fought: Fought,
+    score: int,
+    enemy_score: int,
+    changed: tuple[Hashable, ...],
+) -> Distribution[BreakTest]:
+    """Take the Break test of a side that lost the round and still stands.
+
+    It tests the highest Leadership still standing, moved by the rules in
+    force, with the difference in combat result added to the roll
+    (the-combat-phase/break-test).
+
+    Returns:
+        The result; a side that won, drew or was wiped out takes no test.
+
+    Raises:
+        ValueError: no model left standing prints a Leadership.
+    """
+    if fought is not Fought.LOST or standing.models == 0:
+        return Distribution.pure(BreakTest.NOT_TAKEN)
+    leadership = _leadership_in_force(attacker, standing, changed)
+    if leadership is None:
+        raise ValueError("no model left standing prints a Leadership to test")
+    odds = break_odds(leadership, enemy_score - score)
+    return Distribution(
+        {
+            BreakTest.GIVES_GROUND: odds.gives_ground,
+            BreakTest.FALLS_BACK_IN_GOOD_ORDER: odds.falls_back,
+            BreakTest.BREAKS: odds.breaks,
+        }
+    )
+
+
 _ATTACKER = Holding(Side.ATTACKER)
 _PRINTED = Payloads(())
 _TARGET = Holding(Side.TARGET)
@@ -1345,6 +1403,27 @@ _SPECS = (
             "margin": Offered(_SCORES, _lead, _COUNT),
         },
         outcomes=frozenset(Fought),
+    ),
+    Spec(
+        sequence=StepSequence.BREAK,
+        name="break-test",
+        kind=Kind.ROLL,
+        side=Side.ATTACKER,
+        reads=(
+            _ATTACKER,
+            Fact("standing", Side.ATTACKER),
+            Output("who-is-the-winner"),
+            *_SCORES,
+            CHANGED,
+        ),
+        kernel=break_test,
+        runs={Operation.ADD: frozenset({(Side.ATTACKER, Characteristic.LEADERSHIP)})},
+        target=Offered(
+            (_ATTACKER, Fact("standing", Side.ATTACKER), CHANGED), _leadership_shown, _UNITED
+        ),
+        printed=Offered((_ATTACKER, Fact("standing", Side.ATTACKER)), _leadership, _UNITED),
+        readings={"test": _offer("break-test")},
+        outcomes=frozenset(BreakTest),
     ),
 )
 

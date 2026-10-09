@@ -37,3 +37,7 @@ items:
     sequence: combat-result
     of: [attacker, target]
     readings: [result, margin]
+  - step: break-test
+    sequence: break
+    of: [attacker, target]
+    readings: [test]

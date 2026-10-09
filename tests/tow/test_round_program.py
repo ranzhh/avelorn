@@ -16,7 +16,7 @@ from avelorn.tow.programs import ROUND, Evaluated, Loaded, load_program
 from avelorn.tow.schema.effect import Effect, Role
 from avelorn.tow.schema.rule import Clause, RuleGraph
 from avelorn.tow.schema.stage import Side
-from avelorn.tow.steps import NO_ROLL, WEAPON_CHOICE, Fought, who_is_the_winner
+from avelorn.tow.steps import NO_ROLL, WEAPON_CHOICE, BreakTest, Fought, who_is_the_winner
 
 REPO = TOWRepository()
 ROUND_PROGRAM = load_program(ROUND, REPO.rules)
@@ -91,8 +91,13 @@ def _fought(
     attacker_charges: int = 0,
     attacker_at_start: int | None = None,
 ) -> Evaluated:
-    (fought,) = _lanes(
+    lanes = _lanes(
         attacker, target, attacker_standing, program, attacker_charges, True, attacker_at_start
+    )
+    (fought,) = (
+        each
+        for each in lanes
+        if all(each.lane.choices[toggle] for toggle in each.lane.program.toggles.values())
     )
     return fought
 
@@ -481,3 +486,13 @@ def test_a_side_wiped_out_loses_whatever_it_scored(
     standing, enemy = (Standings((("part", Standing(each, 0)),)) for each in models)
 
     assert who_is_the_winner(standing, enemy, 3, 1).mass == {fought: 1}
+
+
+def test_a_side_wiped_out_takes_no_break_test() -> None:
+    """One Elven Spearman a side: whichever falls alone has lost, and no one is left to test."""
+    spearman = _fielded("elven-spearmen", "Thrusting Spear", 1)
+
+    fought = _fought(spearman, spearman)
+
+    for side in Side:
+        assert fought.at(f"round/{side}/break-test").read("test").mass == {BreakTest.NOT_TAKEN: 1}
