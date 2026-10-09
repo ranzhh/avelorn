@@ -6,6 +6,7 @@ import pytest
 
 from avelorn.core.distribution import Distribution
 from avelorn.core.graph import Carrier, Source
+from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.fielding import Fielding, Part
 from avelorn.tow.kernels import Standing, Standings, back_rank, back_rank_multiplied
@@ -19,7 +20,7 @@ def _maneaters() -> Fielding:
     maneater, captain = MANEATERS.profiles
     return Fielding(
         "maneaters",
-        MANEATERS.troop_type,
+        MANEATERS.rank_and_file,
         (Part("maneater", maneater, 3), Part("maneater-captain", captain, 1)),
         4,
     )
@@ -74,3 +75,37 @@ def test_a_side_whose_parts_carry_different_rules_is_refused() -> None:
 
     with pytest.raises(ValueError, match="maneater-captain carries rules maneater does not"):
         list(mixed.sources())
+
+
+@pytest.mark.parametrize(
+    ("models", "frontage", "bonus"),
+    [
+        pytest.param(20, 5, 2, id="four-ranks-claim-the-cap-of-two"),
+        pytest.param(15, 5, 2, id="three-ranks-claim-two"),
+        pytest.param(14, 5, 1, id="a-rear-rank-of-four-does-not-count"),
+        pytest.param(9, 5, 0, id="one-full-rank-claims-none"),
+        pytest.param(11, 6, 1, id="a-rear-rank-of-five-counts"),
+        pytest.param(20, 4, 0, id="four-wide-is-too-narrow-to-count"),
+    ],
+)
+def test_the_rank_bonus_counts_the_ranks_behind_the_first(
+    models: int, frontage: int, bonus: int
+) -> None:
+    """Elven Spearmen claim each rank behind the first holding five models, at most two."""
+    contingent = Contingent.field(REPO.units["elven-spearmen"], 20, data=REPO, frontage=frontage)
+    side = Fielding.of(contingent, combat=True)
+
+    assert side.rank_bonus(side.standing(models)) == bonus
+
+
+def test_a_side_counts_its_unit_strength_and_the_wounds_it_has_left() -> None:
+    """Four Wounds on three Maneaters and a Captain fell one Maneater and hurt the next.
+
+    Three Monstrous Infantry models stand at Unit Strength 3 each, with 9 Wounds
+    less the 1 the hurt Maneater lost.
+    """
+    side = _maneaters()
+
+    left = back_rank(side.standing(4), 4, side.removal)
+
+    assert (side.unit_strength(left), side.wounds_left(left)) == (9, 8)

@@ -82,6 +82,14 @@ class Test(StrEnum):
     FAILED = "failed"
 
 
+class Fought(StrEnum):
+    """How a round of combat went for one side."""
+
+    WON = "won"
+    DRAWN = "drawn"
+    LOST = "lost"
+
+
 class Retreat(StrEnum):
     """Retreat after a Panic test."""
 
@@ -806,13 +814,14 @@ def how_many_attacks(
     initiative: int,
     ranks: frozenset[str],
     initiatives: Initiatives,
+    at_start: Standings,
     standing: Standings,
 ) -> Distribution[Attacks]:
     """Count the attacks of each part that strikes at the slot's Initiative.
 
-    The ranks stand as the side was fielded at the start of the round, its
-    models placed part by part. Each model in a rank Who Can Fight names makes
-    its Attacks. With a supporting attack, each model in the rank behind makes
+    The ranks stand as the side stood ``at_start`` of the round, its models
+    placed part by part. Each model in a rank Who Can Fight names makes its
+    Attacks. With a supporting attack, each model in the rank behind makes
     one. A casualty suffered since comes off the fighting rank first, then the
     supporting rank, and takes its attacks with it (FAQ v1.5.3).
 
@@ -820,19 +829,21 @@ def how_many_attacks(
         The attacks of each part.
 
     Raises:
-        ValueError: Who Can Fight names a rank that is not counted.
+        ValueError: Who Can Fight names a rank that is not counted, or a part stands
+            more models than at the start of the round.
     """
+    _since(attacker, at_start, standing)
     fighting = ranks - {SUPPORTING_ATTACK}
     deep = len(fighting)
     if fighting != {_rank(number) for number in range(1, deep + 1)}:
         raise ValueError(f"{attacker.unit} fights with {_listed(ranks)}, which are not counted")
     width = attacker.frontage
     last = deep + int(SUPPORTING_ATTACK in ranks)
-    placed = [part for part in attacker.parts for _ in range(part.count)]
+    placed = [part for part in attacker.parts for _ in range(at_start.of(part.id).models)]
     front, support = placed[: deep * width], placed[deep * width : last * width]
     made: dict[str, int] = {}
     for part in attacker.parts:
-        lost = part.count - standing.of(part.id).models
+        lost = at_start.of(part.id).models - standing.of(part.id).models
         in_front = max(front.count(part) - lost, 0)
         supporting = max(support.count(part) - max(lost - front.count(part), 0), 0)
         striking = initiatives.of(part.id) == initiative
@@ -840,6 +851,14 @@ def how_many_attacks(
             in_front * _printed(part, Characteristic.ATTACKS) + supporting if striking else 0
         )
     return Distribution.pure(Attacks(tuple(made.items())))
+
+
+def _since(side: Fielding, at_start: Standings, standing: Standings) -> None:
+    risen = [
+        part.id for part in side.parts if standing.of(part.id).models > at_start.of(part.id).models
+    ]
+    if risen:
+        raise ValueError(f"{side.unit}: {', '.join(risen)} stand more models than at the start")
 
 
 def _melee_hit_target(attacker: Part, target: Part, payloads: Payloads) -> int:
@@ -891,12 +910,66 @@ def _listed(ranks: frozenset[str]) -> str:
     return ", ".join(sorted(ranks))
 
 
+def calculate_combat_result(
+    attacker: Fielding,
+    target: Fielding,
+    standing: Standings,
+    enemy_at_start: Standings,
+    enemy: Standings,
+    changed: tuple[Hashable, ...],
+) -> Distribution[int]:
+    """Score a side's round: the Wounds it inflicted, its Rank Bonus, and the points rules add.
+
+    The Wounds are those the enemy lost since the start of the round
+    (the-combat-phase/unsaved-wounds-inflicted); the Rank Bonus is the one the
+    side's standing models claim (the-combat-phase/rank-bonus).
+
+    An enemy part standing more models than at the start of the round fails it.
+
+    Returns:
+        The side's combat result.
+    """
+    _since(target, enemy_at_start, enemy)
+    inflicted = target.wounds_left(enemy_at_start) - target.wounds_left(enemy)
+    added = Payloads.of(changed).added(Quantity.COMBAT_RESULT)
+    return Distribution.pure(inflicted + attacker.rank_bonus(standing) + added)
+
+
+def who_is_the_winner(
+    standing: Standings, enemy: Standings, score: int, enemy_score: int
+) -> Distribution[Fought]:
+    """Settle how the round went for a side: the higher combat result wins, equal ones draw.
+
+    A side wiped out loses whatever it scored, and two wiped out draw
+    (the-combat-phase/calculate-combat-result); the margin stays the difference
+    in combat result either way.
+
+    Returns:
+        Won, drawn or lost.
+    """
+    match (standing.models == 0, enemy.models == 0):
+        case (True, False):
+            return Distribution.pure(Fought.LOST)
+        case (False, True):
+            return Distribution.pure(Fought.WON)
+        case (True, True):
+            return Distribution.pure(Fought.DRAWN)
+    if score == enemy_score:
+        return Distribution.pure(Fought.DRAWN)
+    return Distribution.pure(Fought.WON if score > enemy_score else Fought.LOST)
+
+
+def _lead(score: int, enemy_score: int) -> int:
+    return score - enemy_score
+
+
 _ATTACKER = Holding(Side.ATTACKER)
 _PRINTED = Payloads(())
 _TARGET = Holding(Side.TARGET)
 _TARGET_STANDING = Fact("standing", Side.TARGET)
 _HELD = Output(WEAPON_CHOICE)
 _STRIKING = Output(WEAPON_CHOICE, Side.ATTACKER)
+_SCORES = (Output("calculate-combat-result"), Output("calculate-combat-result", Side.TARGET))
 _UNITED = Monoid[Hashable](_UNSHOWN, _united)
 _COUNT = Monoid(0)
 _UNSAVED = (Output("roll-to-wound"), Output("make-armour-saves"), Output("ward-saves"))
@@ -1171,6 +1244,7 @@ _SPECS = (
             STRIKING,
             Output("who-can-fight"),
             Output("who-strikes-first"),
+            Fact("standing-at-start-of-round", Side.ATTACKER),
             Fact("standing", Side.ATTACKER),
         ),
         kernel=how_many_attacks,
@@ -1242,6 +1316,36 @@ _SPECS = (
     _struck_saving(),
     _warding(StepSequence.COMBAT),
     _removing(StepSequence.COMBAT),
+    Spec(
+        sequence=StepSequence.COMBAT_RESULT,
+        name="calculate-combat-result",
+        kind=Kind.CONSEQUENCE,
+        side=Side.ATTACKER,
+        reads=(
+            _ATTACKER,
+            _TARGET,
+            Fact("standing", Side.ATTACKER),
+            Fact("standing-at-start-of-round", Side.TARGET),
+            _TARGET_STANDING,
+            CHANGED,
+        ),
+        kernel=calculate_combat_result,
+        runs={Operation.ADD: frozenset({Quantity.COMBAT_RESULT})},
+        readings={"score": _offer("calculate-combat-result", _itself, _COUNT)},
+    ),
+    Spec(
+        sequence=StepSequence.COMBAT_RESULT,
+        name="who-is-the-winner",
+        kind=Kind.CONSEQUENCE,
+        side=Side.ATTACKER,
+        reads=(Fact("standing", Side.ATTACKER), _TARGET_STANDING, *_SCORES),
+        kernel=who_is_the_winner,
+        readings={
+            "result": _offer("who-is-the-winner"),
+            "margin": Offered(_SCORES, _lead, _COUNT),
+        },
+        outcomes=frozenset(Fought),
+    ),
 )
 
 STEPS: Mapping[tuple[StepSequence, str], Spec | Choice] = MappingProxyType(

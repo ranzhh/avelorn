@@ -4,16 +4,19 @@ from collections.abc import Mapping
 from fractions import Fraction
 from typing import NamedTuple
 
+import pytest
+
 from avelorn.core.distribution import Probability
 from avelorn.core.graph import Decision
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.fielding import SHIELD, Fielding, Held
+from avelorn.tow.kernels import Standing, Standings
 from avelorn.tow.programs import ROUND, Evaluated, Loaded, load_program
 from avelorn.tow.schema.effect import Effect, Role
 from avelorn.tow.schema.rule import Clause, RuleGraph
 from avelorn.tow.schema.stage import Side
-from avelorn.tow.steps import NO_ROLL, WEAPON_CHOICE
+from avelorn.tow.steps import NO_ROLL, WEAPON_CHOICE, Fought, who_is_the_winner
 
 REPO = TOWRepository()
 ROUND_PROGRAM = load_program(ROUND, REPO.rules)
@@ -50,13 +53,19 @@ def _lanes(
     program: Loaded = ROUND_PROGRAM,
     attacker_charges: int = 0,
     wielding: bool = False,
+    attacker_at_start: int | None = None,
 ) -> tuple[Evaluated, ...]:
     built = program.built({Side.ATTACKER: attacker.side, Side.TARGET: target.side})
     choices = {Side.ATTACKER: attacker.held, Side.TARGET: target.held}
+    fielded = sum(part.count for part in attacker.side.parts)
+    at_start = fielded if attacker_at_start is None else attacker_at_start
+    target_standing = target.side.standing(sum(part.count for part in target.side.parts))
     return built.evaluate(
         {
             "attacker/standing": attacker.side.standing(attacker_standing),
-            "target/standing": target.side.standing(sum(p.count for p in target.side.parts)),
+            "target/standing": target_standing,
+            "attacker/standing-at-start-of-round": attacker.side.standing(at_start),
+            "target/standing-at-start-of-round": target_standing,
             "attacker/rounds-fought": 1,
             "target/rounds-fought": 1,
             "attacker/charges-made": attacker_charges,
@@ -80,8 +89,11 @@ def _fought(
     attacker_standing: int = 1,
     program: Loaded = ROUND_PROGRAM,
     attacker_charges: int = 0,
+    attacker_at_start: int | None = None,
 ) -> Evaluated:
-    (fought,) = _lanes(attacker, target, attacker_standing, program, attacker_charges, True)
+    (fought,) = _lanes(
+        attacker, target, attacker_standing, program, attacker_charges, True, attacker_at_start
+    )
     return fought
 
 
@@ -400,3 +412,72 @@ def test_a_strength_change_of_the_model_struck_is_held_at_the_blow() -> None:
 
     wound = fought.at("round/initiative-1/attacker/attack/white-lion/roll-to-wound")
     assert wound.read("needed").mass == {"4+": 1}
+
+
+WITHOUT_MASSED_INFANTRY = load_program(
+    ROUND, {**REPO.rules, "massed-infantry": REPO.rules["massed-infantry"].with_graph(None)}
+)
+
+
+@pytest.mark.parametrize(
+    ("program", "lead"),
+    [
+        pytest.param(ROUND_PROGRAM, 2, id="massed-infantry"),
+        pytest.param(WITHOUT_MASSED_INFANTRY, 1, id="without-massed-infantry"),
+    ],
+)
+def test_the_combat_result_scores_the_wounds_and_the_unit_strength_left(
+    program: Loaded, lead: int
+) -> None:
+    """One Elven Spearman a side, striking at once, each falls on 1/6.
+
+    A Spearman that alone fells its foe scores its Wound and, standing at a
+    higher Unit Strength, Massed Infantry's +1: it wins by 2, or by 1 without
+    the rule. Both falling score a Wound each and draw, as does neither.
+    """
+    spearman = _fielded("elven-spearmen", "Thrusting Spear", 1)
+
+    won = _fought(spearman, spearman, program=program).at("round/attacker/who-is-the-winner")
+
+    alone = Fraction(5, 36)
+    assert won.read("margin").mass == {-lead: alone, 0: 1 - 2 * alone, lead: alone}
+    assert won.read("result").mass == {"won": alone, "lost": alone, "drawn": 1 - 2 * alone}
+
+
+def test_the_combat_result_scores_only_the_wounds_of_this_round() -> None:
+    """Spearmen that start the round at twelve of fifteen score the Dwarf nothing for the three.
+
+    The Dwarf scores the one Wound its blow may land, never the casualties the
+    Spearmen took before the round.
+    """
+    spearmen = _fielded("elven-spearmen", "Thrusting Spear", 15, frontage=5)
+    dwarf = _fielded("dwarf-warriors", "Hand Weapon", 1)
+
+    fought = _fought(spearmen, dwarf, attacker_standing=12, attacker_at_start=12)
+
+    assert set(fought.at("round/target/calculate-combat-result").read("score").mass) == {0, 1}
+
+
+def test_a_side_standing_more_models_than_at_the_start_of_the_round_is_refused() -> None:
+    """Spearmen said to stand at twelve after starting the round at ten fail the round."""
+    spearmen = _fielded("elven-spearmen", "Thrusting Spear", 15, frontage=5)
+    dwarf = _fielded("dwarf-warriors", "Hand Weapon", 1)
+
+    with pytest.raises(ValueError, match="elven-spearman stand more models than at the start"):
+        _fought(spearmen, dwarf, attacker_standing=12, attacker_at_start=10)
+
+
+@pytest.mark.parametrize(
+    ("models", "fought"),
+    [
+        pytest.param((0, 5), Fought.LOST, id="the-wiped-out-side-loses"),
+        pytest.param((0, 0), Fought.DRAWN, id="two-wiped-out-sides-draw"),
+    ],
+)
+def test_a_side_wiped_out_loses_whatever_it_scored(
+    models: tuple[int, int], fought: Fought
+) -> None:
+    """A side's 3 against its foe's 1 wins nothing once the side is wiped out."""
+    standing, enemy = (Standings((("part", Standing(each, 0)),)) for each in models)
+
+    assert who_is_the_winner(standing, enemy, 3, 1).mass == {fought: 1}

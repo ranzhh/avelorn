@@ -35,6 +35,7 @@ from avelorn.tow.changes import (
     Granted,
     HasSource,
     Holds,
+    Measured,
     MoreThan,
     Operated,
     Shows,
@@ -53,6 +54,7 @@ from avelorn.tow.schema.effect import (
     When,
 )
 from avelorn.tow.schema.phase import Phase
+from avelorn.tow.schema.program import DerivedFact
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.stage import Side
@@ -506,6 +508,12 @@ class _Fielding:
 
     def fact(self, rule: Rule, side: Side, at: Step[Any], fact: FactGate) -> Check | None:
         comparator, value = fact.compared
+        if fact.fact in DerivedFact:
+            left = self.measured(DerivedFact(fact.fact), fact.of, side)
+            right = self.compared(value, side)
+            if left is None or right is None or comparator != "more-than":
+                return None
+            return MoreThan(left, right)
         if isinstance(value, FactRef):
             return None
         if fact.fact in Printed:
@@ -521,8 +529,29 @@ class _Fielding:
             case "is" if known is not None:
                 return Equals(known, value)
             case "more-than" if known is not None and isinstance(value, int):
-                return MoreThan(known, value)
+                return MoreThan(Measured(known), value)
         return None
+
+    def compared(self, value: object, side: Side) -> Measured | int | None:
+        if isinstance(value, int):
+            return value
+        if isinstance(value, FactRef) and value.fact in DerivedFact:
+            return self.measured(DerivedFact(value.fact), value.of, side)
+        return None
+
+    def measured(self, fact: DerivedFact, of: Role | None, side: Side) -> Measured | None:
+        if of is None:
+            return None
+        owner = side if of is Role.THIS_MODEL else side.other
+        standing = self.inputs.get(f"{owner}/standing")
+        if standing is None:
+            return None
+        fielding = self.fielded[owner]
+        match fact:
+            case DerivedFact.RANK_BONUS:
+                return Measured(standing, fielding.rank_bonus)
+            case DerivedFact.UNIT_STRENGTH:
+                return Measured(standing, fielding.unit_strength)
 
     def equals(self, rule: Rule, step: Step[Any], value: Hashable) -> Equals:
         spec = self.specs[step]

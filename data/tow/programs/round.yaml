@@ -4,6 +4,8 @@ fielded: [attacker, target]
 inputs:
   - {fact: standing, of: attacker}
   - {fact: standing, of: target}
+  - {known: standing-at-start-of-round, of: attacker, type: standing}
+  - {known: standing-at-start-of-round, of: target, type: standing}
   - {fact: rounds-fought, of: attacker}
   - {fact: rounds-fought, of: target}
   - {fact: charges-made, of: attacker}
@@ -27,3 +29,11 @@ items:
           - make-armour-saves
           - {step: ward-saves, readings: [unsaved]}
       - {step: remove-casualties, of: [target, attacker], tallies: [attack], readings: [models]}
+  - step: calculate-combat-result
+    sequence: combat-result
+    of: [attacker, target]
+    readings: [score]
+  - step: who-is-the-winner
+    sequence: combat-result
+    of: [attacker, target]
+    readings: [result, margin]
