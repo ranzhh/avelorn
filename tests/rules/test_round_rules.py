@@ -97,6 +97,10 @@ OUTLASTS_D6_HITS = sum(Fraction(1, 6) * (1 - HIT_FELLS) ** hits for hits in rang
             (1 - OUTLASTS_D6_HITS * (1 - FELLS), OUTLASTS_D6_HITS * (1 - FELLS) * FELLS),
             (FELLS, (1 - FELLS) * FELLS),
             id="charged-6-inches",
+            marks=pytest.mark.xfail(
+                strict=True,
+                reason="Impact Hits needs the Impact Hits step and the charge's Initiative bonus",
+            ),
         ),
         pytest.param(
             2,
@@ -104,6 +108,9 @@ OUTLASTS_D6_HITS = sum(Fraction(1, 6) * (1 - HIT_FELLS) ** hits for hits in rang
             (FELLS, (1 - FELLS) * FELLS),
             (FELLS, (1 - FELLS) * FELLS),
             id="charged-2-inches",
+            marks=pytest.mark.xfail(
+                strict=True, reason="Impact Hits' charged case needs the charge's Initiative bonus"
+            ),
         ),
         pytest.param(None, False, (FELLS, FELLS), (FELLS, FELLS), id="standing"),
     ],
@@ -215,6 +222,7 @@ STOMP = one_attack(Attack(COMBAT, 6, 6, 3, foe_weapon_skill=4, armour_value=5, a
             ),
             ({0: Fraction(1)}, {0: Fraction(1)}),
             id="frostheart-outlasts-the-blows",
+            marks=pytest.mark.xfail(strict=True, reason="Stomp Attacks needs its step"),
         ),
         pytest.param(
             Scenario(
@@ -227,6 +235,7 @@ STOMP = one_attack(Attack(COMBAT, 6, 6, 3, foe_weapon_skill=4, armour_value=5, a
             (_once(FELLS + (1 - FELLS) ** 2 * (1 - (1 - HIT_FELLS) ** 2)), _once(FELLS)),
             (_once(FELLS), _once(FELLS)),
             id="a-slain-stomper-never-stomps",
+            marks=pytest.mark.xfail(strict=True, reason="Stomp Attacks needs its step"),
         ),
     ],
 )

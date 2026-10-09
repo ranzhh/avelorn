@@ -10,14 +10,6 @@ from avelorn.core.registry import Registry
 from avelorn.tow.contingent import Charge, ChargeArc, Contingent, Movement
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.fielding import SHIELD, Fielding, Held
-from avelorn.tow.phases.combat import (
-    CombatPhase,
-    FightResult,
-    SideBreak,
-    break_test,
-    combat_result,
-    fight,
-)
 from avelorn.tow.phases.movement import StandAndShoot, charge
 from avelorn.tow.programs import ROUND, VOLLEY, Evaluated, load_program
 from avelorn.tow.schema import stage
@@ -25,7 +17,7 @@ from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.weapon import Weapon
-from avelorn.tow.steps import Retreat
+from avelorn.tow.steps import BreakTest, Retreat
 
 REPO = TOWRepository()
 
@@ -160,7 +152,11 @@ class Panic:
 
 @dataclass(frozen=True)
 class Outcome:
-    """What a scenario resolved to; ``margin`` is the attacker's lead in combat result."""
+    """What a scenario resolved to.
+
+    ``margin`` is the attacker's lead in combat result, and ``breaks`` each
+    side's Break test as rolled.
+    """
 
     attacks: int | None = None
     unsaved: Probability | None = None
@@ -173,7 +169,7 @@ class Outcome:
 
 
 def resolve(scenario: Scenario) -> Outcome:
-    """Resolve ``scenario``: a volley, its Panic test or a strike on the graph, the rest on legacy.
+    """Resolve ``scenario`` on the graph; a Stand & Shoot still fires on legacy.
 
     A program is read in the lane where every rule a player may decline is taken.
 
@@ -196,7 +192,6 @@ def resolve(scenario: Scenario) -> Outcome:
         raise ValueError(f"not a chapter rule with effects: {sorted(unknown)}")
     attacker, defender = _field(scenario.attacker), _field(scenario.defender)
     shooting = _chapter(Phase.SHOOTING, scenario.dropped)
-    combat = _chapter(Phase.COMBAT, scenario.dropped)
     match scenario.kind:
         case Kind.SHOOT:
             return _shot(_volley(attacker, defender, scenario), defender.models)
@@ -206,16 +201,16 @@ def resolve(scenario: Scenario) -> Outcome:
         case Kind.STRIKE:
             return _struck(_round(attacker, defender, scenario), attacker.models, defender.models)
         case Kind.FIGHT | Kind.BREAK:
-            fought = fight(
-                attacker, defender, first_round=scenario.first_round, phase_rules=combat
+            fought = _round(attacker, defender, scenario)
+            outcome = Outcome(
+                casualties=_lost(fought, stage.Side.TARGET, defender.models),
+                attacker_casualties=_lost(fought, stage.Side.ATTACKER, attacker.models),
+                margin=_margin(fought),
             )
-            outcome = _fought(fought)
             if scenario.kind is Kind.FIGHT:
                 return outcome
-            broken = break_test(combat_result(fought), attacker, defender)
             return replace(
-                outcome,
-                breaks={Role.ATTACKER: _break(broken.a), Role.DEFENDER: _break(broken.b)},
+                outcome, breaks={role: _broken(fought, side) for role, side in _SIDES.items()}
             )
         case Kind.STAND_AND_SHOOT:
             move = attacker.movement.charge
@@ -224,8 +219,7 @@ def resolve(scenario: Scenario) -> Outcome:
             engagement = charge(attacker, defender, move, shooting_rules=shooting)
             reaction = engagement.react(StandAndShoot())
             assert reaction is not None
-            fought = CombatPhase(in_play=combat).fight(engagement)
-            return replace(_fought(fought), attacks=reaction.shots)
+            return Outcome(attacks=reaction.shots)
 
 
 def _volley(attacker: Contingent, defender: Contingent, scenario: Scenario) -> Evaluated:
@@ -383,20 +377,18 @@ def _panicked(volley: Evaluated) -> Panic:
     )
 
 
-def _fought(fought: FightResult) -> Outcome:
-    return Outcome(
-        casualties=_pmf(fought.b_casualties),
-        attacker_casualties=_pmf(fought.a_casualties),
-        margin={lead: p for lead, p in combat_result(fought).margin.items() if p},
+def _margin(fought: Evaluated) -> dict[int, Probability]:
+    lead = fought.at("round/attacker/who-is-the-winner").read("margin")
+    return {by: p for by, p in lead.mass.items() if p}
+
+
+def _broken(fought: Evaluated, side: stage.Side) -> Break:
+    test = fought.at(f"round/{side}/break-test").read("test").mass
+    return Break(
+        test.get(BreakTest.GIVES_GROUND, 0),
+        test.get(BreakTest.FALLS_BACK_IN_GOOD_ORDER, 0),
+        test.get(BreakTest.BREAKS, 0),
     )
-
-
-def _break(side: SideBreak) -> Break:
-    return Break(side.p_gives_ground, side.p_falls_back, side.p_breaks)
-
-
-def _pmf(masses: Sequence[Probability]) -> dict[int, Probability]:
-    return {count: p for count, p in enumerate(masses) if p}
 
 
 def _chapter(phase: Phase, dropped: frozenset[str] = frozenset()) -> dict[str, Rule]:

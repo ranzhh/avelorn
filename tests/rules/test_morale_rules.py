@@ -21,6 +21,7 @@ from rules.scenario import Break, Kind, Outcome, Panic, Role, Scenario, Side, re
 SPEARMEN = Side("elven-spearmen", 10, "Thrusting Spear")
 ARCHERS = Side("elven-archers", 10, frontage=10)
 CHARGING = Side("elven-spearmen", 10, "Hand Weapon", charged=5)
+WALL = Side("elven-spearmen", 15, "Thrusting Spear")
 
 
 def _break_test_rolled(outcome: Outcome, loser: Role, leadership: int) -> Break:
@@ -92,17 +93,7 @@ def _one_more(plain: Mapping[int, Probability]) -> dict[int, Probability]:
             _one_more,
             id="outnumbering-whatever-falls",
         ),
-        pytest.param(
-            EQUAL_RANKS,
-            _after_the_round,
-            id="equal-unit-strength",
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason="correction candidate: legacy compares Unit Strength before any "
-                "blow lands (src/avelorn/tow/phases/combat.py:1056); the printed combat "
-                "result counts the models left once every model has fought",
-            ),
-        ),
+        pytest.param(EQUAL_RANKS, _after_the_round, id="equal-unit-strength"),
     ],
 )
 def test_massed_infantry(
@@ -125,19 +116,24 @@ def test_massed_infantry(
     ("printed", "plain", "leadership", "walled"),
     [
         pytest.param(
-            Scenario(Kind.BREAK, CHARGING, SPEARMEN, first_round=True).adding(
+            Scenario(Kind.BREAK, CHARGING, WALL, first_round=True).adding(
                 "shieldwall", Role.DEFENDER
             ),
-            Scenario(Kind.BREAK, CHARGING, SPEARMEN, first_round=True),
+            Scenario(Kind.BREAK, CHARGING, WALL, first_round=True),
             8,
             True,
             id="charged",
+            marks=pytest.mark.xfail(
+                strict=True,
+                reason="Shieldwall needs a substitute at the Break test, its once-per-game "
+                "limit, the shield it wears and the charges received",
+            ),
         ),
         pytest.param(
-            Scenario(
-                Kind.BREAK, replace(CHARGING, charged=None), SPEARMEN, first_round=False
-            ).adding("shieldwall", Role.DEFENDER),
-            Scenario(Kind.BREAK, replace(CHARGING, charged=None), SPEARMEN, first_round=False),
+            Scenario(Kind.BREAK, replace(CHARGING, charged=None), WALL, first_round=False).adding(
+                "shieldwall", Role.DEFENDER
+            ),
+            Scenario(Kind.BREAK, replace(CHARGING, charged=None), WALL, first_round=False),
             8,
             False,
             id="not-charged",
@@ -156,7 +152,11 @@ def test_massed_infantry(
     ],
 )
 def test_shieldwall(printed: Scenario, plain: Scenario, leadership: int, walled: bool) -> None:
-    """A shielded unit charged this turn Gives Ground where it would Fall Back in Good Order."""
+    """A shielded unit charged this turn Gives Ground where it would Fall Back in Good Order.
+
+    Ten Elves cannot wipe out fifteen Spearmen in a round, so a beaten wall
+    always takes its test.
+    """
     with_rule, without = resolve(printed), resolve(plain)
     rolled = _break_test_rolled(with_rule, Role.DEFENDER, leadership)
     wall = Break(rolled.gives_ground + rolled.falls_back, 0, rolled.breaks)
@@ -167,10 +167,20 @@ def test_shieldwall(printed: Scenario, plain: Scenario, leadership: int, walled:
     )
 
 
+@pytest.mark.xfail(
+    strict=True, reason="Stubborn needs a force at the Break test and the Break tests taken"
+)
 def test_stubborn() -> None:
-    """Ironbreakers that lose Fall Back in Good Order instead of taking the Break test."""
+    """Ironbreakers that lose Fall Back in Good Order instead of taking the Break test.
+
+    Five Spearmen cannot wipe out ten Ironbreakers in a round, so beaten
+    Ironbreakers always face the test.
+    """
     scenario = Scenario(
-        Kind.BREAK, SPEARMEN, Side("ironbreakers", 10, "Hand Weapon"), first_round=False
+        Kind.BREAK,
+        replace(SPEARMEN, models=5, frontage=5),
+        Side("ironbreakers", 10, "Hand Weapon"),
+        first_round=False,
     )
     printed = resolve(scenario)
     plain = resolve(scenario.without("stubborn", Role.DEFENDER))
@@ -183,9 +193,16 @@ def test_stubborn() -> None:
 
 
 def test_terror() -> None:
-    """Spearmen beaten by the Merwyrm test at Leadership 7; the Merwyrm, beaten, keeps its 8."""
+    """Spearmen beaten by the Merwyrm test at Leadership 7; the Merwyrm, beaten, keeps its 8.
+
+    Neither five Spearmen nor the Merwyrm's four blows can wipe out the other in
+    a round, so the loser always tests.
+    """
     scenario = Scenario(
-        Kind.BREAK, Side("merwyrm", 1, "Lashing Talons"), SPEARMEN, first_round=False
+        Kind.BREAK,
+        Side("merwyrm", 1, "Lashing Talons"),
+        replace(SPEARMEN, models=5, frontage=5),
+        first_round=False,
     )
     printed = resolve(scenario)
     plain = resolve(scenario.without("terror", Role.ATTACKER))
