@@ -11,6 +11,7 @@ from typing import Any, ClassVar
 from avelorn.core.distribution import Distribution, Kernel, Monoid, Probability
 from avelorn.core.graph import (
     Consequence,
+    Decision,
     Eligibility,
     Key,
     Mark,
@@ -354,6 +355,28 @@ class Choice:
     def key(self) -> tuple[StepSequence, str]:
         """The registry key: the sequence and the step name."""
         return self.sequence, self.name
+
+
+WEAPON_CHOICE = "choose-combat-and-determine-who-can-fight"
+
+
+def weapon_choices(specs: Mapping[Step[Any], "Spec | Choice"]) -> dict[Side, Decision[Any]]:
+    """The decision each side makes at its weapon choice, by side.
+
+    Returns:
+        Each side's weapon choice.
+
+    Raises:
+        ValueError: a side makes the choice twice.
+    """
+    made: dict[Side, Decision[Any]] = {}
+    for step, spec in specs.items():
+        if isinstance(spec, Choice) and spec.name == WEAPON_CHOICE and isinstance(step, Decision):
+            side = Side(step.side)
+            if side in made:
+                raise ValueError(f"the {side} makes its weapon choice twice")
+            made[side] = step
+    return made
 
 
 def _printed(part: Profiled[int | None], c: Characteristic) -> int:
@@ -872,8 +895,8 @@ _ATTACKER = Holding(Side.ATTACKER)
 _PRINTED = Payloads(())
 _TARGET = Holding(Side.TARGET)
 _TARGET_STANDING = Fact("standing", Side.TARGET)
-_HELD = Output("choose-combat-and-determine-who-can-fight")
-_STRIKING = Output("choose-combat-and-determine-who-can-fight", Side.ATTACKER)
+_HELD = Output(WEAPON_CHOICE)
+_STRIKING = Output(WEAPON_CHOICE, Side.ATTACKER)
 _UNITED = Monoid[Hashable](_UNSHOWN, _united)
 _COUNT = Monoid(0)
 _UNSAVED = (Output("roll-to-wound"), Output("make-armour-saves"), Output("ward-saves"))
@@ -1111,7 +1134,7 @@ _SPECS = (
     ),
     Choice(
         sequence=StepSequence.COMBAT,
-        name="choose-combat-and-determine-who-can-fight",
+        name=WEAPON_CHOICE,
         side=Side.ATTACKER,
         options=_holdings,
     ),

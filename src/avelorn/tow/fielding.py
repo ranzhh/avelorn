@@ -332,5 +332,7 @@ class Fielding:
 
 def _fought(weapon: Weapon) -> list[tuple[RuleRef, Source]]:
     profile = weapon.combat_profile
-    fights = None if profile is None else profile.name or weapon.name
+    if profile is None:
+        raise ValueError(f"{weapon.name} has no combat profile")
+    fights = profile.name or weapon.name
     return [pair for pair in weapon.sources() if pair[1].profile == fights]

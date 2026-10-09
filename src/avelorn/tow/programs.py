@@ -63,6 +63,7 @@ from avelorn.tow.steps import (
     Summed,
     bound,
     share,
+    weapon_choices,
 )
 from avelorn.tow.traits import Operand
 
@@ -189,8 +190,7 @@ class Built:
             if type(value) is not expected:
                 raise ProgramError(f"{name} expects {expected.__name__}; got {value!r}")
         given = {self.inputs[name].state: value for name, value in knowns.items()}
-        deciding = self._deciding()
-        pinned = {deciding[side]: option for side, option in choices.items()}
+        pinned = self.pinned(choices)
         lanes = self.program.evaluate(pinned, given)
         for lane in lanes:
             for decision, option in pinned.items():
@@ -200,12 +200,26 @@ class Built:
                     raise ProgramError(f"{option} is not allowed at {path}")
         return tuple(Evaluated(self, lane, MappingProxyType(dict(knowns))) for lane in lanes)
 
-    def _deciding(self) -> dict[Side, Decision[Any]]:
-        return {
-            Side(step.side): step
-            for step, spec in self.specs.items()
-            if isinstance(spec, Choice) and isinstance(step, Decision)
-        }
+    def pinned(self, choices: Mapping[Side, Hashable]) -> dict[Decision[Any], Hashable]:
+        """Each option given, at the weapon choice of its side.
+
+        Returns:
+            The option, by decision.
+
+        Raises:
+            ProgramError: a side makes no weapon choice, or is given an option it lacks.
+        """
+        made = weapon_choices(self.specs)
+        pinned: dict[Decision[Any], Hashable] = {}
+        for side, option in choices.items():
+            decision = made.get(side)
+            if decision is None:
+                raise ProgramError(f"the {side} makes no weapon choice in {self.program.name}")
+            if option not in decision.options:
+                path = self.program.paths[decision]
+                raise ProgramError(f"{option} is no option at {path}")
+            pinned[decision] = option
+        return pinned
 
 
 @dataclass(frozen=True)

@@ -4,11 +4,11 @@ A payload is what one operation leaves in force at a step. A step's kernel
 reads the payloads under its mark through :class:`Payloads`.
 """
 
-from collections.abc import Hashable, Iterable, Mapping
+from collections.abc import Hashable, Mapping
 from dataclasses import dataclass
 from typing import Any, ClassVar, Protocol
 
-from avelorn.core.graph import Change, Key, Order
+from avelorn.core.graph import Change, Decision, Key, Order
 from avelorn.tow.kernels import Die
 from avelorn.tow.schema.effect import Bounded, Effect, Operation, RerollOn
 from avelorn.tow.schema.quantity import Quantity
@@ -265,12 +265,12 @@ class Granted:
 class Sources:
     """The sources of a rule node at one holder.
 
-    A source riding a weapon is in force only while the bearer's choice
-    ``held`` holds that weapon; any other source is in force throughout.
+    A source riding a weapon is in force only while the bearer's weapon
+    ``choice`` holds that weapon; any other source is in force throughout.
     """
 
     granted: tuple[Granted, ...]
-    held: Key | None = None
+    choice: Decision[Any] | None = None
 
     @property
     def weapons(self) -> frozenset[str]:
@@ -280,34 +280,39 @@ class Sources:
     @property
     def reads(self) -> tuple[Key, ...]:
         """The bearer's choice, when a source rides a weapon."""
-        return (self.held,) if self.held is not None and self.weapons else ()
+        return (self.choice,) if self.choice is not None and self.weapons else ()
 
-    def in_force(self, read: Mapping[Key, Any], out: frozenset[str]) -> tuple[Granted, ...]:
-        """The sources in force in one world: not granted by a node left out, and held.
+    def holding(self, held: frozenset[str]) -> tuple[Granted, ...]:
+        """The sources in force while the bearer holds ``held``.
 
         Returns:
             Each source in force.
         """
-        held = frozenset() if self.held is None or not self.weapons else read[self.held]
-        return tuple(
-            each
-            for each in self.granted
-            if each.via not in out and (each.weapon is None or each.weapon in held)
-        )
+        return tuple(each for each in self.granted if each.weapon is None or each.weapon in held)
 
-    def at_once(self, options: Iterable[frozenset[str]]) -> int:
-        """The most sources in force together, over the options the bearer may hold.
+    @property
+    def options(self) -> tuple[tuple[Granted, ...], ...]:
+        """The sources in force for each option of the choice, or every source with no choice."""
+        if self.choice is None or not self.weapons:
+            return (self.granted,)
+        return tuple(self.holding(option) for option in self.choice.options)
+
+    def in_force(self, read: Mapping[Key, Any], out: frozenset[str]) -> tuple[Granted, ...]:
+        """The sources in force in one world: held, and not granted by a node left out.
 
         Returns:
-            The count; every source when the bearer chooses nothing.
+            Each source in force.
         """
-        return max(
-            (
-                sum(each.weapon is None or each.weapon in option for each in self.granted)
-                for option in options
-            ),
-            default=len(self.granted),
-        )
+        held = read[self.choice] if self.choice is not None and self.weapons else frozenset()
+        return tuple(each for each in self.holding(held) if each.via not in out)
+
+    def at_once(self) -> int:
+        """The most sources in force together, over the options of the choice.
+
+        Returns:
+            The count.
+        """
+        return max(len(each) for each in self.options)
 
 
 @dataclass(frozen=True)
@@ -501,7 +506,21 @@ class Operated:
         )
 
     def view(self) -> dict[str, Any]:
-        payload = self.payload(self.sources.granted)
+        """The change as text: one per distinct payload over the options of the choice.
+
+        Returns:
+            The text, the payloads joined by "or".
+        """
+        held = [each for each in self.sources.options if each] or [self.sources.granted]
+        texts = dict.fromkeys(self.text(self.payload(each)) for each in held)
+        return {"text": " or ".join(texts)}
+
+    def text(self, payload: Hashable) -> str:
+        """One payload as text.
+
+        Returns:
+            The text.
+        """
         match payload:
             case Added(key, amount, maximum, minimum):
                 bounds = "".join(
@@ -509,15 +528,15 @@ class Operated:
                     for name, bound in (("at most", maximum), ("at least", minimum))
                     if bound is not None
                 )
-                return {"text": f"{amount:+d} {key}{bounds}"}
+                return f"{amount:+d} {key}{bounds}"
             case Fixed(key, value):
-                return {"text": f"{key} {value}"}
+                return f"{key} {value}"
             case Denied():
-                return {"text": "deny"}
+                return "deny"
             case Rerolled(on):
-                return {"text": f"re-roll {on}"}
+                return f"re-roll {on}"
             case Multiplied(by):
-                return {"text": f"multiply by {by}"}
+                return f"multiply by {by}"
         cancels = self.effect.cancels
         named = () if cancels is None else (cancels.rule, cancels.op, cancels.quantity)
-        return {"text": " ".join(["cancels", *(str(each) for each in named if each is not None)])}
+        return " ".join(["cancels", *(str(each) for each in named if each is not None)])
