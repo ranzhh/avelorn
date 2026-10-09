@@ -1821,6 +1821,31 @@ def test_a_toggle_lane_keeps_its_masses_exact() -> None:
     ]
 
 
+class _Counted:
+    """A kernel that counts how often it runs."""
+
+    def __init__(self) -> None:
+        self.runs = 0
+
+    def __call__(self) -> Distribution[int]:
+        self.runs += 1
+        return _d6()
+
+
+def test_a_lane_splits_where_its_decision_is_reached() -> None:
+    counted = _Counted()
+    roll = Roll[int](name="roll", side="target", kernel=counted, target=Scalar("t", 1))
+    reaction = Decision[str](
+        name="declare-reaction", side="target", options={"hold": (), "flee": ()}, otherwise="hold"
+    )
+    program = Program.build("charge", _SIDES, (roll, reaction))
+
+    lanes = program.evaluate()
+
+    assert [lane.choices[reaction] for lane in lanes] == ["hold", "flee"]
+    assert counted.runs == 1
+
+
 def test_a_decision_inside_a_repeat_is_refused() -> None:
     once = Measurement[int](name="once", side="attacker", kernel=_one)
     weapon = Decision[str](name="weapon", side="attacker", options={"hand": ()}, otherwise="hand")

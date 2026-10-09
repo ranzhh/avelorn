@@ -531,10 +531,15 @@ class Taken[O: Hashable]:
 
 
 class _Fork(Exception):
-    def __init__(self, decision: "Decision[Any]", options: tuple[Any, ...]) -> None:
+    """Raised at an open decision, carrying the lane as it stood when the decision was reached."""
+
+    def __init__(
+        self, decision: "Decision[Any]", options: tuple[Any, ...], reached: "Lane"
+    ) -> None:
         super().__init__(decision.name)
         self.decision = decision
         self.options = options
+        self.reached = reached
 
 
 @dataclass(frozen=True, eq=False, kw_only=True)
@@ -613,7 +618,8 @@ class Decision[Out: Hashable](Amended[Out, Out]):
             if len(allowed) > 1:
                 open_options |= allowed
         if open_options:
-            raise _Fork(self, tuple(option for option in self.options if option in open_options))
+            options = tuple(option for option in self.options if option in open_options)
+            raise _Fork(self, options, lane)
 
     def liveness(self, after: frozenset[Key], program: "Program") -> frozenset[Key]:
         program.exits[self] = after
@@ -623,6 +629,15 @@ class Decision[Out: Hashable](Amended[Out, Out]):
         return super().liveness(entries | {self.key}, program) - {self.how}
 
     def run(self, lane: "Lane") -> None:
+        """Take the option, then run each option's body in the worlds that took it.
+
+        A decision opened inside a body splits the lane where this decision was
+        reached, since a body runs on its own worlds only.
+
+        Raises:
+            _Fork: this decision, or one inside its bodies, is open.
+        """
+        reached = lane.resumed(lane.given)
         self.choose(lane)
         super().run(lane)
 
@@ -635,10 +650,13 @@ class Decision[Out: Hashable](Amended[Out, Out]):
         resolved = lane.joint
         weights = resolved.map(option)
         bodies = lane.program.bodies[self]
-        ran = {
-            each: self.branch(lane, bodies[each], resolved, weight)
-            for each, weight in weights.mass.items()
-        }
+        try:
+            ran = {
+                each: self.branch(lane, bodies[each], resolved, weight)
+                for each, weight in weights.mass.items()
+            }
+        except _Fork as fork:
+            raise _Fork(fork.decision, fork.options, reached) from None
         after = lane.program.exits[self]
         lane.joint = weights.bind(ran.__getitem__).map(onward)
 
@@ -715,7 +733,7 @@ class Block(ABC):
 
     def run(self, lane: "Lane") -> None:
         for item in self.items:
-            item.run(lane)
+            lane.run(item)
 
     @abstractmethod
     def detail(self, paths: Mapping[Any, str]) -> dict[str, Any]: ...
@@ -1179,21 +1197,29 @@ class Program:
                 raise GraphError(f"{decision.name} is not a decision in {self.name}")
             if choice not in decision.options:
                 raise GraphError(f"{choice!r} is not an option for {decision.name}")
-        return self._grow(choices, start)
+        return self._grow(Lane(program=self, given=choices, joint=Distribution.pure(start)))
 
-    def _grow(self, given: Mapping[Decision[Any], Any], start: World) -> tuple["Lane", ...]:
-        lane = Lane(program=self, given=given, joint=Distribution.pure(start))
+    def _grow(self, lane: "Lane") -> tuple["Lane", ...]:
+        """Run the lane to the end, splitting it where a decision is open.
+
+        Each option goes on from a copy of the lane as the decision found it,
+        so the work before the decision runs once and every option shares it.
+
+        Returns:
+            The lanes, one per set of options taken.
+        """
         try:
             for toggle in self.toggles.values():
-                toggle.run(lane)
+                lane.run(toggle)
             lane.out = frozenset(node for node in self.rules if lane.declined(node))
             for item in self.items:
-                item.run(lane)
+                lane.run(item)
         except _Fork as fork:
+            reached = fork.reached
             return tuple(
                 grown
                 for option in fork.options
-                for grown in self._grow({**given, fork.decision: option}, start)
+                for grown in self._grow(reached.resumed({**reached.given, fork.decision: option}))
             )
         return (lane,)
 
@@ -1207,6 +1233,31 @@ class Lane:
     edges: dict[Step[Any], Edge] = field(default_factory=dict)
     judged: dict[tuple[Step[Any], str], Distribution[Verdict]] = field(default_factory=dict)
     out: frozenset[str] = frozenset()
+    done: set[Item] = field(default_factory=set)
+
+    def run(self, item: Item) -> None:
+        """Run ``item`` unless it already ran."""
+        if item in self.done:
+            return
+        item.run(self)
+        self.done.add(item)
+
+    def resumed(self, given: Mapping[Decision[Any], Any]) -> "Lane":
+        """Copy this lane as it stands, to go on with ``given``.
+
+        Returns:
+            The copy.
+        """
+        return Lane(
+            program=self.program,
+            given=given,
+            joint=self.joint,
+            choices=dict(self.choices),
+            edges=dict(self.edges),
+            judged=dict(self.judged),
+            out=self.out,
+            done=set(self.done),
+        )
 
     def declined(self, node: str) -> bool:
         held = self.program.rules[node]
