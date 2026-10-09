@@ -261,13 +261,19 @@ def _round(attacker: Contingent, defender: Contingent, scenario: Scenario) -> Ev
         stage.Side.TARGET: _held(scenario.defender, defender),
     }
     rounds_fought = 0 if scenario.first_round else 1
+    standing = {
+        stage.Side.ATTACKER: fielded[stage.Side.ATTACKER].standing(attacker.models),
+        stage.Side.TARGET: fielded[stage.Side.TARGET].standing(defender.models),
+    }
     return _taken(
         load_program(ROUND, _rules(scenario))
         .built(fielded)
         .evaluate(
             {
-                "attacker/standing": fielded[stage.Side.ATTACKER].standing(attacker.models),
-                "target/standing": fielded[stage.Side.TARGET].standing(defender.models),
+                "attacker/standing": standing[stage.Side.ATTACKER],
+                "target/standing": standing[stage.Side.TARGET],
+                "attacker/standing-at-start-of-round": standing[stage.Side.ATTACKER],
+                "target/standing-at-start-of-round": standing[stage.Side.TARGET],
                 "attacker/rounds-fought": rounds_fought,
                 "target/rounds-fought": rounds_fought,
                 "attacker/charges-made": int(scenario.attacker.charged is not None),

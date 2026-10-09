@@ -328,9 +328,6 @@
   subject: impact-hits/combat/impact-hits
   reason: Fills the Impact Hits slot; no program registers it until the charge lands (item 20).
 - kind: unattached-effect
-  subject: massed-infantry/combat-result/calculate-combat-result
-  reason: Lands on Calculate Combat Result; no program registers it until the combat round lands (item 14).
-- kind: unattached-effect
   subject: shieldwall/break/break-test
   reason: Lands on the Break Test; no program registers it until the steps from the Break Test on land (item 19).
 - kind: unattached-effect
@@ -342,9 +339,6 @@
 - kind: unattached-effect
   subject: terror/break/break-test
   reason: Lands on the Break Test; no program registers it until the steps from the Break Test on land (item 19).
-- kind: unattached-effect
-  subject: terror/combat-result/who-is-the-winner
-  reason: Reads which side won the combat; no program registers Who Is the Winner? until the combat round lands (item 14).
 - kind: unattached-effect
   subject: valour-of-ages/panic/fled-through
   reason: Reads a Panic test caused by a fleeing friend; no program registers Fled Through, and no numbered item plans one.
