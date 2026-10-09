@@ -216,7 +216,8 @@ class Change(Protocol):
 
     Core settles it in each world and never reads its payload. ``settle`` is
     handed the values of ``reads`` in that world and the nodes the lane
-    declines, and returns the payload in force there, or None.
+    declines, and returns the payload in force there, or None. ``consults``
+    names the nodes whose standing it reads there.
     """
 
     @property
@@ -224,6 +225,9 @@ class Change(Protocol):
 
     @property
     def reads(self) -> tuple[Key, ...]: ...
+
+    @property
+    def consults(self) -> frozenset[str]: ...
 
     def settle(self, values: tuple[Any, ...], out: frozenset[str]) -> Hashable | None: ...
 
@@ -683,10 +687,22 @@ class Decision[Out: Hashable](Amended[Out, Out]):
 
 @dataclass(frozen=True, eq=False, kw_only=True)
 class May(Decision[bool]):
+    """Whether a player takes a rule they may decline.
+
+    It is the lane's choice, so it leaves the worlds as they are; the nodes
+    the lane declines follow from it.
+    """
+
     options: Mapping[bool, tuple["Item", ...]] = field(
         default_factory=lambda: MappingProxyType({True: (), False: ()})
     )
     otherwise: bool = False
+
+    def run(self, lane: "Lane") -> None:
+        self.choose(lane)
+        taken = Taken(lane.choices[self], By.CHOSEN)
+        lane.edges[self] = Edge.single(Distribution.pure(World().holding(self.how, taken)))
+        lane.out = frozenset(node for node in lane.program.rules if lane.declined(node))
 
 
 type Item = Step[Any] | Block
@@ -1017,6 +1033,7 @@ class Program:
     decisions: list[Decision[Any]] = field(default_factory=list)
     rules: dict[str, RuleNode] = field(default_factory=dict)
     toggles: dict[tuple[str, str], May] = field(default_factory=dict)
+    toggling: dict[Item, list[May]] = field(default_factory=dict)
     amendments: dict[Step[Any], list[Amendment]] = field(default_factory=dict)
     changes: dict[Step[Any], list[tuple[str, Change]]] = field(default_factory=dict)
     states: list[State[Any]] = field(default_factory=list)
@@ -1047,8 +1064,6 @@ class Program:
         needed: frozenset[Key] = frozenset()
         for item in reversed(self.items):
             needed = item.liveness(needed, self)
-        for toggle in reversed(self.toggles.values()):
-            needed = toggle.liveness(needed, self)
         self.entry = needed
 
     def take(self, item: Item, path: str) -> None:
@@ -1114,8 +1129,6 @@ class Program:
         for node in nodes:
             self.check_node(node, named)
         for node in nodes:
-            if node.may:
-                self.toggle(node.holder.side, node.rule)
             for landing in node.landings:
                 path = self.paths[landing.at]
                 for contribution in landing.contributions:
@@ -1127,7 +1140,77 @@ class Program:
                     self.reach(path, change.reads, list(self.visible[landing.at]))
                     self.changes.setdefault(landing.at, []).append((node.id, change))
             self.rules[node.id] = node
+        self.place_toggles()
         self.settle_liveness()
+
+    def place_toggles(self) -> None:
+        """Set each rule a player may decline to be decided wherever it may act first.
+
+        It acts where it, or a rule granted through it, amends or changes a
+        step, and where another rule's change consults it. Its toggle runs
+        before each such step, or before the outermost repeat holding one, since
+        a lane cannot split inside a repeat. A lane decides it at the first it
+        reaches, and a lane that reaches none never splits on it.
+        """
+        granting: dict[str, list[RuleNode]] = {}
+        for node in self.rules.values():
+            for source in node.sources:
+                if source.via is not None:
+                    granting.setdefault(source.via, []).append(node)
+        consulted: dict[str, list[Step[Any]]] = {}
+        for step, changes in self.changes.items():
+            for _, change in changes:
+                for node in change.consults:
+                    consulted.setdefault(node, []).append(step)
+        declinable = {(node.holder.side, node.rule) for node in self.rules.values() if node.may}
+        anchors = self.anchors()
+        self.toggling = {}
+        for node in self.rules.values():
+            key = (node.holder.side, node.rule)
+            if key not in declinable:
+                continue
+            for step in self.acting(node, granting, consulted):
+                self.toggle(*key)
+                placed = self.toggling.setdefault(anchors[step], [])
+                if self.toggles[key] not in placed:
+                    placed.append(self.toggles[key])
+
+    def acting(
+        self,
+        node: RuleNode,
+        granting: Mapping[str, list[RuleNode]],
+        consulted: Mapping[str, list[Step[Any]]],
+    ) -> list[Step[Any]]:
+        steps = [
+            landing.at for landing in node.landings if landing.contributions or landing.changes
+        ]
+        steps.extend(consulted.get(node.id, ()))
+        for granted in granting.get(node.id, ()):
+            steps.extend(self.acting(granted, granting, consulted))
+        return steps
+
+    def anchors(self) -> dict[Step[Any], Item]:
+        """Find what a toggle runs before for each step.
+
+        Returns:
+            The step itself, or the outermost repeat holding it.
+        """
+        found: dict[Step[Any], Item] = {}
+
+        def walk(item: Item, repeat: Repeat | None) -> None:
+            if isinstance(item, Step):
+                found[item] = repeat or item
+                if isinstance(item, Decision):
+                    for body in self.bodies[item].values():
+                        walk(body, repeat)
+                return
+            outer = (repeat or item) if isinstance(item, Repeat) else repeat
+            for each in item.items:
+                walk(each, outer)
+
+        for item in self.items:
+            walk(item, None)
+        return found
 
     def check_node(self, node: RuleNode, named: Mapping[str, RuleNode]) -> None:
         if not node.sources:
@@ -1209,9 +1292,6 @@ class Program:
             The lanes, one per set of options taken.
         """
         try:
-            for toggle in self.toggles.values():
-                lane.run(toggle)
-            lane.out = frozenset(node for node in self.rules if lane.declined(node))
             for item in self.items:
                 lane.run(item)
         except _Fork as fork:
@@ -1236,9 +1316,11 @@ class Lane:
     done: set[Item] = field(default_factory=set)
 
     def run(self, item: Item) -> None:
-        """Run ``item`` unless it already ran."""
+        """Run ``item`` unless it already ran, after the toggles decided before it."""
         if item in self.done:
             return
+        for toggle in self.program.toggling.get(item, ()):
+            self.run(toggle)
         item.run(self)
         self.done.add(item)
 
@@ -1262,7 +1344,7 @@ class Lane:
     def declined(self, node: str) -> bool:
         held = self.program.rules[node]
         toggle = self.program.toggles.get((held.holder.side, held.rule))
-        if toggle is not None and not self.choices[toggle]:
+        if toggle is not None and self.choices.get(toggle) is False:
             return True
         granters = [source.via for source in held.sources]
         return all(granter is not None and self.declined(granter) for granter in granters)

@@ -164,10 +164,13 @@ class Payloads:
 
 
 class Check(Protocol):
-    """One condition of a gate."""
+    """One condition of a gate; ``consults`` names the rule nodes whose standing it reads."""
 
     @property
     def reads(self) -> tuple[Key, ...]: ...
+
+    @property
+    def consults(self) -> frozenset[str]: ...
 
     def holds(self, read: Mapping[Key, Any], out: frozenset[str]) -> bool: ...
 
@@ -178,6 +181,7 @@ class Constant:
 
     value: bool
     reads: ClassVar[tuple[Key, ...]] = ()
+    consults: ClassVar[frozenset[str]] = frozenset()
 
     def holds(self, read: Mapping[Key, Any], out: frozenset[str]) -> bool:
         return self.value
@@ -189,6 +193,7 @@ class Shows:
 
     die: Key
     face: int
+    consults: ClassVar[frozenset[str]] = frozenset()
 
     @property
     def reads(self) -> tuple[Key, ...]:
@@ -206,6 +211,7 @@ class Equals:
 
     fact: Key
     value: Hashable
+    consults: ClassVar[frozenset[str]] = frozenset()
 
     @property
     def reads(self) -> tuple[Key, ...]:
@@ -222,6 +228,7 @@ class Holds:
 
     option: Key
     held: frozenset[str]
+    consults: ClassVar[frozenset[str]] = frozenset()
 
     @property
     def reads(self) -> tuple[Key, ...]:
@@ -258,6 +265,7 @@ class MoreThan:
 
     left: Measured
     right: Measured | int
+    consults: ClassVar[frozenset[str]] = frozenset()
 
     @property
     def reads(self) -> tuple[Key, ...]:
@@ -304,6 +312,11 @@ class Sources:
         """The bearer's choice, when a source rides a weapon."""
         return (self.choice,) if self.choice is not None and self.weapons else ()
 
+    @property
+    def consults(self) -> frozenset[str]:
+        """The nodes granting the sources."""
+        return frozenset(each.via for each in self.granted if each.via is not None)
+
     def holding(self, held: frozenset[str]) -> tuple[Granted, ...]:
         """The sources in force while the bearer holds ``held``.
 
@@ -348,6 +361,11 @@ class HasSource:
         """What the sources read."""
         return self.sources.reads
 
+    @property
+    def consults(self) -> frozenset[str]:
+        """The nodes granting the sources."""
+        return self.sources.consults
+
     def holds(self, read: Mapping[Key, Any], out: frozenset[str]) -> bool:
         return bool(self.sources.in_force(read, out))
 
@@ -364,6 +382,12 @@ class Attacks:
     def reads(self) -> tuple[Key, ...]:
         """What the sources read."""
         return self.sources.reads
+
+    @property
+    def consults(self) -> frozenset[str]:
+        """The rule attacked with, and the nodes granting its sources."""
+        node = frozenset() if self.node is None else frozenset({self.node})
+        return node | self.sources.consults
 
     def holds(self, read: Mapping[Key, Any], out: frozenset[str]) -> bool:
         attacking = self.node is not None and self.node not in out
@@ -406,6 +430,11 @@ class Gate:
         """Every step or known the conditions compare, once each."""
         return tuple(dict.fromkeys(key for check in self.checks for key in check.reads))
 
+    @property
+    def consults(self) -> frozenset[str]:
+        """Every rule node whose standing a condition reads."""
+        return frozenset().union(*(check.consults for check in self.checks))
+
     def test(self, values: tuple[Any, ...], out: frozenset[str]) -> bool:
         """Whether the gate holds in one world.
 
@@ -444,6 +473,11 @@ class Operated:
     def reads(self) -> tuple[Key, ...]:
         """What the gate and the sources read."""
         return tuple(dict.fromkeys((*self.gate.reads, *self.sources.reads)))
+
+    @property
+    def consults(self) -> frozenset[str]:
+        """The rule nodes whose standing the gate and the sources read."""
+        return self.gate.consults | self.sources.consults
 
     def settle(self, values: tuple[Any, ...], out: frozenset[str]) -> Hashable | None:
         """The payload in force in one world.

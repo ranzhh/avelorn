@@ -81,14 +81,24 @@ def _runs(step: Step[int]) -> Projection[int]:
 
 @dataclass(frozen=True)
 class _Shift:
-    """A toy change that moves a roll by ``by`` in each world where ``when`` holds."""
+    """A toy change that moves a roll by ``by`` in each world where ``when`` holds.
+
+    It is in force only while the node it ``needs``, if any, is not declined.
+    """
 
     by: int
     reads: tuple[Key, ...] = ()
     when: Callable[..., bool] = _always
     order: Order = Order.ADD
+    needs: str | None = None
+
+    @property
+    def consults(self) -> frozenset[str]:
+        return frozenset() if self.needs is None else frozenset({self.needs})
 
     def settle(self, values: tuple[Any, ...], out: frozenset[str]) -> Hashable | None:
+        if self.needs is not None and self.needs in out:
+            return None
         return self.by if self.when(*values) else None
 
     def cancels(self, other: Change) -> bool:
@@ -106,6 +116,7 @@ class _Cancel:
     reads: tuple[Key, ...] = ()
     when: Callable[..., bool] = _always
     order: Order = Order.CANCEL
+    consults: frozenset[str] = frozenset()
 
     def settle(self, values: tuple[Any, ...], out: frozenset[str]) -> Hashable | None:
         return "cancel" if self.when(*values) else None
@@ -1805,14 +1816,14 @@ def _three_faces() -> Distribution[int]:
     return Distribution({face: Fraction(1, 3) for face in (1, 2, 3)})
 
 
-def test_a_toggle_lane_keeps_its_masses_exact() -> None:
+def test_a_decision_lane_keeps_its_masses_exact() -> None:
+    reaction = Decision[str](
+        name="declare-reaction", side="target", options={"hold": (), "flee": ()}, otherwise="hold"
+    )
     die = Roll[int](name="die", side="target", kernel=_three_faces, target=Scalar("t", 1))
     face = die.output("face", Monoid(0))
     die.show(face)
-    program = Program.build("toggled", _SIDES, (die,))
-    program.attach(
-        (RuleNode(rule="stubborn", name="Stubborn", holder=_TARGET, sources=_MODEL, may=True),)
-    )
+    program = Program.build("charge", _SIDES, (reaction, die))
 
     third = Fraction(1, 3)
     assert [lane.read(die, face).mass for lane in program.evaluate()] == [
@@ -1844,6 +1855,169 @@ def test_a_lane_splits_where_its_decision_is_reached() -> None:
 
     assert [lane.choices[reaction] for lane in lanes] == ["hold", "flee"]
     assert counted.runs == 1
+
+
+def test_a_rule_the_player_may_decline_splits_the_lanes_where_it_first_acts() -> None:
+    counted = _Counted()
+    before = Roll[int](name="before", side="attacker", kernel=counted, target=Scalar("t", 1))
+    hit = _marked_hit()
+    hits = hit.output("hits", Monoid(0))
+    hit.show(hits)
+    program = Program.build("volley", _SIDES, (before, hit))
+    program.attach(
+        (
+            RuleNode(
+                rule="aim",
+                name="Aim",
+                holder=_ATTACKER,
+                sources=_MODEL,
+                may=True,
+                landings=(Landing(hit, changes=(_Shift(1),)),),
+            ),
+        )
+    )
+    toggle = program.toggles["attacker", "aim"]
+
+    lanes = program.evaluate()
+
+    assert [lane.choices[toggle] for lane in lanes] == [True, False]
+    assert counted.runs == 1
+
+
+def test_a_rule_the_player_may_decline_that_acts_nowhere_splits_no_lane() -> None:
+    hit = _marked_hit()
+    program = Program.build("volley", _SIDES, (hit,))
+    program.attach(
+        (
+            RuleNode(
+                rule="aim",
+                name="Aim",
+                holder=_ATTACKER,
+                sources=_MODEL,
+                may=True,
+                landings=(Landing(hit),),
+            ),
+        )
+    )
+
+    assert len(program.evaluate()) == 1
+    assert program.toggles == {}
+
+
+def _shifted_faces(changed: tuple[int, ...]) -> Distribution[int]:
+    return _three_faces().map(lambda face: face + sum(changed))
+
+
+def _faces(name: str) -> tuple[Roll[int], Projection[int]]:
+    changed = Mark[tuple[Hashable, ...]](name)
+    roll = Roll[int](
+        name=name,
+        side="attacker",
+        inputs=(changed,),
+        changed=changed,
+        kernel=_shifted_faces,
+        target=Scalar("t", 1),
+    )
+    face = roll.output("face", Monoid(0))
+    roll.show(face)
+    return roll, face
+
+
+def test_a_rule_another_rule_consults_is_decided_before_that_rule_acts() -> None:
+    """Guard adds 5 to the first roll while Aim, which lands only on the second, is taken."""
+    first, face = _faces("first")
+    second, _ = _faces("second")
+    program = Program.build("volley", _SIDES, (first, second))
+    program.attach(
+        (
+            RuleNode(
+                rule="aim",
+                name="Aim",
+                holder=_ATTACKER,
+                sources=_MODEL,
+                may=True,
+                landings=(Landing(second, changes=(_Shift(1),)),),
+            ),
+            RuleNode(
+                rule="guard",
+                name="Guard",
+                holder=_TARGET,
+                sources=_MODEL,
+                landings=(Landing(first, changes=(_Shift(5, needs="attacker/archers/aim"),)),),
+            ),
+        )
+    )
+    toggle = program.toggles["attacker", "aim"]
+
+    third = Fraction(1, 3)
+    assert [
+        (lane.choices[toggle], lane.read(first, face).mass) for lane in program.evaluate()
+    ] == [
+        (True, {6: third, 7: third, 8: third}),
+        (False, {1: third, 2: third, 3: third}),
+    ]
+
+
+def test_a_toggle_reaches_its_rule_at_every_holder_of_the_side() -> None:
+    """Aim at the champion, on the first roll, follows the archers' choice to decline it."""
+    first, face = _faces("first")
+    second, _ = _faces("second")
+    program = Program.build("volley", _SIDES, (first, second))
+    program.attach(
+        (
+            RuleNode(
+                rule="aim",
+                name="Aim",
+                holder=_ATTACKER,
+                sources=_MODEL,
+                may=True,
+                landings=(Landing(second, changes=(_Shift(1),)),),
+            ),
+            RuleNode(
+                rule="aim",
+                name="Aim",
+                holder=Holder("attacker", "champion"),
+                sources=_MODEL,
+                landings=(Landing(first, changes=(_Shift(1),)),),
+            ),
+        )
+    )
+    toggle = program.toggles["attacker", "aim"]
+
+    third = Fraction(1, 3)
+    assert [
+        (lane.choices[toggle], lane.read(first, face).mass) for lane in program.evaluate()
+    ] == [
+        (True, {2: third, 3: third, 4: third}),
+        (False, {1: third, 2: third, 3: third}),
+    ]
+
+
+def test_a_rule_acting_inside_an_option_splits_only_the_lanes_that_take_it() -> None:
+    hit = _marked_hit()
+    weapon = Decision[str](
+        name="weapon", side="attacker", options={"bow": (hit,), "sword": ()}, otherwise="bow"
+    )
+    program = Program.build("volley", _SIDES, (weapon,))
+    program.attach(
+        (
+            RuleNode(
+                rule="aim",
+                name="Aim",
+                holder=_ATTACKER,
+                sources=_MODEL,
+                may=True,
+                landings=(Landing(hit, changes=(_Shift(1),)),),
+            ),
+        )
+    )
+    toggle = program.toggles["attacker", "aim"]
+
+    assert [lane.choices for lane in program.evaluate()] == [
+        {weapon: "bow", toggle: True},
+        {weapon: "bow", toggle: False},
+        {weapon: "sword"},
+    ]
 
 
 def test_a_decision_inside_a_repeat_is_refused() -> None:

@@ -153,9 +153,5 @@ def fire(
             "target/battle-strength": battle_strength or target.models,
         }
     )
-    (taken,) = (
-        evaluated
-        for evaluated in lanes
-        if all(evaluated.lane.choices[toggle] for toggle in built.program.toggles.values())
-    )
+    (taken,) = (evaluated for evaluated in lanes if not evaluated.lane.out)
     return Volley(taken, fielded[Side.ATTACKER], target.models)
