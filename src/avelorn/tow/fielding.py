@@ -10,6 +10,7 @@ from avelorn.tow.engine.armour import defender_armour
 from avelorn.tow.kernels import Standing, Standings
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.reference import RuleRef, slugified
+from avelorn.tow.schema.troop_type import TroopTypeProfile
 from avelorn.tow.schema.unit import Characteristic, Profile, ProfileRole, TroopType
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile
 from avelorn.tow.traits import Carries
@@ -147,7 +148,7 @@ class Fielding:
     """A side on the table, of one troop type: its parts in placement order, front to back."""
 
     unit: str
-    troop_type: TroopType
+    troop: TroopTypeProfile
     parts: tuple[Part, ...]
     frontage: int
 
@@ -164,6 +165,11 @@ class Fielding:
             raise ValueError(f"{self.unit} fields no rank and file")
         if self.frontage < 1:
             raise ValueError(f"{self.unit} stands with no frontage")
+
+    @property
+    def troop_type(self) -> TroopType:
+        """The side's troop type."""
+        return TroopType(self.troop.name)
 
     @property
     def hit(self) -> Part:
@@ -205,19 +211,13 @@ class Fielding:
         """Each part with its Wounds per model, in the order casualties come off.
 
         Casualties come off the back of the placement, and a champion falls last.
-
-        Raises:
-            ValueError: a part prints no Wounds.
         """
         rank_and_file = [part for part in self.parts if part.row.role is not ProfileRole.CHAMPION]
         champions = [part for part in self.parts if part.row.role is ProfileRole.CHAMPION]
-        order = []
-        for part in (*reversed(rank_and_file), *reversed(champions)):
-            wounds = part.characteristic(Characteristic.WOUNDS)
-            if wounds is None:
-                raise ValueError(f"{part.id} prints no Wounds")
-            order.append((part.id, wounds))
-        return tuple(order)
+        return tuple(
+            (part.id, self._wounds(part))
+            for part in (*reversed(rank_and_file), *reversed(champions))
+        )
 
     def standing(self, models: int) -> Standings:
         """The side with ``models`` standing, the rest taken off as casualties fall.
@@ -238,6 +238,53 @@ class Fielding:
             counts[part] -= taken
             lost -= taken
         return Standings(tuple((part.id, Standing(counts[part.id], 0)) for part in self.parts))
+
+    def wounds_left(self, standings: Standings) -> int:
+        """The Wounds the side's standing models have left.
+
+        Returns:
+            Their Wounds, less those a damaged model has lost.
+        """
+        return sum(
+            standings.of(part.id).models * self._wounds(part) - standings.of(part.id).wounds_lost
+            for part in self.parts
+        )
+
+    def rank_bonus(self, standings: Standings) -> int:
+        """The Rank Bonus the models standing claim (the-combat-phase/rank-bonus).
+
+        Each rank behind the first counts, an incomplete one only when it holds
+        the troop type's models per rank, up to the troop type's maximum. A side
+        narrower than a counting rank, or of a troop type that does not rank
+        up, claims none.
+
+        Returns:
+            The Rank Bonus.
+        """
+        per_rank = self.troop.models_per_rank
+        if per_rank is None or self.frontage < per_rank:
+            return 0
+        full, remainder = divmod(standings.models, self.frontage)
+        behind = full + int(remainder >= per_rank) - 1
+        return min(max(behind, 0), self.troop.max_rank_bonus)
+
+    def unit_strength(self, standings: Standings) -> int:
+        """The Unit Strength of the models standing, by the troop type's strength per model.
+
+        Returns:
+            The Unit Strength.
+        """
+        return sum(
+            standings.of(part.id).models
+            * self.troop.unit_strength_per_model(part.characteristic(Characteristic.WOUNDS))
+            for part in self.parts
+        )
+
+    def _wounds(self, part: Part) -> int:
+        wounds = part.characteristic(Characteristic.WOUNDS)
+        if wounds is None:
+            raise ValueError(f"{part.id} prints no Wounds")
+        return wounds
 
     def highest(self, c: Characteristic, standings: Standings) -> int | None:
         """The highest value of a characteristic among the parts still standing.
@@ -327,7 +374,7 @@ class Fielding:
             )
             for row, count in counts
         )
-        return cls(unit.id, unit.troop_type, parts, contingent.frontage)
+        return cls(unit.id, unit.rank_and_file, parts, contingent.frontage)
 
 
 def _fought(weapon: Weapon) -> list[tuple[RuleRef, Source]]:
