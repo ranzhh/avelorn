@@ -8,7 +8,8 @@ the-shooting-phase/roll-to-wound-shooting, the-shooting-phase/7-to-hit,
 the-shooting-phase/bs-of-6-or-higher, the-shooting-phase/to-hit-modifiers,
 the-shooting-phase/determining-armour-value,
 the-shooting-phase/armour-piercing,
-the-combat-phase/roll-to-hit-combat, model-profiles/leadership-tests.
+the-combat-phase/roll-to-hit-combat, model-profiles/leadership-tests,
+the-combat-phase/break-test.
 """
 
 import logging
@@ -308,6 +309,48 @@ def leadership_test(value: int | None, reroll_failed: bool = False) -> Fraction:
         p = p + (1 - p) * p
     logger.debug("leadership test vs %s, re-roll failed %s -> p=%s", value, reroll_failed, p)
     return p
+
+
+class BreakOdds(NamedTuple):
+    """The chance of each Break test result.
+
+    Attributes:
+        gives_ground: The chance the unit Gives Ground.
+        falls_back: The chance it Falls Back in Good Order.
+        breaks: The chance it Breaks and flees.
+    """
+
+    gives_ground: Fraction
+    falls_back: Fraction
+    breaks: Fraction
+
+
+def break_odds(leadership: int, lost_by: int) -> BreakOdds:
+    """Exact chances of each Break test result for a unit that lost its combat by ``lost_by``.
+
+    Source: the-combat-phase/break-test. The difference in combat result is
+    added to 2D6: a natural roll over Leadership Breaks, a modified roll over
+    it Falls Back in Good Order, and a modified roll within it or a natural
+    double 1 Gives Ground.
+
+    Returns:
+        The chance of each result.
+
+    Raises:
+        ValueError: the unit did not lose by at least 1.
+    """
+    if lost_by < 1:
+        raise ValueError(f"a Break test follows a combat lost by at least 1, not by {lost_by}")
+    gives = falls = breaks = 0
+    for first, second in product(_FACES, repeat=2):
+        natural = first + second
+        if natural == 2 or natural + lost_by <= leadership:
+            gives += 1
+        elif natural <= leadership:
+            falls += 1
+        else:
+            breaks += 1
+    return BreakOdds(Fraction(gives, 36), Fraction(falls, 36), Fraction(breaks, 36))
 
 
 class Standing(NamedTuple):
