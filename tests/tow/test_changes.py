@@ -15,7 +15,7 @@ def _effect(rule: str, index: int) -> Effect:
 
 
 def _operated(rule: str, effect: Effect, key: Quantity | None) -> Operated:
-    return Operated(rule, effect, key, Gate(), (Granted(None, None),), None)
+    return Operated(rule, effect, key, None, Gate(), (Granted(None, None),), None)
 
 
 def test_a_cancel_of_one_quantity_spares_the_rest_of_an_add() -> None:

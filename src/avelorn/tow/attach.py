@@ -295,12 +295,12 @@ class _Fielding:
         if effect.limit is not None or not runs:
             return None
         keys: tuple[Any, ...] = (None,)
+        whose = self.whose(side, at, effect.of)
         match operation:
             case Operation.ADD | Operation.SET:
                 keys = tuple(effect.add or effect.set_ or {})
-                if not set(keys) <= runs.get(operation, frozenset()):
-                    return None
-                if effect.of is not None and effect.of is not _role(side, at):
+                folded = {key if whose is None else (whose, key) for key in keys}
+                if not folded <= runs.get(operation, frozenset()):
                     return None
             case Operation.REROLL:
                 if effect.reroll not in runs.get(operation, frozenset()):
@@ -322,7 +322,15 @@ class _Fielding:
             return None
         carried = self.scopes[side][rule.id]
         sources = tuple(Granted(reference.x, source.via) for reference, source in carried)
-        return [Operated(rule.id, effect, key, gate, sources, rule.parameter) for key in keys]
+        return [
+            Operated(rule.id, effect, key, whose, gate, sources, rule.parameter) for key in keys
+        ]
+
+    def whose(self, side: Side, at: Step[Any], of: Role | None) -> Side | None:
+        if of is None:
+            return None
+        acting = self.specs[at].side
+        return acting if of is _role(side, at) else acting.other
 
     def gate(self, rule: Rule, side: Side, at: Step[Any], effect: Effect) -> Gate | None:
         when: list[Check] = []

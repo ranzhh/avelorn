@@ -13,10 +13,11 @@ from avelorn.tow.kernels import Die
 from avelorn.tow.schema.effect import Bounded, Effect, Operation, RerollOn
 from avelorn.tow.schema.quantity import Quantity
 from avelorn.tow.schema.rule import DiceQuantity, Parameter
+from avelorn.tow.schema.stage import Side
 from avelorn.tow.schema.unit import Characteristic
 
 type Changeable = Quantity | Characteristic
-type Folded = Changeable | RerollOn
+type Folded = Quantity | tuple[Side, Characteristic] | RerollOn
 
 _ORDERS = {
     Operation.CANCELS: Order.CANCEL,
@@ -30,20 +31,26 @@ _ORDERS = {
 
 @dataclass(frozen=True)
 class Added:
-    """An amount added to a quantity, within its printed bounds."""
+    """An amount added to a quantity, within its printed bounds.
+
+    ``of`` names the side whose model's characteristic it moves, as the step's
+    spec names the sides; a quantity has none.
+    """
 
     key: Changeable
     amount: int
     maximum: int | None = None
     minimum: int | None = None
+    of: Side | None = None
 
 
 @dataclass(frozen=True)
 class Fixed:
-    """A value a quantity is set to."""
+    """A value a quantity is set to; ``of`` reads as on :class:`Added`."""
 
     key: Changeable
     value: int
+    of: Side | None = None
 
 
 @dataclass(frozen=True)
@@ -91,33 +98,37 @@ class Payloads:
             payloads.append(payload)
         return cls(tuple(payloads))
 
-    def added(self, key: Changeable) -> int:
-        """Sum the amounts added to ``key``.
+    def added(self, key: Changeable, of: Side | None = None) -> int:
+        """Sum the amounts added to ``key``, of the model ``of`` names for a characteristic.
 
         Returns:
             The sum, 0 when nothing is added.
         """
-        return sum(each.amount for each in self._adds(key))
+        return sum(each.amount for each in self._adds(key, of))
 
-    def bounds(self, key: Changeable) -> tuple[tuple[int, ...], tuple[int, ...]]:
-        """Read the printed bounds of the amounts added to ``key``.
+    def bounds(
+        self, key: Changeable, of: Side | None = None
+    ) -> tuple[tuple[int, ...], tuple[int, ...]]:
+        """Read the printed bounds of the amounts added to ``key``, of the model ``of`` names.
 
         Returns:
             The maxima, then the minima.
         """
-        adds = self._adds(key)
+        adds = self._adds(key, of)
         maxima = tuple(each.maximum for each in adds if each.maximum is not None)
         minima = tuple(each.minimum for each in adds if each.minimum is not None)
         return maxima, minima
 
-    def fixed(self, key: Changeable) -> tuple[int, ...]:
-        """Read the values ``key`` is set to.
+    def fixed(self, key: Changeable, of: Side | None = None) -> tuple[int, ...]:
+        """Read the values ``key`` is set to, of the model ``of`` names.
 
         Returns:
             Every value set, in the order written.
         """
         return tuple(
-            each.value for each in self.payloads if isinstance(each, Fixed) and each.key == key
+            each.value
+            for each in self.payloads
+            if isinstance(each, Fixed) and (each.key, each.of) == (key, of)
         )
 
     def denied(self) -> bool:
@@ -144,8 +155,12 @@ class Payloads:
         """
         return tuple(each.by for each in self.payloads if isinstance(each, Multiplied))
 
-    def _adds(self, key: Changeable) -> tuple[Added, ...]:
-        return tuple(each for each in self.payloads if isinstance(each, Added) and each.key == key)
+    def _adds(self, key: Changeable, of: Side | None) -> tuple[Added, ...]:
+        return tuple(
+            each
+            for each in self.payloads
+            if isinstance(each, Added) and (each.key, each.of) == (key, of)
+        )
 
 
 class Check(Protocol):
@@ -292,13 +307,15 @@ class Granted:
 class Operated:
     """One operation of a rule node at a step.
 
-    An add or a set changes one ``key``. X is the rule's parameter combined over
-    the sources still in force.
+    An add or a set changes one ``key``; a characteristic is the one of the
+    model on side ``of``, as the step's spec names the sides. X is the rule's
+    parameter combined over the sources still in force.
     """
 
     rule: str
     effect: Effect
     key: Changeable | None
+    of: Side | None
     gate: Gate
     sources: tuple[Granted, ...]
     parameter: Parameter | None
@@ -339,10 +356,10 @@ class Operated:
                 written = effect.add[self.key]
                 if isinstance(written, Bounded):
                     amount = self.amount(written.amount, sources)
-                    return Added(self.key, amount, written.maximum, written.minimum)
-                return Added(self.key, self.amount(written, sources))
+                    return Added(self.key, amount, written.maximum, written.minimum, self.of)
+                return Added(self.key, self.amount(written, sources), of=self.of)
             case Operation.SET if effect.set_ is not None and self.key is not None:
-                return Fixed(self.key, self.amount(effect.set_[self.key], sources))
+                return Fixed(self.key, self.amount(effect.set_[self.key], sources), self.of)
             case Operation.DENY if effect.deny:
                 return Denied()
             case Operation.REROLL if effect.reroll is not None:

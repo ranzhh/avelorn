@@ -205,10 +205,10 @@ class Spec:
     A ``fighter`` step is made once per fighter: its holdings are the fighter's
     part and the part of the model hit. Any other step holds whole sides.
     ``runs`` names what the kernel folds of each operation a rule lands there;
-    a characteristic it folds is the acting model's, and a deny or a multiply
-    names nothing, since neither changes a quantity. ``outcomes`` lists every
-    value the step can output. A roll whose rules change it shows its
-    ``target`` in force and its ``printed`` target.
+    a characteristic it folds is paired with the side whose model it belongs
+    to, and a deny or a multiply names nothing, since neither changes a
+    quantity. ``outcomes`` lists every value the step can output. A roll whose
+    rules change it shows its ``target`` in force and its ``printed`` target.
     """
 
     sequence: StepSequence
@@ -342,23 +342,23 @@ def _profile(attacker: Part) -> WeaponProfile:
     return attacker.weapon
 
 
-def _moved(part: Part, c: Characteristic, payloads: Payloads) -> int:
-    match payloads.fixed(c):
+def _moved(part: Part, c: Characteristic, payloads: Payloads, of: Side) -> int:
+    match payloads.fixed(c, of):
         case ():
             start = _printed(part, c)
         case (fixed,):
             start = fixed
         case fixed:
             raise ValueError(f"{part.id}'s {c} is set {len(fixed)} times")
-    maxima, minima = payloads.bounds(c)
-    return min((max((start + payloads.added(c), *minima)), *maxima))
+    maxima, minima = payloads.bounds(c, of)
+    return min((max((start + payloads.added(c, of), *minima)), *maxima))
 
 
 def _strength(attacker: Part, payloads: Payloads) -> int:
     strength = _profile(attacker).strength
     if strength.base is not None:
         return strength.base
-    return strength.resolve(_moved(attacker, Characteristic.STRENGTH, payloads))
+    return strength.resolve(_moved(attacker, Characteristic.STRENGTH, payloads, Side.ATTACKER))
 
 
 def _printed_strength(attacker: Part) -> int:
@@ -693,7 +693,8 @@ def who_strikes_first(
     """
     payloads = Payloads.of(changed)
     moved = (
-        (part.id, _moved(part, Characteristic.INITIATIVE, payloads)) for part in attacker.parts
+        (part.id, _moved(part, Characteristic.INITIATIVE, payloads, Side.ATTACKER))
+        for part in attacker.parts
     )
     return Distribution.pure(Initiatives(tuple(moved)))
 
@@ -741,8 +742,8 @@ def how_many_attacks(
 
 def _melee_hit_target(attacker: Part, target: Part, payloads: Payloads) -> int:
     return melee_hit_target(
-        _printed(attacker, Characteristic.WEAPON_SKILL),
-        _printed(target, Characteristic.WEAPON_SKILL),
+        _moved(attacker, Characteristic.WEAPON_SKILL, payloads, Side.ATTACKER),
+        _moved(target, Characteristic.WEAPON_SKILL, payloads, Side.TARGET),
         payloads.added(Quantity.TO_HIT),
     )
 
@@ -752,7 +753,8 @@ def roll_to_hit_in_combat(
 ) -> Distribution[Die]:
     """Roll one attack To Hit, Weapon Skill against the target's on the chart.
 
-    The roll moves by the rules in force and is re-rolled as they allow.
+    Each Weapon Skill moves by the amounts added to that model's, and the roll
+    moves by the rules in force and is re-rolled as they allow.
 
     Returns:
         The die as it lands; a natural 6 always hits.
@@ -1011,8 +1013,8 @@ _SPECS = (
         reads=(_ATTACKER, CHANGED),
         kernel=who_strikes_first,
         runs={
-            Operation.SET: frozenset({Characteristic.INITIATIVE}),
-            Operation.ADD: frozenset({Characteristic.INITIATIVE}),
+            Operation.SET: frozenset({(Side.ATTACKER, Characteristic.INITIATIVE)}),
+            Operation.ADD: frozenset({(Side.ATTACKER, Characteristic.INITIATIVE)}),
         },
         readings={"initiatives": _offer("who-strikes-first", str)},
     ),
@@ -1042,7 +1044,16 @@ _SPECS = (
         side=Side.ATTACKER,
         reads=(_ATTACKER, _TARGET, CHANGED),
         kernel=roll_to_hit_in_combat,
-        runs={Operation.ADD: frozenset({Quantity.TO_HIT}), Operation.REROLL: _ALL_REROLLS},
+        runs={
+            Operation.ADD: frozenset(
+                {
+                    Quantity.TO_HIT,
+                    (Side.ATTACKER, Characteristic.WEAPON_SKILL),
+                    (Side.TARGET, Characteristic.WEAPON_SKILL),
+                }
+            ),
+            Operation.REROLL: _ALL_REROLLS,
+        },
         target=Offered(
             (_ATTACKER, _TARGET, CHANGED),
             lambda attacker, target, changed: _shown(
@@ -1067,7 +1078,7 @@ _SPECS = (
         kernel=roll_to_wound,
         in_force={(Side.ATTACKER, Characteristic.STRENGTH): _printed_strength},
         runs={
-            Operation.ADD: frozenset({Characteristic.STRENGTH}),
+            Operation.ADD: frozenset({(Side.ATTACKER, Characteristic.STRENGTH)}),
             Operation.REROLL: _ALL_REROLLS,
         },
         target=Offered(
