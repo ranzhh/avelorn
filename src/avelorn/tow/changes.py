@@ -4,7 +4,7 @@ A payload is what one operation leaves in force at a step. A step's kernel
 reads the payloads under its mark through :class:`Payloads`.
 """
 
-from collections.abc import Hashable, Mapping
+from collections.abc import Callable, Hashable, Mapping
 from dataclasses import dataclass
 from typing import Any, ClassVar, Protocol
 
@@ -232,20 +232,42 @@ class Holds:
         return self.held <= read[self.option]
 
 
+def _as_read(value: int) -> int:
+    return value
+
+
+@dataclass(frozen=True)
+class Measured:
+    """A number a gate reads: a known as it is, or one ``measure`` works out from a state."""
+
+    key: Key
+    measure: Callable[[Any], int] = _as_read
+
+    def of(self, read: Mapping[Key, Any]) -> int:
+        """The number in one world.
+
+        Returns:
+            The number.
+        """
+        return self.measure(read[self.key])
+
+
 @dataclass(frozen=True)
 class MoreThan:
-    """A known, more than a number."""
+    """A number more than another, or than a fixed one."""
 
-    fact: Key
-    value: int
+    left: Measured
+    right: Measured | int
 
     @property
     def reads(self) -> tuple[Key, ...]:
-        """The known compared."""
-        return (self.fact,)
+        """What the numbers are read from."""
+        right = () if isinstance(self.right, int) else (self.right.key,)
+        return tuple(dict.fromkeys((self.left.key, *right)))
 
     def holds(self, read: Mapping[Key, Any], out: frozenset[str]) -> bool:
-        return read[self.fact] > self.value
+        right = self.right if isinstance(self.right, int) else self.right.of(read)
+        return self.left.of(read) > right
 
 
 @dataclass(frozen=True)
