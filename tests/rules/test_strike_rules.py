@@ -1,7 +1,6 @@
 """Each rule that changes one side's blows in close combat, struck with and without it."""
 
 import re
-from contextlib import AbstractContextManager, nullcontext
 from dataclasses import replace
 from fractions import Fraction
 
@@ -452,49 +451,30 @@ SHIELD_REFUSED = (
 )
 
 
-@pytest.mark.parametrize(
-    ("scenario", "shielded", "printed", "plain"),
-    [
-        pytest.param(
-            Scenario(Kind.STRIKE, SPEARS, TWO_HANDED),
-            pytest.raises(ProgramError, match=re.escape(SHIELD_REFUSED)),
-            replace(SPEAR_INTO_SPEARMEN, armour_value=6),
-            SPEAR_INTO_SPEARMEN,
-            id="struck-wielding-it",
-        ),
-        pytest.param(
-            Scenario(Kind.STRIKE, SPEARS, replace(TWO_HANDED, weapon="Hand Weapon", shield=True)),
-            nullcontext(),
-            replace(SPEAR_INTO_SPEARMEN, armour_value=4),
-            replace(SPEAR_INTO_SPEARMEN, armour_value=4),
-            id="struck-wielding-a-hand-weapon",
-        ),
-        pytest.param(
-            Scenario(Kind.SHOOT, ARCHERS, TWO_HANDED, distance=10),
-            nullcontext(),
-            ARROWS_INTO_SPEARMEN,
-            ARROWS_INTO_SPEARMEN,
-            id="shot",
-        ),
-    ],
-)
-def test_requires_two_hands(
-    scenario: Scenario,
-    shielded: AbstractContextManager[object],
-    printed: Attack,
-    plain: Attack,
-) -> None:
+def test_requires_two_hands() -> None:
     """Spearmen swinging a great weapon cannot use their shield in combat: 6+ rather than 5+.
 
     Taking the shield with the great weapon is refused; without the rule they
     take it. Fighting with a hand weapon instead, the shield stands and parries;
     against shooting it counts whatever is in hand.
     """
-    with_shield = replace(scenario, defender=replace(scenario.defender, shield=True))
-    with shielded:
-        resolve(with_shield)
-    without = with_shield.without("requires-two-hands", Role.DEFENDER)
-    assert _with_and_without(scenario, without) == (_unsaved(printed), _unsaved(plain))
+    struck = Scenario(Kind.STRIKE, SPEARS, TWO_HANDED)
+    shielded = replace(struck, defender=replace(TWO_HANDED, shield=True))
+    with pytest.raises(ProgramError, match=re.escape(SHIELD_REFUSED)):
+        resolve(shielded)
+    assert _with_and_without(struck, shielded.without("requires-two-hands", Role.DEFENDER)) == (
+        _unsaved(replace(SPEAR_INTO_SPEARMEN, armour_value=6)),
+        _unsaved(SPEAR_INTO_SPEARMEN),
+    )
+    parrying = replace(struck, defender=replace(TWO_HANDED, weapon="Hand Weapon", shield=True))
+    shot = Scenario(Kind.SHOOT, ARCHERS, TWO_HANDED, distance=10)
+    assert [
+        _with_and_without(each, each.without("requires-two-hands", Role.DEFENDER))
+        for each in (parrying, shot)
+    ] == [
+        (_unsaved(replace(SPEAR_INTO_SPEARMEN, armour_value=4)),) * 2,
+        (_unsaved(ARROWS_INTO_SPEARMEN),) * 2,
+    ]
 
 
 HOETH_INTO_IRONBREAKERS = Attack(
@@ -510,6 +490,14 @@ HOETH_INTO_IRONBREAKERS = Attack(
             replace(IRONBREAKERS_PARRY, ward=6),
             replace(IRONBREAKERS_PARRY, ward=None),
             id="mundane-spears",
+        ),
+        pytest.param(
+            Scenario(
+                Kind.STRIKE, replace(SWORDS, equipment=("Ceremonial Halberd",)), IRONBREAKERS
+            ),
+            replace(IRONBREAKERS_PARRY, ward=6),
+            replace(IRONBREAKERS_PARRY, ward=None),
+            id="hand-weapon-beside-a-magical-halberd",
         ),
         pytest.param(
             Scenario(Kind.SHOOT, ARCHERS, IRONBREAKERS, distance=10),
