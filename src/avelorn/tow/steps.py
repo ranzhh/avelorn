@@ -7,7 +7,7 @@ from fractions import Fraction
 from functools import partial
 from itertools import takewhile
 from types import MappingProxyType
-from typing import Any
+from typing import Any, ClassVar
 
 from avelorn.core.distribution import Distribution, Kernel, Monoid, Probability
 from avelorn.core.graph import (
@@ -22,7 +22,7 @@ from avelorn.core.graph import (
     Step,
 )
 from avelorn.tow.changes import Folded, Payloads
-from avelorn.tow.fielding import Attacks, Fielding, Initiatives, Part, PerPart, Shots
+from avelorn.tow.fielding import Attacks, Fielding, Held, Initiatives, Part, PerPart, Shots
 from avelorn.tow.kernels import (
     HIGH_BALLISTIC_SKILL,
     UNARMOURED,
@@ -96,6 +96,7 @@ class Kind(StrEnum):
 
     MEASUREMENT = "measurement"
     ELIGIBILITY = "eligibility"
+    DECISION = "decision"
     ROLL = "roll"
     CONSEQUENCE = "consequence"
 
@@ -279,10 +280,12 @@ class Spec:
             The step, of the class its kind names.
 
         Raises:
-            ValueError: a roll is built with no target.
+            ValueError: a roll is built with no target, or a decision from a spec.
         """
         acts = str(side)
         match self.kind:
+            case Kind.DECISION:
+                raise ValueError(f"{self.name}: a decision is built from a Choice")
             case Kind.MEASUREMENT:
                 return Measurement(
                     name=self.name,
@@ -327,6 +330,26 @@ class Spec:
                     printed=printed,
                     changed=changed,
                 )
+
+
+@dataclass(frozen=True, kw_only=True)
+class Choice:
+    """A printed decision, made for a side.
+
+    ``options`` names every option from the side when the program is built,
+    and the first is the one taken otherwise.
+    """
+
+    sequence: StepSequence
+    name: str
+    side: Side
+    options: Callable[[Fielding], tuple[Hashable, ...]]
+    kind: ClassVar[Kind] = Kind.DECISION
+
+    @property
+    def key(self) -> tuple[StepSequence, str]:
+        """The registry key: the sequence and the step name."""
+        return self.sequence, self.name
 
 
 def _printed(part: Profiled[int | None], c: Characteristic) -> int:
@@ -553,14 +576,28 @@ def _piercing(attacker: Part, payloads: Payloads) -> int:
     return printed - payloads.added(Quantity.ARMOUR_PIERCING)
 
 
-def _save_target(target: Part, attacker: Part, payloads: Payloads) -> int | None:
+def _save_target(worn: int | None, attacker: Part, payloads: Payloads) -> int | None:
     if payloads.denied():
         return None
     piercing = _piercing(attacker, payloads)
-    armour = UNARMOURED if target.armour is None else target.armour
+    armour = UNARMOURED if worn is None else worn
     maxima, _ = payloads.bounds(Quantity.ARMOUR_VALUE)
     improved = max((armour - payloads.added(Quantity.ARMOUR_VALUE), *maxima))
     return armour_save_target(improved, piercing)
+
+
+def _save_needed(worn: int | None, attacker: Part, changed: tuple[Hashable, ...]) -> str:
+    return _shown(_save_target(worn, attacker, Payloads.of(changed)))
+
+
+def _saved(
+    worn: int | None, attacker: Part, wound: Die | None, changed: tuple[Hashable, ...]
+) -> Distribution[Die | None]:
+    payloads = Payloads.of(changed)
+    needed = _save_target(worn, attacker, payloads)
+    if not _succeeded(wound) or needed is None:
+        return Distribution.pure(None)
+    return _thrown(needed, payloads.rerolls())
 
 
 def make_armour_saves(
@@ -576,11 +613,20 @@ def make_armour_saves(
     Returns:
         The die as it lands, or None when no die is rolled.
     """
-    payloads = Payloads.of(changed)
-    needed = _save_target(target, attacker, payloads)
-    if not _succeeded(wound) or needed is None:
-        return Distribution.pure(None)
-    return _thrown(needed, payloads.rerolls())
+    return _saved(target.armour, attacker, wound, changed)
+
+
+def make_armour_saves_in_combat(
+    target: Part, attacker: Part, wound: Die | None, held: Held, changed: tuple[Hashable, ...]
+) -> Distribution[Die | None]:
+    """Roll the armour save against a blow, from the armour the struck side uses with ``held``.
+
+    A shield counts only when held; the rest reads as :func:`make_armour_saves`.
+
+    Returns:
+        The die as it lands, or None when no die is rolled.
+    """
+    return _saved(target.armour_with(held), attacker, wound, changed)
 
 
 def ward_saves(
@@ -664,6 +710,10 @@ def fall_back_or_flee(
     if falls_back_in_good_order(standing.models, battle_strength):
         return Distribution.pure(Retreat.FALLS_BACK_IN_GOOD_ORDER)
     return Distribution.pure(Retreat.FLEES)
+
+
+def _holdings(side: Fielding) -> tuple[Held, ...]:
+    return side.hit.holdings
 
 
 def _rank(number: int) -> str:
@@ -793,6 +843,7 @@ _ATTACKER = Holding(Side.ATTACKER)
 _PRINTED = Payloads(())
 _TARGET = Holding(Side.TARGET)
 _TARGET_STANDING = Fact("standing", Side.TARGET)
+_HELD = Output("choose-combat-and-determine-who-can-fight")
 _UNITED = Monoid[Hashable](_UNSHOWN, _united)
 _COUNT = Monoid(0)
 _UNSAVED = (Output("roll-to-wound"), Output("make-armour-saves"), Output("ward-saves"))
@@ -816,31 +867,60 @@ _WOUND_NEEDED = Offered(
 _ALL_REROLLS = frozenset(RerollOn)
 
 
-def _armour_saving(sequence: StepSequence) -> Spec:
+_SAVE_RUNS: Mapping[Operation, frozenset[Folded]] = MappingProxyType(
+    {
+        Operation.ADD: frozenset({Quantity.ARMOUR_PIERCING, Quantity.ARMOUR_VALUE}),
+        Operation.SET: frozenset({Quantity.ARMOUR_PIERCING}),
+        Operation.DENY: frozenset(),
+        Operation.REROLL: _ALL_REROLLS,
+    }
+)
+
+
+def _shot_saving() -> Spec:
     return Spec(
-        sequence=sequence,
+        sequence=StepSequence.SHOOTING,
         name="make-armour-saves",
         kind=Kind.ROLL,
         fighter=True,
         side=Side.TARGET,
         reads=(_TARGET, _ATTACKER, Output("roll-to-wound"), CHANGED),
         kernel=make_armour_saves,
-        runs={
-            Operation.ADD: frozenset({Quantity.ARMOUR_PIERCING, Quantity.ARMOUR_VALUE}),
-            Operation.SET: frozenset({Quantity.ARMOUR_PIERCING}),
-            Operation.DENY: frozenset(),
-            Operation.REROLL: _ALL_REROLLS,
-        },
+        runs=_SAVE_RUNS,
         target=Offered(
             (_TARGET, _ATTACKER, CHANGED),
-            lambda target, attacker, changed: _shown(
-                _save_target(target, attacker, Payloads.of(changed))
-            ),
+            lambda target, attacker, changed: _save_needed(target.armour, attacker, changed),
             _UNITED,
         ),
         printed=Offered(
             (_TARGET, _ATTACKER),
-            lambda target, attacker: _shown(_save_target(target, attacker, _PRINTED)),
+            lambda target, attacker: _save_needed(target.armour, attacker, ()),
+            _UNITED,
+        ),
+        readings={"saves": _counted("make-armour-saves")},
+    )
+
+
+def _struck_saving() -> Spec:
+    return Spec(
+        sequence=StepSequence.COMBAT,
+        name="make-armour-saves",
+        kind=Kind.ROLL,
+        fighter=True,
+        side=Side.TARGET,
+        reads=(_TARGET, _ATTACKER, Output("roll-to-wound"), _HELD, CHANGED),
+        kernel=make_armour_saves_in_combat,
+        runs=_SAVE_RUNS,
+        target=Offered(
+            (_TARGET, _ATTACKER, _HELD, CHANGED),
+            lambda target, attacker, held, changed: _save_needed(
+                target.armour_with(held), attacker, changed
+            ),
+            _UNITED,
+        ),
+        printed=Offered(
+            (_TARGET, _ATTACKER, _HELD),
+            lambda target, attacker, held: _save_needed(target.armour_with(held), attacker, ()),
             _UNITED,
         ),
         readings={"saves": _counted("make-armour-saves")},
@@ -957,7 +1037,7 @@ _SPECS = (
         target=_WOUND_NEEDED,
         readings={"wounds": _counted("roll-to-wound")},
     ),
-    _armour_saving(StepSequence.SHOOTING),
+    _shot_saving(),
     _warding(StepSequence.SHOOTING),
     _removing(StepSequence.SHOOTING),
     Spec(
@@ -994,6 +1074,12 @@ _SPECS = (
         ),
         kernel=fall_back_or_flee,
         readings={"retreat": _offer("fall-back-or-flee")},
+    ),
+    Choice(
+        sequence=StepSequence.COMBAT,
+        name="choose-combat-and-determine-who-can-fight",
+        side=Side.ATTACKER,
+        options=_holdings,
     ),
     Spec(
         sequence=StepSequence.COMBAT,
@@ -1091,11 +1177,11 @@ _SPECS = (
         printed=_WOUND_NEEDED,
         readings={"wounds": _counted("roll-to-wound")},
     ),
-    _armour_saving(StepSequence.COMBAT),
+    _struck_saving(),
     _warding(StepSequence.COMBAT),
     _removing(StepSequence.COMBAT),
 )
 
-STEPS: Mapping[tuple[StepSequence, str], Spec] = MappingProxyType(
+STEPS: Mapping[tuple[StepSequence, str], Spec | Choice] = MappingProxyType(
     {spec.key: spec for spec in _SPECS}
 )

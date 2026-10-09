@@ -331,12 +331,6 @@
   subject: massed-infantry/combat-result/calculate-combat-result
   reason: Lands on Calculate Combat Result; no program registers it until the combat round lands (item 14).
 - kind: unattached-effect
-  subject: parry/combat/choose-combat-and-determine-who-can-fight
-  reason: Reads the weapon chosen at Step 1.1; no program registers it until the combat round lands (item 14).
-- kind: unattached-effect
-  subject: requires-two-hands/combat/choose-combat-and-determine-who-can-fight
-  reason: Lands on Step 1.1, where the weapon is chosen; no program registers it until the combat round lands (item 14).
-- kind: unattached-effect
   subject: shieldwall/break/break-test
   reason: Lands on the Break Test; no program registers it until the steps from the Break Test on land (item 19).
 - kind: unattached-effect

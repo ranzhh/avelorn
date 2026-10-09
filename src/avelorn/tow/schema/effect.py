@@ -201,8 +201,8 @@ class When(Gates):
     """What fires an effect.
 
     The trigger is ``step`` and ``by``. It may also read the ``natural`` face
-    its die shows, the outcome it ``is`` or the score it ``needed``. The gates
-    must hold as well.
+    its die shows, the outcome it ``is``, the score it ``needed`` or the
+    equipment its option ``holds``. The gates must hold as well.
     """
 
     step: Step | None = None
@@ -210,14 +210,16 @@ class When(Gates):
     natural: StrictInt | None = Field(default=None, ge=1, le=6)
     is_: Value | None = Field(default=None, alias="is")
     needed: Comparison | None = None
+    holds: Annotated[tuple[Slug, ...], Field(min_length=1)] | None = None
 
     @model_validator(mode="after")
     def _triggers_or_gates(self) -> Self:
         if (self.step is None) != (self.by is None):
             raise ValueError("a trigger names its step and who acts there")
         if self.step is None:
-            if self.natural is not None or self.is_ is not None or self.needed is not None:
-                raise ValueError("natural, is and needed read a trigger's step")
+            read = (self.natural, self.is_, self.needed, self.holds)
+            if any(each is not None for each in read):
+                raise ValueError("natural, is, needed and holds read a trigger's step")
             if not self.gated:
                 raise ValueError("a when names a trigger or a gate")
         elif (self.natural is not None or self.needed is not None) and (
@@ -500,6 +502,11 @@ class Effect(BaseModel):
         if isinstance(self.to, WeaponMatch):
             named.append(self.to.weapon)
         return frozenset(weapon for weapon in named if weapon is not None)
+
+    @property
+    def held(self) -> frozenset[str]:
+        """Every piece of equipment the trigger's option holds."""
+        return frozenset(() if self.when is None or self.when.holds is None else self.when.holds)
 
     @property
     def armour(self) -> frozenset[str]:

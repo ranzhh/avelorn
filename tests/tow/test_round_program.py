@@ -5,6 +5,7 @@ from fractions import Fraction
 import pytest
 
 from avelorn.core.distribution import Distribution, Probability
+from avelorn.core.graph import Decision
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.fielding import Fielding
@@ -183,13 +184,15 @@ def test_martial_prowess_moves_weapon_skill_striking_and_struck(
 
 
 def test_a_list_of_sides_builds_the_entry_once_for_each_in_order() -> None:
-    """Both sides measure at the head; the target's casualties come off before the attacker's."""
+    """Both sides decide and measure at the head; the target's casualties come off first."""
     spearman = _fielded("elven-spearmen", "Thrusting Spear", 1)
 
     program = ROUND_PROGRAM.built({Side.ATTACKER: spearman, Side.TARGET: spearman}).program
 
     paths = [program.paths[step] for step in program.steps]
-    assert paths[:4] == [
+    assert paths[:6] == [
+        "round/attacker/choose-combat-and-determine-who-can-fight",
+        "round/target/choose-combat-and-determine-who-can-fight",
         "round/attacker/who-can-fight",
         "round/target/who-can-fight",
         "round/attacker/who-strikes-first",
@@ -202,6 +205,27 @@ def test_a_list_of_sides_builds_the_entry_once_for_each_in_order() -> None:
     ] == [
         "round/initiative-4/target/remove-casualties",
         "round/initiative-4/attacker/remove-casualties",
+    ]
+
+
+def test_a_side_chooses_each_weapon_it_carries_with_or_without_its_shield() -> None:
+    """Elven Spearmen given great weapons may fight with any weapon they carry, shield or not."""
+    datasheet = REPO.units["elven-spearmen"]
+    armed = datasheet.model_copy(update={"equipment": [*datasheet.equipment, "Great Weapon"]})
+    spearmen = Fielding.of(Contingent.field(armed, 10, data=REPO), "Great Weapon", combat=True)
+
+    choice = _fought(spearmen, spearmen).at(
+        "round/target/choose-combat-and-determine-who-can-fight"
+    )
+
+    assert isinstance(choice.step, Decision)
+    assert [str(option) for option in choice.step.options] == [
+        "hand-weapon",
+        "hand-weapon+shield",
+        "thrusting-spear",
+        "thrusting-spear+shield",
+        "great-weapon",
+        "great-weapon+shield",
     ]
 
 

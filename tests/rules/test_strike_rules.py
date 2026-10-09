@@ -26,7 +26,6 @@ FLAMESPYRE = Side("flamespyre-phoenix", 1, "Wicked Claws")
 SPEAR_INTO_SPEARMEN = Attack(COMBAT, 4, 3, 3, foe_weapon_skill=4, armour_value=5)
 ARCHERS = Side("elven-archers", 5, frontage=5)
 ARROWS_INTO_PHOENIX_GUARD = Attack(SHOOTING, 4, 3, 3, armour_value=4, armour_bane=1, ward=6)
-PARRY = "Parry needs the weapon choice at Step 1.1"
 
 
 def _unsaved(attack: Attack) -> Fraction:
@@ -415,7 +414,6 @@ ARROWS_INTO_SPEARMEN = Attack(SHOOTING, 4, 3, 3, armour_value=5, armour_bane=1)
             replace(SPEAR_INTO_SPEARMEN, armour_value=4),
             SPEAR_INTO_SPEARMEN,
             id="hand-weapon",
-            marks=pytest.mark.xfail(strict=True, reason=PARRY),
         ),
         pytest.param(
             Scenario(Kind.STRIKE, SPEARS, SPEARMEN),
@@ -456,16 +454,12 @@ TWO_HANDED = Side("elven-spearmen", 10, "Great Weapon", equipment=("Great Weapon
             replace(SPEAR_INTO_SPEARMEN, armour_value=6),
             SPEAR_INTO_SPEARMEN,
             id="struck-wielding-it",
-            marks=pytest.mark.xfail(
-                strict=True, reason="Requires Two Hands needs the weapon choice at Step 1.1"
-            ),
         ),
         pytest.param(
             Scenario(Kind.STRIKE, SPEARS, replace(TWO_HANDED, weapon="Hand Weapon")),
             replace(SPEAR_INTO_SPEARMEN, armour_value=4),
             replace(SPEAR_INTO_SPEARMEN, armour_value=4),
             id="struck-wielding-a-hand-weapon",
-            marks=pytest.mark.xfail(strict=True, reason=PARRY),
         ),
         pytest.param(
             Scenario(Kind.SHOOT, ARCHERS, TWO_HANDED, distance=10),

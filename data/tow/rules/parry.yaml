@@ -9,8 +9,7 @@ effects:
   - when:
       step: choose-combat-and-determine-who-can-fight
       by: this-model
-      is: hand-weapon
-      worn: {armour: shield}
+      holds: [hand-weapon, shield]
     add: {armour-value: {amount: 1, maximum: 3}}
     at: {step: make-armour-saves, by: this-model, in: combat}
     legacy:

@@ -8,24 +8,69 @@ from avelorn.core.graph import Source
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.engine.armour import defender_armour
 from avelorn.tow.kernels import Standing, Standings
+from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.reference import RuleRef, slugified
 from avelorn.tow.schema.unit import Characteristic, Profile, ProfileRole, TroopType
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile
 from avelorn.tow.traits import Carries
 
+SHIELD = "shield"
+
+
+class Held(frozenset[str]):
+    """What a model fights with in hand, by slug: a weapon, and the shield when it uses one."""
+
+    def __str__(self) -> str:
+        """The slugs joined by ``+``, the weapon first.
+
+        Returns:
+            The slugs, sorted with the shield last.
+        """
+        return "+".join(sorted(self, key=lambda slug: (slug == SHIELD, slug)))
+
 
 @dataclass(frozen=True, eq=False)
 class Part:
-    """The models of a side that share a profile row and a loadout."""
+    """The models of a side that share a profile row and a loadout.
+
+    ``weapons`` are the weapons they carry that fight in combat, and ``worn``
+    the armour they wear.
+    """
 
     id: str
     row: Profile
     count: int
     weapon: WeaponProfile | None = None
     wielded: Weapon | None = None
+    weapons: tuple[Weapon, ...] = ()
+    worn: tuple[Armour, ...] = ()
     armour: int | None = None
     ward: int | None = None
     carried: tuple[tuple[RuleRef, Source], ...] = ()
+
+    @property
+    def holdings(self) -> tuple[Held, ...]:
+        """Each way the models can fight: a weapon they carry, alone or with the shield they wear.
+
+        The weapons come in the order carried, each alone and then with the shield.
+        """
+        shielded = any(piece.id == SHIELD for piece in self.worn)
+        holdings = []
+        for weapon in self.weapons:
+            holdings.append(Held({weapon.id}))
+            if shielded:
+                holdings.append(Held({weapon.id, SHIELD}))
+        return tuple(holdings)
+
+    def armour_with(self, held: Held) -> int | None:
+        """The armour value folded from the pieces in use with ``held``: a shield only when held.
+
+        Returns:
+            The armour value, or None when unarmoured.
+        """
+        return defender_armour(
+            [piece for piece in self.worn if piece.id != SHIELD or SHIELD in held]
+        )
 
     def characteristic(self, c: Characteristic) -> int | None:
         """The part's printed value for a characteristic.
@@ -249,6 +294,7 @@ class Fielding:
             if (profile_name := offered[name].profile) is not None
         ]
         armour = defender_armour(contingent.loadout.armour)
+        weapons = tuple(w for w in contingent.loadout.weapons if w.combat_profile is not None)
         counts = [(row, 1) for row in champions]
         counts.append((unit.main, contingent.models - len(champions)))
         parts = tuple(
@@ -258,6 +304,8 @@ class Fielding:
                 count=count,
                 weapon=profile,
                 wielded=wielded,
+                weapons=weapons,
+                worn=contingent.loadout.armour,
                 armour=armour,
                 carried=tuple(carried),
             )

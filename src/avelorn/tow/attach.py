@@ -15,6 +15,7 @@ from avelorn.core.graph import (
     Carrier,
     Change,
     Contribution,
+    Decision,
     Eligibility,
     Holder,
     Landing,
@@ -32,6 +33,7 @@ from avelorn.tow.changes import (
     Equals,
     Gate,
     Granted,
+    Holds,
     MoreThan,
     Operated,
     Shows,
@@ -55,7 +57,7 @@ from avelorn.tow.schema.stage import Side
 from avelorn.tow.schema.step import Step as Printed
 from avelorn.tow.schema.step import StepSequence
 from avelorn.tow.schema.weapon import Weapon
-from avelorn.tow.steps import Spec
+from avelorn.tow.steps import Choice, Spec
 
 type Carried = tuple[tuple[RuleRef, Source], ...]
 type Reached = list[tuple[int, Effect, tuple[Step[Any], ...]]]
@@ -126,7 +128,7 @@ def rules_in_scope(
 
 def attach_rules(
     program: Program,
-    specs: Mapping[Step[Any], Spec],
+    specs: Mapping[Step[Any], Spec | Choice],
     fielded: Mapping[Side, Fielding],
     rules: Mapping[str, Rule],
     inputs: Mapping[str, State[Any]],
@@ -184,7 +186,7 @@ def attach_rules(
 @dataclass(frozen=True)
 class _Fielding:
     program: Program
-    specs: Mapping[Step[Any], Spec]
+    specs: Mapping[Step[Any], Spec | Choice]
     fielded: Mapping[Side, Fielding]
     rules: Mapping[str, Rule]
     inputs: Mapping[str, State[Any]]
@@ -248,6 +250,12 @@ class _Fielding:
                     return None
                 contributions.append(contribution)
                 continue
+            if isinstance(at, Decision) and effect.operation is Operation.BAR:
+                barred = self.barred(rule, side, at, effect)
+                if barred is None:
+                    return None
+                contributions.append(barred)
+                continue
             operated = self.operated(rule, side, at, effect)
             if operated is None:
                 return None
@@ -276,6 +284,29 @@ class _Fielding:
             inputs=gate.reads,
         )
 
+    def barred(
+        self, rule: Rule, side: Side, at: Decision[Any], effect: Effect
+    ) -> Contribution[Any] | None:
+        carriers = {
+            source.item
+            for _, source in self.scopes[side][rule.id]
+            if source.carrier is Carrier.WEAPON
+        }
+        if effect.bar is None or effect.limit is not None or not carriers:
+            return None
+        gate = self.gate(rule, side, at, effect)
+        if gate is None or any(isinstance(check, Attacks) for check in gate.checks):
+            return None
+        named = frozenset(
+            option for option in at.options if effect.bar in option and carriers & option
+        )
+        return Contribution(
+            operation=GraphOperation.FORBID,
+            options=partial(_named, named, gate),
+            text=f"{GraphOperation.FORBID} {', '.join(sorted(map(str, named)))}",
+            inputs=gate.reads,
+        )
+
     def gated_grant(self, rule: Rule, source: Source) -> bool:
         if source.via is None:
             return False
@@ -290,7 +321,10 @@ class _Fielding:
     def operated(
         self, rule: Rule, side: Side, at: Step[Any], effect: Effect
     ) -> list[Operated] | None:
-        runs = self.specs[at].runs
+        spec = self.specs[at]
+        if not isinstance(spec, Spec):
+            return None
+        runs = spec.runs
         operation = effect.operation
         if effect.limit is not None or not runs:
             return None
@@ -358,6 +392,8 @@ class _Fielding:
             checks.append(Shows(step.key, when.natural))
         if when.is_ is not None:
             checks.append(self.equals(rule, step, when.is_))
+        if when.holds is not None:
+            checks.append(Holds(step.key, frozenset(when.holds)))
         return checks or None
 
     def gates(self, rule: Rule, side: Side, at: Step[Any], gates: Gates) -> list[Check] | None:
@@ -409,10 +445,13 @@ class _Fielding:
 
     def equals(self, rule: Rule, step: Step[Any], value: Hashable) -> Equals:
         spec = self.specs[step]
-        if spec.outcomes is None or value not in spec.outcomes:
+        outcomes = spec.outcomes if isinstance(spec, Spec) else None
+        if isinstance(step, Decision):
+            outcomes = frozenset(step.options)
+        if outcomes is None or value not in outcomes:
             raise AttachError(
                 f"{rule.id} reads {value!r} from {self.program.paths[step]}, "
-                f"which outputs {sorted(map(str, spec.outcomes or ())) or 'no listed value'}"
+                f"which outputs {sorted(map(str, outcomes or ())) or 'no listed value'}"
             )
         return Equals(step.key, value)
 
@@ -428,8 +467,8 @@ class _Fielding:
 
 
 def _named(
-    named: frozenset[str], gate: Gate, printed: frozenset[str], *values: Hashable
-) -> frozenset[str]:
+    named: frozenset[Hashable], gate: Gate, printed: frozenset[Hashable], *values: Hashable
+) -> frozenset[Hashable]:
     return named if gate.test(values, frozenset()) else frozenset()
 
 
@@ -488,7 +527,7 @@ def _addresses(
     step: Step[Any],
     side: Side,
     program: Program,
-    specs: Mapping[Step[Any], Spec],
+    specs: Mapping[Step[Any], Spec | Choice],
 ) -> bool:
     spec = specs[step]
     blocks = program.paths[step].split("/")[:-1]
