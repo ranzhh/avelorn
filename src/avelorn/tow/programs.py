@@ -41,6 +41,7 @@ from avelorn.tow.schema.program import (
     GroupEntry,
     KnownInput,
     ProgramFile,
+    SlotEntry,
     SlotsEntry,
     StateFact,
     StateFile,
@@ -50,7 +51,9 @@ from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.stage import Side
 from avelorn.tow.schema.unit import Characteristic
 from avelorn.tow.steps import (
+    AUTOMATIC_HITS,
     CHANGED,
+    SLOTTED,
     STEPS,
     Changed,
     Choice,
@@ -144,7 +147,9 @@ class Loaded:
         states = dict(self.states)
         builder = _Builder(self.source, self.file, self.facts, dict(self.inputs), fielded, states)
         program = builder.build()
-        attachment = attach_rules(program, builder.specs, fielded, self.rules, self.states)
+        attachment = attach_rules(
+            program, builder.specs, fielded, self.rules, self.states, builder.wielding
+        )
         program.attach(attachment.nodes)
         return Built(
             self.inputs,
@@ -374,7 +379,9 @@ class _Builder:
     fighter: tuple[Side, Part | None] | None = None
     swapped: bool = False
     initiative: int | None = None
+    slotted: str | None = None
     specs: dict[Step[Any], Spec | Choice] = field(default_factory=dict)
+    wielding: dict[Step[Any], tuple[Side, frozenset[str]]] = field(default_factory=dict)
     written: set[str] = field(default_factory=set)
 
     def build(self) -> Program:
@@ -404,7 +411,7 @@ class _Builder:
 
     def block(
         self,
-        entries: Iterable[GroupEntry | SlotsEntry | StepEntry | str],
+        entries: Iterable[GroupEntry | SlotEntry | SlotsEntry | StepEntry | str],
         where: str,
         visible: _Scope,
     ) -> tuple[Item, ...]:
@@ -414,6 +421,9 @@ class _Builder:
             here = f"{where}[{index}]"
             if isinstance(entry, SlotsEntry):
                 built.extend(self.slots(entry, here, visible))
+                continue
+            if isinstance(entry, SlotEntry):
+                built.append(self.slot(entry, here, visible))
                 continue
             if isinstance(entry, GroupEntry):
                 built.extend(self.group(entry, of, here, visible, groups) for of in entry.sides)
@@ -430,6 +440,14 @@ class _Builder:
             built.append(Slot(name=f"{entry.slots}-{value}", items=items))
         self.initiative = None
         return built
+
+    def slot(self, entry: SlotEntry, here: str, visible: _Scope) -> Slot:
+        if self.slotted is not None:
+            raise self.error(here, f"{entry.slot} is opened inside {self.slotted}")
+        self.slotted = entry.slot
+        items = self.block(entry.items, f"{here}.items", visible)
+        self.slotted = None
+        return Slot(name=entry.slot, items=items)
 
     def role(self, side: Side) -> Side:
         return side.other if self.swapped else side
@@ -466,7 +484,7 @@ class _Builder:
         self, entry: StepEntry, of: Side | None, here: str, visible: _Scope, groups: _Groups
     ) -> Step[Any]:
         sequence = entry.sequence or self.file.sequence
-        spec = STEPS.get((sequence, entry.step))
+        spec = SLOTTED.get((self.slotted or "", entry.step)) or STEPS.get((sequence, entry.step))
         if spec is None:
             raise self.error(here, f"{entry.step} is no step of the {sequence} sequence")
         if isinstance(spec, Choice):
@@ -493,6 +511,8 @@ class _Builder:
         sided = of is not None
         step = spec.build(kernel, inputs, target, writes, changed, printed, side=acts, sided=sided)
         self.specs[step] = spec
+        if self.slotted in AUTOMATIC_HITS:
+            self.wielding[step] = (self.role(Side.ATTACKER), frozenset())
         visible.add(step, acts)
         for name in entry.readings:
             offered = spec.readings.get(name)

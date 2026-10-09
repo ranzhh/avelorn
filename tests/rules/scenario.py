@@ -26,6 +26,9 @@ CHAPTERS = (Phase.SHOOTING, Phase.COMBAT)
 
 INITIATIVES = range(10, 0, -1)
 
+BLOWS_END = "initiative-1"
+ROUND_END = "stomp-attacks"
+
 
 class Kind(StrEnum):
     """What the attacker does; STRIKE is the attacker's blows in a round."""
@@ -207,8 +210,8 @@ def resolve(scenario: Scenario) -> Outcome:
         case Kind.FIGHT | Kind.BREAK:
             fought = _round(attacker, defender, scenario)
             outcome = Outcome(
-                casualties=_lost(fought, stage.Side.TARGET, defender.models),
-                attacker_casualties=_lost(fought, stage.Side.ATTACKER, attacker.models),
+                casualties=_lost(fought, stage.Side.TARGET, defender.models, ROUND_END),
+                attacker_casualties=_lost(fought, stage.Side.ATTACKER, attacker.models, ROUND_END),
                 margin=_margin(fought),
             )
             if scenario.kind is Kind.FIGHT:
@@ -330,9 +333,9 @@ def _struck(fought: Evaluated, attackers: int, models: int) -> Outcome:
     The chance an attack goes unsaved is the unsaved wounds expected over the
     attacks expected. The attacks are reported when they are certain, and are
     None when the defender's blows back may fell attackers before they strike.
-    The casualties are each side's in the round, of the ``attackers`` and the
-    ``models`` it fielded. Each side's Initiative is the first slot its attacks
-    land in.
+    The casualties are each side's by the end of the last Initiative slot,
+    before Stomp Attacks, of the ``attackers`` and the ``models`` it fielded.
+    Each side's Initiative is the first slot its attacks land in.
 
     Returns:
         The attacker's attacks, its unsaved chance per attack, each side's
@@ -352,14 +355,14 @@ def _struck(fought: Evaluated, attackers: int, models: int) -> Outcome:
     return Outcome(
         attacks=_certain(attacks),
         unsaved=unsaved / sum(made.expect(lambda n: n) for made in attacks),
-        casualties=_lost(fought, stage.Side.TARGET, models),
-        attacker_casualties=_lost(fought, stage.Side.ATTACKER, attackers),
+        casualties=_lost(fought, stage.Side.TARGET, models, BLOWS_END),
+        attacker_casualties=_lost(fought, stage.Side.ATTACKER, attackers, BLOWS_END),
         initiative={role: _initiative(fought, side) for role, side in _SIDES.items()},
     )
 
 
-def _lost(fought: Evaluated, side: stage.Side, models: int) -> dict[int, Probability]:
-    left = fought.at(f"round/initiative-1/{side}/remove-casualties").read("models")
+def _lost(fought: Evaluated, side: stage.Side, models: int, after: str) -> dict[int, Probability]:
+    left = fought.at(f"round/{after}/{side}/remove-casualties").read("models")
     lost = left.map(lambda standing: models - standing)
     return {count: p for count, p in lost.mass.items() if p}
 

@@ -132,7 +132,7 @@ def _fought(
 
 
 def _falls(fought: Evaluated, side: Side) -> Probability:
-    return fought.at(f"round/initiative-1/{side}/remove-casualties").read("models").mass[0]
+    return fought.at(f"round/stomp-attacks/{side}/remove-casualties").read("models").mass[0]
 
 
 def _needed(fought: Evaluated, path: str) -> set[str]:
@@ -376,6 +376,111 @@ def test_a_side_in_the_enemy_s_flank_or_rear_claims_its_points(
     )
 
     assert behind == {score + points for score in front}
+
+
+MANEATER_WITH_A_GREAT_WEAPON = ("maneaters", "Great Weapon", ("Great Weapon",))
+
+
+@pytest.mark.parametrize(
+    ("hitter", "foe", "slot", "needed"),
+    [
+        pytest.param(
+            MANEATER_WITH_A_GREAT_WEAPON,
+            ("ironbreakers", "Hand Weapon", ()),
+            "impact-hits",
+            ({"3+"}, {"2+"}),
+            id="impact-hit-without-the-great-weapon",
+        ),
+        pytest.param(
+            ("maneaters", "Hand Weapon", ()),
+            ("merwyrm", "Lashing Talons", ()),
+            "impact-hits",
+            ({"5+"}, {"6+"}),
+            id="impact-hit-without-enfeebling-cold",
+        ),
+        pytest.param(
+            ("merwyrm", "Lashing Talons", ()),
+            ("merwyrm", "Lashing Talons", ()),
+            "stomp-attacks",
+            ({"4+"}, {"5+"}),
+            id="stomp-without-enfeebling-cold",
+        ),
+    ],
+)
+def test_an_automatic_hit_wounds_at_the_model_s_unmodified_strength(
+    hitter: tuple[str, str, tuple[str, ...]],
+    foe: tuple[str, str, tuple[str, ...]],
+    slot: str,
+    needed: tuple[set[str], set[str]],
+) -> None:
+    """A hit made with no weapon wounds at the model's printed Strength, its blows as moved.
+
+    A Maneater charging 6" hits at S5, where its great weapon strikes at S7; against
+    the Merwyrm it hits at S5 where Enfeebling Cold leaves its blows at S4, and a
+    Merwyrm stomps another at S6 where its blows strike at S5.
+    """
+    (unit, weapon, equipment), (enemy, held, worn) = hitter, foe
+    attacker = _fielded(unit, weapon, 1, equipment=equipment)
+    target = _fielded(enemy, held, 1, equipment=worn)
+    charge = 6 if slot == "impact-hits" else 0
+
+    fought = _fought(attacker, target, attacker_charges=int(charge > 0), charge_move=charge)
+
+    part = attacker.side.hit.id
+    blow = f"round/initiative-{_strikes_at(fought, Side.ATTACKER)}/attacker/attack/{part}"
+    hit = f"round/{slot}/attacker/attack/{part}"
+    assert (_needed(fought, f"{hit}/roll-to-wound"), _needed(fought, f"{blow}/roll-to-wound")) == (
+        needed
+    )
+
+
+def test_only_the_front_rank_makes_automatic_hits() -> None:
+    """Six Maneaters three abreast charge 6": the front three make an impact hit each."""
+    maneaters = _fielded("maneaters", "Hand Weapon", 6, frontage=3)
+    ironbreaker = _fielded("ironbreakers", "Hand Weapon", 1)
+
+    fought = _fought(
+        maneaters, ironbreaker, attacker_standing=6, attacker_charges=1, charge_move=6
+    )
+
+    assert fought.at("round/impact-hits/attacker/impact-hits").read("hits").mass == {3: 1}
+
+
+def test_no_weapon_s_rule_reaches_an_automatic_hit() -> None:
+    """A Maneater's impact hit fells an Ironbreaker as often with a great weapon as without.
+
+    The great weapon's Armour Bane rides the weapon, and the hit is made with none.
+    """
+    ironbreaker = _fielded("ironbreakers", "Hand Weapon", 1)
+    unit, weapon, equipment = MANEATER_WITH_A_GREAT_WEAPON
+
+    felled = [
+        _fought(maneater, ironbreaker, attacker_charges=1, charge_move=6)
+        .at("round/impact-hits/target/remove-casualties")
+        .read("models")
+        .mass
+        for maneater in (
+            _fielded("maneaters", "Hand Weapon", 1),
+            _fielded(unit, weapon, 1, equipment=equipment),
+        )
+    ]
+
+    assert felled[0] == felled[1]
+
+
+def test_the_struck_side_keeps_its_weapon_s_rules_against_an_automatic_hit() -> None:
+    """Resolute rewritten to grant Dragon Armour to the hand weapon wards a charged Dwarf.
+
+    The Maneater's impact hit is made with no weapon, but the Dwarf Warrior it
+    strikes still holds its hand weapon, so the ward meets the hit on 6+.
+    """
+    program = _granting(("resolute", {"grants": "dragon-armour", "to": {"weapon": "hand-weapon"}}))
+    maneater = _fielded("maneaters", "Hand Weapon", 1)
+    dwarf = _fielded("dwarf-warriors", "Hand Weapon", 1)
+
+    fought = _fought(maneater, dwarf, program=program, attacker_charges=1, charge_move=6)
+
+    assert _needed(fought, "round/impact-hits/attacker/attack/maneater/ward-saves") == {"6+"}
 
 
 def test_a_rule_also_granted_by_the_unit_is_in_force_whatever_the_weapon() -> None:

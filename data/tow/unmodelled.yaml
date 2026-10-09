@@ -319,12 +319,6 @@
 # it needs yet: its landing in one sequence, or the trigger or fact it reads.
 
 - kind: unattached-effect
-  subject: impact-hits/combat/impact-hits
-  reason: Fills the Impact Hits slot; no program registers it until the charge lands (item 20).
-- kind: unattached-effect
-  subject: stomp-attacks/combat/stomp-attacks
-  reason: Fills the Stomp Attacks slot; no program registers it until the combat round lands (item 14).
-- kind: unattached-effect
   subject: valour-of-ages/panic/fled-through
   reason: Reads a Panic test caused by a fleeing friend; no program registers Fled Through, and no numbered item plans one.
 - kind: unattached-effect

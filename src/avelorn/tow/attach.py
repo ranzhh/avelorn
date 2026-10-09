@@ -194,12 +194,16 @@ def attach_rules(
     fielded: Mapping[Side, Fielding],
     rules: Mapping[str, Rule],
     inputs: Mapping[str, State[Any]],
+    wielding: Mapping[Step[Any], tuple[Side, frozenset[str]]],
 ) -> Attachment:
     """The rule nodes both fielded sides give a program, built and not yet attached.
 
     ``inputs`` are the program's inputs by name, which fact gates read. Where a
     side chooses its weapon, a rule's sources count together only within one
     option: the model's own sources and those of the weapons it holds.
+    ``wielding`` names the side that strikes at a step and the weapons it strikes
+    with there, where its choice does not decide them: none for hits made with
+    no weapon. The rules of that side's other weapons never reach the step.
 
     Returns:
         The nodes, ordered by side then slug, every effect that reached a step,
@@ -220,7 +224,9 @@ def attach_rules(
     scopes = {
         side: rules_in_scope(holder, fielded, rules, choosing) for side, holder in holders.items()
     }
-    fielding = _Fielding(program, specs, fielded, rules, inputs, holders, scopes, choices)
+    fielding = _Fielding(
+        program, specs, fielded, rules, inputs, holders, scopes, choices, wielding
+    )
     run = {spec.sequence for spec in specs.values()}
     printed = {spec.key for spec in specs.values()}
     landed: dict[tuple[Side, str], dict[Step[Any], Reached]] = defaultdict(dict)
@@ -266,6 +272,7 @@ class _Fielding:
     holders: Mapping[Side, Holder]
     scopes: Mapping[Side, Mapping[str, Carried]]
     choices: Mapping[Side, Decision[Any]]
+    wielding: Mapping[Step[Any], tuple[Side, frozenset[str]]]
 
     def node(
         self, rule: Rule, side: Side, landed: Mapping[Step[Any], Reached]
@@ -357,7 +364,7 @@ class _Fielding:
         gate = self.gate(rule, side, at, effect)
         if gate is None or any(isinstance(check, Attacks) for check in gate.checks):
             return None
-        sources = self.sources(rule.id, side, self.choice(side, at))
+        sources = self.sources_at(rule.id, side, at)
         if sources.reads:
             gate = Gate((*gate.when, HasSource(sources)), gate.unless)
         operation = GraphOperation.ALLOW if effect.allow else GraphOperation.FORBID
@@ -419,7 +426,13 @@ class _Fielding:
             case Operation.REROLL:
                 if effect.reroll not in runs.get(operation, frozenset()):
                     return None
-            case Operation.DENY | Operation.MULTIPLY | Operation.FORCE | Operation.SUBSTITUTE:
+            case (
+                Operation.DENY
+                | Operation.MULTIPLY
+                | Operation.FORCE
+                | Operation.SUBSTITUTE
+                | Operation.HITS
+            ):
                 if operation not in runs:
                     return None
             case Operation.CANCELS:
@@ -428,14 +441,14 @@ class _Fielding:
                 return None
         if any(isinstance(amount, FactRef) for amount in effect.amounts):
             return None
-        multiplies = operation is Operation.MULTIPLY
+        rolls = operation in {Operation.MULTIPLY, Operation.HITS}
         whole = all(isinstance(x, int) for x in self.xs(rule, side))
-        if effect.reads_x and not multiplies and not whole:
+        if effect.reads_x and not rolls and not whole:
             return None
         gate = self.gate(rule, side, at, effect)
         if gate is None:
             return None
-        sources = self.sources(rule.id, side, self.choice(side, at))
+        sources = self.sources_at(rule.id, side, at)
         return [
             Operated(rule.id, effect, key, whose, gate, sources, rule.parameter) for key in keys
         ]
@@ -592,12 +605,13 @@ class _Fielding:
         if slug not in self.scopes[side]:
             return Attacks(None, wanted)
         node = f"{self.holders[side]}/{slug}"
-        return Attacks(node, wanted, self.sources(slug, side, self.choice(side, at)))
+        return Attacks(node, wanted, self.sources_at(slug, side, at))
 
     def together(self, rule: Rule, side: Side, at: Step[Any]) -> int:
         own = self.choices.get(side)
-        decision = own if at is own else self.choice(side, at)
-        return self.sources(rule.id, side, decision).at_once()
+        if at is own:
+            return self.sources(rule.id, side, own).at_once()
+        return self.sources_at(rule.id, side, at).at_once()
 
     def sources(self, slug: str, side: Side, choice: Decision[Any] | None) -> Sources:
         granted = tuple(
@@ -606,11 +620,28 @@ class _Fielding:
         )
         return Sources(granted, choice)
 
+    def sources_at(self, slug: str, side: Side, at: Step[Any]) -> Sources:
+        weapons = self.wielded(side, at)
+        if weapons is None:
+            return self.sources(slug, side, self.choice(side, at))
+        granted = tuple(
+            Granted(reference.x, source.via, None)
+            for reference, source in self.scopes[side][slug]
+            if _rides(source) is None or _rides(source) in weapons
+        )
+        return Sources(granted)
+
+    def wielded(self, side: Side, at: Step[Any]) -> frozenset[str] | None:
+        striking = self.wielding.get(at)
+        if striking is None or striking[0] is not side:
+            return None
+        return striking[1]
+
     def choice(self, side: Side, at: Step[Any]) -> Decision[Any] | None:
         decision = self.choices.get(side)
-        if decision is None or decision not in self.program.visible[at]:
+        if decision is None or self.wielded(side, at) is not None:
             return None
-        return decision
+        return decision if decision in self.program.visible[at] else None
 
     def nearest(
         self, name: Printed, role: Role | None, side: Side, at: Step[Any]
