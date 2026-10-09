@@ -14,6 +14,7 @@ from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.fielding import Fielding
 from avelorn.tow.programs import VOLLEY, Built, Evaluated, load_program
+from avelorn.tow.schema.effect import Effect
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import Clause, Rule, RuleGraph
 from avelorn.tow.schema.stage import Side
@@ -223,6 +224,25 @@ def test_a_rule_with_no_x_carried_twice_to_a_landing_that_runs_is_refused() -> N
         AttachError, match="moving-and-shooting at attacker/elven-archers has 2 sources"
     ):
         _attached(twice, Fielding.of(_deployed("elven-spearmen")))
+
+
+def test_a_grant_to_a_weapon_reaches_no_side_that_is_shot_at() -> None:
+    """Valour of Ages rewritten to grant Deflect Shots to the hand weapon wards no Spearman shot.
+
+    A side shot at holds no weapon, so the grant has nothing to ride.
+    """
+    printed = REPO.rules["valour-of-ages"]
+    assert printed.graph is not None
+    grant = {"grants": "deflect-shots", "to": {"weapon": "hand-weapon"}}
+    clauses = (
+        *(Clause(effect=effect) for effect in printed.graph.effects),
+        Clause(effect=Effect.model_validate(grant)),
+    )
+    rules = {**REPO.rules, "valour-of-ages": printed.with_graph(RuleGraph(clauses=clauses))}
+
+    built = _attached(_archers(), Fielding.of(_deployed("elven-spearmen")), rules)
+
+    assert "target/elven-spearmen/deflect-shots" not in built.program.rules
 
 
 def test_each_fielding_evaluates_with_its_own_rule_nodes() -> None:

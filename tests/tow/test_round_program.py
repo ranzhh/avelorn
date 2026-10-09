@@ -232,25 +232,26 @@ def test_a_rule_two_carried_weapons_give_is_in_force_once_in_each_option() -> No
     assert lane.built.program.rules["target/elven-spearmen/armour-bane"].name == "Armour Bane (1)"
 
 
-def _granting(rule: str, grant: dict[str, object]) -> Loaded:
-    printed = REPO.rules[rule]
-    assert printed.graph is not None
-    clauses = (
-        *(Clause(effect=effect) for effect in printed.graph.effects),
-        Clause(effect=Effect.model_validate(grant)),
-    )
-    return load_program(
-        ROUND, {**REPO.rules, rule: printed.with_graph(RuleGraph(clauses=clauses))}
-    )
+def _granting(*grants: tuple[str, dict[str, object]]) -> Loaded:
+    rules = dict(REPO.rules)
+    for rule, grant in grants:
+        printed = rules[rule]
+        effects = () if printed.graph is None else printed.graph.effects
+        clauses = (
+            *(Clause(effect=effect) for effect in effects),
+            Clause(effect=Effect.model_validate(grant)),
+        )
+        rules[rule] = printed.with_graph(RuleGraph(clauses=clauses))
+    return load_program(ROUND, rules)
 
 
 def test_a_rule_a_weapon_grants_is_in_force_only_while_the_weapon_is_held() -> None:
     """Magical Attacks rewritten to grant Strike First sends the halberd to Initiative 10 alone.
 
     The Ceremonial Halberd gives the Spearmen Magical Attacks, so what it grants
-    rides the halberd: with hand weapon and shield they strike at their own 4.
+    rides the halberd: with a hand weapon they strike at their own 4.
     """
-    program = _granting("magical-attacks", {"grants": "strike-first", "to": "this-model"})
+    program = _granting(("magical-attacks", {"grants": "strike-first", "to": "this-model"}))
     dwarf = _fielded("dwarf-warriors", "Hand Weapon", 1)
     struck = {
         weapon: _fought(
@@ -277,11 +278,39 @@ def _strikes_at(fought: Evaluated, side: Side) -> int:
     )
 
 
+def test_a_rule_also_granted_by_the_unit_is_in_force_whatever_the_weapon() -> None:
+    """Magical Attacks granted through Fear and by the halberd: Strike First rides no weapon.
+
+    Valour of Ages grants Fear, Fear grants Magical Attacks, and Magical Attacks
+    grants Strike First. The unit's own chain keeps Magical Attacks in force with
+    a hand weapon, so the Spearmen strike at 10 with either.
+    """
+    program = _granting(
+        ("valour-of-ages", {"grants": "fear", "to": "this-model"}),
+        ("fear", {"grants": "magical-attacks", "to": "this-model"}),
+        ("magical-attacks", {"grants": "strike-first", "to": "this-model"}),
+    )
+    dwarf = _fielded("dwarf-warriors", "Hand Weapon", 1)
+
+    struck = [
+        _fought(
+            dwarf,
+            _fielded("elven-spearmen", weapon, 1, equipment=("Ceremonial Halberd",), shield=False),
+            program=program,
+        )
+        for weapon in ("Hand Weapon", "Ceremonial Halberd")
+    ]
+
+    assert [_strikes_at(fought, Side.TARGET) for fought in struck] == [10, 10]
+
+
 def test_a_rule_granted_to_a_weapon_rides_it_in_combat() -> None:
     """Valour of Ages rewritten to grant Armour Bane (1) to the hand weapon attaches in combat."""
     program = _granting(
-        "valour-of-ages",
-        {"grants": {"rule": "armour-bane", "X": 1}, "to": {"weapon": "hand-weapon"}},
+        (
+            "valour-of-ages",
+            {"grants": {"rule": "armour-bane", "X": 1}, "to": {"weapon": "hand-weapon"}},
+        )
     )
     spearman = _fielded("elven-spearmen", "Hand Weapon", 1)
 
