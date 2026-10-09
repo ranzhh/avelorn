@@ -101,11 +101,7 @@ def _fought(
     lanes = _lanes(
         attacker, target, attacker_standing, program, attacker_charges, True, attacker_at_start
     )
-    (fought,) = (
-        each
-        for each in lanes
-        if all(each.lane.choices[toggle] for toggle in each.lane.program.toggles.values())
-    )
+    (fought,) = (each for each in lanes if not each.lane.out)
     return fought
 
 

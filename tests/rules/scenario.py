@@ -289,11 +289,7 @@ def _rules(scenario: Scenario) -> dict[str, Rule]:
 
 
 def _taken(lanes: tuple[Evaluated, ...]) -> Evaluated:
-    (taken,) = (
-        each
-        for each in lanes
-        if all(each.lane.choices[toggle] for toggle in each.lane.program.toggles.values())
-    )
+    (taken,) = (each for each in lanes if not each.lane.out)
     return taken
 
 

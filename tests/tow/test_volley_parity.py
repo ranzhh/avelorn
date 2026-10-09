@@ -141,13 +141,7 @@ def _taken(built: Built, attacker: Contingent, target: Contingent, distance: int
             "target/battle-strength": target.models,
         }
     )
-    (taken,) = (
-        evaluated
-        for evaluated in lanes
-        if all(
-            evaluated.lane.choices[toggle] for toggle in evaluated.lane.program.toggles.values()
-        )
-    )
+    (taken,) = (evaluated for evaluated in lanes if not evaluated.lane.out)
     return taken
 
 
