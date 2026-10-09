@@ -1,0 +1,13 @@
+# Source: https://tow.whfb.app/the-shooting-phase/standing-and-shooting
+id: standing-and-shooting
+name: Standing and Shooting
+page: 139
+category: The Shooting Phase
+paragraphs:
+  - Taking careful aim whilst the enemy charges ever closer can be difficult. Models that are making a Stand & Shoot charge
+    reaction suffer a -1 To Hit modifier. Note that models making a Stand & Shoot charge reaction do not suffer any additional
+    modifiers for Firing at Long Range.
+notes: The long-range waiver holds because a Stand & Shoot is shot at no range, so Check Range never gives the long band.
+effects:
+  - add: {to-hit: -1}
+    at: {step: roll-to-hit, by: this-model, in: stand-and-shoot}

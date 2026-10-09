@@ -6,6 +6,8 @@ inputs:
   - {fact: standing, of: target}
   - {known: standing-at-start-of-round, of: attacker, type: standing}
   - {known: standing-at-start-of-round, of: target, type: standing}
+  - {known: standing-at-start-of-turn, of: attacker, type: standing}
+  - {known: standing-at-start-of-turn, of: target, type: standing}
   - {fact: rounds-fought, of: attacker}
   - {fact: rounds-fought, of: target}
   - {fact: charges-made, of: attacker}

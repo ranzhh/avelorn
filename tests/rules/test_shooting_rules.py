@@ -306,7 +306,7 @@ CHARGING_SPEARMEN = Side("elven-spearmen", 10, "Hand Weapon", charged=5)
             Scenario(
                 Kind.STAND_AND_SHOOT,
                 CHARGING_SPEARMEN,
-                replace(DEEP_ARCHERS, weapon="Hand Weapon"),
+                DEEP_ARCHERS,
             ),
             5,
             id="stand-and-shoot",
@@ -321,3 +321,15 @@ def test_volley_fire(scenario: Scenario, printed: int) -> None:
     role = Role.DEFENDER if scenario.kind is Kind.STAND_AND_SHOOT else Role.ATTACKER
     plain = scenario.without("volley-fire", role)
     assert (resolve(scenario).attacks, resolve(plain).attacks) == (printed, 5)
+
+
+def test_standing_and_shooting() -> None:
+    """Archers making a Stand & Shoot reaction to charging Spearmen shoot at -1 To Hit.
+
+    The volley is shot as the chargers close, at no range and no long range penalty.
+    """
+    scenario = Scenario(Kind.STAND_AND_SHOOT, CHARGING_SPEARMEN, ARCHERS)
+    assert _with_and_without(scenario, scenario.without("standing-and-shooting")) == (
+        _unsaved(replace(ARCHERS_AT_SPEARMEN, hit_modifier=-1)),
+        _unsaved(ARCHERS_AT_SPEARMEN),
+    )

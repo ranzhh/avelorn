@@ -1056,26 +1056,26 @@ def calculate_combat_result(
     attacker: Fielding,
     target: Fielding,
     standing: Standings,
-    enemy_at_start: Standings,
+    enemy_at_start_of_turn: Standings,
     enemy: Standings,
     arc: ChargeArc,
     changed: tuple[Hashable, ...],
 ) -> Distribution[int]:
     """Score a side's round: the Wounds it inflicted, its Rank Bonus, and the points rules add.
 
-    The Wounds are those the enemy lost since the start of the round
-    (the-combat-phase/unsaved-wounds-inflicted); the Rank Bonus is the one the
-    side's standing models claim (the-combat-phase/rank-bonus). A side fighting
-    in the enemy's flank or rear claims its points
+    The Wounds are those the enemy lost this turn, to a Stand & Shoot reaction
+    or in the round (the-combat-phase/unsaved-wounds-inflicted); the Rank Bonus
+    is the one the side's standing models claim (the-combat-phase/rank-bonus).
+    A side fighting in the enemy's flank or rear claims its points
     (the-combat-phase/flank-and-rear-attacks).
 
-    An enemy part standing more models than at the start of the round fails it.
+    An enemy part standing more models than at the start of the turn fails it.
 
     Returns:
         The side's combat result.
     """
-    _since(target, enemy_at_start, enemy)
-    inflicted = target.wounds_left(enemy_at_start) - target.wounds_left(enemy)
+    _since(target, enemy_at_start_of_turn, enemy)
+    inflicted = target.wounds_left(enemy_at_start_of_turn) - target.wounds_left(enemy)
     added = Payloads.of(changed).added(Quantity.COMBAT_RESULT)
     bonus = attacker.rank_bonus(standing) + arc.combat_result_bonus
     return Distribution.pure(inflicted + bonus + added)
@@ -1325,6 +1325,7 @@ def _removing(sequence: StepSequence) -> Spec:
             "unsaved": Offered((SUMMED,), _itself, _COUNT),
             "models": _offer("remove-casualties", _models, _COUNT),
             "wounds-lost": _offer("remove-casualties", _wounds_lost, _COUNT),
+            "standing": _offer("remove-casualties"),
         },
     )
 
@@ -1589,7 +1590,7 @@ _SPECS = (
             _ATTACKER,
             _TARGET,
             Fact("standing", Side.ATTACKER),
-            Fact("standing-at-start-of-round", Side.TARGET),
+            Fact("standing-at-start-of-turn", Side.TARGET),
             _TARGET_STANDING,
             Fact("enemy-arc", Side.ATTACKER),
             CHANGED,
