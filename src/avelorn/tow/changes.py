@@ -24,6 +24,8 @@ _ORDERS = {
     Operation.SET: Order.SET,
     Operation.ADD: Order.ADD,
     Operation.DENY: Order.DENY,
+    Operation.FORCE: Order.DENY,
+    Operation.SUBSTITUTE: Order.DENY,
     Operation.REROLL: Order.REROLL,
     Operation.MULTIPLY: Order.MULTIPLY,
 }
@@ -72,7 +74,23 @@ class Multiplied:
     by: int | DiceQuantity
 
 
-type Payload = Added | Fixed | Denied | Rerolled | Multiplied
+@dataclass(frozen=True)
+class Forced:
+    """The outcomes a step's outcome is forced to."""
+
+    options: frozenset[str]
+
+
+@dataclass(frozen=True)
+class Substituted:
+    """Outcomes each replaced by the one it maps to."""
+
+    replaced: tuple[tuple[str, str], ...]
+
+
+type Payload = Added | Fixed | Denied | Rerolled | Multiplied | Forced | Substituted
+
+_PAYLOADS = (Added, Fixed, Denied, Rerolled, Multiplied, Forced, Substituted)
 
 
 @dataclass(frozen=True)
@@ -93,7 +111,7 @@ class Payloads:
         """
         payloads: list[Payload] = []
         for payload in written:
-            if not isinstance(payload, Added | Fixed | Denied | Rerolled | Multiplied):
+            if not isinstance(payload, _PAYLOADS):
                 raise TypeError(f"{payload!r} is no payload a step folds")
             payloads.append(payload)
         return cls(tuple(payloads))
@@ -146,6 +164,33 @@ class Payloads:
             Each re-roll's dice, once.
         """
         return frozenset(each.on for each in self.payloads if isinstance(each, Rerolled))
+
+    def forced(self) -> str | None:
+        """Read the outcome forced.
+
+        Returns:
+            The outcome, or None when none is forced.
+
+        Raises:
+            ValueError: the outcomes forced are more than one.
+        """
+        options = frozenset[str]().union(
+            *(each.options for each in self.payloads if isinstance(each, Forced))
+        )
+        if len(options) > 1:
+            raise ValueError(f"rules force {', '.join(sorted(options))} at once")
+        return next(iter(options), None)
+
+    def substituted(self, outcome: str) -> str:
+        """Replace ``outcome`` by each substitution in force, in the order written.
+
+        Returns:
+            The outcome left.
+        """
+        for each in self.payloads:
+            if isinstance(each, Substituted):
+                outcome = dict(each.replaced).get(outcome, outcome)
+        return outcome
 
     def multiplied(self) -> tuple[int | DiceQuantity, ...]:
         """Read what the unsaved wounds are multiplied by.
@@ -237,6 +282,39 @@ class Holds:
 
     def holds(self, read: Mapping[Key, Any], out: frozenset[str]) -> bool:
         return self.held <= read[self.option]
+
+
+@dataclass(frozen=True)
+class Uses:
+    """How many times each of a side's rules has applied, by rule."""
+
+    counts: tuple[tuple[str, int], ...] = ()
+
+    def of(self, rule: str) -> int:
+        """The times ``rule`` has applied.
+
+        Returns:
+            The count, 0 for a rule never used.
+        """
+        return dict(self.counts).get(rule, 0)
+
+
+@dataclass(frozen=True)
+class Unspent:
+    """A rule applied fewer times than its limit allows."""
+
+    uses: Key
+    rule: str
+    times: int
+    consults: ClassVar[frozenset[str]] = frozenset()
+
+    @property
+    def reads(self) -> tuple[Key, ...]:
+        """The uses read."""
+        return (self.uses,)
+
+    def holds(self, read: Mapping[Key, Any], out: frozenset[str]) -> bool:
+        return read[self.uses].of(self.rule) < self.times
 
 
 def _as_read(value: int) -> int:
@@ -496,7 +574,8 @@ class Operated:
         """The payload the operation leaves with ``sources`` in force.
 
         Returns:
-            An added amount, a value set, a deny, a re-roll, a multiplier, or the cancel itself.
+            An added amount, a value set, a deny, a re-roll, a multiplier, an outcome
+            forced or replaced, or the cancel itself.
 
         Raises:
             ValueError: the operation is not one a step folds.
@@ -517,6 +596,10 @@ class Operated:
                 return Rerolled(effect.reroll)
             case Operation.MULTIPLY if effect.multiply is not None:
                 return Multiplied(self.multiplier(effect.multiply, sources))
+            case Operation.FORCE if effect.force is not None:
+                return Forced(frozenset(effect.force))
+            case Operation.SUBSTITUTE if effect.substitute is not None:
+                return Substituted(tuple(sorted(effect.substitute.items())))
             case Operation.CANCELS if effect.cancels is not None:
                 return effect.cancels
         raise ValueError(f"{self.rule} {effect.operation}s nothing a step folds")
@@ -593,6 +676,10 @@ class Operated:
                 return f"re-roll {on}"
             case Multiplied(by):
                 return f"multiply by {by}"
+            case Forced(options):
+                return f"force {', '.join(sorted(options))}"
+            case Substituted(replaced):
+                return ", ".join(f"{old} becomes {new}" for old, new in replaced)
         cancels = self.effect.cancels
         named = () if cancels is None else (cancels.rule, cancels.op, cancels.quantity)
         return " ".join(["cancels", *(str(each) for each in named if each is not None)])

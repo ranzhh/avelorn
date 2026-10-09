@@ -8,6 +8,7 @@ import pytest
 
 from avelorn.core.distribution import Probability
 from avelorn.core.graph import Decision
+from avelorn.tow.changes import Uses
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.fielding import SHIELD, Fielding, Held
@@ -77,6 +78,12 @@ def _lanes(
             "target/rounds-fought": 1,
             "attacker/charges-made": attacker_charges,
             "target/charges-made": 0,
+            "attacker/charges-received": 0,
+            "target/charges-received": attacker_charges,
+            "attacker/break-tests-taken": 0,
+            "target/break-tests-taken": 0,
+            "attacker/uses-this-game": Uses(),
+            "target/uses-this-game": Uses(),
         },
         choices if wielding else {},
     )
@@ -99,7 +106,13 @@ def _fought(
     attacker_at_start: int | None = None,
 ) -> Evaluated:
     lanes = _lanes(
-        attacker, target, attacker_standing, program, attacker_charges, True, attacker_at_start
+        attacker,
+        target,
+        attacker_standing,
+        program,
+        attacker_charges,
+        True,
+        attacker_at_start,
     )
     (fought,) = (each for each in lanes if not each.lane.out)
     return fought
@@ -531,6 +544,7 @@ def test_only_a_winner_more_than_twice_the_loser_s_unit_strength_turns_a_fall_ba
         spearmen.standing(5),
         spearmen.standing(winners),
         BreakTest.FALLS_BACK_IN_GOOD_ORDER,
+        (),
     )
 
     assert settled.mass == {acted: 1}

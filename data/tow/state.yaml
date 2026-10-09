@@ -23,3 +23,7 @@ facts:
     type: int
     per: side
     lasts: game
+  - fact: uses-this-game
+    type: uses
+    per: side
+    lasts: game

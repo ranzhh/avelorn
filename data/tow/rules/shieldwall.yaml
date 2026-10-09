@@ -15,7 +15,7 @@ effects:
       worn: {armour: shield}
       facts: [{fact: charges-received, of: this-model, more-than: 0}]
     substitute: {fall-back-in-good-order: gives-ground}
-    at: {step: break-test, by: this-model}
+    at: {step: loser-falls-back-in-good-order, by: this-model}
     limit: {per: game, times: 1}
     legacy:
       when: {combat: {was_charged: true}, worn: {name: Shield}}

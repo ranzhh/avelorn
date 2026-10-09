@@ -998,7 +998,8 @@ def break_test(
 
     It tests the highest Leadership still standing, moved by the rules in
     force, with the difference in combat result added to the roll
-    (the-combat-phase/break-test).
+    (the-combat-phase/break-test). An outcome a rule forces stands in for the
+    roll.
 
     Returns:
         The result; a side that won, drew or was wiped out takes no test.
@@ -1008,6 +1009,9 @@ def break_test(
     """
     if fought is not Fought.LOST or standing.models == 0:
         return Distribution.pure(BreakTest.NOT_TAKEN)
+    forced = Payloads.of(changed).forced()
+    if forced is not None:
+        return Distribution.pure(BreakTest(forced))
     leadership = _leadership_in_force(attacker, standing, changed)
     if leadership is None:
         raise ValueError("no model left standing prints a Leadership to test")
@@ -1022,20 +1026,35 @@ def break_test(
 
 
 def loser_falls_back_in_good_order(
-    attacker: Fielding, target: Fielding, standing: Standings, enemy: Standings, test: BreakTest
+    attacker: Fielding,
+    target: Fielding,
+    standing: Standings,
+    enemy: Standings,
+    test: BreakTest,
+    changed: tuple[Hashable, ...],
 ) -> Distribution[BreakTest]:
-    """Break a loser that would Fall Back in Good Order from a winner over twice its Unit Strength.
+    """Settle a loser that would Fall Back in Good Order.
 
-    Each side's Unit Strength is the one left once the round is fought
-    (the-combat-phase/loser-falls-back-in-good-order).
+    It Breaks instead when the winner's Unit Strength is more than twice its
+    own, each counted once the round is fought
+    (the-combat-phase/loser-falls-back-in-good-order). An outcome a rule
+    forces stands in for that, and a substitution in force then replaces the
+    outcome left.
 
     Returns:
         The result the side acts on.
     """
-    overwhelmed = target.unit_strength(enemy) > 2 * attacker.unit_strength(standing)
-    if test is BreakTest.FALLS_BACK_IN_GOOD_ORDER and overwhelmed:
-        return Distribution.pure(BreakTest.BREAKS)
-    return Distribution.pure(test)
+    if test is not BreakTest.FALLS_BACK_IN_GOOD_ORDER:
+        return Distribution.pure(test)
+    payloads = Payloads.of(changed)
+    forced = payloads.forced()
+    if forced is not None:
+        settled = BreakTest(forced)
+    elif target.unit_strength(enemy) > 2 * attacker.unit_strength(standing):
+        settled = BreakTest.BREAKS
+    else:
+        settled = test
+    return Distribution.pure(BreakTest(payloads.substituted(settled)))
 
 
 _ATTACKER = Holding(Side.ATTACKER)
@@ -1434,7 +1453,10 @@ _SPECS = (
             CHANGED,
         ),
         kernel=break_test,
-        runs={Operation.ADD: frozenset({(Side.ATTACKER, Characteristic.LEADERSHIP)})},
+        runs={
+            Operation.ADD: frozenset({(Side.ATTACKER, Characteristic.LEADERSHIP)}),
+            Operation.FORCE: frozenset(),
+        },
         target=Offered(
             (_ATTACKER, Fact("standing", Side.ATTACKER), CHANGED), _leadership_shown, _UNITED
         ),
@@ -1453,8 +1475,10 @@ _SPECS = (
             Fact("standing", Side.ATTACKER),
             _TARGET_STANDING,
             Output("break-test"),
+            CHANGED,
         ),
         kernel=loser_falls_back_in_good_order,
+        runs={Operation.FORCE: frozenset(), Operation.SUBSTITUTE: frozenset()},
         readings={"result": _offer("loser-falls-back-in-good-order")},
         outcomes=frozenset(BreakTest),
     ),
