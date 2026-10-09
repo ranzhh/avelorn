@@ -33,12 +33,14 @@ from avelorn.tow.changes import (
     Equals,
     Gate,
     Granted,
+    HasSource,
     Holds,
     MoreThan,
     Operated,
     Shows,
+    Sources,
 )
-from avelorn.tow.fielding import Fielding
+from avelorn.tow.fielding import Fielding, Part
 from avelorn.tow.schema.effect import (
     Address,
     Effect,
@@ -56,8 +58,8 @@ from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.stage import Side
 from avelorn.tow.schema.step import Step as Printed
 from avelorn.tow.schema.step import StepSequence
-from avelorn.tow.schema.weapon import Weapon
-from avelorn.tow.steps import Choice, Spec
+from avelorn.tow.schema.weapon import Weapon, WeaponProfile
+from avelorn.tow.steps import Choice, Spec, weapon_choices
 
 type Carried = tuple[tuple[RuleRef, Source], ...]
 type Reached = list[tuple[int, Effect, tuple[Step[Any], ...]]]
@@ -93,13 +95,20 @@ class Attachment:
 
 
 def rules_in_scope(
-    holder: Holder, fielded: Mapping[Side, Fielding], rules: Mapping[str, Rule]
+    holder: Holder,
+    fielded: Mapping[Side, Fielding],
+    rules: Mapping[str, Rule],
+    choosing: frozenset[Side],
 ) -> Mapping[str, Carried]:
     """Every rule a holder has, with each source that gives it.
 
     A side carries its own sources. Each side has the core rules of the phases
     that carry graph effects. Each grant of a rule in scope is read once per
-    holder, and gives a source whose ``via`` names the granting node.
+    holder, and gives a source whose ``via`` names the granting node. On the
+    ``choosing`` sides, which choose their weapon, a grant to a weapon reaches
+    each weapon carried, and once the grants settle, what a rule only weapons
+    give grants rides the same weapons; such a rule granting to the enemy fails
+    the attach.
 
     Returns:
         The sources of each rule, by slug.
@@ -122,8 +131,56 @@ def rules_in_scope(
             via = f"{holders[side]}/{slug}"
             for effect in _effects(rules[slug]):
                 if effect.grants is not None:
-                    _grant(effect.grants, effect.to, via, side, fielded, scopes)
+                    chooses = side in choosing
+                    _grant(effect.grants, effect.to, via, chooses, side, fielded, scopes)
+    _ride(scopes, holders, choosing)
     return {slug: tuple(sources) for slug, sources in scopes[Side(holder.side)].items()}
+
+
+def _ride(
+    scopes: Mapping[Side, dict[str, list[tuple[RuleRef, Source]]]],
+    holders: Mapping[Side, Holder],
+    choosing: frozenset[Side],
+) -> None:
+    named = {f"{holders[side]}/{slug}": (side, slug) for side in scopes for slug in scopes[side]}
+    riding: dict[tuple[Side, str], tuple[str, ...]] = {}
+
+    def weapons(rule: tuple[Side, str], seen: frozenset[tuple[Side, str]]) -> tuple[str, ...]:
+        if rule in riding:
+            return riding[rule]
+        side, slug = rule
+        found: list[str] = []
+        for _, source in scopes[side][slug]:
+            if source.carrier is Carrier.WEAPON:
+                found.append(str(source.item))
+                continue
+            granter = None if source.via is None else named[source.via]
+            ridden = ()
+            if granter is not None and granter not in seen and granter[0] is side:
+                ridden = weapons(granter, seen | {rule})
+            if not ridden:
+                found = []
+                break
+            found.extend(ridden)
+        riding[rule] = tuple(dict.fromkeys(found))
+        return riding[rule]
+
+    for side in scopes:
+        for slug, carried in scopes[side].items():
+            ridden: list[tuple[RuleRef, Source]] = []
+            for reference, source in carried:
+                granter = None if source.carrier is not Carrier.EFFECT else source.via
+                granted = () if granter is None else weapons(named[granter], frozenset())
+                if not granted or named[str(granter)][0] not in choosing:
+                    ridden.append((reference, source))
+                elif named[str(granter)][0] is not side:
+                    raise AttachError(f"{granter} grants {slug} to the enemy from a weapon")
+                else:
+                    ridden.extend(
+                        (reference, Source(Carrier.WEAPON, weapon, via=granter))
+                        for weapon in granted
+                    )
+            carried[:] = ridden
 
 
 def attach_rules(
@@ -135,19 +192,30 @@ def attach_rules(
 ) -> Attachment:
     """The rule nodes both fielded sides give a program, built and not yet attached.
 
-    ``inputs`` are the program's inputs by name, which fact gates read. The
-    attach fails with an :class:`AttachError` on a rule whose sources at one
-    holder give X values that do not combine, on a gate comparing a step with a
-    value it never outputs, and on a rule with no X carried twice to a landing
-    that runs.
+    ``inputs`` are the program's inputs by name, which fact gates read. Where a
+    side chooses its weapon, a rule's sources count together only within one
+    option: the model's own sources and those of the weapons it holds.
 
     Returns:
         The nodes, ordered by side then slug, every effect that reached a step,
         and the reaches held.
+
+    Raises:
+        AttachError: a side makes its weapon choice twice, a rule's sources give X
+            values that do not combine, a gate compares a step with a value it
+            never outputs, or a rule with no X is carried twice to a landing that
+            runs.
     """
+    try:
+        choices = weapon_choices(specs)
+    except ValueError as error:
+        raise AttachError(f"{program.name}: {error}") from error
     holders = _holders(fielded)
-    scopes = {side: rules_in_scope(holder, fielded, rules) for side, holder in holders.items()}
-    fielding = _Fielding(program, specs, fielded, rules, inputs, holders, scopes)
+    choosing = frozenset(choices)
+    scopes = {
+        side: rules_in_scope(holder, fielded, rules, choosing) for side, holder in holders.items()
+    }
+    fielding = _Fielding(program, specs, fielded, rules, inputs, holders, scopes, choices)
     run = {spec.sequence for spec in specs.values()}
     printed = {spec.key for spec in specs.values()}
     landed: dict[tuple[Side, str], dict[Step[Any], Reached]] = defaultdict(dict)
@@ -192,13 +260,14 @@ class _Fielding:
     inputs: Mapping[str, State[Any]]
     holders: Mapping[Side, Holder]
     scopes: Mapping[Side, Mapping[str, Carried]]
+    choices: Mapping[Side, Decision[Any]]
 
     def node(
         self, rule: Rule, side: Side, landed: Mapping[Step[Any], Reached]
     ) -> tuple[RuleNode, list[Reach]]:
         holder = self.holders[side]
         carried = self.scopes[side][rule.id]
-        x = self.x(rule, side)
+        xs = self.xs(rule, side) or (None,)
         landings = []
         held = []
         for at in sorted(landed, key=self.program.steps.index):
@@ -218,7 +287,7 @@ class _Fielding:
             )
         node = RuleNode(
             rule=rule.id,
-            name=rule.display(x),
+            name=" or ".join(rule.display(x) for x in xs),
             holder=holder,
             sources=tuple(source for _, source in carried),
             landings=tuple(landings),
@@ -226,12 +295,18 @@ class _Fielding:
         )
         return node, held
 
-    def x(self, rule: Rule, side: Side) -> int | str | None:
-        xs = [
-            reference.x for reference, _ in self.scopes[side][rule.id] if reference.x is not None
-        ]
+    def xs(self, rule: Rule, side: Side) -> tuple[int | str, ...]:
+        parameter = rule.parameter
+        if parameter is None:
+            return ()
+        sources = self.sources(rule.id, side, self.choices.get(side))
         try:
-            return None if rule.parameter is None else rule.parameter.combined(xs)
+            combined = (
+                parameter.combined([each.x for each in held if each.x is not None])
+                for held in sources.options
+                if held
+            )
+            return tuple(dict.fromkeys(combined))
         except ValueError as error:
             raise AttachError(f"{rule.id} at {self.holders[side]}: {error}") from error
 
@@ -260,9 +335,10 @@ class _Fielding:
             if operated is None:
                 return None
             changes.extend(operated)
-        if rule.parameter is None and len(carried) > 1:
+        together = self.together(rule, side, at)
+        if rule.parameter is None and together > 1:
             raise AttachError(
-                f"{rule.id} at {self.holders[side]} has {len(carried)} sources, "
+                f"{rule.id} at {self.holders[side]} has {together} sources in force at once, "
                 f"and no X to combine them, at {self.program.paths[at]}"
             )
         return tuple(contributions), tuple(changes)
@@ -276,6 +352,9 @@ class _Fielding:
         gate = self.gate(rule, side, at, effect)
         if gate is None or any(isinstance(check, Attacks) for check in gate.checks):
             return None
+        sources = self.sources(rule.id, side, self.choice(side, at))
+        if sources.reads:
+            gate = Gate((*gate.when, HasSource(sources)), gate.unless)
         operation = GraphOperation.ALLOW if effect.allow else GraphOperation.FORBID
         return Contribution(
             operation=operation,
@@ -287,11 +366,7 @@ class _Fielding:
     def barred(
         self, rule: Rule, side: Side, at: Decision[Any], effect: Effect
     ) -> Contribution[Any] | None:
-        carriers = {
-            source.item
-            for _, source in self.scopes[side][rule.id]
-            if source.carrier is Carrier.WEAPON
-        }
+        carriers = self.sources(rule.id, side, at).weapons
         if effect.bar is None or effect.limit is not None or not carriers:
             return None
         gate = self.gate(rule, side, at, effect)
@@ -349,13 +424,13 @@ class _Fielding:
         if any(isinstance(amount, FactRef) for amount in effect.amounts):
             return None
         multiplies = operation is Operation.MULTIPLY
-        if effect.reads_x and not multiplies and not isinstance(self.x(rule, side), int):
+        whole = all(isinstance(x, int) for x in self.xs(rule, side))
+        if effect.reads_x and not multiplies and not whole:
             return None
         gate = self.gate(rule, side, at, effect)
         if gate is None:
             return None
-        carried = self.scopes[side][rule.id]
-        sources = tuple(Granted(reference.x, source.via) for reference, source in carried)
+        sources = self.sources(rule.id, side, self.choice(side, at))
         return [
             Operated(rule.id, effect, key, whose, gate, sources, rule.parameter) for key in keys
         ]
@@ -401,8 +476,14 @@ class _Fielding:
             return None
         checks: list[Check] = []
         if gates.with_ is not None:
+            chosen = self.choice(side, at)
             wielded = self.fielded[side].hit.wielded
-            checks.append(Constant(wielded is not None and _matches(gates.with_, wielded)))
+            if chosen is None:
+                checks.append(Constant(wielded is not None and _matches(gates.with_, wielded)))
+            elif gates.with_.weapon is None or gates.with_.type is not None:
+                return None
+            else:
+                checks.append(Holds(chosen, frozenset({gates.with_.weapon})))
         if gates.foe is not None:
             foe = gates.foe
             if foe.troop_type is None or foe.army is not None or foe.has is not None:
@@ -415,7 +496,7 @@ class _Fielding:
                 ("flaming-attacks", attack.flaming),
             ):
                 if wanted is not None:
-                    checks.append(Attacks(self.attacking(slug, at), wanted))
+                    checks.append(self.attacking(slug, at, wanted))
         for fact in gates.facts:
             check = self.fact(rule, side, at, fact)
             if check is None:
@@ -455,10 +536,31 @@ class _Fielding:
             )
         return Equals(step.key, value)
 
-    def attacking(self, slug: str, at: Step[Any]) -> str | None:
+    def attacking(self, slug: str, at: Step[Any], wanted: bool) -> Attacks:
         acting = Side(at.side)
         side = acting if self.specs[at].side is Side.ATTACKER else acting.other
-        return f"{self.holders[side]}/{slug}" if slug in self.scopes[side] else None
+        if slug not in self.scopes[side]:
+            return Attacks(None, wanted)
+        node = f"{self.holders[side]}/{slug}"
+        return Attacks(node, wanted, self.sources(slug, side, self.choice(side, at)))
+
+    def together(self, rule: Rule, side: Side, at: Step[Any]) -> int:
+        own = self.choices.get(side)
+        decision = own if at is own else self.choice(side, at)
+        return self.sources(rule.id, side, decision).at_once()
+
+    def sources(self, slug: str, side: Side, choice: Decision[Any] | None) -> Sources:
+        granted = tuple(
+            Granted(reference.x, source.via, None if choice is None else _rides(source))
+            for reference, source in self.scopes[side][slug]
+        )
+        return Sources(granted, choice)
+
+    def choice(self, side: Side, at: Step[Any]) -> Decision[Any] | None:
+        decision = self.choices.get(side)
+        if decision is None or decision not in self.program.visible[at]:
+            return None
+        return decision
 
     def nearest(
         self, name: Printed, role: Role | None, side: Side, at: Step[Any]
@@ -470,6 +572,10 @@ def _named(
     named: frozenset[Hashable], gate: Gate, printed: frozenset[Hashable], *values: Hashable
 ) -> frozenset[Hashable]:
     return named if gate.test(values, frozenset()) else frozenset()
+
+
+def _rides(source: Source) -> str | None:
+    return source.item if source.carrier is Carrier.WEAPON else None
 
 
 def _holders(fielded: Mapping[Side, Fielding]) -> dict[Side, Holder]:
@@ -490,6 +596,7 @@ def _grant(
     granted: RuleRef,
     to: Role | WeaponMatch | None,
     via: str,
+    chooses: bool,
     side: Side,
     fielded: Mapping[Side, Fielding],
     scopes: Mapping[Side, dict[str, list[tuple[RuleRef, Source]]]],
@@ -500,11 +607,22 @@ def _grant(
         case Role.THE_ENEMY:
             scopes[side.other][granted.rule].append((granted, Source(Carrier.EFFECT, via=via)))
         case WeaponMatch() as target:
-            wielded, profile = fielded[side].hit.wielded, fielded[side].hit.weapon
-            if wielded is None or profile is None or not _matches(target, wielded):
-                return
-            source = Source(Carrier.WEAPON, wielded.id, profile.name or wielded.name, via)
-            scopes[side][granted.rule].append((granted, source))
+            for weapon, profile in _wielded(fielded[side].hit, chooses):
+                if _matches(target, weapon):
+                    source = Source(Carrier.WEAPON, weapon.id, profile.name or weapon.name, via)
+                    scopes[side][granted.rule].append((granted, source))
+
+
+def _wielded(part: Part, chooses: bool) -> tuple[tuple[Weapon, WeaponProfile], ...]:
+    if chooses:
+        return tuple(
+            (weapon, weapon.combat_profile)
+            for weapon in part.weapons
+            if weapon.combat_profile is not None
+        )
+    if part.wielded is None or part.weapon is None:
+        return ()
+    return ((part.wielded, part.weapon),)
 
 
 def _matches(target: WeaponMatch, wielded: Weapon) -> bool:

@@ -62,6 +62,20 @@ class Part:
                 holdings.append(Held({weapon.id, SHIELD}))
         return tuple(holdings)
 
+    def weapon_with(self, held: Held) -> WeaponProfile:
+        """The combat profile of the weapon in ``held``.
+
+        Returns:
+            The profile.
+
+        Raises:
+            ValueError: ``held`` holds no weapon the models carry, or more than one.
+        """
+        match [each.combat_profile for each in self.weapons if each.id in held]:
+            case [WeaponProfile() as profile]:
+                return profile
+        raise ValueError(f"{self.id} holds {held}, not one weapon it carries")
+
     def armour_with(self, held: Held) -> int | None:
         """The armour value folded from the pieces in use with ``held``: a shield only when held.
 
@@ -255,34 +269,37 @@ class Fielding:
         equipment and rules. The armour value folds from the armour worn. A ward
         comes only from rules, so a part fielded from the corpus has none. A part
         carries the rules of its datasheet, its troop type, and the profile its
-        weapon shoots with, or fights with in ``combat``. A round of combat
-        reads each part's count as its models at the start of the round.
+        weapon shoots with. In ``combat`` it fixes no weapon, since the side
+        chooses at Step 1.1, and carries the rules of each weapon's combat
+        profile. A round of combat reads each part's count as its models at the
+        start of the round.
 
         Returns:
             The fielded side.
 
         Raises:
-            ValueError: ``weapon`` has no profile to shoot or fight with, an option
-                is not offered, or a side fielded for combat names no weapon or
-                rides a mount.
+            ValueError: ``weapon`` has no profile to shoot with, an option is not
+                offered, or a side fielded for combat names a weapon or rides a
+                mount.
         """
         unit = contingent.unit
-        if combat and weapon is None:
-            raise ValueError(f"{unit.id} is fielded for combat with no weapon to fight with")
+        if combat and weapon is not None:
+            raise ValueError(f"{unit.id} chooses its weapon at Step 1.1, not when fielded")
         if combat and unit.mount is not None:
             raise ValueError(f"{unit.id} rides a mount, which a round of combat does not field")
         carriers: tuple[Carries, ...] = (unit, unit.rank_and_file)
         carried = [pair for carrier in carriers for pair in carrier.sources()]
+        weapons = tuple(w for w in contingent.loadout.weapons if w.combat_profile is not None)
         wielded = profile = None
         if weapon is not None:
             wielded = contingent.loadout.weapon(weapon)
-            profile = wielded.combat_profile if combat else wielded.missile_profile
-            if profile is None and combat:
-                raise ValueError(f"{weapon} has no combat profile; it cannot fight")
+            profile = wielded.missile_profile
             if profile is None:
                 raise ValueError(f"{weapon} has no missile profile; it cannot shoot")
             shot = profile.name or wielded.name
             carried += [pair for pair in wielded.sources() if pair[1].profile == shot]
+        if combat:
+            carried += [pair for each in weapons for pair in _fought(each)]
         offered = {option.name: option for option in unit.options}
         unknown = [name for name in options if name not in offered]
         if unknown:
@@ -294,7 +311,6 @@ class Fielding:
             if (profile_name := offered[name].profile) is not None
         ]
         armour = defender_armour(contingent.loadout.armour)
-        weapons = tuple(w for w in contingent.loadout.weapons if w.combat_profile is not None)
         counts = [(row, 1) for row in champions]
         counts.append((unit.main, contingent.models - len(champions)))
         parts = tuple(
@@ -312,3 +328,11 @@ class Fielding:
             for row, count in counts
         )
         return cls(unit.id, unit.troop_type, parts, contingent.frontage)
+
+
+def _fought(weapon: Weapon) -> list[tuple[RuleRef, Source]]:
+    profile = weapon.combat_profile
+    if profile is None:
+        raise ValueError(f"{weapon.name} has no combat profile")
+    fights = profile.name or weapon.name
+    return [pair for pair in weapon.sources() if pair[1].profile == fights]

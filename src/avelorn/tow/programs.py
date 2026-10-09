@@ -13,6 +13,7 @@ from pydantic import BaseModel, ValidationError
 from avelorn.core.distribution import Distribution, Monoid
 from avelorn.core.errors import AvelornError
 from avelorn.core.graph import (
+    By,
     Decision,
     GraphError,
     Item,
@@ -27,11 +28,10 @@ from avelorn.core.graph import (
     State,
     Step,
     Tally,
-    World,
 )
 from avelorn.tow.attach import Attachment, attach_rules
 from avelorn.tow.data import DATA_DIR
-from avelorn.tow.fielding import SHIELD, Fielding, Held, Part
+from avelorn.tow.fielding import Fielding, Part
 from avelorn.tow.kernels import Standings
 from avelorn.tow.schema.program import (
     FactInput,
@@ -63,6 +63,7 @@ from avelorn.tow.steps import (
     Summed,
     bound,
     share,
+    weapon_choices,
 )
 from avelorn.tow.traits import Operand
 
@@ -160,17 +161,23 @@ class Built:
     fielded: Mapping[Side, Fielding]
     attachment: Attachment
 
-    def evaluate(self, knowns: Mapping[str, Hashable]) -> tuple["Evaluated", ...]:
+    def evaluate(
+        self,
+        knowns: Mapping[str, Hashable],
+        choices: Mapping[Side, Hashable] = MappingProxyType({}),
+    ) -> tuple["Evaluated", ...]:
         """Evaluate the program with every input given by name.
 
-        Each side's weapon choice takes the weapon it was fielded with, and its
-        shield where the shield is worn and allowed.
+        ``choices`` gives the option a side takes at its weapon choice, which
+        then opens no lane. Each other option a side may take is a lane of its
+        own.
 
         Returns:
             One evaluation per lane.
 
         Raises:
-            ProgramError: an input is missing, unknown or of the wrong type.
+            ProgramError: an input is missing, unknown or of the wrong type, or
+                an option given is not taken in every world, as a rule forbids it.
         """
         missing = sorted(set(self.inputs) - set(knowns))
         if missing:
@@ -183,39 +190,36 @@ class Built:
             if type(value) is not expected:
                 raise ProgramError(f"{name} expects {expected.__name__}; got {value!r}")
         given = {self.inputs[name].state: value for name, value in knowns.items()}
-        return tuple(
-            Evaluated(self, lane, MappingProxyType(dict(knowns)))
-            for lane in self.program.evaluate(self.fought_with(), given)
-        )
+        pinned = self.pinned(choices)
+        lanes = self.program.evaluate(pinned, given)
+        for lane in lanes:
+            for decision, option in pinned.items():
+                taken = lane.read(decision, decision.taken)
+                if any(each.by is not By.CHOSEN for each in taken.mass):
+                    path = self.program.paths[decision]
+                    raise ProgramError(f"{option} is not allowed at {path}")
+        return tuple(Evaluated(self, lane, MappingProxyType(dict(knowns))) for lane in lanes)
 
-    def fought_with(self) -> dict[Decision[Any], Held]:
-        """The option each side's weapon choice takes, from what the side was fielded with.
-
-        Returns:
-            Each decision's option.
-        """
-        return {
-            step: self.held(step)
-            for step, spec in self.specs.items()
-            if isinstance(spec, Choice) and isinstance(step, Decision)
-        }
-
-    def held(self, decision: Decision[Any]) -> Held:
-        """The weapon a side was fielded with, and its shield where worn and allowed.
+    def pinned(self, choices: Mapping[Side, Hashable]) -> dict[Decision[Any], Hashable]:
+        """Each option given, at the weapon choice of its side.
 
         Returns:
-            The option.
+            The option, by decision.
 
         Raises:
-            ProgramError: the side is fielded with no weapon.
+            ProgramError: a side makes no weapon choice, or is given an option it lacks.
         """
-        wielded = self.fielded[Side(decision.side)].hit.wielded
-        if wielded is None:
-            raise ProgramError(f"the {decision.side} decides with no weapon fielded")
-        lane = Lane(program=self.program, given={}, joint=Distribution.pure(World()))
-        allowed, _ = decision.settle(decision.printed, World(), lane)
-        shielded = Held({wielded.id, SHIELD})
-        return shielded if shielded in allowed else Held({wielded.id})
+        made = weapon_choices(self.specs)
+        pinned: dict[Decision[Any], Hashable] = {}
+        for side, option in choices.items():
+            decision = made.get(side)
+            if decision is None:
+                raise ProgramError(f"the {side} makes no weapon choice in {self.program.name}")
+            if option not in decision.options:
+                path = self.program.paths[decision]
+                raise ProgramError(f"{option} is no option at {path}")
+            pinned[decision] = option
+        return pinned
 
 
 @dataclass(frozen=True)
@@ -504,6 +508,8 @@ class _Builder:
         if acts not in self.file.fielded:
             raise self.error(here, f"{choice.name} decides for the {acts}, which is not fielded")
         options = (None,) if self.fielded is None else choice.options(self.fielded[acts])
+        if not options:
+            raise self.error(here, f"{choice.name} offers the {acts} nothing to decide")
         decision = Decision[Any](
             name=choice.name,
             side=str(acts),
@@ -616,7 +622,7 @@ class _Builder:
                 return changed
 
     def output(self, read: Output, spec: Spec, here: str, visible: _Scope) -> Key:
-        step = visible.find(read.step, self.role(spec.side))
+        step = visible.find(read.step, self.role(spec.side if read.of is None else read.of))
         if step is None:
             raise self.error(here, f"{spec.name} reads {read.step}, which is not in scope")
         return step.key

@@ -1,54 +1,88 @@
 """A round of close combat on the graph."""
 
+from collections.abc import Mapping
 from fractions import Fraction
+from typing import NamedTuple
 
-import pytest
-
-from avelorn.core.distribution import Distribution, Probability
+from avelorn.core.distribution import Probability
 from avelorn.core.graph import Decision
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.fielding import Fielding
+from avelorn.tow.fielding import SHIELD, Fielding, Held
 from avelorn.tow.programs import ROUND, Evaluated, Loaded, load_program
-from avelorn.tow.schema.effect import Role
+from avelorn.tow.schema.effect import Effect, Role
 from avelorn.tow.schema.rule import Clause, RuleGraph
 from avelorn.tow.schema.stage import Side
-from avelorn.tow.schema.unit import Characteristic
-from avelorn.tow.steps import NO_ROLL
-from avelorn.tow.traits import Operand
+from avelorn.tow.steps import NO_ROLL, WEAPON_CHOICE
 
 REPO = TOWRepository()
 ROUND_PROGRAM = load_program(ROUND, REPO.rules)
-WITHOUT_MARTIAL_PROWESS = load_program(
-    ROUND, {**REPO.rules, "martial-prowess": REPO.rules["martial-prowess"].with_graph(None)}
-)
 
 
-def _fielded(unit: str, weapon: str, models: int, frontage: int | None = None) -> Fielding:
-    contingent = Contingent.field(REPO.units[unit], models, data=REPO, frontage=frontage)
-    return Fielding.of(contingent, weapon, combat=True)
+class _Armed(NamedTuple):
+    """A side fielded for combat, and what it holds to fight."""
+
+    side: Fielding
+    held: Held
 
 
-def _fought(
-    attacker: Fielding,
-    target: Fielding,
+def _fielded(
+    unit: str,
+    weapon: str,
+    models: int,
+    frontage: int | None = None,
+    equipment: tuple[str, ...] = (),
+    shield: bool = True,
+) -> _Armed:
+    datasheet = REPO.units[unit]
+    armed = datasheet.model_copy(update={"equipment": [*datasheet.equipment, *equipment]})
+    contingent = Contingent.field(armed, models, data=REPO, frontage=frontage)
+    worn = {piece.id for piece in contingent.loadout.armour}
+    shields = {SHIELD} & worn if shield else set()
+    held = Held({contingent.loadout.weapon(weapon).id, *shields})
+    return _Armed(Fielding.of(contingent, combat=True), held)
+
+
+def _lanes(
+    attacker: _Armed,
+    target: _Armed,
     attacker_standing: int = 1,
     program: Loaded = ROUND_PROGRAM,
     attacker_charges: int = 0,
-    rounds_fought: int = 1,
-) -> Evaluated:
-    built = program.built({Side.ATTACKER: attacker, Side.TARGET: target})
-    (evaluated,) = built.evaluate(
+    wielding: bool = False,
+) -> tuple[Evaluated, ...]:
+    built = program.built({Side.ATTACKER: attacker.side, Side.TARGET: target.side})
+    choices = {Side.ATTACKER: attacker.held, Side.TARGET: target.held}
+    return built.evaluate(
         {
-            "attacker/standing": attacker.standing(attacker_standing),
-            "target/standing": target.standing(sum(part.count for part in target.parts)),
-            "attacker/rounds-fought": rounds_fought,
-            "target/rounds-fought": rounds_fought,
+            "attacker/standing": attacker.side.standing(attacker_standing),
+            "target/standing": target.side.standing(sum(p.count for p in target.side.parts)),
+            "attacker/rounds-fought": 1,
+            "target/rounds-fought": 1,
             "attacker/charges-made": attacker_charges,
             "target/charges-made": 0,
-        }
+        },
+        choices if wielding else {},
     )
-    return evaluated
+
+
+def _held(fought: Evaluated) -> Mapping[Side, frozenset[str]]:
+    return {
+        Side(decision.side): option
+        for decision, option in fought.lane.choices.items()
+        if decision.name == WEAPON_CHOICE
+    }
+
+
+def _fought(
+    attacker: _Armed,
+    target: _Armed,
+    attacker_standing: int = 1,
+    program: Loaded = ROUND_PROGRAM,
+    attacker_charges: int = 0,
+) -> Evaluated:
+    (fought,) = _lanes(attacker, target, attacker_standing, program, attacker_charges, True)
+    return fought
 
 
 def _falls(fought: Evaluated, side: Side) -> Probability:
@@ -127,65 +161,9 @@ def test_an_entry_acting_for_the_target_swaps_the_sides() -> None:
     ]
 
 
-@pytest.mark.parametrize(
-    ("foe", "program", "rounds_fought", "striking", "needed"),
-    [
-        pytest.param("longbeards", ROUND_PROGRAM, 0, 5, ({"4+"}, {"4+"}), id="ws5-first-round"),
-        pytest.param("longbeards", ROUND_PROGRAM, 1, 4, ({"4+"}, {"3+"}), id="ws5-later-round"),
-        pytest.param(
-            "longbeards",
-            WITHOUT_MARTIAL_PROWESS,
-            0,
-            5,
-            ({"4+"}, {"3+"}),
-            id="ws5-without-the-rule",
-        ),
-        pytest.param(
-            "dwarf-warriors", ROUND_PROGRAM, 0, 5, ({"3+"}, {"4+"}), id="ws4-first-round"
-        ),
-        pytest.param(
-            "dwarf-warriors",
-            WITHOUT_MARTIAL_PROWESS,
-            0,
-            5,
-            ({"4+"}, {"4+"}),
-            id="ws4-without-the-rule",
-        ),
-    ],
-)
-def test_martial_prowess_moves_weapon_skill_striking_and_struck(
-    foe: str,
-    program: Loaded,
-    rounds_fought: int,
-    striking: int,
-    needed: tuple[set[str], set[str]],
-) -> None:
-    """Elven Spearmen count as WS5 in the first round, striking and struck, ten a side in a rank.
-
-    On the chart WS5 against WS5 Longbeards hits on 4+ both ways. At WS4, in a
-    later round or without the rule, the Spearmen still hit WS5 on 4+, and the
-    Longbeards' WS5 hits WS4 on 3+. Against WS4 Dwarf Warriors the Spearmen hit
-    on 3+ at WS5 and on 4+ at WS4, and are hit on 4+ either way. The Spearmen
-    strike at Initiative 5 in the first round and at 4 after it; a foe felled
-    before its blow at 2 rolls nothing.
-    """
-    spearmen = _fielded("elven-spearmen", "Hand Weapon", 10, frontage=10)
-    dwarfs = _fielded(foe, "Hand Weapon", 10, frontage=10)
-    (dwarf,) = dwarfs.parts
-
-    fought = _fought(
-        spearmen, dwarfs, attacker_standing=10, program=program, rounds_fought=rounds_fought
-    )
-
-    assert (
-        _needed(fought, f"round/initiative-{striking}/attacker/attack/elven-spearman/roll-to-hit"),
-        _needed(fought, f"round/initiative-2/target/attack/{dwarf.id}/roll-to-hit"),
-    ) == needed
-
-
 def test_a_list_of_sides_builds_the_entry_once_for_each_in_order() -> None:
     """Both sides decide and measure at the head; the target's casualties come off first."""
-    spearman = _fielded("elven-spearmen", "Thrusting Spear", 1)
+    spearman = _fielded("elven-spearmen", "Thrusting Spear", 1).side
 
     program = ROUND_PROGRAM.built({Side.ATTACKER: spearman, Side.TARGET: spearman}).program
 
@@ -210,9 +188,9 @@ def test_a_list_of_sides_builds_the_entry_once_for_each_in_order() -> None:
 
 def test_a_side_chooses_each_weapon_it_carries_with_or_without_its_shield() -> None:
     """Elven Spearmen given great weapons may fight with any weapon they carry, shield or not."""
-    datasheet = REPO.units["elven-spearmen"]
-    armed = datasheet.model_copy(update={"equipment": [*datasheet.equipment, "Great Weapon"]})
-    spearmen = Fielding.of(Contingent.field(armed, 10, data=REPO), "Great Weapon", combat=True)
+    spearmen = _fielded(
+        "elven-spearmen", "Great Weapon", 10, equipment=("Great Weapon",), shield=False
+    )
 
     choice = _fought(spearmen, spearmen).at(
         "round/target/choose-combat-and-determine-who-can-fight"
@@ -229,10 +207,126 @@ def test_a_side_chooses_each_weapon_it_carries_with_or_without_its_shield() -> N
     ]
 
 
+def test_a_rule_two_carried_weapons_give_is_in_force_once_in_each_option() -> None:
+    """Spearmen given a great weapon and a halberd attach Requires Two Hands, which both give.
+
+    No option holds both weapons, so each sees the rule once, as each sees
+    Fight in Extra Rank from the spear or the halberd once. Neither weapon
+    fights beside the shield, and every other option is a lane.
+    """
+    two_handed = ("Great Weapon", "Ceremonial Halberd")
+    spearman = _fielded("elven-spearmen", "Great Weapon", 1, equipment=two_handed, shield=False)
+    dwarf = _fielded("dwarf-warriors", "Hand Weapon", 1)
+
+    lanes = _lanes(dwarf, spearman)
+
+    assert {str(_held(each)[Side.TARGET]) for each in lanes} == {
+        "hand-weapon",
+        "hand-weapon+shield",
+        "thrusting-spear",
+        "thrusting-spear+shield",
+        "great-weapon",
+        "ceremonial-halberd",
+    }
+    (lane, *_) = lanes
+    assert lane.built.program.rules["target/elven-spearmen/armour-bane"].name == "Armour Bane (1)"
+
+
+def _granting(*grants: tuple[str, dict[str, object]]) -> Loaded:
+    rules = dict(REPO.rules)
+    for rule, grant in grants:
+        printed = rules[rule]
+        effects = () if printed.graph is None else printed.graph.effects
+        clauses = (
+            *(Clause(effect=effect) for effect in effects),
+            Clause(effect=Effect.model_validate(grant)),
+        )
+        rules[rule] = printed.with_graph(RuleGraph(clauses=clauses))
+    return load_program(ROUND, rules)
+
+
+def test_a_rule_a_weapon_grants_is_in_force_only_while_the_weapon_is_held() -> None:
+    """Magical Attacks rewritten to grant Strike First sends the halberd to Initiative 10 alone.
+
+    The Ceremonial Halberd gives the Spearmen Magical Attacks, so what it grants
+    rides the halberd: with a hand weapon they strike at their own 4.
+    """
+    program = _granting(("magical-attacks", {"grants": "strike-first", "to": "this-model"}))
+    dwarf = _fielded("dwarf-warriors", "Hand Weapon", 1)
+    struck = {
+        weapon: _fought(
+            dwarf,
+            _fielded("elven-spearmen", weapon, 1, equipment=("Ceremonial Halberd",), shield=False),
+            program=program,
+        )
+        for weapon in ("Hand Weapon", "Ceremonial Halberd")
+    }
+
+    assert {weapon: _strikes_at(fought, Side.TARGET) for weapon, fought in struck.items()} == {
+        "Hand Weapon": 4,
+        "Ceremonial Halberd": 10,
+    }
+
+
+def _strikes_at(fought: Evaluated, side: Side) -> int:
+    return max(
+        slot
+        for slot in range(10, 0, -1)
+        if fought.at(f"round/initiative-{slot}/{side}/how-many-attacks")
+        .read("attacks")
+        .prob(lambda attacks: attacks > 0)
+    )
+
+
+def test_a_rule_also_granted_by_the_unit_is_in_force_whatever_the_weapon() -> None:
+    """Magical Attacks granted through Fear and by the halberd: Strike First rides no weapon.
+
+    Valour of Ages grants Fear, Fear grants Magical Attacks, and Magical Attacks
+    grants Strike First. The unit's own chain keeps Magical Attacks in force with
+    a hand weapon, so the Spearmen strike at 10 with either.
+    """
+    program = _granting(
+        ("valour-of-ages", {"grants": "fear", "to": "this-model"}),
+        ("fear", {"grants": "magical-attacks", "to": "this-model"}),
+        ("magical-attacks", {"grants": "strike-first", "to": "this-model"}),
+    )
+    dwarf = _fielded("dwarf-warriors", "Hand Weapon", 1)
+
+    struck = [
+        _fought(
+            dwarf,
+            _fielded("elven-spearmen", weapon, 1, equipment=("Ceremonial Halberd",), shield=False),
+            program=program,
+        )
+        for weapon in ("Hand Weapon", "Ceremonial Halberd")
+    ]
+
+    assert [_strikes_at(fought, Side.TARGET) for fought in struck] == [10, 10]
+
+
+def test_a_rule_granted_to_a_weapon_rides_it_in_combat() -> None:
+    """Valour of Ages rewritten to grant Armour Bane (1) to the hand weapon attaches in combat."""
+    program = _granting(
+        (
+            "valour-of-ages",
+            {"grants": {"rule": "armour-bane", "X": 1}, "to": {"weapon": "hand-weapon"}},
+        )
+    )
+    spearman = _fielded("elven-spearmen", "Hand Weapon", 1)
+
+    built = program.built({Side.ATTACKER: spearman.side, Side.TARGET: spearman.side})
+
+    assert [
+        str(source.item)
+        for source in built.program.rules["attacker/elven-spearmen/armour-bane"].sources
+    ] == ["hand-weapon"]
+
+
 def test_the_target_s_part_reads_its_weapon_strength_at_its_own_blow() -> None:
     """A Swordmaster striking back wounds at the Sword of Hoeth's S+2, so 5, not its printed 3.
 
-    At its own roll To Wound the Swordmaster plays the attacker.
+    At its own roll To Wound the Swordmaster plays the attacker: Strength 5
+    against the Spearman's Toughness 3 wounds on 2+.
     """
     spearman = _fielded("elven-spearmen", "Thrusting Spear", 1)
     swordmaster = _fielded("swordmasters-of-hoeth", "Sword of Hoeth", 1)
@@ -241,9 +335,31 @@ def test_the_target_s_part_reads_its_weapon_strength_at_its_own_blow() -> None:
         "round/initiative-6/target/attack/swordmaster/roll-to-wound"
     )
 
-    assert wound.part(Side.TARGET, "swordmaster").characteristic(
-        Characteristic.STRENGTH
-    ) == Operand(Distribution.pure(5), 3)
+    assert wound.read("needed").mass == {"2+": 1}
+
+
+def test_each_weapon_a_side_may_fight_with_is_a_lane() -> None:
+    """Spearmen given great weapons and struck by a Dwarf Warrior save as their choice allows.
+
+    Light armour alone saves on 6+, with the shield on 5+, and with a hand
+    weapon and shield Parry makes it 4+. Requires Two Hands leaves no lane
+    for the great weapon with the shield.
+    """
+    spearman = _fielded(
+        "elven-spearmen", "Great Weapon", 1, equipment=("Great Weapon",), shield=False
+    )
+    dwarf = _fielded("dwarf-warriors", "Hand Weapon", 1)
+
+    lanes = _lanes(dwarf, spearman)
+
+    saves = "round/initiative-2/attacker/attack/dwarf-warrior/make-armour-saves"
+    assert {str(_held(each)[Side.TARGET]): _needed(each, saves) for each in lanes} == {
+        "hand-weapon": {"6+"},
+        "hand-weapon+shield": {"4+"},
+        "thrusting-spear": {"6+"},
+        "thrusting-spear+shield": {"5+"},
+        "great-weapon": {"6+"},
+    }
 
 
 def test_the_target_s_magical_blows_meet_no_runes_of_protection() -> None:

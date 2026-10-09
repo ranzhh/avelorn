@@ -299,17 +299,15 @@ def _shooting(contingent: Contingent) -> Iterator[Facing]:
 
 
 def _fighting(contingent: Contingent) -> Iterator[Facing]:
-    """The unit fighting itself with each weapon it carries, unless it rides a mount.
+    """The unit fighting itself, choosing among the weapons it carries, unless it rides a mount.
 
     Yields:
         The attacker, the target, and the sides counted.
     """
     if contingent.unit.mount is not None:
         return
-    for weapon in contingent.loadout.weapons:
-        if weapon.combat_profile is not None:
-            fighter = Fielding.of(contingent, weapon.name, combat=True)
-            yield fighter, fighter, _BOTH
+    fighter = Fielding.of(contingent, combat=True)
+    yield fighter, fighter, _BOTH
 
 
 def fieldings(data: TOWRepository) -> Iterator[tuple[tuple[str, ...], Contingent]]:
