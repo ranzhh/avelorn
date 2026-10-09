@@ -41,3 +41,7 @@ items:
     sequence: break
     of: [attacker, target]
     readings: [test]
+  - step: loser-falls-back-in-good-order
+    sequence: break
+    of: [attacker, target]
+    readings: [result]

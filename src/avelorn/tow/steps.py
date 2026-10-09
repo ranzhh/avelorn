@@ -1021,6 +1021,23 @@ def break_test(
     )
 
 
+def loser_falls_back_in_good_order(
+    attacker: Fielding, target: Fielding, standing: Standings, enemy: Standings, test: BreakTest
+) -> Distribution[BreakTest]:
+    """Break a loser that would Fall Back in Good Order from a winner over twice its Unit Strength.
+
+    Each side's Unit Strength is the one left once the round is fought
+    (the-combat-phase/loser-falls-back-in-good-order).
+
+    Returns:
+        The result the side acts on.
+    """
+    overwhelmed = target.unit_strength(enemy) > 2 * attacker.unit_strength(standing)
+    if test is BreakTest.FALLS_BACK_IN_GOOD_ORDER and overwhelmed:
+        return Distribution.pure(BreakTest.BREAKS)
+    return Distribution.pure(test)
+
+
 _ATTACKER = Holding(Side.ATTACKER)
 _PRINTED = Payloads(())
 _TARGET = Holding(Side.TARGET)
@@ -1423,6 +1440,22 @@ _SPECS = (
         ),
         printed=Offered((_ATTACKER, Fact("standing", Side.ATTACKER)), _leadership, _UNITED),
         readings={"test": _offer("break-test")},
+        outcomes=frozenset(BreakTest),
+    ),
+    Spec(
+        sequence=StepSequence.BREAK,
+        name="loser-falls-back-in-good-order",
+        kind=Kind.CONSEQUENCE,
+        side=Side.ATTACKER,
+        reads=(
+            _ATTACKER,
+            _TARGET,
+            Fact("standing", Side.ATTACKER),
+            _TARGET_STANDING,
+            Output("break-test"),
+        ),
+        kernel=loser_falls_back_in_good_order,
+        readings={"result": _offer("loser-falls-back-in-good-order")},
         outcomes=frozenset(BreakTest),
     ),
 )
