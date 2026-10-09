@@ -31,6 +31,7 @@ from avelorn.core.graph import (
 )
 from avelorn.tow.attach import Attachment, attach_rules
 from avelorn.tow.changes import Uses
+from avelorn.tow.contingent import ChargeArc
 from avelorn.tow.data import DATA_DIR
 from avelorn.tow.fielding import Fielding, Part
 from avelorn.tow.kernels import Standings
@@ -78,6 +79,7 @@ TYPES: Mapping[FactType, type] = MappingProxyType(
         FactType.BOOL: bool,
         FactType.STANDING: Standings,
         FactType.USES: Uses,
+        FactType.ARC: ChargeArc,
     }
 )
 

@@ -186,7 +186,7 @@ def _attacks_counted_outside_a_slot(combat: dict[str, Any]) -> None:
 
 
 def _no_who_can_fight_for_the_target(combat: dict[str, Any]) -> None:
-    combat["items"][1]["of"] = "attacker"
+    combat["items"][2]["of"] = "attacker"
 
 
 @pytest.mark.parametrize(
@@ -200,7 +200,7 @@ def _no_who_can_fight_for_the_target(combat: dict[str, Any]) -> None:
         ),
         pytest.param(
             _no_who_can_fight_for_the_target,
-            "round.yaml: items[3].items[0]: "
+            "round.yaml: items[4].items[0]: "
             "how-many-attacks reads who-can-fight, which is not in scope",
             id="no-step-for-the-reader-s-side",
         ),

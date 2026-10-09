@@ -10,6 +10,10 @@ inputs:
   - {fact: rounds-fought, of: target}
   - {fact: charges-made, of: attacker}
   - {fact: charges-made, of: target}
+  - {fact: charge-move, of: attacker}
+  - {fact: charge-move, of: target}
+  - {fact: enemy-arc, of: attacker}
+  - {fact: enemy-arc, of: target}
   - {fact: charges-received, of: attacker}
   - {fact: charges-received, of: target}
   - {fact: break-tests-taken, of: attacker}
@@ -17,6 +21,7 @@ inputs:
   - {fact: uses-this-game, of: attacker}
   - {fact: uses-this-game, of: target}
 items:
+  - {step: the-charge-move, sequence: charge, of: [attacker, target]}
   - {step: choose-combat-and-determine-who-can-fight, of: [attacker, target]}
   - {step: who-can-fight, of: [attacker, target]}
   - {step: who-strikes-first, of: [attacker, target]}

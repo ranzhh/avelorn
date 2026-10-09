@@ -65,8 +65,22 @@ def test_an_effect_waits_for_the_step_that_triggers_it() -> None:
 
 
 def test_an_effect_waits_for_a_step_it_reads_as_a_fact() -> None:
-    """Furious Charge reads the length of a charge move no program registers yet."""
-    assert "furious-charge/charge/the-charge-move" in UNATTACHED
+    """Furious Charge rewritten to read the Pursuit Move waits for a program that registers it."""
+    printed = REPO.rules["furious-charge"]
+    assert printed.graph is not None
+    charging = printed.graph.effects[0]
+    assert charging.when is not None
+    pursuing = charging.when.facts[0].model_copy(update={"fact": "the-pursuit-move"})
+    when = charging.when.model_copy(update={"facts": (pursuing,)})
+    rewritten = printed.with_graph(
+        RuleGraph(clauses=(Clause(effect=charging.model_copy(update={"when": when})),))
+    )
+    data = copy.copy(REPO)
+    data.rules = Registry({**REPO.rules, rewritten.id: rewritten}.values(), kind="rule")
+    unattached = {
+        gap.subject for gap in coverage(data).gaps if gap.kind is GapKind.UNATTACHED_EFFECT
+    }
+    assert "furious-charge/break/the-pursuit-move" in unattached
 
 
 def test_a_volley_effect_waits_for_a_side_that_carries_it_there() -> None:

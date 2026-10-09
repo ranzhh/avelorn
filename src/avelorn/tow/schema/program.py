@@ -16,6 +16,7 @@ class FactType(StrEnum):
     BOOL = "bool"
     STANDING = "standing"
     USES = "uses"
+    ARC = "arc"
 
 
 class DerivedFact(StrEnum):

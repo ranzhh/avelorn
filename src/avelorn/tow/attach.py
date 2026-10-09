@@ -18,6 +18,7 @@ from avelorn.core.graph import (
     Decision,
     Eligibility,
     Holder,
+    Key,
     Landing,
     Program,
     RuleNode,
@@ -537,19 +538,20 @@ class _Fielding:
             return None
         if fact.fact in Printed:
             step = self.nearest(Printed(fact.fact), fact.of, side, at)
-            if step is None or comparator != "is":
+            if step is None:
                 return None
-            return self.equals(rule, step, value)
+            if comparator == "is":
+                return self.equals(rule, step, value)
+            return _counted(step.key, comparator, value)
         name = str(fact.fact)
         if fact.of is not None:
             name = f"{side if fact.of is Role.THIS_MODEL else side.other}/{name}"
         known = self.inputs.get(name)
-        match comparator:
-            case "is" if known is not None:
-                return Equals(known, value)
-            case "more-than" if known is not None and isinstance(value, int):
-                return MoreThan(Measured(known), value)
-        return None
+        if known is None:
+            return None
+        if comparator == "is":
+            return Equals(known, value)
+        return _counted(known, comparator, value)
 
     def compared(self, value: object, side: Side) -> Measured | int | None:
         if isinstance(value, int):
@@ -671,6 +673,17 @@ def _wielded(part: Part, chooses: bool) -> tuple[tuple[Weapon, WeaponProfile], .
     if part.wielded is None or part.weapon is None:
         return ()
     return ((part.wielded, part.weapon),)
+
+
+def _counted(key: Key, comparator: str, value: object) -> Check | None:
+    if not isinstance(value, int):
+        return None
+    match comparator:
+        case "more-than":
+            return MoreThan(Measured(key), value)
+        case "at-least":
+            return MoreThan(Measured(key), value - 1)
+    return None
 
 
 def _matches(target: WeaponMatch, wielded: Weapon) -> bool:

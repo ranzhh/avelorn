@@ -46,10 +46,8 @@ def test_fight_in_extra_rank(charged: int | None, printed: int, plain: int) -> N
             2 * 5,
             5,
             id="charged-5-inches",
-            marks=pytest.mark.xfail(
-                strict=True, reason="Furious Charge needs the charge move at How Many Attacks"
-            ),
         ),
+        pytest.param(3, 2 * 5, 5, id="charged-3-inches"),
         pytest.param(2, 5, 5, id="charged-2-inches"),
         pytest.param(None, 2 * 5, 2 * 5, id="did-not-charge"),
     ],
@@ -99,7 +97,7 @@ OUTLASTS_D6_HITS = sum(Fraction(1, 6) * (1 - HIT_FELLS) ** hits for hits in rang
             id="charged-6-inches",
             marks=pytest.mark.xfail(
                 strict=True,
-                reason="Impact Hits needs the Impact Hits step and the charge's Initiative bonus",
+                reason="Impact Hits needs the Impact Hits step",
             ),
         ),
         pytest.param(
@@ -108,9 +106,6 @@ OUTLASTS_D6_HITS = sum(Fraction(1, 6) * (1 - HIT_FELLS) ** hits for hits in rang
             (FELLS, (1 - FELLS) * FELLS),
             (FELLS, (1 - FELLS) * FELLS),
             id="charged-2-inches",
-            marks=pytest.mark.xfail(
-                strict=True, reason="Impact Hits' charged case needs the charge's Initiative bonus"
-            ),
         ),
         pytest.param(None, False, (FELLS, FELLS), (FELLS, FELLS), id="standing"),
     ],
@@ -316,10 +311,6 @@ def test_strike_first() -> None:
             (1 + 2 + 1, 5),
             (5 + 2 + 1, 5),
             id="charged-2-inches",
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason="Strike Last's charged case needs the charge's Initiative bonus",
-            ),
         ),
     ],
 )
