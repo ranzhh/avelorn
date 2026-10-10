@@ -366,3 +366,28 @@ export function pivot(
 		}
 	);
 }
+
+/** The block moved the least distance that brings it wholly back onto the table. */
+export function inside(placed: Placed): Placed {
+	const box = bounds(placed);
+	const dx = box.left < 0 ? -box.left : Math.min(TABLE.width - box.right, 0);
+	const dy = box.top < 0 ? -box.top : Math.min(TABLE.depth - box.bottom, 0);
+	return { ...placed, x: placed.x + dx, y: placed.y + dy };
+}
+
+/**
+ * A standing block re-costed or re-formed in place.
+ *
+ * Its front rank stays where it stood and the ranks gained or lost come off the
+ * back, the way a unit re-forms; then it is kept on the table.
+ */
+export function refit(standing: Placed, block: MusteredUnit): Placed {
+	const grown = { ...standing, block };
+	const deeper = measured(grown).depth - measured(standing).depth;
+	const { front } = bearing(standing.facing);
+	return inside({
+		...grown,
+		x: standing.x - (front.x * deeper) / 2,
+		y: standing.y - (front.y * deeper) / 2
+	});
+}

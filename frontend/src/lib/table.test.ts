@@ -9,8 +9,10 @@ import {
 	clearance,
 	corners,
 	identifier,
+	inside,
 	legend,
 	pivot,
+	refit,
 	reformed,
 	room,
 	separation,
@@ -317,5 +319,31 @@ describe('pivot', () => {
 			expect(at.y).toBeGreaterThanOrEqual(1);
 			expect(at.y).toBeLessThanOrEqual(48 - 1);
 		}
+	});
+});
+
+describe('inside', () => {
+	it('brings a block hanging off the table back to the edge', () => {
+		const kept = inside(placed(1, 24));
+		expect(within(kept)).toBe(true);
+		expect(bounds(kept).left).toBeCloseTo(0);
+	});
+
+	it('leaves a block on the table where it stands', () => {
+		expect(inside(placed(36, 24))).toEqual(placed(36, 24));
+	});
+});
+
+describe('refit', () => {
+	it('keeps the front rank where it stood as ranks are added', () => {
+		const grown = refit(placed(36, 24, 0, LINE), BLOCK);
+		expect(bounds(grown).top).toBeCloseTo(24 - SHALLOW / 2);
+		expect(bounds(grown).height).toBeCloseTo(DEEP);
+	});
+
+	it('keeps a block grown with its back to the table edge on the table', () => {
+		const grown = refit(placed(36, 47, 0, LINE), BLOCK);
+		expect(within(grown)).toBe(true);
+		expect(bounds(grown).bottom).toBeCloseTo(48);
 	});
 });

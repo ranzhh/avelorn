@@ -13,6 +13,8 @@
 		arc,
 		bounds,
 		identifier,
+		inside,
+		refit,
 		room,
 		separation,
 		span,
@@ -207,8 +209,18 @@
 		const standing = battle.placed.find((each) => each.id === id);
 		if (!standing) return;
 		const costed = await muster(standing.block.unit, size, options);
-		if (!costed) return;
-		battle.amend(id, { block: costed });
+		const now = battle.placed.find((each) => each.id === id);
+		if (!costed || !now) return;
+		const { x, y } = refit(now, costed);
+		battle.amend(id, { block: costed, x, y });
+	}
+
+	/** Turn a block about its centre, nudged back onto the table if a corner swings off it. */
+	function turn(id: number, facing: number) {
+		const standing = battle.placed.find((each) => each.id === id);
+		if (!standing) return;
+		const { x, y } = inside({ ...standing, facing });
+		battle.amend(id, { facing, x, y });
 	}
 
 	/** Re-form a block to a new width, asking the engine for the footprint it takes. */
@@ -230,7 +242,10 @@
 			refusal = typeof refused?.detail === 'string' ? refused.detail : 'could not re-form that';
 			return;
 		}
-		battle.amend(id, { block: costed });
+		const now = battle.placed.find((each) => each.id === id);
+		if (!now) return;
+		const { x, y } = refit(now, costed);
+		battle.amend(id, { block: costed, x, y });
 	}
 
 	/** Open a block's own pane: the datasheet it fields, with its options beside it. */
@@ -295,7 +310,7 @@
 				{linked}
 				onpick={(id) => (picked = id)}
 				onmove={(id, x, y) => battle.amend(id, { x, y })}
-				onturn={(id, facing) => battle.amend(id, { facing })}
+				onturn={turn}
 				ondrop={(mover, target) => {
 					battle.asking = { mover, target };
 				}}
@@ -384,9 +399,7 @@
 				{/if}
 				<div class="cluster acts">
 					<button class="btn btn-sm" onclick={() => sheet(block.id)}>datasheet</button>
-					<button class="btn btn-sm" onclick={() => battle.amend(block.id, { facing: 0 })}>
-						face up
-					</button>
+					<button class="btn btn-sm" onclick={() => turn(block.id, 0)}>face up</button>
 					<button class="btn btn-sm" onclick={() => remove(block.id)}>remove</button>
 				</div>
 				<p class="meta hint">drag it onto another block to charge or shoot</p>
