@@ -320,7 +320,9 @@
 					<button class="btn btn-sm" disabled={!pair.shoots} onclick={loose}>
 						{pair.shoots ? `shoot at ${pair.inches}in` : 'no missile weapon'}
 					</button>
-					<button class="btn btn-sm" onclick={() => meet(false)}>fight, engaged</button>
+					{#if pair.inches === 0}
+						<button class="btn btn-sm" onclick={() => meet(false)}>fight, engaged</button>
+					{/if}
 					<button class="btn btn-ghost btn-sm" onclick={() => (battle.asking = null)}>
 						cancel
 					</button>
