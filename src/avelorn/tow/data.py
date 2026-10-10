@@ -17,7 +17,7 @@ from avelorn.tow.schema.effect import Effect, FactRef, conflicts
 from avelorn.tow.schema.ledger import Ledger
 from avelorn.tow.schema.program import DerivedFact, FactType, StateFact, StateFile
 from avelorn.tow.schema.reference import RuleRef
-from avelorn.tow.schema.rule import GrantEffect, Rule, bind
+from avelorn.tow.schema.rule import Rule, bind
 from avelorn.tow.schema.step import Step
 from avelorn.tow.schema.troop_type import TroopTypeProfile
 from avelorn.tow.schema.unit import Characteristic, Unit
@@ -251,8 +251,7 @@ class TOWRepository:
         entries = (load_yaml(path, Rule) for path in rule_paths(self._data_dir))
         rules = Registry(entries, kind="rule")
         for rule in rules.values():
-            grants = [e.grants for e in rule.effects if isinstance(e, GrantEffect)]
-            grants += [e.grants for e in _effects(rule) if e.grants is not None]
+            grants = [e.grants for e in _effects(rule) if e.grants is not None]
             _checked(f"rule {rule.id}", grants, rules)
         state = load_yaml(self._data_dir / "tow/state.yaml", StateFile)
         _addressed(rules, state.facts)

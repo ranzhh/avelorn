@@ -25,7 +25,7 @@ from avelorn.tow.schema.effect import Effect
 from avelorn.tow.schema.ledger import Acknowledgement, GapKind
 from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.reference import RuleRef
-from avelorn.tow.schema.rule import GrantEffect, Rule
+from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.stage import Side
 from avelorn.tow.schema.step import Step, StepSequence
 from avelorn.tow.schema.unit import OptionKind, UnitOption
@@ -137,12 +137,9 @@ def rule_references(data: TOWRepository) -> Iterator[tuple[RuleRef, Site]]:
                 yield reference, Site(entry=Entry.WEAPON, id=slug)
     for slug, rule in sorted(data.rules.items()):
         site = Site(entry=Entry.RULE, id=slug)
-        for effect in rule.effects:
-            if isinstance(effect, GrantEffect):
+        for effect in () if rule.graph is None else rule.graph.effects:
+            if effect.grants is not None:
                 yield effect.grants, site
-        for addressed in () if rule.graph is None else rule.graph.effects:
-            if addressed.grants is not None:
-                yield addressed.grants, site
 
 
 def rule_gap(rule: Rule) -> GapKind | None:
@@ -154,7 +151,7 @@ def rule_gap(rule: Rule) -> GapKind | None:
     Returns:
         The gap kind, or None when the rule carries effects.
     """
-    return None if rule.effects else GapKind.RULE_WITHOUT_EFFECTS
+    return None if rule.graph is not None and rule.graph.effects else GapKind.RULE_WITHOUT_EFFECTS
 
 
 def unattached(effect: Effect) -> Iterator[tuple[StepSequence, Step]]:

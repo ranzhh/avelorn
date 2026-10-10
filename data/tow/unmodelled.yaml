@@ -99,6 +99,9 @@
   subject: magic-resistance
   reason: It modifies enemy Casting rolls; magic is not modelled.
 - kind: rule-without-effects
+  subject: magical-attacks
+  reason: It marks an attack and changes nothing itself; the graph reads the mark where another rule gates on a magical attack, as Runes of Protection does.
+- kind: rule-without-effects
   subject: motley-crew
   reason: Models armed and armoured differently in one unit; a fielded unit has one loadout.
 - kind: rule-without-effects

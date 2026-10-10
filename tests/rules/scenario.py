@@ -445,7 +445,7 @@ def _chapter(phase: Phase) -> dict[str, Rule]:
 
 
 def _effected(rule: Rule) -> bool:
-    return bool(rule.effects) or (rule.graph is not None and bool(rule.graph.effects))
+    return rule.graph is not None and bool(rule.graph.effects)
 
 
 def _reference(ref: Ref) -> RuleRef:

@@ -13,8 +13,9 @@ import yaml
 from avelorn.tow.coverage import Gap, coverage, rule_gap
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.schema.armour import Armour
+from avelorn.tow.schema.effect import Effect
 from avelorn.tow.schema.reference import RuleRef
-from avelorn.tow.schema.rule import GrantEffect, Rule, RuleEffect
+from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.unit import (
     BaseSize,
     Characteristic,
@@ -327,9 +328,10 @@ def show_rule(data: TOWRepository, slug: str) -> list[str]:
         lines.extend(["", *(f"  {line}" for line in _wrapped(rule.flavour))])
     for paragraph in rule.paragraphs:
         lines.extend(["", *_wrapped(paragraph)])
-    if rule.effects:
+    effects = () if rule.graph is None else rule.graph.effects
+    if effects:
         dumped = yaml.safe_dump(
-            [_effect_as_printed(effect, data) for effect in rule.effects], sort_keys=False
+            [_effect_as_printed(effect, data) for effect in effects], sort_keys=False
         )
         lines.extend(["", "Effects:", *(f"  {line}" for line in dumped.rstrip().splitlines())])
     else:
@@ -339,9 +341,9 @@ def show_rule(data: TOWRepository, slug: str) -> list[str]:
     return lines
 
 
-def _effect_as_printed(effect: RuleEffect, data: TOWRepository) -> dict[str, object]:
-    printed = effect.model_dump(mode="json", exclude_none=True)
-    if isinstance(effect, GrantEffect):
+def _effect_as_printed(effect: Effect, data: TOWRepository) -> dict[str, object]:
+    printed = effect.model_dump(mode="json", by_alias=True, exclude_defaults=True)
+    if effect.grants is not None:
         printed["grants"] = data.rules[effect.grants.rule].display(effect.grants.x)
     return printed
 

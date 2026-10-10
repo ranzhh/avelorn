@@ -4,7 +4,7 @@ from dataclasses import replace
 from fractions import Fraction
 
 import pytest
-from oracle.procedure import Attack, Phase, ReRoll, one_attack
+from oracle.procedure import Attack, Phase, one_attack
 
 from rules.scenario import Kind, Ref, Role, Scenario, Side, resolve
 
@@ -193,62 +193,6 @@ def test_lion_cloak(scenario: Scenario, printed: Attack, plain: Attack) -> None:
     assert _with_and_without(scenario, scenario.without("lion-cloak", Role.DEFENDER)) == (
         _unsaved(printed),
         _unsaved(plain),
-    )
-
-
-SISTERS_INTO_IRONBREAKERS = Attack(
-    SHOOTING,
-    5,
-    3,
-    4,
-    armour_value=3,
-    armour_piercing=-1,
-    armour_bane=2,
-    save_re_rolls=frozenset({ReRoll.ONES}),
-)
-SPEARS_INTO_IRONBREAKERS = Attack(
-    Phase.COMBAT,
-    4,
-    3,
-    4,
-    foe_weapon_skill=5,
-    armour_value=3,
-    save_re_rolls=frozenset({ReRoll.ONES}),
-)
-IRONBREAKERS = Side("ironbreakers", 10, "Hand Weapon")
-ENCHANTED_SPEARS = Scenario(
-    Kind.STRIKE, Side("elven-spearmen", 5, "Thrusting Spear", frontage=5), IRONBREAKERS
-)
-
-
-@pytest.mark.parametrize(
-    ("printed", "plain", "printed_attack", "plain_attack"),
-    [
-        pytest.param(
-            Scenario(Kind.SHOOT, SISTERS, IRONBREAKERS, distance=SHORT),
-            Scenario(Kind.SHOOT, SISTERS, IRONBREAKERS, distance=SHORT).without(
-                "magical-attacks", Role.ATTACKER
-            ),
-            SISTERS_INTO_IRONBREAKERS,
-            replace(SISTERS_INTO_IRONBREAKERS, ward=6),
-            id="printed-on-the-bow",
-        ),
-        pytest.param(
-            ENCHANTED_SPEARS.adding("magical-attacks", Role.ATTACKER),
-            ENCHANTED_SPEARS,
-            SPEARS_INTO_IRONBREAKERS,
-            replace(SPEARS_INTO_IRONBREAKERS, ward=6),
-            id="printed-on-the-unit",
-        ),
-    ],
-)
-def test_magical_attacks(
-    printed: Scenario, plain: Scenario, printed_attack: Attack, plain_attack: Attack
-) -> None:
-    """Magical attacks, from a weapon or from the unit, deny the Runes of Protection ward."""
-    assert _with_and_without(printed, plain) == (
-        _unsaved(printed_attack),
-        _unsaved(plain_attack),
     )
 
 

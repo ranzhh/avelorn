@@ -599,7 +599,7 @@ class RuleSummary(BaseModel):
             id=rule.id,
             name=rule.name,
             category=rule.category,
-            factors=bool(rule.effects),
+            factors=rule.graph is not None and bool(rule.graph.effects),
             references=references,
         )
 

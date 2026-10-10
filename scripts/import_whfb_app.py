@@ -333,8 +333,8 @@ def _import_rule(client: WhfbAppClient, slug: str, data_dir: Path, dry_run: bool
         return False
     for warning in (*result.warnings, *merge_warnings):
         logger.warning("%s: %s", slug, warning)
-    if rule.effects:
-        logger.info("%s: preserved %d hand-authored effect(s)", slug, len(rule.effects))
+    if rule.graph is not None and rule.graph.effects:
+        logger.info("%s: preserved %d hand-authored effect(s)", slug, len(rule.graph.effects))
     page_path = slug if "/" in slug else f"special-rules/{slug}"
     text = rule_to_yaml(rule, source_url=f"{BASE_URL}/{page_path}")
     if dry_run:

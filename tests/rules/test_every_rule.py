@@ -27,4 +27,4 @@ def test_every_rule_with_effects_has_one_test_named_for_it() -> None:
 
 
 def _effects(rule: Rule) -> bool:
-    return bool(rule.effects) or (rule.graph is not None and bool(rule.graph.effects))
+    return rule.graph is not None and bool(rule.graph.effects)
