@@ -28,8 +28,10 @@ export type MusteredUnit =
 export type UnitOption = NonNullable<Unit['options']>[number];
 export type Wieldable = MusteredUnit['weapons'][number];
 
+export type FightBody = paths['/fight']['post']['requestBody']['content']['application/json'];
 export type FightReport = paths['/fight']['post']['responses'][200]['content']['application/json'];
 export type FightSide = FightReport['a'];
 
+export type VolleyBody = paths['/volley']['post']['requestBody']['content']['application/json'];
 export type VolleyReport =
 	paths['/volley']['post']['responses'][200]['content']['application/json'];

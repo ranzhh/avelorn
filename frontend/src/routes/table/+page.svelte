@@ -4,7 +4,8 @@
 	import Muster from '$lib/Muster.svelte';
 	import Panes from '$lib/Panes.svelte';
 	import Resolved from '$lib/Resolved.svelte';
-	import { api, type FightReport, type MusteredUnit, type VolleyReport } from '$lib/api/client';
+	import { api, type FightBody, type MusteredUnit, type VolleyBody } from '$lib/api/client';
+	import { battle } from '$lib/battle.svelte';
 	import { entry } from '$lib/corpus';
 	import { fielded, listing } from '$lib/listing';
 	import { TABLE, arc, identifier, room, separation, span, usable, type Placed } from '$lib/table';
@@ -13,27 +14,23 @@
 
 	let panes = $state<Panes | null>(null);
 	let needle = $state('');
-	let stamped = $state(0);
-	let placed = $state<Placed[]>([]);
-	let nextId = $state(1);
 	let picked = $state<number | null>(null);
 	let refusal = $state('');
-	// The pair a menu is open on: what the first could do to the second.
-	let asking = $state<{ mover: number; target: number } | null>(null);
 	let resolving = $state('');
-	let fight = $state<FightReport | null>(null);
-	let volley = $state<VolleyReport | null>(null);
+
+	const fight = $derived(battle.resolved?.action === 'fight' ? battle.resolved.report : null);
+	const volley = $derived(battle.resolved?.action === 'volley' ? battle.resolved.report : null);
 
 	const rows = $derived(listing(data.units, needle, { column: 'name', descending: false }));
 
-	const block = $derived(placed.find((each) => each.id === picked) ?? null);
-	const points = $derived(placed.reduce((sum, each) => sum + each.block.points, 0));
+	const block = $derived(battle.placed.find((each) => each.id === picked) ?? null);
+	const points = $derived(battle.placed.reduce((sum, each) => sum + each.block.points, 0));
 
 	const pair = $derived.by(() => {
-		const open = asking;
+		const open = battle.asking;
 		if (!open) return null;
-		const mover = placed.find((each) => each.id === open.mover);
-		const target = placed.find((each) => each.id === open.target);
+		const mover = battle.placed.find((each) => each.id === open.mover);
+		const target = battle.placed.find((each) => each.id === open.target);
 		if (!mover || !target) return null;
 		return {
 			mover,
@@ -88,8 +85,7 @@
 	}
 
 	function cleared() {
-		fight = null;
-		volley = null;
+		battle.resolved = null;
 		refusal = '';
 	}
 
@@ -97,47 +93,45 @@
 		if (!pair) return;
 		cleared();
 		resolving = 'melee';
+		const body: FightBody = {
+			a: deployment(pair.mover, 'melee'),
+			b: deployment(pair.target, 'melee'),
+			charge: charging ? { side: 'a', full_inches: pair.inches, arc: pair.into } : null
+		};
 		const { data: report, error: refused } = await api(window.location.origin, fetch).POST(
 			'/fight',
-			{
-				body: {
-					a: deployment(pair.mover, 'melee'),
-					b: deployment(pair.target, 'melee'),
-					charge: charging ? { side: 'a', full_inches: pair.inches, arc: pair.into } : null
-				}
-			}
+			{ body }
 		);
 		resolving = '';
-		asking = null;
+		battle.asking = null;
 		if (!report) {
 			refusal = typeof refused?.detail === 'string' ? refused.detail : 'could not resolve that';
 			return;
 		}
-		fight = report;
+		battle.resolved = { action: 'fight', body, report };
 	}
 
 	async function loose() {
 		if (!pair) return;
 		cleared();
 		resolving = 'shooting';
+		const body: VolleyBody = {
+			shooter: deployment(pair.mover, 'missile'),
+			target: deployment(pair.target, 'melee'),
+			distance: pair.inches,
+			moved: false
+		};
 		const { data: report, error: refused } = await api(window.location.origin, fetch).POST(
 			'/volley',
-			{
-				body: {
-					shooter: deployment(pair.mover, 'missile'),
-					target: deployment(pair.target, 'melee'),
-					distance: pair.inches,
-					moved: false
-				}
-			}
+			{ body }
 		);
 		resolving = '';
-		asking = null;
+		battle.asking = null;
 		if (!report) {
 			refusal = typeof refused?.detail === 'string' ? refused.detail : 'could not resolve that';
 			return;
 		}
-		volley = report;
+		battle.resolved = { action: 'volley', body, report };
 	}
 
 	async function muster(unit: string, size: number, options: string[], frontage?: number) {
@@ -167,8 +161,8 @@
 		const costed = await muster(unit, size, []);
 		if (!costed) return;
 		const wanted: Placed = {
-			id: nextId,
-			mark: identifier(stamped),
+			id: battle.nextId,
+			mark: identifier(battle.stamped),
 			block: costed,
 			x: where?.x ?? TABLE.width / 2,
 			y: where?.y ?? TABLE.depth - 6,
@@ -176,16 +170,16 @@
 			melee: '',
 			missile: ''
 		};
-		const settled = room(wanted, placed);
-		placed = [...placed, settled];
-		nextId += 1;
-		stamped += 1;
+		const settled = room(wanted, battle.placed);
+		battle.placed = [...battle.placed, settled];
+		battle.nextId += 1;
+		battle.stamped += 1;
 		picked = settled.id;
 	}
 
 	/** Re-cost a standing block at a new size or set of options. */
 	async function recost(id: number, size: number, options: string[]) {
-		const standing = placed.find((each) => each.id === id);
+		const standing = battle.placed.find((each) => each.id === id);
 		if (!standing) return;
 		const costed = await muster(standing.block.unit, size, options);
 		if (!costed) return;
@@ -194,7 +188,7 @@
 
 	/** Re-form a block to a new width, asking the engine for the footprint it takes. */
 	async function reform(id: number, frontage: number) {
-		const block = placed.find((each) => each.id === id);
+		const block = battle.placed.find((each) => each.id === id);
 		if (!block) return;
 		const { data: costed, error: refused } = await api(window.location.origin, fetch).POST(
 			'/muster',
@@ -216,7 +210,7 @@
 
 	/** Open a block's own pane: the datasheet it fields, with its options beside it. */
 	function sheet(id: number) {
-		const standing = placed.find((each) => each.id === id);
+		const standing = battle.placed.find((each) => each.id === id);
 		if (!standing) return;
 		panes?.show({
 			subject: 'unit',
@@ -227,18 +221,18 @@
 	}
 
 	function amend(id: number, change: Partial<Placed>) {
-		placed = placed.map((each) => (each.id === id ? { ...each, ...change } : each));
+		battle.placed = battle.placed.map((each) => (each.id === id ? { ...each, ...change } : each));
 	}
 
 	function remove(id: number) {
-		placed = placed.filter((each) => each.id !== id);
+		battle.placed = battle.placed.filter((each) => each.id !== id);
 		if (picked === id) picked = null;
 	}
 </script>
 
 <div class="shell">
 	<aside class="left">
-		<Dock title="deploy" keep="deploy" value={`${placed.length} on the table`}>
+		<Dock title="deploy" keep="deploy" value={`${battle.placed.length} on the table`}>
 			<input class="input filter" bind:value={needle} placeholder="filter" />
 			<div class="rows">
 				{#each rows as unit (unit.id)}
@@ -275,12 +269,12 @@
 	<div class="centre">
 		<div class="surface">
 			<BattleTable
-				{placed}
+				placed={battle.placed}
 				{picked}
 				onpick={(id) => (picked = id)}
 				onmove={(id, x, y) => amend(id, { x, y })}
 				onturn={(id, facing) => amend(id, { facing })}
-				ondrop={(mover, target) => (asking = { mover, target })}
+				ondrop={(mover, target) => (battle.asking = { mover, target })}
 				onreform={reform}
 				ondropunit={(unit, size, x, y) => deploy(unit, size, { x, y })}
 				onedit={(id) => ((picked = id), sheet(id))}
@@ -299,7 +293,9 @@
 						{pair.shoots ? `shoot at ${pair.inches}in` : 'no missile weapon'}
 					</button>
 					<button class="btn btn-sm" onclick={() => meet(false)}>fight, engaged</button>
-					<button class="btn btn-ghost btn-sm" onclick={() => (asking = null)}>cancel</button>
+					<button class="btn btn-ghost btn-sm" onclick={() => (battle.asking = null)}>
+						cancel
+					</button>
 				</div>
 			{/if}
 		</div>
@@ -364,7 +360,7 @@
 					<button class="btn btn-sm" onclick={() => remove(block.id)}>remove</button>
 				</div>
 			{:else}
-				<div class="field"><span>blocks</span><span class="num">{placed.length}</span></div>
+				<div class="field"><span>blocks</span><span class="num">{battle.placed.length}</span></div>
 				<div class="field"><span>points</span><span class="num">{points}</span></div>
 			{/if}
 		</Dock>
@@ -385,7 +381,7 @@
 
 <Panes bind:this={panes}>
 	{#snippet options(id)}
-		{@const standing = placed.find((each) => each.id === id)}
+		{@const standing = battle.placed.find((each) => each.id === id)}
 		{#if standing}
 			<Muster
 				live
