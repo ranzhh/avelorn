@@ -8,7 +8,7 @@ from collections import defaultdict
 from collections.abc import Hashable, Mapping
 from dataclasses import dataclass
 from functools import partial
-from typing import Any
+from typing import Any, NamedTuple
 
 from avelorn.core.errors import AvelornError
 from avelorn.core.graph import (
@@ -188,13 +188,20 @@ def _ride(
             carried[:] = ridden
 
 
+class Wielder(NamedTuple):
+    """The side striking at a step, and the weapons it strikes with there."""
+
+    side: Side
+    weapons: frozenset[str]
+
+
 def attach_rules(
     program: Program,
     specs: Mapping[Step[Any], Spec | Choice],
     fielded: Mapping[Side, Fielding],
     rules: Mapping[str, Rule],
     inputs: Mapping[str, State[Any]],
-    wielding: Mapping[Step[Any], tuple[Side, frozenset[str]]],
+    wielding: Mapping[Step[Any], "Wielder"],
 ) -> Attachment:
     """The rule nodes both fielded sides give a program, built and not yet attached.
 
@@ -202,8 +209,9 @@ def attach_rules(
     side chooses its weapon, a rule's sources count together only within one
     option: the model's own sources and those of the weapons it holds.
     ``wielding`` names the side that strikes at a step and the weapons it strikes
-    with there, where its choice does not decide them: none for hits made with
-    no weapon. The rules of that side's other weapons never reach the step.
+    with there, where its choice does not decide them: a mount's own, or none for
+    hits made with no weapon. The rules of that side's other weapons never reach
+    the step.
 
     Returns:
         The nodes, ordered by side then slug, every effect that reached a step,
@@ -272,7 +280,7 @@ class _Fielding:
     holders: Mapping[Side, Holder]
     scopes: Mapping[Side, Mapping[str, Carried]]
     choices: Mapping[Side, Decision[Any]]
-    wielding: Mapping[Step[Any], tuple[Side, frozenset[str]]]
+    wielding: Mapping[Step[Any], "Wielder"]
 
     def node(
         self, rule: Rule, side: Side, landed: Mapping[Step[Any], Reached]
@@ -449,8 +457,10 @@ class _Fielding:
         if gate is None:
             return None
         sources = self.sources_at(rule.id, side, at)
+        not_on = frozenset(() if rule.graph is None else rule.graph.not_on)
         return [
-            Operated(rule.id, effect, key, whose, gate, sources, rule.parameter) for key in keys
+            Operated(rule.id, effect, key, whose, gate, sources, rule.parameter, not_on)
+            for key in keys
         ]
 
     def whose(self, side: Side, at: Step[Any], of: Role | None) -> Side | None:
@@ -633,9 +643,9 @@ class _Fielding:
 
     def wielded(self, side: Side, at: Step[Any]) -> frozenset[str] | None:
         striking = self.wielding.get(at)
-        if striking is None or striking[0] is not side:
+        if striking is None or striking.side is not side:
             return None
-        return striking[1]
+        return striking.weapons
 
     def choice(self, side: Side, at: Step[Any]) -> Decision[Any] | None:
         decision = self.choices.get(side)

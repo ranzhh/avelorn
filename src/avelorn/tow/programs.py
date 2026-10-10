@@ -29,7 +29,7 @@ from avelorn.core.graph import (
     Step,
     Tally,
 )
-from avelorn.tow.attach import Attachment, attach_rules
+from avelorn.tow.attach import Attachment, Wielder, attach_rules
 from avelorn.tow.changes import Uses
 from avelorn.tow.contingent import ChargeArc
 from avelorn.tow.data import DATA_DIR
@@ -381,7 +381,7 @@ class _Builder:
     initiative: int | None = None
     slotted: str | None = None
     specs: dict[Step[Any], Spec | Choice] = field(default_factory=dict)
-    wielding: dict[Step[Any], tuple[Side, frozenset[str]]] = field(default_factory=dict)
+    wielding: dict[Step[Any], Wielder] = field(default_factory=dict)
     written: set[str] = field(default_factory=set)
 
     def build(self) -> Program:
@@ -463,7 +463,7 @@ class _Builder:
         if self.fighter is not None:
             raise self.error(here, f"{entry.group} runs inside another fighter's group")
         fighters: tuple[Part | None, ...] = (
-            (None,) if self.fielded is None else self.fielded[of].parts
+            (None,) if self.fielded is None else self.fielded[of].fighters
         )
         repeats: list[Repeat] = []
         self.swapped = of is not Side.ATTACKER
@@ -512,7 +512,10 @@ class _Builder:
         step = spec.build(kernel, inputs, target, writes, changed, printed, side=acts, sided=sided)
         self.specs[step] = spec
         if self.slotted in AUTOMATIC_HITS:
-            self.wielding[step] = (self.role(Side.ATTACKER), frozenset())
+            self.wielding[step] = Wielder(self.role(Side.ATTACKER), frozenset())
+        elif self.fighter is not None and (part := self.fighter[1]) is not None and part.rider:
+            weapons = frozenset(weapon.id for weapon in part.weapons)
+            self.wielding[step] = Wielder(self.role(Side.ATTACKER), weapons)
         visible.add(step, acts)
         for name in entry.readings:
             offered = spec.readings.get(name)

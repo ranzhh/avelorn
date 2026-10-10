@@ -115,7 +115,6 @@ def test_cleaving_blow(target: Side, printed: Attack, plain: Attack) -> None:
             Scenario(Kind.STRIKE, SPEARS, Side("dragon-princes", 5, "Hand Weapon")),
             Attack(COMBAT, 4, 3, 3, foe_weapon_skill=5, armour_value=2),
             id="struck",
-            marks=pytest.mark.xfail(strict=True, reason="Dragon Armour needs ridden units"),
         ),
         pytest.param(
             Scenario(Kind.SHOOT, ARCHERS, Side("dragon-princes", 5), distance=10),

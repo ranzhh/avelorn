@@ -424,15 +424,16 @@ def _profile(attacker: Part) -> WeaponProfile:
 
 
 def _moved(part: Part, c: Characteristic, payloads: Payloads, of: Side) -> int:
-    match payloads.fixed(c, of):
+    role = part.row.role
+    match payloads.fixed(c, of, role):
         case ():
             start = _printed(part, c)
         case (fixed,):
             start = fixed
         case fixed:
             raise ValueError(f"{part.id}'s {c} is set {len(fixed)} times")
-    maxima, minima = payloads.bounds(c, of)
-    return min((max((start + payloads.added(c, of), *minima)), *maxima))
+    maxima, minima = payloads.bounds(c, of, role)
+    return min((max((start + payloads.added(c, of, role), *minima)), *maxima))
 
 
 def _strength(weapon: WeaponProfile, attacker: Part, payloads: Payloads) -> int:
@@ -661,7 +662,9 @@ def automatic_hits(
     as the engine reads contact, makes the hits of every rule in force: a
     number or a dice roll each (special-rules/impact-hits,
     special-rules/stomp-attacks). A casualty suffered since the start of the
-    round comes off the front rank first.
+    round comes off the front rank first. A ridden model's hits are its
+    mount's, struck at the mount's Strength
+    (troop-types-in-detail/split-profile-cavalry).
 
     Returns:
         The hits each part makes.
@@ -671,10 +674,14 @@ def automatic_hits(
     for per_model in Payloads.of(changed).hits():
         each = each.combine(_rolled(per_model), _COUNT.operation)
     front = _front_rank(attacker, at_start, standing)
-    made = Distribution.pure(Hits(()))
+    carried = {mount.rider: mount.id for mount in attacker.mounts}
+    making = {fighter.id: 0 for fighter in attacker.fighters}
     for part in attacker.parts:
-        theirs = each.repeat(front[part.id], _COUNT)
-        made = made.bind(partial(_joined, part.id, theirs))
+        making[carried.get(part.id, part.id)] = front[part.id]
+    made = Distribution.pure(Hits(()))
+    for fighter in attacker.fighters:
+        theirs = each.repeat(making[fighter.id], _COUNT)
+        made = made.bind(partial(_joined, fighter.id, theirs))
     return made
 
 
@@ -923,7 +930,7 @@ def who_strikes_first(
             part.id,
             min(_moved(part, Characteristic.INITIATIVE, payloads, Side.ATTACKER) + bonus, 10),
         )
-        for part in attacker.parts
+        for part in attacker.fighters
     )
     return Distribution.pure(Initiatives(tuple(moved)))
 
@@ -944,7 +951,9 @@ def how_many_attacks(
     Attacks, moved by the rules in force. With a supporting attack, each model
     in the rank behind makes one. A casualty suffered since comes off the
     fighting rank first, then the supporting rank, and takes its attacks with
-    it (FAQ v1.5.3).
+    it (FAQ v1.5.3). A mount makes its own Attacks for each of its rider's
+    models in the fighting ranks, and no supporting attack
+    (troop-types-in-detail/cavalry-support).
 
     Returns:
         The attacks of each part.
@@ -963,18 +972,27 @@ def how_many_attacks(
     last = deep + int(SUPPORTING_ATTACK in ranks)
     placed = [part for part in attacker.parts for _ in range(at_start.of(part.id).models)]
     front, support = placed[: deep * width], placed[deep * width : last * width]
+    mounted = {mount.rider: mount for mount in attacker.mounts}
     made: dict[str, int] = {}
     for part in attacker.parts:
         lost = at_start.of(part.id).models - standing.of(part.id).models
         in_front = max(front.count(part) - lost, 0)
         supporting = max(support.count(part) - max(lost - front.count(part), 0), 0)
-        striking = initiatives.of(part.id) == initiative
-        made[part.id] = (
-            in_front * _moved(part, Characteristic.ATTACKS, payloads, Side.ATTACKER) + supporting
-            if striking
-            else 0
+        made[part.id] = _strikes(part, initiatives, initiative, in_front, payloads) + (
+            supporting if initiatives.of(part.id) == initiative else 0
         )
+        mount = mounted.get(part.id)
+        if mount is not None:
+            made[mount.id] = _strikes(mount, initiatives, initiative, in_front, payloads)
     return Distribution.pure(Attacks(tuple(made.items())))
+
+
+def _strikes(
+    fighter: Part, initiatives: Initiatives, initiative: int, models: int, payloads: Payloads
+) -> int:
+    if initiatives.of(fighter.id) != initiative:
+        return 0
+    return models * _moved(fighter, Characteristic.ATTACKS, payloads, Side.ATTACKER)
 
 
 def _since(side: Fielding, at_start: Standings, standing: Standings) -> None:

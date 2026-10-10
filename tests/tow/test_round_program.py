@@ -7,7 +7,7 @@ from typing import NamedTuple
 import pytest
 
 from avelorn.core.distribution import Probability
-from avelorn.core.graph import Decision
+from avelorn.core.graph import Decision, Verdict
 from avelorn.tow.changes import Added, Uses
 from avelorn.tow.contingent import ChargeArc, Contingent
 from avelorn.tow.data import TOWRepository
@@ -67,6 +67,7 @@ def _lanes(
     attacker_at_start: int | None = None,
     charge_move: int = 0,
     enemy_arc: ChargeArc = ChargeArc.FRONT,
+    rounds_fought: int = 1,
 ) -> tuple[Evaluated, ...]:
     built = program.built({Side.ATTACKER: attacker.side, Side.TARGET: target.side})
     choices = {Side.ATTACKER: attacker.held, Side.TARGET: target.held}
@@ -79,8 +80,8 @@ def _lanes(
             "target/standing": target_standing,
             "attacker/standing-at-start-of-round": attacker.side.standing(at_start),
             "target/standing-at-start-of-round": target_standing,
-            "attacker/rounds-fought": 1,
-            "target/rounds-fought": 1,
+            "attacker/rounds-fought": rounds_fought,
+            "target/rounds-fought": rounds_fought,
             "attacker/charges-made": attacker_charges,
             "target/charges-made": 0,
             "attacker/charge-move": charge_move,
@@ -115,6 +116,7 @@ def _fought(
     attacker_at_start: int | None = None,
     charge_move: int = 0,
     enemy_arc: ChargeArc = ChargeArc.FRONT,
+    rounds_fought: int = 1,
 ) -> Evaluated:
     lanes = _lanes(
         attacker,
@@ -126,6 +128,7 @@ def _fought(
         attacker_at_start,
         charge_move,
         enemy_arc,
+        rounds_fought,
     )
     (fought,) = (each for each in lanes if not each.lane.out)
     return fought
@@ -481,6 +484,64 @@ def test_the_struck_side_keeps_its_weapon_s_rules_against_an_automatic_hit() -> 
     fought = _fought(maneater, dwarf, program=program, attacker_charges=1, charge_move=6)
 
     assert _needed(fought, "round/impact-hits/attacker/attack/maneater/ward-saves") == {"6+"}
+
+
+def test_a_steed_strikes_beside_its_rider_with_its_own_profile() -> None:
+    """Ten Silver Helms with lances against Dwarf Warriors: five riders strike at I5 with S5.
+
+    Their five steeds strike at their own I4 with S3 hooves, so they wound on 5+ where
+    the lances wound on 3+, and the lance's Armour Bane never reaches their blows.
+    """
+    helms = _fielded("silver-helms", "Lance", 10, frontage=5)
+    dwarfs = _fielded("dwarf-warriors", "Hand Weapon", 10, frontage=5)
+    steed = "round/initiative-4/attacker/attack/silver-helm-barded-elven-steed"
+    rider = "round/initiative-5/attacker/attack/silver-helm"
+
+    fought = _fought(helms, dwarfs, attacker_standing=10)
+
+    attacks = [
+        fought.at(f"round/initiative-{slot}/attacker/how-many-attacks").read("attacks").mass
+        for slot in (5, 4)
+    ]
+    saves = fought.at(f"{steed}/make-armour-saves").step
+    assert attacks == [{5: 1}, {5: 1}]
+    assert (
+        _needed(fought, f"{rider}/roll-to-wound"),
+        _needed(fought, f"{steed}/roll-to-wound"),
+    ) == (
+        {"3+"},
+        {"5+"},
+    )
+    assert fought.lane.verdicts("attacker/silver-helms/armour-bane", saves).mass == {
+        Verdict.HONOURED: 1
+    }
+
+
+def test_a_rule_printed_not_to_reach_mounts_leaves_the_steeds_as_they_are() -> None:
+    """In the first round Silver Helms strike at I6 by Elven Reflexes; their steeds keep I4.
+
+    Dragon Princes re-roll their own natural 1s To Hit by Ithilmar Weapons, never
+    their steeds'.
+    """
+    helms = _fielded("silver-helms", "Lance", 5, frontage=5)
+    princes = _fielded("dragon-princes", "Hand Weapon", 5, frontage=5)
+    dwarfs = _fielded("dwarf-warriors", "Hand Weapon", 10, frontage=5)
+
+    first = _fought(helms, dwarfs, attacker_standing=5, rounds_fought=0)
+    reroll = _fought(princes, dwarfs, attacker_standing=5)
+
+    attacks = {
+        slot: first.at(f"round/initiative-{slot}/attacker/how-many-attacks").read("attacks").mass
+        for slot in (6, 5, 4)
+    }
+    rider, steed = (
+        reroll.at(f"round/initiative-{slot}/attacker/attack/{part}/roll-to-hit").step
+        for slot, part in ((5, "dragon-prince"), (4, "dragon-prince-barded-elven-steed"))
+    )
+    rerolls = "attacker/dragon-princes/ithilmar-weapons"
+    assert attacks == {6: {5: 1}, 5: {0: 1}, 4: {5: 1}}
+    assert Verdict.APPLIED in reroll.lane.verdicts(rerolls, rider).mass
+    assert Verdict.APPLIED not in reroll.lane.verdicts(rerolls, steed).mass
 
 
 def test_a_rule_also_granted_by_the_unit_is_in_force_whatever_the_weapon() -> None:

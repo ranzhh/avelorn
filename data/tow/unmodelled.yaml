@@ -347,9 +347,6 @@
   subject: daiths-reaper/combat/make-armour-saves
   reason: Makes the enemy re-roll successful armour saves in combat; no corpus unit carries Daith's Reaper.
 - kind: unreached-effect
-  subject: dragon-armour/combat/ward-saves
-  reason: Sets the Ward save in combat; only the Dragon Princes wear it, and the round fields no ridden unit.
-- kind: unreached-effect
   subject: multiple-wounds/shooting/remove-casualties
   reason: Only the Great Eagle's Serrated Maw carries it, a combat profile, so no corpus side shoots with it.
 

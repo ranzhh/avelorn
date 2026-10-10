@@ -35,7 +35,9 @@ class Part:
     """The models of a side that share a profile row and a loadout.
 
     ``weapons`` are the weapons they carry that fight in combat, and ``worn``
-    the armour they wear.
+    the armour they wear. A mount names the ``rider`` part whose models it
+    carries: it fights beside them with its own row and weapon, and stands and
+    falls with them.
     """
 
     id: str
@@ -48,6 +50,7 @@ class Part:
     armour: int | None = None
     ward: int | None = None
     carried: tuple[tuple[RuleRef, Source], ...] = ()
+    rider: str | None = None
 
     @property
     def holdings(self) -> tuple[Held, ...]:
@@ -64,7 +67,7 @@ class Part:
         return tuple(holdings)
 
     def weapon_with(self, held: Held) -> WeaponProfile:
-        """The combat profile of the weapon in ``held``.
+        """The combat profile of the weapon in ``held``; a mount's own, whatever is held.
 
         Returns:
             The profile.
@@ -72,6 +75,8 @@ class Part:
         Raises:
             ValueError: ``held`` holds no weapon the models carry, or more than one.
         """
+        if self.rider is not None and self.weapon is not None:
+            return self.weapon
         match [each.combat_profile for each in self.weapons if each.id in held]:
             case [WeaponProfile() as profile]:
                 return profile
@@ -155,20 +160,30 @@ class Fielding:
     troop: TroopTypeProfile
     parts: tuple[Part, ...]
     frontage: int
+    mounts: tuple[Part, ...] = ()
 
     def __post_init__(self) -> None:
         """Refuse a fielding that cannot stand.
 
         Raises:
-            ValueError: the fielding has no rank-and-file part, repeats a part, or has no frontage.
+            ValueError: the fielding has no rank-and-file part, repeats a part, has no
+                frontage, or has a mount that carries no part.
         """
-        ids = [part.id for part in self.parts]
+        ids = [part.id for part in self.fighters]
         if len(set(ids)) != len(ids):
             raise ValueError(f"{self.unit} fields a part twice")
         if not any(part.row.role is ProfileRole.RANK_AND_FILE for part in self.parts):
             raise ValueError(f"{self.unit} fields no rank and file")
         if self.frontage < 1:
             raise ValueError(f"{self.unit} stands with no frontage")
+        riders = {part.id for part in self.parts}
+        if any(mount.rider not in riders for mount in self.mounts):
+            raise ValueError(f"{self.unit} fields a mount that carries none of its parts")
+
+    @property
+    def fighters(self) -> tuple[Part, ...]:
+        """Every part that strikes in combat: the models, then the mounts carrying them."""
+        return (*self.parts, *self.mounts)
 
     @property
     def troop_type(self) -> TroopType:
@@ -322,22 +337,21 @@ class Fielding:
         carries the rules of its datasheet, its troop type, and the profile its
         weapon shoots with. In ``combat`` it fixes no weapon, since the side
         chooses at Step 1.1, and carries the rules of each weapon's combat
-        profile. A round of combat reads each part's count as its models at the
-        start of the round.
+        profile; a mount fights beside each part with the weapon its row
+        carries (troop-types-in-detail/split-profile-cavalry). A round of combat
+        reads each part's count as its models at the start of the round.
 
         Returns:
             The fielded side.
 
         Raises:
             ValueError: ``weapon`` has no profile to shoot with, an option is not
-                offered, or a side fielded for combat names a weapon or rides a
-                mount.
+                offered, a side fielded for combat names a weapon, or a mount
+                carries a weapon its unit does not.
         """
         unit = contingent.unit
         if combat and weapon is not None:
             raise ValueError(f"{unit.id} chooses its weapon at Step 1.1, not when fielded")
-        if combat and unit.mount is not None:
-            raise ValueError(f"{unit.id} rides a mount, which a round of combat does not field")
         carriers: tuple[Carries, ...] = (unit, unit.rank_and_file)
         carried = [pair for carrier in carriers for pair in carrier.sources()]
         weapons = tuple(w for w in contingent.loadout.weapons if w.combat_profile is not None)
@@ -378,7 +392,32 @@ class Fielding:
             )
             for row, count in counts
         )
-        return cls(unit.id, unit.rank_and_file, parts, contingent.frontage)
+        mounts = () if not combat else _mounted(contingent, parts)
+        return cls(unit.id, unit.rank_and_file, parts, contingent.frontage, mounts)
+
+
+def _mounted(contingent: Contingent, riders: tuple[Part, ...]) -> tuple[Part, ...]:
+    rows = [row for row in contingent.unit.profiles if row.role is ProfileRole.MOUNT]
+    if not rows:
+        return ()
+    (row,) = rows
+    match row.equipment:
+        case [name]:
+            weapon = contingent.loadout.weapon(name)
+        case names:
+            raise ValueError(f"{row.name} fights with {len(names)} weapons, not one")
+    return tuple(
+        Part(
+            id=f"{rider.id}-{slugified(row.name)}",
+            row=row,
+            count=rider.count,
+            weapon=weapon.combat_profile,
+            weapons=(weapon,),
+            carried=rider.carried,
+            rider=rider.id,
+        )
+        for rider in riders
+    )
 
 
 def _fought(weapon: Weapon) -> list[tuple[RuleRef, Source]]:

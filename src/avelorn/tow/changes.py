@@ -14,7 +14,7 @@ from avelorn.tow.schema.effect import Bounded, Effect, Operation, RerollOn
 from avelorn.tow.schema.quantity import Quantity
 from avelorn.tow.schema.rule import DiceQuantity, Parameter
 from avelorn.tow.schema.stage import Side
-from avelorn.tow.schema.unit import Characteristic
+from avelorn.tow.schema.unit import Characteristic, ProfileRole
 
 type Changeable = Quantity | Characteristic
 type Folded = Quantity | tuple[Side, Characteristic] | RerollOn
@@ -37,7 +37,8 @@ class Added:
     """An amount added to a quantity, within its printed bounds.
 
     ``of`` names the side whose model's characteristic it moves, as the step's
-    spec names the sides; a quantity has none.
+    spec names the sides; a quantity has none. It never moves a part of a role
+    ``not_on`` names.
     """
 
     key: Changeable
@@ -45,15 +46,17 @@ class Added:
     maximum: int | None = None
     minimum: int | None = None
     of: Side | None = None
+    not_on: frozenset[ProfileRole] = frozenset()
 
 
 @dataclass(frozen=True)
 class Fixed:
-    """A value a quantity is set to; ``of`` reads as on :class:`Added`."""
+    """A value a quantity is set to; ``of`` and ``not_on`` read as on :class:`Added`."""
 
     key: Changeable
     value: int
     of: Side | None = None
+    not_on: frozenset[ProfileRole] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -126,29 +129,33 @@ class Payloads:
             payloads.append(payload)
         return cls(tuple(payloads))
 
-    def added(self, key: Changeable, of: Side | None = None) -> int:
-        """Sum the amounts added to ``key``, of the model ``of`` names for a characteristic.
+    def added(
+        self, key: Changeable, of: Side | None = None, role: ProfileRole | None = None
+    ) -> int:
+        """Sum the amounts added to ``key``, of the model ``of`` names, for a part of ``role``.
 
         Returns:
             The sum, 0 when nothing is added.
         """
-        return sum(each.amount for each in self._adds(key, of))
+        return sum(each.amount for each in self._adds(key, of, role))
 
     def bounds(
-        self, key: Changeable, of: Side | None = None
+        self, key: Changeable, of: Side | None = None, role: ProfileRole | None = None
     ) -> tuple[tuple[int, ...], tuple[int, ...]]:
-        """Read the printed bounds of the amounts added to ``key``, of the model ``of`` names.
+        """Read the printed bounds of the amounts added to ``key``, as :meth:`added` reads them.
 
         Returns:
             The maxima, then the minima.
         """
-        adds = self._adds(key, of)
+        adds = self._adds(key, of, role)
         maxima = tuple(each.maximum for each in adds if each.maximum is not None)
         minima = tuple(each.minimum for each in adds if each.minimum is not None)
         return maxima, minima
 
-    def fixed(self, key: Changeable, of: Side | None = None) -> tuple[int, ...]:
-        """Read the values ``key`` is set to, of the model ``of`` names.
+    def fixed(
+        self, key: Changeable, of: Side | None = None, role: ProfileRole | None = None
+    ) -> tuple[int, ...]:
+        """Read the values ``key`` is set to, as :meth:`added` reads them.
 
         Returns:
             Every value set, in the order written.
@@ -156,7 +163,9 @@ class Payloads:
         return tuple(
             each.value
             for each in self.payloads
-            if isinstance(each, Fixed) and (each.key, each.of) == (key, of)
+            if isinstance(each, Fixed)
+            and (each.key, each.of) == (key, of)
+            and role not in each.not_on
         )
 
     def denied(self) -> bool:
@@ -218,11 +227,15 @@ class Payloads:
         """
         return tuple(each.by for each in self.payloads if isinstance(each, Multiplied))
 
-    def _adds(self, key: Changeable, of: Side | None) -> tuple[Added, ...]:
+    def _adds(
+        self, key: Changeable, of: Side | None, role: ProfileRole | None
+    ) -> tuple[Added, ...]:
         return tuple(
             each
             for each in self.payloads
-            if isinstance(each, Added) and (each.key, each.of) == (key, of)
+            if isinstance(each, Added)
+            and (each.key, each.of) == (key, of)
+            and role not in each.not_on
         )
 
 
@@ -559,6 +572,7 @@ class Operated:
     gate: Gate
     sources: Sources
     parameter: Parameter | None
+    not_on: frozenset[ProfileRole] = frozenset()
 
     @property
     def order(self) -> Order:
@@ -604,10 +618,15 @@ class Operated:
                 written = effect.add[self.key]
                 if isinstance(written, Bounded):
                     amount = self.amount(written.amount, sources)
-                    return Added(self.key, amount, written.maximum, written.minimum, self.of)
-                return Added(self.key, self.amount(written, sources), of=self.of)
+                    return Added(
+                        self.key, amount, written.maximum, written.minimum, self.of, self.not_on
+                    )
+                return Added(
+                    self.key, self.amount(written, sources), of=self.of, not_on=self.not_on
+                )
             case Operation.SET if effect.set_ is not None and self.key is not None:
-                return Fixed(self.key, self.amount(effect.set_[self.key], sources), self.of)
+                value = self.amount(effect.set_[self.key], sources)
+                return Fixed(self.key, value, self.of, self.not_on)
             case Operation.DENY if effect.deny:
                 return Denied()
             case Operation.REROLL if effect.reroll is not None:
@@ -681,14 +700,14 @@ class Operated:
             The text.
         """
         match payload:
-            case Added(key, amount, maximum, minimum):
+            case Added(key, amount, maximum, minimum, _, _):
                 bounds = "".join(
                     f", {name} {bound}"
                     for name, bound in (("at most", maximum), ("at least", minimum))
                     if bound is not None
                 )
                 return f"{amount:+d} {key}{bounds}"
-            case Fixed(key, value):
+            case Fixed(key, value, _, _):
                 return f"{key} {value}"
             case Denied():
                 return "deny"
