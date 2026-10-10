@@ -7,9 +7,8 @@ probabilities and distributions.
 
 import logging
 import random
-from collections.abc import Iterator, Sequence
+from collections.abc import Sequence
 from fractions import Fraction
-from math import comb
 
 from avelorn.core.distribution import Probability
 
@@ -35,73 +34,6 @@ def p_d6_at_least(target: int) -> Probability:
     if target > 6:
         return Fraction(0)
     return Fraction(7 - target, 6)
-
-
-def binomial_pmf(successes: int, trials: int, p: Probability) -> Probability:
-    """Probability of exactly ``successes`` hits in ``trials`` independent attempts.
-
-    Carries ``p``'s numeric type: the complement is ``1 - p`` with an integer
-    ``1``, so an exact ``p`` gives an exact answer.
-
-    Returns:
-        P(X = successes) for X ~ Binomial(trials, p).
-    """
-    misses = trials - successes
-    return comb(trials, successes) * p**successes * (1 - p) ** misses
-
-
-def binomial_distribution(trials: int, p: Probability) -> list[Probability]:
-    """Full probability mass function for a binomial outcome.
-
-    Returns:
-        A list of length ``trials + 1`` where index ``k`` is P(k successes), in
-        whatever numeric type ``p`` carries.
-    """
-    logger.debug("binomial distribution over %d trials, p=%.3f", trials, p)
-    return [binomial_pmf(k, trials, p) for k in range(trials + 1)]
-
-
-def multinomial_outcomes(
-    trials: int, probabilities: Sequence[Probability]
-) -> Iterator[tuple[tuple[int, ...], Probability]]:
-    """Enumerate class-count vectors of a multinomial with their probabilities.
-
-    ``probabilities`` are the per-trial probabilities of each class; any
-    remaining mass is an implicit "nothing" class whose count is not
-    reported. With one class this reduces to the binomial. The walk carries the
-    numeric type given: the leftover class and the recursion's seed are integer
-    ``1``, so exact per-class probabilities enumerate exactly.
-
-    With *no* classes there is nothing to take a numeric type from, so the single
-    empty vector's mass is the integer ``1`` rather than ``1.0``. Degenerate and
-    unused, noted only because it is the one case where the seed reaches a caller
-    unchanged.
-
-    Yields:
-        ``(counts, probability)`` per distinct count vector, where
-        ``counts[i]`` is how many of the ``trials`` fell in class ``i``.
-        The probabilities of all vectors sum to 1.
-
-    Raises:
-        ValueError: ``trials`` is negative.
-    """
-    if trials < 0:
-        raise ValueError("trials must be >= 0")
-    p_rest = 1 - sum(probabilities)
-
-    def _vectors(
-        remaining: int, index: int, counts: tuple[int, ...], mass: Probability
-    ) -> Iterator[tuple[tuple[int, ...], Probability]]:
-        if index == len(probabilities):
-            yield counts, mass * p_rest**remaining
-            return
-        p = probabilities[index]
-        for k in range(remaining + 1):
-            yield from _vectors(
-                remaining - k, index + 1, (*counts, k), mass * comb(remaining, k) * p**k
-            )
-
-    yield from _vectors(trials, 0, (), 1)
 
 
 def cap_distribution(distribution: Sequence[Probability], cap: int) -> list[Probability]:

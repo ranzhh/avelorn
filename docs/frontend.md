@@ -113,8 +113,9 @@ with the others in `routes/table/+page.svelte` only.
   `Sheet.svelte` and `RuleText.svelte` are the bodies. `/units/[slug]` and
   `/rules/[slug]` stay as routes for linking.
 - **#203 the To Hit ledger.** A compiled `Modifier` carries the rule that
-  emitted it. `engine/derivation.py` gathers the target's operands. Shooting
-  only.
+  emitted it, and `engine/derivation.py` gathers the target's operands. Both
+  belong to the legacy engine, since deleted, so it needs rebuilding on the
+  graph. Shooting only.
 - **#204 matchup matrix.** Every standing block against every other, under the
   table. Depends on the roster, not on where a block stands.
 - **#205 conditions dock.** The `moved` flag reaches `POST /volley` at last, so

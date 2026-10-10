@@ -1,10 +1,9 @@
 """The engine's own error vocabulary.
 
 One family, so callers can catch engine errors as a class apart from
-Python's own. The tenet behind ``UnmodelledRuleError``: where degrading
-to an unfactored note would resolve the *wrong game*, the engine
-refuses loudly instead — a note can honestly report a modifier the
-math skipped, but not a whole action that never happened.
+Python's own. The tenet behind ``UnmodelledRuleError``: where leaving a
+rule out would resolve the *wrong game*, a whole action that never
+happened, the engine refuses loudly instead.
 """
 
 

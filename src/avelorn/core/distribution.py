@@ -16,11 +16,11 @@ outcomes — :meth:`__add__` and the rest — goes through :meth:`combine`.
 
 The arithmetic operators mean whatever the *outcome type's* operator means, so
 they serve numeric outcomes and nothing else. A distribution over vectors of
-per-class counts (``(wounds, kills)``, the shape the multinomial aggregation in
-:mod:`avelorn.tow.engine.casualties` produces) does not add component-wise:
-``+`` concatenates the tuples instead, silently. Vector outcomes need
-:meth:`combine` with a component-wise operation, or a distribution per class.
-Naming that gap here rather than guessing at an operator for it.
+per-class counts (``(wounds, kills)``, the shape a multinomial aggregation
+produces) does not add component-wise: ``+`` concatenates the tuples instead,
+silently. Vector outcomes need :meth:`combine` with a component-wise operation,
+or a distribution per class. Naming that gap here rather than guessing at an
+operator for it.
 
 Formally this is the discrete probability monad: :meth:`pure` is a point mass,
 :meth:`bind` is the mix, and the two obey the monad laws (checked in the tests).
@@ -45,37 +45,6 @@ from typing import cast
 # design is ours to build regardless of which Distribution we stand on.
 
 
-# How likely an outcome is. Three numeric types, because the module stores all
-# three:
-#   - ``float`` for the aggregations, because that is what every caller in the
-#     engine hands them today, not because exactness would not work there. An
-#     exact binomial at p=1/6 reaches 63-digit denominators at 80 trials in
-#     0.2ms, summing to exactly 1: slower than float by ~19x, but no kind of
-#     blow-up. Widening those signatures is a separate change;
-#   - ``Fraction`` for the per-attack dice walk in tow.engine.attack, which
-#     resolves exactly on purpose and converts at the caller's edge;
-#   - ``int`` for the fold identities. ``pure`` is the integer ``1`` and the folds
-#     accumulate from the integer ``0``, deliberately, because those coerce
-#     neither of the other two. So an integer mass is a real runtime value, not a
-#     theoretical one: ``Distribution.pure(x).mass[x]`` is ``1`` and an empty
-#     distribution's ``total()`` is ``0``.
-#
-# ``int`` is listed even though a checker already promotes it to ``float``,
-# because the alias is meant to describe the runtime domain honestly. Anything
-# dispatching on a mass's type at a boundary has three cases to handle, not two.
-# Note this is a PEP 695 alias, so it cannot be used with ``isinstance`` --
-# check against ``(int, float, Fraction)`` directly.
-#
-# A checker cannot accept Fraction under a float annotation: int widens to float
-# but Fraction does not, and the numbers ABCs it registers with are invisible to
-# type checkers. Hence the explicit union.
-#
-# Chosen over parameterising the class as Distribution[T, P], which would let the
-# checker prove a chain never mixes the kinds. That costs a type parameter on
-# every signature and call site, and it fights the integer-seeded
-# folds below (sum starts at 0, so an exactly-typed total would not check). The
-# union documents the intent instead; see Distribution for the invariant it cannot
-# enforce.
 type Probability = int | float | Fraction
 type Kernel[Out: Hashable] = Callable[..., "Distribution[Out]"]
 
@@ -108,8 +77,8 @@ class Distribution[T: Hashable]:
     mixing one into a fold quietly yields ``float``, because ``Fraction * float``
     is a ``float``. Exactness is lost at the first inexact value and cannot come
     back. Build a distribution from one kind of number and keep a chain in that
-    kind; convert deliberately at a boundary, the way the engine's phases already
-    do when they take the walk's exact per-attack probabilities into ``float``.
+    kind; convert deliberately at a boundary, the way the API views hand exact
+    masses to JSON as ``float``.
     """
 
     mass: Mapping[T, Probability]

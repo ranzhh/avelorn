@@ -13,7 +13,7 @@ from avelorn.tow.changes import Added, Uses
 from avelorn.tow.contingent import ChargeArc, Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.fielding import SHIELD, Fielding, Held, Initiatives
-from avelorn.tow.kernels import Standing, Standings, success
+from avelorn.tow.kernels import Standing, Standings
 from avelorn.tow.programs import (
     ROUND,
     STAND_AND_SHOOT,
@@ -243,7 +243,9 @@ def test_a_combat_hit_pushed_past_6_still_lands_on_a_natural_6() -> None:
     spearman = _fielded("elven-spearmen", "Thrusting Spear", 1).side.hit
     penalised = (Added(Quantity.TO_HIT, -3),)
 
-    assert success(roll_to_hit_in_combat(spearman, spearman, penalised)) == Fraction(1, 6)
+    hit = roll_to_hit_in_combat(spearman, spearman, penalised)
+
+    assert hit.prob(lambda die: die.success) == Fraction(1, 6)
 
 
 def test_an_entry_acting_for_the_target_swaps_the_sides() -> None:
