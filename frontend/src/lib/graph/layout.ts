@@ -30,13 +30,19 @@ export interface PlacedStep {
 	box: Box;
 }
 
+/** What one side's steps in a block read, one glimpse after another. */
+export interface Summary {
+	side: string;
+	text: string;
+}
+
 export interface PlacedBlock {
 	path: string;
 	block: Block;
 	box: Box;
 	collapsed: boolean;
 	multiplier: Reading[];
-	summary: string;
+	summary: Summary[];
 	steps: string[];
 }
 
@@ -112,27 +118,39 @@ function isRepeat(block: Block): block is Repeat {
 	return block.kind === 'repeat';
 }
 
-function summaryOf(paths: string[], program: Program): string {
-	const readings = paths.flatMap(
-		(path) => program.nodes.find((node) => node.path === path)?.edge.readings ?? []
-	);
-	const seen = new Set<string>();
-	return readings
-		.filter((reading) => {
-			if (seen.has(reading.label)) return false;
-			seen.add(reading.label);
-			return true;
-		})
-		.map((reading) => {
-			if (!('outcomes' in reading)) return `${reading.label} ${reading.value}`;
-			const values = reading.outcomes.map((outcome) => outcome.value);
-			if (!values.length) return '';
-			const first = values[0];
-			const last = values[values.length - 1];
-			return `${reading.label} ${first === last ? first : `${first}–${last}`}`;
-		})
-		.filter(Boolean)
-		.join(' · ');
+/** Whether a block may be drawn as one card; a decision's body stays open. */
+export function foldable(block: Block): boolean {
+	return block.kind !== 'body';
+}
+
+/** Whether a block starts as one card: a slot does, a sequence or repeat as its program says. */
+export function startsFolded(block: Block): boolean {
+	if (block.kind === 'slot') return true;
+	return block.kind !== 'body' && block.collapsed;
+}
+
+function glimpse(reading: Reading): string {
+	if (!('outcomes' in reading)) return `${reading.label} ${reading.value}`;
+	const values = reading.outcomes.map((outcome) => outcome.value);
+	if (!values.length) return '';
+	const first = values[0];
+	const last = values[values.length - 1];
+	return `${reading.label} ${first === last ? first : `${first}–${last}`}`;
+}
+
+function summaryOf(paths: string[], program: Program): Summary[] {
+	const held = new Set(paths);
+	const steps = program.nodes.filter((node) => held.has(node.path));
+	return program.sides
+		.map((side) => ({
+			side,
+			text: steps
+				.filter((step) => step.side === side)
+				.flatMap((step) => step.edge.readings.map(glimpse))
+				.filter(Boolean)
+				.join(' · ')
+		}))
+		.filter((summary) => summary.text);
 }
 
 function multiplierOf(block: Block, program: Program): Reading[] {
@@ -415,19 +433,24 @@ export function layout(program: Program, collapsed: string[], metrics = METRICS)
 	};
 }
 
+/**
+ * The widest metrics at which the program fits the width available.
+ *
+ * Squeezing is worth it only when it spares the scroll; when even the floor
+ * overflows, the cards keep their full size. Between the floor and full size the
+ * drawing widens no faster than the straight line joining them, so a share of
+ * the way along that line always fits.
+ */
 export function fitted(program: Program, collapsed: string[], available: number): Metrics {
-	const natural = layout(program, collapsed, METRICS);
-	if (natural.width <= available) return METRICS;
-	const columns = natural.steps.length + natural.blocks.filter((block) => block.collapsed).length;
-	const gaps = columns - 1 + natural.edges.filter((edge) => edge.kind === 'output').length;
-	const scalable = columns * METRICS.node.width + gaps * METRICS.gap;
-	const ratio = Math.max(0, (available - (natural.width - scalable)) / scalable);
+	const widest = layout(program, collapsed, METRICS).width;
+	if (widest <= available) return METRICS;
+	const narrowest = layout(program, collapsed, LEAST).width;
+	if (narrowest > available) return METRICS;
+	const share = (available - narrowest) / (widest - narrowest);
+	const between = (least: number, most: number) => Math.floor(least + share * (most - least));
 	return {
-		node: {
-			width: Math.max(Math.floor(METRICS.node.width * ratio), LEAST.node.width),
-			height: METRICS.node.height
-		},
-		gap: Math.max(Math.floor(METRICS.gap * ratio), LEAST.gap)
+		node: { width: between(LEAST.node.width, METRICS.node.width), height: METRICS.node.height },
+		gap: between(LEAST.gap, METRICS.gap)
 	};
 }
 

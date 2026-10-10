@@ -5,9 +5,11 @@
 		MARGIN,
 		caption,
 		fitted,
+		foldable,
 		grants,
 		layout,
 		moved,
+		startsFolded,
 		type Moves,
 		type Point
 	} from './layout';
@@ -18,11 +20,7 @@
 	let folded = $state<Record<string, boolean>>({});
 	const collapsed = $derived(
 		program.blocks
-			.filter(
-				(block) =>
-					(block.kind === 'sequence' || block.kind === 'repeat') &&
-					(folded[block.path] ?? block.collapsed)
-			)
+			.filter((block) => foldable(block) && (folded[block.path] ?? startsFolded(block)))
 			.map((block) => block.path)
 	);
 	let moves = $state<Moves>({});
@@ -195,13 +193,13 @@
 							onkeydown={(event) => key(event, pick)}
 						>
 							<header>
+								<button class="fold" title="expand" onclick={() => toggle(each.path)}>▶</button>
 								<span class="mark" title="group">{MARK.group}</span>
-								<h3>{printed(last(each.path))}</h3>
+								<h3 title={printed(last(each.path))}>{printed(last(each.path))}</h3>
 							</header>
-							<span class="side">{each.summary}</span>
-							<button class="btn btn-ghost btn-sm fold" onclick={() => toggle(each.path)}>
-								expand
-							</button>
+							{#each each.summary as line (line.side)}
+								<span class="line {tint(line.side)}" title={line.text}>{line.text}</span>
+							{/each}
 						</div>
 					{:else}
 						<div
@@ -217,14 +215,14 @@
 							onpointercancel={release}
 							onkeydown={(event) => key(event, pick)}
 						>
+							{#if foldable(each.block)}
+								<button class="fold" title="collapse" onclick={() => toggle(each.path)}>▼</button>
+							{/if}
 							<span class="mark" title={each.block.kind}>{MARK.group}</span>
 							<h3>{printed(last(each.path))}</h3>
 							{#if each.block.kind === 'repeat'}
 								<span class="side">× {caption(each.multiplier)}</span>
 							{/if}
-							<button class="btn btn-ghost btn-sm fold" onclick={() => toggle(each.path)}>
-								collapse
-							</button>
 						</div>
 					{/if}
 				{/each}
@@ -369,9 +367,17 @@
 			<div class="field"><span>kind</span><span>{block.block.kind}</span></div>
 			<div class="field"><span>steps</span><span class="num">{block.steps.length}</span></div>
 			<div class="field"><span>path</span><span class="path">{block.path}</span></div>
+			{#if block.summary.length}
+				<h2>readings</h2>
+				{#each block.summary as line (line.side)}
+					<p class="line {tint(line.side)}">{line.text}</p>
+				{/each}
+			{/if}
 			{#if block.block.kind === 'repeat'}
 				<h2>multiplier</h2>
 				<Readings readings={block.multiplier} width={STRIP} />
+			{/if}
+			{#if foldable(block.block)}
 				<button class="btn btn-sm" onclick={() => toggle(block.path)}>
 					{block.collapsed ? 'expand' : 'collapse'}
 				</button>
@@ -519,12 +525,47 @@
 			0.7rem ui-monospace,
 			monospace;
 	}
+	.card.group h3 {
+		min-width: 0;
+		overflow: hidden;
+		white-space: nowrap;
+		text-overflow: ellipsis;
+	}
+	.line {
+		display: block;
+		padding-left: 0.3rem;
+		overflow: hidden;
+		color: var(--dim);
+		white-space: nowrap;
+		text-overflow: ellipsis;
+		font:
+			0.7rem ui-monospace,
+			monospace;
+	}
+	.line.side-0 {
+		border-left: 2px solid #3677b8;
+	}
+	.line.side-1 {
+		border-left: 2px solid #b84a3d;
+	}
 	.fold {
-		margin-left: auto;
+		display: inline-grid;
+		flex: none;
+		place-items: center;
+		width: 1.1rem;
+		height: 1.1rem;
+		padding: 0;
+		border: 0;
+		background: transparent;
+		font-size: 0.65rem;
+		cursor: pointer;
 	}
 	.explore {
 		padding: 0.75rem;
 		border-left: 1px solid #bbb;
+	}
+	.explore .line {
+		white-space: normal;
 	}
 	.explore > * + * {
 		margin-top: 0.5rem;
