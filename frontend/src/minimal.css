@@ -403,6 +403,71 @@ svg {
 	font-size: var(--text-xs);
 }
 
+.stacked {
+	display: flex;
+	height: 1.25rem;
+	margin: var(--space-2) 0 var(--space-1);
+}
+.stacked .cell {
+	display: grid;
+	place-items: center;
+	min-width: 0;
+	overflow: hidden;
+	font-size: var(--text-xs);
+}
+.stacked + .legend {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0 var(--space-3);
+	margin-bottom: var(--space-3);
+	font-size: var(--text-xs);
+}
+.stacked + .legend i {
+	display: inline-block;
+	width: 0.6rem;
+	height: 0.6rem;
+	margin-right: var(--space-1);
+}
+.plot {
+	position: relative;
+	padding-top: var(--space-2);
+}
+.plot svg {
+	display: block;
+	overflow: visible;
+}
+.plot .tick {
+	font-size: 10px;
+	fill: var(--dim);
+}
+.plot .grid {
+	stroke: #eee;
+}
+.plot .baseline {
+	stroke: var(--line);
+}
+.plot .fill {
+	fill: var(--series-1);
+}
+.plot .fill.lit {
+	fill: var(--accent);
+	opacity: 0.7;
+}
+.plot .mean {
+	stroke: var(--ink);
+	stroke-dasharray: 3 2;
+}
+.plot .tip {
+	position: absolute;
+	transform: translate(-50%, -100%);
+	padding: 0 var(--space-1);
+	background: #fff;
+	border: 1px solid var(--line);
+	font: var(--text-xs) var(--font-mono);
+	white-space: nowrap;
+	pointer-events: none;
+}
+
 .pane {
 	position: fixed;
 	width: var(--pane-w);
