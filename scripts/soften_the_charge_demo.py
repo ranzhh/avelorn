@@ -15,12 +15,16 @@ from avelorn.tow.contingent import Charge, ChargeArc
 from avelorn.tow.game import TOWGame
 from avelorn.tow.phases.movement import StandAndShoot
 from avelorn.tow.schema.unit import Characteristic, Unit
+from avelorn.tow.steps import Fought
 
 
 class Side(Enum):
     """Who wins the combat."""
 
     CHARGER, DRAW, DEFENDER = auto(), auto(), auto()
+
+
+_WINNER = {Fought.WON: Side.CHARGER, Fought.DRAWN: Side.DRAW, Fought.LOST: Side.DEFENDER}
 
 
 def _defender_wins(side: Side) -> bool:
@@ -44,8 +48,7 @@ def win(game: TOWGame, defender: Unit, charging: int) -> Distribution[Side]:
         engagement = movement.charge(lions, unit, Charge(10, ChargeArc.FRONT))
         engagement.react(StandAndShoot())
     with turn.combat() as combat:
-        r = combat.result(combat.fight(engagement))
-    return Distribution({Side.CHARGER: r.p_a_wins, Side.DRAW: r.p_draw, Side.DEFENDER: r.p_b_wins})
+        return combat.fight(engagement).fought.map(_WINNER.__getitem__)
 
 
 def win_if_shot(game: TOWGame, defender: Unit):

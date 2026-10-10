@@ -35,14 +35,23 @@ def fight(client: TestClient, **body: object) -> dict:
 
 
 def test_both_sides_are_reported(client: TestClient) -> None:
-    """A round names what each side fielded and what it fought with."""
+    """A round names what each side fielded and what it fought with.
+
+    Ten White Lions five wide stand one rank behind the first, for a Rank
+    Bonus of +1. Twenty Dwarfs four wide stand four ranks behind the first,
+    which Heavy Infantry caps at +2. Each model is one point of Unit Strength.
+    """
     report = fight(
         client,
-        a={"unit": "white-lions-of-chrace", "size": 20},
+        a={"unit": "white-lions-of-chrace", "size": 10},
         b={"unit": "dwarf-warriors", "size": 20},
     )
     assert report["a"]["name"] == "White Lions of Chrace"
     assert report["b"]["size"] == 20
+    assert [(report[side]["rank_bonus"], report[side]["unit_strength"]) for side in "ab"] == [
+        (1, 10),
+        (2, 20),
+    ]
 
 
 def test_the_outcome_is_a_distribution_not_an_average(client: TestClient) -> None:

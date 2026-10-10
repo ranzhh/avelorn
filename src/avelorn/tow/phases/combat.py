@@ -81,6 +81,8 @@ from avelorn.tow.kernels import (
     wound_target,
 )
 from avelorn.tow.phases.movement import Engagement
+from avelorn.tow.programs import Loaded
+from avelorn.tow.round import Fight, fight_round
 from avelorn.tow.schema.psychology import BreakOutcome
 from avelorn.tow.schema.rule import AttackKind, Decision, HitOrder, Rule
 from avelorn.tow.schema.unit import Characteristic, Profile, ProfileRole
@@ -2053,14 +2055,11 @@ def _break_outcomes(leadership: int, margin: int) -> tuple[Probability, Probabil
 class CombatPhase(Phase):
     """The Combat phase: its steps, its round's actions.
 
-    ``in_play`` are the chapter's rules in force — every round of combat
-    resolves under them, gated by each side's engagement conditions. No
-    combat chapter rule carries effects in the data today, so the mapping
-    is empty in practice; the path is here, so a rule gaining effects is a
-    data change, honoured like its shooting sibling, not new code.
+    ``program`` is the round program, loaded with the corpus rules; every
+    round of combat runs on it.
     """
 
-    in_play: Mapping[str, Rule]
+    program: Loaded
 
     # The printed combat sequence's modelled steps: every step knows
     # what it rolls — this Roll to Hit never confirms (a natural 6
@@ -2075,66 +2074,39 @@ class CombatPhase(Phase):
     )
 
     @overload
-    def fight(self, combat: Engagement, /) -> FightResult: ...
+    def fight(self, combat: Engagement, /) -> Fight: ...
 
     @overload
-    def fight(self, combat: Contingent, opponent: Contingent, /) -> FightResult: ...
+    def fight(self, combat: Contingent, opponent: Contingent, /) -> Fight: ...
 
     def fight(
         self,
         combat: Engagement | Contingent,
         opponent: Contingent | None = None,
         /,
-    ) -> FightResult:
-        """One round of a combat, under the chapter's rules in force.
+    ) -> Fight:
+        """One round of a combat, each side fighting with the weapon it has in hand.
 
         ``combat`` is either an :class:`~avelorn.tow.phases.movement.Engagement`
-        — a charge-formed combat carrying the charge Initiative bonus, its
-        first-round status, and any Stand & Shoot casualties — or two
-        contingents in base contact, taken as a plain frontal standing combat:
-        no charge, not a first round (the "or something else" opening). Each
-        side swings the weapon it has in hand, armed through
-        :meth:`~avelorn.tow.contingent.Contingent.wielding`.
+        -- a charge-formed combat, in its first round until the turn ends, the
+        charger thinned by any Stand & Shoot -- or two contingents in base
+        contact, fought as a first round when either carries a charge.
 
         Returns:
-            The round's joint casualty distribution.
+            The round's lane in which every rule the players may decline is taken.
 
         Raises:
             ValueError: a lone contingent with no opponent and no engagement.
         """
         if isinstance(combat, Engagement):
-            a, b = combat.a, combat.b
-            a_prior_losses = None if combat.reaction is None else combat.reaction.casualties
-            first_round = combat.first_round
-        elif opponent is None:
+            return fight_round(
+                self.program,
+                combat.a,
+                combat.b,
+                first_round=combat.first_round,
+                stood=combat.reaction,
+            )
+        if opponent is None:
             raise ValueError("fighting two contingents needs both; pass an Engagement otherwise")
-        else:
-            a, b = combat, opponent
-            a_prior_losses = None
-            first_round = None
-        return fight(
-            a,
-            b,
-            a_prior_losses=a_prior_losses,
-            first_round=first_round,
-            phase_rules=self.in_play,
-        )
-
-    def result(self, fought: FightResult) -> CombatResult:
-        """Score a fought round and name the winner.
-
-        Returns:
-            The win/draw/loss probabilities and signed margin.
-        """
-        return combat_result(fought)
-
-    def break_test(self, scored: CombatResult, a: Contingent, b: Contingent) -> BreakResult:
-        """The Break test for a scored round, for each side.
-
-        Each contingent supplies its Leadership and its resolved rules (a
-        fixed-outcome rule like Stubborn is read here).
-
-        Returns:
-            Each side's break outcome distribution, plus any fixed-outcome notes.
-        """
-        return break_test(scored, a, b)
+        charged = combat.movement.charge is not None or opponent.movement.charge is not None
+        return fight_round(self.program, combat, opponent, first_round=charged)

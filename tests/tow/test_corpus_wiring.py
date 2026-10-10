@@ -35,8 +35,6 @@ def test_stomp_attacks_are_claimed_by_every_behemoth_that_prints_them() -> None:
         with GAME.turn().combat() as combat:
             fought = combat.fight(GAME.field(REPO.units[slug], 1).wielding(weapon), foe)
         unapplied = [
-            note
-            for note in fought.notes
-            if "not factored" in note and ("Stomp Attacks" in note or "Impact Hits" in note)
+            name for name in fought.held if name.startswith(("Stomp Attacks", "Impact Hits"))
         ]
         assert not unapplied, f"{slug}: {unapplied}"

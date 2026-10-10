@@ -7,15 +7,20 @@ import pytest
 from avelorn.tow.contingent import Charge, ChargeArc, Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.game import TOWGame
-from avelorn.tow.phases.combat import break_test, combat_result, fight
-from avelorn.tow.phases.movement import charge as charge_verb
+from avelorn.tow.phases.combat import fight
+from avelorn.tow.phases.movement import StandAndShoot
 from avelorn.tow.phases.shooting import shoot_unit
 from avelorn.tow.schema.phase import Phase
-from avelorn.tow.schema.stage import Stage
+from avelorn.tow.schema.stage import Side, Stage
 from avelorn.tow.schema.unit import Unit
 
 REPO = TOWRepository()
 GAME = TOWGame.assemble(REPO)
+SHOOTING_IN_FORCE = {
+    rule.name: rule
+    for rule in REPO.rules.values()
+    if rule.category == Phase.SHOOTING and rule.effects
+}
 
 
 def _fielded(unit: Unit, models: int) -> Contingent:
@@ -49,23 +54,10 @@ def test_every_phase_category_in_data_names_a_phase() -> None:
     assert phaselike <= {phase.value for phase in Phase}
 
 
-def test_assemble_resolves_the_shooting_rules_in_force() -> None:
-    """The shooting chapter's effectful rules are in force, resolved by name."""
-    in_force = GAME.in_play[Phase.SHOOTING]
-    assert set(in_force) == {"Firing at Long Range", "Moving and Shooting"}
-    assert all(rule.effects for rule in in_force.values())
-
-
-def test_phases_without_chapter_rules_have_none_in_force() -> None:
-    """Assembly answers every phase, empty where the data has no chapter rules."""
-    assert set(GAME.in_play) == set(Phase)
-    assert GAME.in_play[Phase.STRATEGY] == {}
-
-
 def test_the_game_is_a_frozen_value() -> None:
-    """Assembled once, never mutated: the rules in force cannot be reassigned."""
+    """Assembled once, never mutated: its phases cannot be reassigned."""
     with pytest.raises(dataclasses.FrozenInstanceError):
-        setattr(GAME, "in_play", {})  # noqa: B010 — the point is the freeze
+        setattr(GAME, "combat", GAME.combat)  # noqa: B010
 
 
 def test_phases_are_the_printed_sequence() -> None:
@@ -96,7 +88,7 @@ def test_a_volley_runs_on_the_program_with_the_corpus_rules() -> None:
     spearmen = _fielded(REPO.units["elven-spearmen"], 10)
 
     fired = GAME.shooting.volley(archers, spearmen, distance=20)
-    legacy = shoot_unit(archers, spearmen, phase_rules=GAME.in_play[Phase.SHOOTING], distance=20)
+    legacy = shoot_unit(archers, spearmen, phase_rules=SHOOTING_IN_FORCE, distance=20)
 
     assert fired.applied("volley/attacker/attack/elven-archer/roll-to-hit") == (
         "Firing at Long Range",
@@ -104,31 +96,35 @@ def test_a_volley_runs_on_the_program_with_the_corpus_rules() -> None:
     assert fired.p_unsaved == legacy.p_unsaved
 
 
-def test_fight_result_and_break_test_delegate() -> None:
-    """The combat binding's three actions match the module functions."""
+def test_a_round_runs_on_the_program_with_the_corpus_rules() -> None:
+    """Spearmen fight Spearmen at once, as the old engine has them do.
+
+    Neither charged, so it is no first round, and both strike at Initiative 4.
+    """
     spearmen = REPO.units["elven-spearmen"]
     a = _fielded(spearmen, 5).wielding("Thrusting Spear")
     b = _fielded(spearmen, 5).wielding("Thrusting Spear")
-    bound = GAME.combat.fight(a, b)
-    direct = fight(
-        a,
-        b,
-        phase_rules=GAME.in_play[Phase.COMBAT],
-    )
-    assert bound == direct
-    scored = GAME.combat.result(bound)
-    assert scored == combat_result(direct)
-    assert GAME.combat.break_test(scored, a, b) == break_test(scored, a, b)
+
+    fought = GAME.combat.fight(a, b)
+    legacy = fight(a, b)
+
+    assert fought.first_striker is None
+    lost = fought.casualties(Side.TARGET).mass
+    assert [lost.get(count, 0) for count in range(b.models + 1)] == legacy.b_casualties
 
 
-def test_the_charge_is_a_movement_action() -> None:
-    """game.movement.charge forms the engagement, the shooting rules injected."""
+def test_a_charge_reaction_runs_on_the_program_with_the_corpus_rules() -> None:
+    """Archers stand and shoot at the Spearmen charging them, under Standing and Shooting."""
     spearmen = _fielded(REPO.units["elven-spearmen"], 5)
     archers = _fielded(REPO.units["elven-archers"], 5)
-    move = Charge(3, ChargeArc.FRONT)
-    bound = GAME.movement.charge(spearmen, archers, move)
-    direct = charge_verb(spearmen, archers, move, shooting_rules=GAME.in_play[Phase.SHOOTING])
-    assert bound == direct
+
+    engagement = GAME.movement.charge(spearmen, archers, Charge(3, ChargeArc.FRONT))
+    fired = engagement.react(StandAndShoot("Longbow"))
+
+    assert fired is not None
+    assert fired.applied("stand-and-shoot/attacker/attack/elven-archer/roll-to-hit") == (
+        "Standing and Shooting",
+    )
 
 
 def test_each_phase_declares_the_dice_the_engine_rolls() -> None:

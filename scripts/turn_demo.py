@@ -11,6 +11,7 @@ from avelorn.core.distribution import Distribution
 from avelorn.tow.contingent import Charge, ChargeArc
 from avelorn.tow.game import TOWGame
 from avelorn.tow.phases.movement import StandAndShoot
+from avelorn.tow.steps import Fought
 
 
 def main() -> None:
@@ -26,19 +27,17 @@ def main() -> None:
     with turn.shooting():
         pass  # both units are now locked in combat — nothing to shoot
     with turn.combat() as combat:
-        scored = combat.result(combat.fight(engagement))
+        fought = combat.fight(engagement).fought.mass
+    won, drawn, lost = (fought.get(each, 0) for each in (Fought.WON, Fought.DRAWN, Fought.LOST))
 
-    toll = Distribution.from_counts(volley.casualties) if volley else Distribution.pure(0)
+    toll = volley.casualties if volley else Distribution.pure(0)
     print('Walking one turn -- 20 Spearmen charge 10 Archers (8"):')
     print(f"  Movement: Archers Stand & Shoot, {toll.expect(Fraction):.2f} chargers felled.")
     print("  Shooting: both locked in combat -- no shots.")
-    print(
-        f"  Combat:   P(Spearmen win) {scored.p_a_wins:.3f}  draw {scored.p_draw:.3f}  "
-        f"P(Archers win) {scored.p_b_wins:.3f}"
-    )
+    print(f"  Combat:   P(Spearmen win) {won:.3f}  draw {drawn:.3f}  P(Archers win) {lost:.3f}")
     # Exact, so this is an identity rather than a rounding: the three outcomes of
     # a scored round account for all of it.
-    print(f"  ... those three sum to {scored.p_a_wins + scored.p_draw + scored.p_b_wins} exactly.")
+    print(f"  ... those three sum to {won + drawn + lost} exactly.")
 
 
 if __name__ == "__main__":

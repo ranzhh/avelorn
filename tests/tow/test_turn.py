@@ -6,6 +6,7 @@ from avelorn.tow.contingent import Charge, ChargeArc, Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.game import TOWGame
 from avelorn.tow.phases.movement import StandAndShoot
+from avelorn.tow.schema.stage import Side
 
 REPO = TOWRepository()
 GAME = TOWGame.assemble(REPO)
@@ -34,8 +35,8 @@ def test_a_charge_in_movement_is_fought_in_combat() -> None:
         engagement.react(StandAndShoot("Longbow"))
     with turn.combat() as cb:
         fought = cb.fight(engagement)
-    assert fought.first_striker is engagement.a  # the charger struck first
-    assert engagement.reaction is not None  # the Stand & Shoot volley was resolved
+    assert fought.first_striker is Side.ATTACKER
+    assert engagement.reaction is not None
 
 
 def test_a_phase_cannot_be_taken_out_of_order() -> None:
