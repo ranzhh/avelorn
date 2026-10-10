@@ -270,3 +270,37 @@ export function room(candidate: Placed, taken: Placed[]): Placed {
 	}
 	return candidate;
 }
+
+/** How wide a glyph of the block's label is, and how tall its line, per unit of font size. */
+const GLYPH = 0.62;
+const LINE = 1;
+/** How much of the room the label may take, so it never touches the block's edge. */
+const FILL = 0.85;
+/** The largest label worth drawing, in inches: past this a big block only shouts. */
+const LARGEST = 1.6;
+/** Below this the count is dropped so the mark can stand larger. */
+const SMALLEST = 0.7;
+
+/**
+ * The largest font, in inches, at which a label of `characters` glyphs fits
+ * inside the block upright, however the block is turned.
+ *
+ * Never taller than the block's narrower side, so a label does not grow as its
+ * block is turned on end.
+ */
+export function lettering(placed: Placed, characters: number): number {
+	const { width, depth } = measured(placed);
+	const radians = (placed.facing * Math.PI) / 180;
+	const cos = Math.abs(Math.cos(radians));
+	const sin = Math.abs(Math.sin(radians));
+	const wide = characters * GLYPH;
+	const fits = Math.min(width / (wide * cos + LINE * sin), depth / (wide * sin + LINE * cos));
+	return Math.min(FILL * Math.min(fits, width, depth), LARGEST);
+}
+
+/** What the block's label shows and at what size: its mark, and its count where that fits. */
+export function legend(placed: Placed): { count: boolean; size: number } {
+	const full = lettering(placed, `${placed.mark} ${placed.block.size}`.length);
+	if (full >= SMALLEST) return { count: true, size: full };
+	return { count: false, size: lettering(placed, placed.mark.length) };
+}

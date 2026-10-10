@@ -297,11 +297,16 @@ svg {
 	stroke-width: 2px;
 }
 .surface text {
-	fill: #111;
+	fill: var(--ink);
+	text-anchor: middle;
+	dominant-baseline: central;
 }
-.surface .mark,
+.surface .mark {
+	font-weight: 700;
+}
 .surface .count {
-	font-size: 2px;
+	fill: var(--dim);
+	font-weight: 400;
 }
 .surface .reading {
 	font-family: var(--font-mono);
@@ -324,6 +329,7 @@ svg {
 .surface .halo {
 	stroke-dasharray: 4 3;
 }
+.surface text,
 .surface .trace,
 .surface .ghost,
 .surface .halo {

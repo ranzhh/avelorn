@@ -6,6 +6,7 @@
 		base,
 		bearing,
 		bounds,
+		legend,
 		reformed,
 		separation,
 		snap,
@@ -291,6 +292,7 @@
 		{@const print = block.block.footprint}
 		{#if print}
 			{@const size = span(print)}
+			{@const label = legend(block)}
 			{@const box = bounds(block)}
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<g
@@ -316,15 +318,12 @@
 						x2={block.x + size.width / 2}
 						y2={block.y - size.depth / 2}
 					/>
-					{#if size.depth > 3}
-						<text class="mark" x={block.x} y={block.y - 0.1}>{block.mark}</text>
-						<text class="count" x={block.x} y={block.y + 1.7}>{block.block.size}</text>
-					{:else}
-						<text class="mark" x={block.x} y={block.y + 0.7}>
-							{block.mark}<tspan class="count"> {block.block.size}</tspan>
-						</text>
-					{/if}
 				</g>
+				<text class="mark" x={block.x} y={block.y} font-size={label.size}>
+					{block.mark}{#if label.count}<tspan class="count" dx={label.size * 0.3}
+							>{block.block.size}</tspan
+						>{/if}
+				</text>
 
 				{#if block.id === picked && !flight}
 					<!-- svelte-ignore a11y_no_static_element_interactions -->

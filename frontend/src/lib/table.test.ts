@@ -8,6 +8,7 @@ import {
 	bounds,
 	corners,
 	identifier,
+	legend,
 	reformed,
 	room,
 	separation,
@@ -255,5 +256,26 @@ describe('reformed', () => {
 	it('will not go wider than the block has models', () => {
 		expect(reformed(print, 20, 40)).toBe(20);
 		expect(reformed(print, 6, 40)).toBe(6);
+	});
+});
+
+const LINE: MusteredUnit = {
+	...BLOCK,
+	size: 5,
+	footprint: { files: 5, ranks: 1, width_mm: 125, depth_mm: 25 }
+};
+const SHALLOW = 25 / 25.4;
+
+describe('legend', () => {
+	it('fits the mark and the count inside a single rank', () => {
+		const { count, size } = legend(placed(36, 24, 0, LINE));
+		expect(count).toBe(true);
+		expect(size).toBeLessThan(SHALLOW);
+	});
+
+	it('keeps the label upright inside a rank turned on its side by dropping the count', () => {
+		const { count, size } = legend(placed(36, 24, 90, LINE));
+		expect(count).toBe(false);
+		expect(size).toBeLessThan(SHALLOW);
 	});
 });
