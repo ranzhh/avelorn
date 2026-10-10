@@ -52,7 +52,7 @@ def test_unchanged_text_preserves_without_warning(tmp_path: Path) -> None:
     """Same printed text: effects carry over silently."""
     existing = REPO.rules["armour-bane"]
     path = _existing(tmp_path, rule_to_yaml(existing))
-    fresh = existing.model_copy(update={"effects": []})
+    fresh = existing.model_copy(update={"effects": ()})
     merged, warnings = with_hand_authored(fresh, path)
     assert merged.effects == existing.effects
     assert warnings == []
@@ -125,7 +125,7 @@ def test_rule_notes_survive_a_reimport(tmp_path: Path) -> None:
     assert held.notes  # the premise: the real file has them
     path = tmp_path / "stubborn.yaml"
     path.write_text(rule_to_yaml(held))
-    scraped = held.model_copy(update={"notes": None, "effects": []})
+    scraped = held.model_copy(update={"notes": None, "effects": ()})
 
     merged, _ = with_hand_authored(scraped, path)
     assert merged.notes == held.notes
@@ -138,10 +138,14 @@ def test_modifier_effect_prints_the_rulebook_key() -> None:
     assert "set_" not in rendered
 
 
-def test_addresses_survive_a_reimport(tmp_path: Path) -> None:
-    """The graph's form of each effect carries over onto the freshly scraped rule."""
-    existing = REPO.rules["armour-bane"]
-    assert existing.graph is not None
-    path = _existing(tmp_path, rule_to_yaml(existing))
-    merged, _ = with_hand_authored(_REIMPORTED, path)
-    assert merged.graph == existing.graph
+@pytest.mark.parametrize("slug", ["stubborn", "elven-reflexes"])
+def test_rule_level_keys_survive_a_reimport(tmp_path: Path, slug: str) -> None:
+    """Whether a player may decline the rule, where it stops, and what it needs carry over."""
+    held = REPO.rules[slug]
+    assert held.may or held.not_on
+    path = tmp_path / f"{slug}.yaml"
+    path.write_text(rule_to_yaml(held))
+    scraped = held.model_copy(update={"may": False, "not_on": (), "needs": ()})
+
+    merged, _ = with_hand_authored(scraped, path)
+    assert (merged.may, merged.not_on, merged.needs) == (held.may, held.not_on, held.needs)

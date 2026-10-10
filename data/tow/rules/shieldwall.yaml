@@ -17,9 +17,6 @@ effects:
     substitute: {fall-back-in-good-order: gives-ground}
     at: {step: loser-falls-back-in-good-order, by: this-model}
     limit: {per: game, times: 1}
-    legacy:
-      when: {combat: {was_charged: true}, worn: {name: Shield}}
-      replaces: {break: {fall-back-in-good-order: gives-ground}}
 notes: >-
   The round reports the lane in which it is taken. Each round starts with no use recorded, so the
   once-per-game limit is not carried from one round to the next. The Close Order requirement is a

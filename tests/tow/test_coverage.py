@@ -13,7 +13,6 @@ from avelorn.core.registry import Registry
 from avelorn.tow.coverage import Entry, Site, coverage
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.schema.ledger import GapKind
-from avelorn.tow.schema.rule import Clause, RuleGraph
 from avelorn.tow.schema.unit import Characteristic
 
 REPO = TOWRepository()
@@ -67,13 +66,12 @@ def test_an_effect_waits_for_the_step_that_triggers_it() -> None:
 def test_an_effect_waits_for_a_step_it_reads_as_a_fact() -> None:
     """Furious Charge rewritten to read the Pursuit Move waits for a program that registers it."""
     printed = REPO.rules["furious-charge"]
-    assert printed.graph is not None
-    charging = printed.graph.effects[0]
+    charging = printed.effects[0]
     assert charging.when is not None
     pursuing = charging.when.facts[0].model_copy(update={"fact": "the-pursuit-move"})
     when = charging.when.model_copy(update={"facts": (pursuing,)})
-    rewritten = printed.with_graph(
-        RuleGraph(clauses=(Clause(effect=charging.model_copy(update={"when": when})),))
+    rewritten = printed.model_copy(
+        update={"effects": (charging.model_copy(update={"when": when}),)}
     )
     data = copy.copy(REPO)
     data.rules = Registry({**REPO.rules, rewritten.id: rewritten}.values(), kind="rule")
@@ -95,10 +93,9 @@ def test_an_effect_its_step_cannot_run_is_held() -> None:
     That step runs no set, and the Elven Spearmen alone carry the rule there.
     """
     printed = REPO.rules["martial-prowess"]
-    assert printed.graph is not None
-    striking = printed.graph.effects[0]
+    striking = printed.effects[0]
     fixed = striking.model_copy(update={"add": None, "set_": {Characteristic.WEAPON_SKILL: 5}})
-    rewritten = printed.with_graph(RuleGraph(clauses=(Clause(effect=fixed),)))
+    rewritten = printed.model_copy(update={"effects": (fixed,)})
     data = copy.copy(REPO)
     data.rules = Registry({**REPO.rules, rewritten.id: rewritten}.values(), kind="rule")
     data.units = Registry([REPO.units["elven-spearmen"]], kind="unit")

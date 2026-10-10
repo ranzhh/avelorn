@@ -134,9 +134,8 @@ def test_the_coverage_report_names_each_gap_where_it_occurs_and_why(client: Test
 def test_a_rule_is_served_whole(client: TestClient) -> None:
     """The detail route is the schema type, effects and notes included."""
     body = client.get("/rules/stubborn").json()
-    # Served with its nulls, as every response model is; the CLI drops them for
-    # readability, which is rendering rather than a difference in what is carried.
-    assert body["effects"] == [{"when": None, "forces": {"break": "fall-back-in-good-order"}}]
+    assert [effect["force"] for effect in body["effects"]] == [["fall-back-in-good-order"]] * 2
+    assert body["may"]
     assert body["notes"]
 
 

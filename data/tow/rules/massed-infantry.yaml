@@ -15,5 +15,3 @@ effects:
         - {fact: unit-strength, of: this-model, more-than: {fact: unit-strength, of: the-enemy}}
     add: {combat-result: 1}
     at: {step: calculate-combat-result, by: this-model}
-    legacy:
-      when: {combat: {outnumbers: true}}

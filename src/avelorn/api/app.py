@@ -31,7 +31,7 @@ from avelorn.tow.muster import Complement
 from avelorn.tow.programs import VOLLEY, load_program
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
-from avelorn.tow.schema.stage import Side
+from avelorn.tow.schema.side import Side
 from avelorn.tow.schema.weapon import Weapon
 from avelorn.tow.views import (
     FightReport,

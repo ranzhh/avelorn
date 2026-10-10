@@ -11,7 +11,5 @@ needs: [formations]
 effects:
   - grants: skirmish-formation
     to: this-model
-    legacy:
-      grants: enemy-fire-skirmishers
 notes: the volley and the round report the lane in which the formation is
   adopted.

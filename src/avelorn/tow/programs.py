@@ -50,7 +50,7 @@ from avelorn.tow.schema.program import (
     StepEntry,
 )
 from avelorn.tow.schema.rule import Rule
-from avelorn.tow.schema.stage import Side
+from avelorn.tow.schema.side import Side
 from avelorn.tow.schema.unit import Characteristic
 from avelorn.tow.steps import (
     AUTOMATIC_HITS,

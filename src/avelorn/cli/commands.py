@@ -328,14 +328,19 @@ def show_rule(data: TOWRepository, slug: str) -> list[str]:
         lines.extend(["", *(f"  {line}" for line in _wrapped(rule.flavour))])
     for paragraph in rule.paragraphs:
         lines.extend(["", *_wrapped(paragraph)])
-    effects = () if rule.graph is None else rule.graph.effects
-    if effects:
+    if rule.effects:
         dumped = yaml.safe_dump(
-            [_effect_as_printed(effect, data) for effect in effects], sort_keys=False
+            [_effect_as_printed(effect, data) for effect in rule.effects], sort_keys=False
         )
         lines.extend(["", "Effects:", *(f"  {line}" for line in dumped.rstrip().splitlines())])
     else:
         lines.extend(["", "Effects: none -- the engine holds this text and does not apply it"])
+    if rule.may:
+        lines.extend(["", "The player may decline it."])
+    if rule.not_on:
+        lines.extend(["", f"Not on the {', '.join(rule.not_on)} row."])
+    if rule.needs:
+        lines.extend(["", f"Needs what the engine lacks: {', '.join(rule.needs)}."])
     if rule.notes:
         lines.extend(["", "Not covered:", *(f"  {line}" for line in _wrapped(rule.notes))])
     return lines

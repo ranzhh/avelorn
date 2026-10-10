@@ -24,8 +24,7 @@ from avelorn.tow.programs import (
 )
 from avelorn.tow.schema.effect import Effect, Role
 from avelorn.tow.schema.quantity import Quantity
-from avelorn.tow.schema.rule import Clause, RuleGraph
-from avelorn.tow.schema.stage import Side
+from avelorn.tow.schema.side import Side
 from avelorn.tow.schema.unit import Characteristic
 from avelorn.tow.steps import (
     NO_ROLL,
@@ -346,12 +345,8 @@ def _granting(*grants: tuple[str, dict[str, object]]) -> Loaded:
     rules = dict(REPO.rules)
     for rule, grant in grants:
         printed = rules[rule]
-        effects = () if printed.graph is None else printed.graph.effects
-        clauses = (
-            *(Clause(effect=effect) for effect in effects),
-            Clause(effect=Effect.model_validate(grant)),
-        )
-        rules[rule] = printed.with_graph(RuleGraph(clauses=clauses))
+        granted = (*printed.effects, Effect.model_validate(grant))
+        rules[rule] = printed.model_copy(update={"effects": granted})
     return load_program(ROUND, rules)
 
 
@@ -805,13 +800,9 @@ def test_a_strength_change_of_the_model_struck_is_held_at_the_blow() -> None:
     the Merwyrm's four Attacks before it leave one of a rank of five standing.
     """
     printed = REPO.rules["enfeebling-cold"]
-    assert printed.graph is not None
-    (effect,) = printed.graph.effects
+    (effect,) = printed.effects
     own = effect.model_copy(update={"of": Role.THIS_MODEL})
-    rules = {
-        **REPO.rules,
-        "enfeebling-cold": printed.with_graph(RuleGraph(clauses=(Clause(effect=own),))),
-    }
+    rules = {**REPO.rules, "enfeebling-cold": printed.model_copy(update={"effects": (own,)})}
     lions = _fielded("white-lions-of-chrace", "Chracian Great Blade", 5, frontage=5)
     merwyrm = _fielded("merwyrm", "Lashing Talons", 1)
 
@@ -822,7 +813,11 @@ def test_a_strength_change_of_the_model_struck_is_held_at_the_blow() -> None:
 
 
 WITHOUT_MASSED_INFANTRY = load_program(
-    ROUND, {**REPO.rules, "massed-infantry": REPO.rules["massed-infantry"].with_graph(None)}
+    ROUND,
+    {
+        **REPO.rules,
+        "massed-infantry": REPO.rules["massed-infantry"].model_copy(update={"effects": ()}),
+    },
 )
 
 

@@ -19,11 +19,4 @@ effects:
         troop_type: [Regular Infantry, Heavy Infantry, Light Cavalry, Heavy Cavalry, War Beast]
     deny: true
     at: {step: make-armour-saves, by: the-enemy, in: combat}
-    legacy:
-      when:
-        combat: true
-        natural: {face: 6, roll: roll-to-wound}
-        foe:
-          troop_type: [Regular Infantry, Heavy Infantry, Light Cavalry, Heavy Cavalry, War Beast]
-      denies: [make-armour-saves]
 notes: Regeneration saves do not exist to deny.

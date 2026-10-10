@@ -115,6 +115,9 @@ def test_show_rule_covers_every_field_the_detail_endpoint_serves() -> None:
         "category": (rule.category or "") in printed,
         "flavour": rule.flavour is None or rule.flavour.split()[0] in printed,
         "paragraphs": all(p.split()[0] in printed for p in rule.paragraphs),
+        "may": "The player may decline it." in printed,
+        "not_on": not rule.not_on and "Not on the" not in printed,
+        "needs": f"Needs what the engine lacks: {', '.join(rule.needs)}." in printed,
         "effects": "fall-back-in-good-order" in printed,
         "notes": "Not covered:" in printed,
     }

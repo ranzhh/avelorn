@@ -13,6 +13,5 @@ needs: [formations]
 effects:
   - grants: enemy-fire-skirmishers
     to: this-model
-    legacy: {}
 notes: only the formation's Enemy Fire rule is modelled; the loose group's
   movement, its lack of ranks and files, and its use of terrain are not.

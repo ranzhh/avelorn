@@ -110,16 +110,13 @@ def _addressed(rules: Mapping[str, Rule], state: Iterable[StateFact]) -> None:
     types |= {str(fact): FactType.INT for fact in (*DerivedFact, *Characteristic)}
     known = {*types, *Step}
     for rule in rules.values():
-        if rule.effects and rule.graph is None:
-            raise ValueError(f"rule {rule.id}: its effects state no addresses")
-        for effect in () if rule.graph is None else rule.graph.effects:
+        for effect in rule.effects:
             if unknown := sorted(effect.facts - known):
                 raise ValueError(f"rule {rule.id}: no fact is named {', '.join(unknown)}")
             if missing := sorted(effect.rules - set(rules)):
                 raise ValueError(f"rule {rule.id}: no rule entry {', '.join(missing)}")
             _typed(rule.id, effect, types)
-    graphs = {slug: rule.graph.effects for slug, rule in rules.items() if rule.graph is not None}
-    if found := conflicts(graphs):
+    if found := conflicts({slug: rule.effects for slug, rule in rules.items()}):
         raise ValueError("; ".join(found))
 
 
@@ -224,7 +221,7 @@ class TOWRepository:
         for weapon in weapons.values():
             references = [ref for profile in weapon.profiles for ref in profile.special_rules]
             _checked(f"weapon {weapon.id}", references, self.rules)
-        named = [(slug, e.weapons) for slug, rule in self.rules.items() for e in _effects(rule)]
+        named = [(slug, e.weapons) for slug, rule in self.rules.items() for e in rule.effects]
         _named("weapon", named, weapons)
         return weapons
 
@@ -232,9 +229,9 @@ class TOWRepository:
     def armoury(self) -> Registry[Armour]:
         """Armour items."""
         armoury = Registry(load_yaml_dir(self._data_dir / "tow/armour", Armour), kind="armour")
-        named = [(slug, e.armour) for slug, rule in self.rules.items() for e in _effects(rule)]
+        named = [(slug, e.armour) for slug, rule in self.rules.items() for e in rule.effects]
         _named("armour", named, armoury)
-        held = [(slug, e.held) for slug, rule in self.rules.items() for e in _effects(rule)]
+        held = [(slug, e.held) for slug, rule in self.rules.items() for e in rule.effects]
         _named("weapon or armour", held, {*self.weapons, *armoury})
         return armoury
 
@@ -244,14 +241,14 @@ class TOWRepository:
 
         A magic item lives under its army
         (``tow/armies/<army>/magic-items/``) but resolves through this one
-        registry — an item's rule text compiles exactly like a special
+        registry -- an item's effects attach exactly like a special
         rule's until magic items earn a model of their own, and printed
         names are unique across both. :func:`rule_paths` states the homes.
         """
         entries = (load_yaml(path, Rule) for path in rule_paths(self._data_dir))
         rules = Registry(entries, kind="rule")
         for rule in rules.values():
-            grants = [e.grants for e in _effects(rule) if e.grants is not None]
+            grants = [e.grants for e in rule.effects if e.grants is not None]
             _checked(f"rule {rule.id}", grants, rules)
         state = load_yaml(self._data_dir / "tow/state.yaml", StateFile)
         _addressed(rules, state.facts)
@@ -270,10 +267,6 @@ class TOWRepository:
     def ledger(self) -> Ledger:
         """The gaps between the corpus and the engine, each acknowledged with a reason."""
         return load_yaml(self._data_dir / "tow/unmodelled.yaml", Ledger)
-
-
-def _effects(rule: Rule) -> tuple[Effect, ...]:
-    return () if rule.graph is None else rule.graph.effects
 
 
 _default_repository: "TOWRepository | None" = None

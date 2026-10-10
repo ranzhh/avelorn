@@ -10,8 +10,5 @@ needs: [own-unit-strength]
 effects:
   - add: {to-hit: -1}
     at: {step: roll-to-hit, by: the-enemy, in: shooting}
-    legacy:
-      enemy: true
-      when: {target_of: {kind: shooting}}
 notes: the Unit Strength 1 restriction is not expressed, so a skirmishing unit
   of light cavalry gives enemies the -1 To Hit too.

@@ -12,5 +12,3 @@ effects:
   - when: {attack: {flaming: true}}
     set: {ward-save: 5}
     at: {step: ward-saves, by: this-model}
-    legacy:
-      when: {target_of: {flaming: true}}

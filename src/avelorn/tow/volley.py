@@ -10,7 +10,7 @@ from avelorn.tow.contingent import Contingent
 from avelorn.tow.fielding import Fielding
 from avelorn.tow.kernels import Standings
 from avelorn.tow.programs import Evaluated, Loaded
-from avelorn.tow.schema.stage import Side
+from avelorn.tow.schema.side import Side
 from avelorn.tow.steps import NO_ROLL, Retreat
 
 

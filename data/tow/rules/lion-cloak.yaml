@@ -13,5 +13,3 @@ effects:
   - when: {attack: {magical: false}}
     add: {armour-value: {amount: 1, maximum: 2}}
     at: {step: make-armour-saves, by: this-model, in: shooting}
-    legacy:
-      when: {target_of: {kind: shooting, magical: false}}

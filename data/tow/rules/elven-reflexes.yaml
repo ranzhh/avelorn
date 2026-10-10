@@ -14,5 +14,3 @@ effects:
     add: {I: {amount: 1, maximum: 10}}
     of: this-model
     at: {step: who-strikes-first, by: this-model}
-    legacy:
-      when: {combat: {first_round: true}}

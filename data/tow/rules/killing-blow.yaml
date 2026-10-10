@@ -31,13 +31,6 @@ effects:
           - War Beast
     deny: true
     at: {step: make-armour-saves, by: the-enemy, in: combat}
-    legacy:
-      when:
-        combat: true
-        natural: {face: 6, roll: roll-to-wound}
-        foe: *infantry-or-cavalry
-      denies: [make-armour-saves]
-      slays: true
   - when:
       step: roll-to-wound
       by: this-model

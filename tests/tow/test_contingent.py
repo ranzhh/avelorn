@@ -16,7 +16,6 @@ from avelorn.tow.contingent import (
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.muster import Complement
 from avelorn.tow.schema.reference import RuleRef
-from avelorn.tow.schema.rule import ModifierEffect
 from avelorn.tow.schema.unit import TroopType, Unit
 
 REPO = TOWRepository()
@@ -291,13 +290,11 @@ def test_field_refuses_a_reference_to_no_rule(spearmen_unit: Unit) -> None:
         Contingent.field(doctored, 10, data=REPO)
 
 
-def test_field_substitutes_rule_parameters_as_printed(spearmen_unit: Unit) -> None:
-    """A parameterised unit rule arrives as the rule printed on the unit.
+def test_field_names_a_parameterised_rule_as_printed(spearmen_unit: Unit) -> None:
+    """A parameterised unit rule arrives named as printed on the unit.
 
     No unit in data/ prints one yet, so a doctored datasheet exercises
-    the path: "Armour Bane (2)" resolves to the (X) entry with the 2
-    substituted into its effects, symmetric with the weapons and armour
-    beside it.
+    the path: "Armour Bane (2)" resolves to the (X) entry, named with its 2.
     """
     doctored = spearmen_unit.model_copy(
         update={"special_rules": [RuleRef(rule="armour-bane", X=2)]}
@@ -307,11 +304,7 @@ def test_field_substitutes_rule_parameters_as_printed(spearmen_unit: Unit) -> No
         data=REPO,
     )
     assert contingent.loadout is not None
-    # Regular Infantry also confers Press of Battle; pick out the unit's own rule.
-    rule = next(r for r in contingent.loadout.rules if r.name == "Armour Bane (2)")
-    effect = rule.effects[0]
-    assert isinstance(effect, ModifierEffect)
-    assert effect.add == {"armour-piercing": 2}
+    assert [rule.name for rule in contingent.loadout.own] == ["Armour Bane (2)"]
 
 
 def test_loadout_answers_the_weapon_choice_by_printed_name(spearmen_unit: Unit) -> None:

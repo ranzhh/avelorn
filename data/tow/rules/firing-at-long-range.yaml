@@ -10,5 +10,3 @@ effects:
   - when: {step: check-range, by: this-model, is: long}
     add: {to-hit: -1}
     at: {step: roll-to-hit, by: this-model, in: shooting}
-    legacy:
-      when: {shooting: {at_long_range: true}}

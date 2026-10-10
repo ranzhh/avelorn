@@ -18,8 +18,6 @@ needs: [parts, psychology-tests, march-tests]
 effects:
   - reroll: failed
     at: {step: make-panic-tests, by: this-model}
-    legacy:
-      reroll: make-panic-tests
   - reroll: failed
     at: {step: rally-fleeing-units, by: this-model}
   - reroll: failed

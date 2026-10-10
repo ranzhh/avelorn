@@ -17,7 +17,3 @@ paragraphs:
 effects:
   - reroll: successful
     at: {step: make-armour-saves, by: the-enemy, in: combat}
-    legacy:
-      reroll: make-armour-saves
-      of: successful
-      enemy: true

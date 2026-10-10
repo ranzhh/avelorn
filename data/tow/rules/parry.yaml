@@ -12,5 +12,3 @@ effects:
       holds: [hand-weapon, shield]
     add: {armour-value: {amount: 1, maximum: 3}}
     at: {step: make-armour-saves, by: this-model, in: combat}
-    legacy:
-      when: {combat: true, wielding: {name: Hand Weapon}, worn: {name: Shield}}

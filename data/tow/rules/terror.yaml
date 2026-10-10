@@ -19,9 +19,6 @@ effects:
     add: {Ld: -1}
     of: the-enemy
     at: {step: break-test, by: the-enemy}
-    legacy:
-      enemy: true
-      when: {combat: true}
   - grants: fear
     to: this-model
 notes: only the Break-test Leadership malus is modelled — the Leadership test
