@@ -9,8 +9,12 @@ export const METRICS: Metrics = { node: { width: 168, height: 72 }, gap: 64 };
 export const LEAST: Metrics = { node: { width: 88, height: 72 }, gap: 32 };
 export const FRAME = { pad: 12, header: 24 } as const;
 export const MARGIN = 12;
+/** The space between two cards stacked in one column. */
+export const STACK = 20;
 /** A caption's monospace glyph and padding as the canvas draws them, and its clearance. */
 export const CAPTION = { glyph: 6.75, pad: 3.2, clear: 8 } as const;
+/** The space between the lanes that carry a reading past columns, and their clearance from the cards. */
+export const LANE = { step: 6, clear: 16 } as const;
 
 export interface Point {
 	x: number;
@@ -48,17 +52,29 @@ export interface PlacedBlock {
 
 export type EdgeKind = 'input' | 'times' | 'output';
 
+/** How an edge passing columns runs: across the gaps beside its ends, and along a lane below the cards. */
+export interface Lane {
+	index: number;
+	out: number;
+	back: number;
+}
+
 export interface PlacedEdge {
 	kind: EdgeKind;
 	from: string;
 	to: string | null;
 	readings: Reading[];
+	reach: number;
+	lane: Lane | null;
 	start: Point;
+	via: Point[];
 	end: Point;
 }
 
 export interface PlacedCaption {
+	from: string;
 	text: string;
+	dx: number;
 	at: Point;
 }
 
@@ -75,7 +91,21 @@ export interface Layout {
 
 export type Moves = Record<string, Point>;
 
-type Item = { kind: 'step'; node: Node } | { kind: 'block'; block: Block; items: Item[] };
+type Item = { kind: 'step'; node: Node } | Group;
+type Group = { kind: 'block'; block: Block; items: Item[] };
+
+interface Span {
+	cols: number;
+	rows: number;
+}
+
+/** Where an item sits on the grid, and the open frames it sits in. */
+interface Cell extends Span {
+	item: Item;
+	col: number;
+	row: number;
+	within: Cell[];
+}
 
 function enclosing(path: string, blocks: Block[]): Block | undefined {
 	return blocks
@@ -101,8 +131,72 @@ function tree(program: Program, parent: Block | undefined): Item[] {
 		.sort((a, b) => order.get(firstStep(a))! - order.get(firstStep(b))!);
 }
 
-function depth(items: Item[]): number {
-	return Math.max(0, ...items.map((item) => (item.kind === 'block' ? 1 + depth(item.items) : 0)));
+function pathOf(item: Item): string {
+	return item.kind === 'step' ? item.node.path : item.block.path;
+}
+
+function total(values: number[]): number {
+	return values.reduce((sum, value) => sum + value, 0);
+}
+
+/** Whether neighbours run side by side: one step made for each side, or one group per part. */
+function alongside(a: Item, b: Item, sides: string[]): boolean {
+	const sideless = (item: Item) =>
+		pathOf(item)
+			.split('/')
+			.map((part) => (sides.includes(part) ? '' : part))
+			.join('/');
+	const counter = (item: Item) =>
+		item.kind === 'block' && isRepeat(item.block) ? item.block.times : null;
+	return sideless(a) === sideless(b) || (counter(a) !== null && counter(a) === counter(b));
+}
+
+/** The items in runs that share a column, each run in side order. */
+function stages(items: Item[], sides: string[]): Item[][] {
+	const runs: Item[][] = [];
+	for (const item of items) {
+		const run = runs[runs.length - 1];
+		if (run && alongside(run[0], item, sides)) run.push(item);
+		else runs.push([item]);
+	}
+	const sideOf = (item: Item) => sides.findIndex((side) => pathOf(item).split('/').includes(side));
+	return runs.map((run) => run.sort((a, b) => sideOf(a) - sideOf(b)));
+}
+
+/**
+ * Every item on a grid of columns and rows.
+ *
+ * Items that run side by side stack down one column, and each run after them
+ * takes the next column. A run shorter than its frame is centred in it; a run
+ * holding a frame keeps to whole rows.
+ */
+function grid(items: Item[], open: (item: Item) => item is Group, sides: string[]) {
+	const cells: Cell[] = [];
+	const span = (list: Item[]): Span => {
+		const runs = stages(list, sides).map((run) => run.map(size));
+		return {
+			cols: total(runs.map((sizes) => Math.max(...sizes.map((each) => each.cols)))),
+			rows: Math.max(...runs.map((sizes) => total(sizes.map((each) => each.rows))))
+		};
+	};
+	const size = (item: Item): Span => (open(item) ? span(item.items) : { cols: 1, rows: 1 });
+	const put = (list: Item[], col: number, row: number, rows: number, within: Cell[]) => {
+		for (const run of stages(list, sides)) {
+			const sizes = run.map(size);
+			const spare = (rows - total(sizes.map((each) => each.rows))) / 2;
+			let at = row + (run.some(open) ? Math.floor(spare) : spare);
+			run.forEach((item, index) => {
+				const cell = { item, col, row: at, ...sizes[index], within };
+				cells.push(cell);
+				if (open(item)) put(item.items, col, at, cell.rows, [...within, cell]);
+				at += cell.rows;
+			});
+			col += Math.max(...sizes.map((each) => each.cols));
+		}
+	};
+	const whole = span(items);
+	put(items, 0, 0, whole.rows, []);
+	return { cells, ...whole };
 }
 
 function isRepeat(block: Block): block is Repeat {
@@ -153,12 +247,23 @@ function stepPaths(item: Item): string[] {
 	return item.kind === 'step' ? [item.node.path] : item.items.flatMap(stepPaths);
 }
 
+function pathsIn(item: Item): string[] {
+	return item.kind === 'step'
+		? [item.node.path]
+		: [item.block.path, ...item.items.flatMap(pathsIn)];
+}
+
 function right(box: Box): Point {
 	return { x: box.x + box.width, y: box.y + box.height / 2 };
 }
 
 function left(box: Box): Point {
 	return { x: box.x, y: box.y + box.height / 2 };
+}
+
+/** Where an edge enters an open frame: level with the cards below its header. */
+function entry(box: Box): Point {
+	return { x: box.x, y: box.y + (box.height + FRAME.header) / 2 };
 }
 
 function boxesOf(steps: PlacedStep[], blocks: PlacedBlock[]): Map<string, Box> {
@@ -206,11 +311,14 @@ export function framed(steps: PlacedStep[], blocks: PlacedBlock[]): PlacedBlock[
 
 function extent(steps: PlacedStep[], blocks: PlacedBlock[], edges: PlacedEdge[], gap: number) {
 	const boxes = [...steps, ...blocks].map((placed) => placed.box);
+	const points = edges.flatMap((edge) => [edge.end, ...edge.via]);
 	return {
 		width:
-			Math.max(...boxes.map((box) => box.x + box.width + gap), ...edges.map((edge) => edge.end.x)) +
+			Math.max(...boxes.map((box) => box.x + box.width + gap), ...points.map((point) => point.x)) +
 			MARGIN,
-		height: Math.max(...boxes.map((box) => box.y + box.height)) + MARGIN
+		height:
+			Math.max(...boxes.map((box) => box.y + box.height), ...points.map((point) => point.y)) +
+			MARGIN
 	};
 }
 
@@ -244,24 +352,40 @@ function captioned(edges: PlacedEdge[], blocks: PlacedBlock[]): Map<string, stri
 	return texts;
 }
 
+function entering(blocks: PlacedBlock[], boxes: Map<string, Box>): (path: string) => Point {
+	const frames = new Set(blocks.filter((block) => !block.collapsed).map((block) => block.path));
+	return (path) => (frames.has(path) ? entry : left)(boxes.get(path)!);
+}
+
+/** The corners of an edge on a lane: down the gap after its source, under the cards, up the gap before its reader. */
+function bends(start: Point, end: Point, { index, out, back }: Lane, floor: number): Point[] {
+	const y = floor + index * LANE.step;
+	return [
+		{ x: start.x + out, y: start.y },
+		{ x: start.x + out, y },
+		{ x: end.x - back, y },
+		{ x: end.x - back, y: end.y }
+	];
+}
+
 function wire(
 	edges: PlacedEdge[],
+	captions: PlacedCaption[],
 	steps: PlacedStep[],
-	blocks: PlacedBlock[],
-	gap: number
+	blocks: PlacedBlock[]
 ): { edges: PlacedEdge[]; captions: PlacedCaption[] } {
 	const boxes = boxesOf(steps, blocks);
-	const texts = captioned(edges, blocks);
+	const into = entering(blocks, boxes);
+	const floor = Math.max(...[...boxes.values()].map((box) => box.y + box.height)) + LANE.clear;
 	return {
 		edges: edges.map((edge) => {
 			const start = right(boxes.get(edge.from)!);
-			const after = room(texts.get(edge.from) ?? '', gap);
-			const end = edge.to ? left(boxes.get(edge.to)!) : { x: start.x + after, y: start.y };
-			return { ...edge, start, end };
+			const end = edge.to ? into(edge.to) : { x: start.x + edge.reach, y: start.y };
+			return { ...edge, start, via: edge.lane ? bends(start, end, edge.lane, floor) : [], end };
 		}),
-		captions: [...texts].map(([from, text]) => {
-			const start = right(boxes.get(from)!);
-			return { text, at: { x: start.x + room(text, gap) / 2, y: start.y } };
+		captions: captions.map((each) => {
+			const start = right(boxes.get(each.from)!);
+			return { ...each, at: { x: start.x + each.dx, y: start.y } };
 		})
 	};
 }
@@ -272,119 +396,213 @@ export function grants(program: Program, granter: Rule): Rule[] {
 	return program.rules.filter((rule) => rule.sources.some((source) => source.via === granter.id));
 }
 
+interface Link {
+	kind: EdgeKind;
+	from: string;
+	to: string;
+	readings: Reading[];
+}
+
+/**
+ * The lane each source's edges past a column share, and the order lanes cross each gap in.
+ *
+ * A lane runs from the gap after its source to the gap before its furthest
+ * reader, and lanes that never meet share a depth. In a gap, the lanes leaving
+ * cross nearest their sources, so none runs through another rising.
+ */
+function lanes(links: Link[], columnOf: Map<string, number>) {
+	const spans = new Map<string, { first: number; last: number }>();
+	const bands = new Map<number, string[]>();
+	const cross = (col: number, from: string) => {
+		const band = bands.get(col) ?? [];
+		if (!band.includes(from)) bands.set(col, [...band, from]);
+	};
+	for (const { from, to } of links) {
+		const last = columnOf.get(to)! - 1;
+		spans.set(from, {
+			first: columnOf.get(from)!,
+			last: Math.max(last, spans.get(from)?.last ?? last)
+		});
+	}
+	for (const [from, { first }] of spans) cross(first, from);
+	for (const { from, to } of links) cross(columnOf.get(to)! - 1, from);
+	const depths = new Map<string, number>();
+	const ends: number[] = [];
+	for (const [from, { first, last }] of [...spans].sort((a, b) => a[1].first - b[1].first)) {
+		const free = ends.findIndex((end) => end < first);
+		const depth = free < 0 ? ends.length : free;
+		ends[depth] = last;
+		depths.set(from, depth);
+	}
+	return { depths, bands };
+}
+
+/**
+ * Where each column and row of the grid starts, and where a lane crosses the gap after a column.
+ *
+ * The gap after a column holds its widest caption, then the lanes crossing it,
+ * and the frames closing around it and opening around the next.
+ */
+function measure(
+	cards: Cell[],
+	cols: number,
+	rows: number,
+	{ node, gap }: Metrics,
+	bands: Map<number, string[]>
+) {
+	const framing = (axis: 'col' | 'row', index: number, closing: boolean) => {
+		const edge = (frame: Cell) =>
+			closing ? frame[axis] + (axis === 'col' ? frame.cols : frame.rows) - 1 : frame[axis];
+		return Math.max(
+			0,
+			...cards
+				.filter((card) => card[axis] === index)
+				.map((card) => card.within.filter((frame) => edge(frame) === index).length)
+		);
+	};
+	const text = (item: Item) => (item.kind === 'step' ? caption(item.node.edge.readings) : '');
+	const rooms = Array.from({ length: cols }, (_, col) =>
+		Math.max(
+			gap,
+			...cards.filter((card) => card.col === col).map((card) => room(text(card.item), gap))
+		)
+	);
+	const crossing = (col: number) => bands.get(col) ?? [];
+	const band = (col: number) =>
+		crossing(col).length ? LANE.step * crossing(col).length + LANE.clear : 0;
+	const lefts: number[] = [];
+	for (let col = 0, x = MARGIN + FRAME.pad * framing('col', 0, false); col < cols; col++) {
+		lefts.push(x);
+		const pads = framing('col', col, true) + framing('col', col + 1, false);
+		x += node.width + FRAME.pad * pads + rooms[col] + band(col);
+	}
+	const tops: number[] = [];
+	for (
+		let row = 0, y = MARGIN + (FRAME.header + FRAME.pad) * framing('row', 0, false);
+		row <= rows;
+		row++
+	) {
+		tops.push(y);
+		y +=
+			node.height +
+			FRAME.pad * framing('row', row, true) +
+			STACK +
+			(FRAME.header + FRAME.pad) * framing('row', row + 1, false);
+	}
+	const top = (row: number) => {
+		const whole = Math.floor(row);
+		return tops[whole] + (row - whole) * (tops[whole + 1] - tops[whole]);
+	};
+	const centre = (col: number) => FRAME.pad * framing('col', col, true) + rooms[col] / 2;
+	const slot = (col: number, from: string) =>
+		FRAME.pad * framing('col', col, true) +
+		rooms[col] +
+		LANE.step * (crossing(col).indexOf(from) + 0.5);
+	return { lefts, top, centre, slot };
+}
+
 export function layout(program: Program, collapsed: string[], metrics = METRICS): Layout {
 	const { node, gap } = metrics;
-	const items = tree(program, undefined);
-	const levels = depth(items);
-	const rowTop = MARGIN + levels * (FRAME.header + FRAME.pad);
+	const open = (item: Item): item is Group =>
+		item.kind === 'block' && !collapsed.includes(item.block.path);
+	const { cells, cols, rows } = grid(tree(program, undefined), open, program.sides);
+	const columnOf = new Map(cells.map((cell) => [pathOf(cell.item), cell.col]));
+	const standsFor = new Map<string, string>();
+	for (const cell of cells) {
+		const held = open(cell.item) ? [cell.item.block.path] : pathsIn(cell.item);
+		for (const each of held) standsFor.set(each, pathOf(cell.item));
+	}
+
+	const links: Link[] = [];
+	const seen = new Set<string>();
+	const link = (kind: EdgeKind, from: string, to: string, readings: Reading[]) => {
+		if (from === to || seen.has(`${from}>${to}`)) return;
+		seen.add(`${from}>${to}`);
+		links.push({ kind, from, to, readings });
+	};
+	for (const step of program.nodes) {
+		for (const input of step.inputs) {
+			const source = program.nodes.find((each) => each.path === input)!;
+			link('input', standsFor.get(input)!, standsFor.get(step.path)!, source.edge.readings);
+		}
+	}
+	for (const group of program.blocks.filter(isRepeat)) {
+		const to = standsFor.get(group.path)!;
+		link('times', standsFor.get(group.times)!, to, multiplierOf(group, program));
+	}
+	const span = (each: Link) => columnOf.get(each.to)! - columnOf.get(each.from)!;
+	const forward = links.filter((each) => span(each) > 0);
+	const { depths, bands } = lanes(
+		forward.filter((each) => span(each) > 1),
+		columnOf
+	);
+	const { lefts, top, centre, slot } = measure(
+		cells.filter((cell) => !open(cell.item)),
+		cols,
+		rows,
+		metrics,
+		bands
+	);
 
 	const steps: PlacedStep[] = [];
 	const placed: PlacedBlock[] = [];
-	const standsFor = new Map<string, string>();
-
-	function place(list: Item[], x: number): { end: number; after: number } {
-		let end = x;
-		let after = 0;
-		for (const item of list) {
-			const at = end + after;
-			if (item.kind === 'step') {
-				const box = { x: at, y: rowTop, width: node.width, height: node.height };
-				steps.push({ path: item.node.path, node: item.node, box });
-				standsFor.set(item.node.path, item.node.path);
-				end = at + node.width;
-				after = room(caption(item.node.edge.readings), gap);
-				continue;
-			}
-			const multiplier = multiplierOf(item.block, program);
-			const held = stepPaths(item);
-			if (collapsed.includes(item.block.path)) {
-				const box = { x: at, y: rowTop, width: node.width, height: node.height };
-				placed.push({
-					path: item.block.path,
-					block: item.block,
-					box,
-					collapsed: true,
-					multiplier,
-					summary: summaryOf(held, program),
-					steps: held
-				});
-				for (const path of held) standsFor.set(path, item.block.path);
-				end = at + node.width;
-				after = gap;
-				continue;
-			}
-			const pad = FRAME.pad * (1 + depth(item.items));
-			const inner = place(item.items, at + pad);
-			end = inner.end + pad;
-			after = Math.max(gap, inner.after - pad);
-			placed.push({
-				path: item.block.path,
-				block: item.block,
-				box: { x: at, y: rowTop, width: end - at, height: node.height },
-				collapsed: false,
-				multiplier,
-				summary: summaryOf(held, program),
-				steps: held
-			});
+	for (const cell of cells) {
+		const box = { x: lefts[cell.col], y: top(cell.row), width: node.width, height: node.height };
+		const path = pathOf(cell.item);
+		if (cell.item.kind === 'step') {
+			steps.push({ path, node: cell.item.node, box });
+			continue;
 		}
-		return { end, after };
-	}
-
-	place(items, MARGIN);
-	const blocks = framed(steps, placed);
-	const boxes = boxesOf(steps, blocks);
-
-	const edges: PlacedEdge[] = [];
-	const seen = new Set<string>();
-	const consumed = new Set<string>();
-
-	for (const step of program.nodes) {
-		for (const input of step.inputs) {
-			consumed.add(input);
-			const from = standsFor.get(input)!;
-			const to = standsFor.get(step.path)!;
-			if (from === to || seen.has(`${from}>${to}`)) continue;
-			seen.add(`${from}>${to}`);
-			const source = program.nodes.find((each) => each.path === input)!;
-			edges.push({
-				kind: 'input',
-				from,
-				to,
-				readings: source.edge.readings,
-				start: NOWHERE,
-				end: NOWHERE
-			});
-		}
-	}
-
-	for (const group of program.blocks.filter(isRepeat)) {
-		consumed.add(group.times);
-		const from = standsFor.get(group.times)!;
-		const to = standsFor.get(group.path) ?? group.path;
-		if (from === to || !boxes.has(to)) continue;
-		edges.push({
-			kind: 'times',
-			from,
-			to,
-			readings: multiplierOf(group, program),
-			start: NOWHERE,
-			end: NOWHERE
+		const held = stepPaths(cell.item);
+		placed.push({
+			path,
+			block: cell.item.block,
+			box,
+			collapsed: !open(cell.item),
+			multiplier: multiplierOf(cell.item.block, program),
+			summary: summaryOf(held, program),
+			steps: held
 		});
 	}
 
-	for (const step of program.nodes) {
-		if (consumed.has(step.path)) continue;
+	const blocks = framed(steps, placed);
+	const into = entering(blocks, boxesOf(steps, blocks));
+	const edges: PlacedEdge[] = forward.map((each) => {
+		const [from, to] = [columnOf.get(each.from)!, columnOf.get(each.to)!];
+		const rise = lefts[to - 1] + node.width + slot(to - 1, each.from);
+		const lane =
+			to - from > 1
+				? {
+						index: depths.get(each.from)!,
+						out: slot(from, each.from),
+						back: into(each.to).x - rise
+					}
+				: null;
+		return { ...each, reach: 0, lane, start: NOWHERE, via: [], end: NOWHERE };
+	});
+	const sending = new Set(links.map((each) => each.from));
+	for (const step of steps) {
+		if (sending.has(step.path) || !caption(step.node.edge.readings)) continue;
 		edges.push({
 			kind: 'output',
-			from: standsFor.get(step.path)!,
+			from: step.path,
 			to: null,
-			readings: step.edge.readings,
+			readings: step.node.edge.readings,
+			reach: centre(columnOf.get(step.path)!),
+			lane: null,
 			start: NOWHERE,
+			via: [],
 			end: NOWHERE
 		});
 	}
+	const captions = [...captioned(edges, blocks)].map(([from, text]) => ({
+		from,
+		text,
+		dx: centre(columnOf.get(from)!),
+		at: NOWHERE
+	}));
 
-	const wired = wire(edges, steps, blocks, gap);
+	const wired = wire(edges, captions, steps, blocks);
 	return {
 		metrics,
 		...extent(steps, blocks, wired.edges, gap),
@@ -475,7 +693,7 @@ export function moved(drawn: Layout, moves: Moves): Layout {
 	const by = nudge(dragged, reframed);
 	const steps = dragged.map((step) => ({ ...step, box: shifted(step.box, by) }));
 	const blocks = reframed.map((block) => ({ ...block, box: shifted(block.box, by) }));
-	const wired = wire(drawn.edges, steps, blocks, drawn.metrics.gap);
+	const wired = wire(drawn.edges, drawn.captions, steps, blocks);
 	return {
 		...drawn,
 		...extent(steps, blocks, wired.edges, drawn.metrics.gap),

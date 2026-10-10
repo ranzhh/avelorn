@@ -150,13 +150,10 @@
 						/>
 					{/each}
 					{#each drawn.edges as edge}
-						<line
+						<polyline
 							class="edge {edge.kind}"
-							x1={edge.start.x}
-							y1={edge.start.y}
-							x2={edge.end.x}
-							y2={edge.end.y}
-							marker-end="url(#edge-arrow)"
+							points={[edge.start, ...edge.via, edge.end].map(({ x, y }) => `${x},${y}`).join(' ')}
+							marker-end={edge.to ? 'url(#edge-arrow)' : undefined}
 						/>
 					{/each}
 				</svg>
@@ -285,6 +282,12 @@
 			{:else}
 				<span class="meta">none</span>
 			{/if}
+			<h2>reads</h2>
+			{#each [...new Set(node.inputs)] as input (input)}
+				<button class="link path" onclick={() => choose('step', input)}>{within(input)}</button>
+			{:else}
+				<span class="meta">nothing</span>
+			{/each}
 			<h2>rules</h2>
 			{#each landed(program, node.path) as each (each.rule.id)}
 				<div class="ruled">
@@ -440,6 +443,7 @@
 		stroke-dasharray: 4 3;
 	}
 	.edge {
+		fill: none;
 		stroke: #555;
 		stroke-width: 1;
 	}
@@ -530,10 +534,13 @@
 		align-items: baseline;
 		gap: 0.4rem;
 	}
-	.ruled .link {
+	.explore .link {
 		min-width: 0;
 		padding: 0;
 		text-align: left;
 		overflow-wrap: anywhere;
+	}
+	.explore > .link {
+		display: block;
 	}
 </style>
