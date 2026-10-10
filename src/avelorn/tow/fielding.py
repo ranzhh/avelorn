@@ -328,8 +328,8 @@ class Fielding:
     ) -> "Fielding":
         """Field a contingent as its rank and file, with a champion part for each champion bought.
 
-        ``options`` are the options the contingent was mustered with. A champion
-        stands in the front rank, so its part is placed first
+        ``options`` are the ids of the options the contingent was mustered with.
+        A champion stands in the front rank, so its part is placed first
         (command-groups/position-within-the-unit). Every part carries the unit's
         equipment and rules. The armour value folds from the armour worn. A ward
         comes only from rules, so a part fielded from the corpus has none. A part
@@ -364,15 +364,15 @@ class Fielding:
             carried += [pair for pair in wielded.sources() if pair[1].profile == shot]
         if combat:
             carried += [pair for each in weapons for pair in _fought(each)]
-        offered = {option.name: option for option in unit.options}
-        unknown = [name for name in options if name not in offered]
+        offered = {option.id: option for option in unit.options}
+        unknown = [chosen for chosen in options if chosen not in offered]
         if unknown:
             raise ValueError(f"{unit.id} offers no option {', '.join(unknown)}")
         rows = {row.name: row for row in unit.profiles}
         champions = [
             rows[profile_name]
-            for name in options
-            if (profile_name := offered[name].profile) is not None
+            for chosen in options
+            if (profile_name := offered[chosen].profile) is not None
         ]
         armour = defender_armour(contingent.loadout.armour)
         counts = [(row, 1) for row in champions]

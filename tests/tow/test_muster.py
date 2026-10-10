@@ -3,7 +3,9 @@
 import pytest
 from pydantic import ValidationError
 
+from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
+from avelorn.tow.fielding import Fielding
 from avelorn.tow.muster import Complement
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.unit import OptionKind, OptionScope, Unit, UnitOption
@@ -26,14 +28,14 @@ def test_complement_points_sum_models_and_flat_options(spearmen_unit: Unit) -> N
     # 10 Spearmen, plus a Standard Bearer (5) and Musician (5). The per-model
     # cost is read from the datasheet: what is under test is the arithmetic,
     # not what the army list charges this week.
-    mustered = Complement(unit=spearmen_unit, size=10, options=["Standard Bearer", "Musician"])
+    mustered = Complement(unit=spearmen_unit, size=10, options=["standard-bearer", "musician"])
     assert mustered.points == 10 * spearmen_unit.points + 5 + 5
 
 
 def test_complement_per_model_option_costs_once_per_model(spearmen_unit: Unit) -> None:
     """A per-model option is charged for every model, and folds its rules."""
     # Veteran: +1 pt/model, adds "Veteran", removes "Valour of Ages".
-    mustered = Complement(unit=spearmen_unit, size=10, options=["Veteran"])
+    mustered = Complement(unit=spearmen_unit, size=10, options=["veteran"])
     assert mustered.points == 10 * spearmen_unit.points + 10 * 1
     assert RuleRef(rule="veteran") in mustered.special_rules
     assert RuleRef(rule="valour-of-ages") not in mustered.special_rules
@@ -41,10 +43,28 @@ def test_complement_per_model_option_costs_once_per_model(spearmen_unit: Unit) -
 
 def test_complement_option_adds_rule(spearmen_unit: Unit) -> None:
     """An option's adds_rules appears in the effective special rules."""
-    mustered = Complement(unit=spearmen_unit, size=10, options=["Shieldwall"])
+    mustered = Complement(unit=spearmen_unit, size=10, options=["shieldwall"])
     assert RuleRef(rule="shieldwall") in mustered.special_rules
     # Untaken options leave the datasheet loadout untouched.
     assert Complement(unit=spearmen_unit, size=10).special_rules == spearmen_unit.special_rules
+
+
+@pytest.mark.parametrize(
+    ("option", "points", "parts", "rule"),
+    [
+        ("veteran", 85, ["veteran", "dwarf-warrior"], False),
+        ("veteran-rule", 90, ["dwarf-warrior"], True),
+    ],
+)
+def test_dwarf_warriors_buy_one_of_the_two_veterans(
+    option: str, points: int, parts: list[str], rule: bool
+) -> None:
+    """The Veteran champion and the Veteran special rule print one name; each id buys one."""
+    mustered = Complement(unit=REPO.units["dwarf-warriors"], size=10, options=[option])
+    assert mustered.points == points
+    assert (RuleRef(rule="veteran") in mustered.special_rules) is rule
+    fielded = Fielding.of(Contingent.field(mustered, data=REPO), options=(option,))
+    assert [part.id for part in fielded.parts] == parts
 
 
 def test_complement_size_below_minimum_rejected(spearmen_unit: Unit) -> None:
@@ -56,13 +76,13 @@ def test_complement_size_below_minimum_rejected(spearmen_unit: Unit) -> None:
 def test_complement_unknown_option_rejected(spearmen_unit: Unit) -> None:
     """An option the datasheet does not offer fails validation."""
     with pytest.raises(ValidationError, match="not offered"):
-        Complement(unit=spearmen_unit, size=10, options=["Warpstone Amulet"])
+        Complement(unit=spearmen_unit, size=10, options=["warpstone-amulet"])
 
 
 def test_complement_duplicate_option_rejected(spearmen_unit: Unit) -> None:
     """The same option chosen twice fails validation."""
     with pytest.raises(ValidationError, match="duplicates"):
-        Complement(unit=spearmen_unit, size=10, options=["Musician", "Musician"])
+        Complement(unit=spearmen_unit, size=10, options=["musician", "musician"])
 
 
 def test_complement_rejects_an_option_that_removes_an_absent_rule(spearmen_unit: Unit) -> None:
@@ -75,7 +95,7 @@ def test_complement_rejects_an_option_that_removes_an_absent_rule(spearmen_unit:
         removes_rules=[RuleRef(rule="absent-rule")],
     )
     unit = spearmen_unit.model_copy(update={"options": [*spearmen_unit.options, stale]})
-    mustered = Complement(unit=unit, size=10, options=["Stale swap"])
+    mustered = Complement(unit=unit, size=10, options=["stale-swap"])
 
     with pytest.raises(ValueError, match="Stale swap removes absent absent-rule"):
         _ = mustered.special_rules
@@ -105,12 +125,12 @@ def spearmen_with_a_sentinel_option(spearmen_unit: Unit) -> Unit:
 def test_complement_model_scoped_option_rejected(spearmen_with_a_sentinel_option: Unit) -> None:
     """An option bought for one model has no part to fold into: refuse it."""
     with pytest.raises(ValidationError, match="attach to a single model"):
-        Complement(unit=spearmen_with_a_sentinel_option, size=10, options=["Ithilmar Blade"])
+        Complement(unit=spearmen_with_a_sentinel_option, size=10, options=["ithilmar-blade"])
 
 
 def test_complement_unit_wide_options_unaffected(spearmen_with_a_sentinel_option: Unit) -> None:
     """The refusal is about the one option, not the datasheet that offers it."""
-    mustered = Complement(unit=spearmen_with_a_sentinel_option, size=10, options=["Shieldwall"])
+    mustered = Complement(unit=spearmen_with_a_sentinel_option, size=10, options=["shieldwall"])
     assert RuleRef(rule="shieldwall") in mustered.special_rules
     assert "Ithilmar Blade" not in mustered.equipment
 
@@ -123,9 +143,7 @@ def test_the_reavers_replace_option_swaps_the_spear_for_the_shortbow() -> None:
     mustered loadout carries the real entry — the regression that needed a
     hand-edit before the importer learned to spell references as filed.
     """
-    from avelorn.tow.contingent import Contingent
-
-    reavers = Contingent.deploy("ellyrian-reavers", 5, ["Shortbows"], data=REPO)
+    reavers = Contingent.deploy("ellyrian-reavers", 5, ["shortbows"], data=REPO)
     carried = [weapon.name for weapon in reavers.loadout.weapons]
     assert "Shortbow" in carried
     assert "Cavalry Spear" not in carried

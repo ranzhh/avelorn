@@ -357,10 +357,10 @@ def test_the_volley_counts_its_shots(
 )
 def test_a_champion_shoots_from_the_front_rank(moved: bool, standing: int, parts: str) -> None:
     """Ten Archers five wide with a Sentinel: the Sentinel fires from the front rank."""
-    archers = Contingent.deploy("elven-archers", 10, ("Sentinel",), data=REPO, frontage=5)
+    archers = Contingent.deploy("elven-archers", 10, ("sentinel",), data=REPO, frontage=5)
     spearmen = Contingent.deploy("elven-spearmen", 20, data=REPO, frontage=5)
     volley = _volley(
-        Fielding.of(archers, "Longbow", ("Sentinel",)),
+        Fielding.of(archers, "Longbow", ("sentinel",)),
         Fielding.of(spearmen),
         shooters=standing,
         models=20,
@@ -373,10 +373,10 @@ def test_a_champion_shoots_from_the_front_rank(moved: bool, standing: int, parts
 
 def test_a_champion_shoots_at_its_own_ballistic_skill() -> None:
     """The Sentinel hits on 2+ at its own BS 5, where the Archers at BS 4 need 3+."""
-    archers = Contingent.deploy("elven-archers", 10, ("Sentinel",), data=REPO, frontage=5)
+    archers = Contingent.deploy("elven-archers", 10, ("sentinel",), data=REPO, frontage=5)
     spearmen = Contingent.deploy("elven-spearmen", 20, data=REPO, frontage=5)
     volley = _volley(
-        Fielding.of(archers, "Longbow", ("Sentinel",)),
+        Fielding.of(archers, "Longbow", ("sentinel",)),
         Fielding.of(spearmen),
         shooters=10,
         models=20,

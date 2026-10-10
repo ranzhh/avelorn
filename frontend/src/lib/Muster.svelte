@@ -2,7 +2,7 @@
 	import { untrack } from 'svelte';
 
 	import { entry } from '$lib/corpus';
-	import { cost, repeated } from '$lib/options';
+	import { cost } from '$lib/options';
 	import { sizeRange } from '$lib/listing';
 	import type { UnitOption } from '$lib/api/client';
 
@@ -71,10 +71,9 @@
 		<div class="options">
 			{#each offered as option}
 				<label class="check">
-					<input type="checkbox" value={option.name} bind:group={chosen} onchange={edited} />
+					<input type="checkbox" value={option.id} bind:group={chosen} onchange={edited} />
 					<span>{option.name}</span>
 					{#if cost(option)}<span class="pill">{cost(option)}</span>{/if}
-					{#if repeated(offered, option.name)}<span class="warn">×2</span>{/if}
 				</label>
 			{/each}
 		</div>

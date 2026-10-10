@@ -521,7 +521,7 @@ class Contingent:
         Args:
             slug: The datasheet's slug, resolved against ``data.units``.
             models: The fielded size; must fall in the datasheet's allowed range.
-            options: Option names to buy, each offered by the datasheet.
+            options: Ids of the options to buy, each offered by the datasheet.
             data: The corpus to resolve against; the process-wide default when omitted.
             frontage: The formation width in files; the troop type's default
                 width when omitted.

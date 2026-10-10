@@ -29,10 +29,10 @@ export default defineConfig(
 	{
 		files: ['**/*.svelte'],
 		rules: {
-			// A key is a promise the value is unique, and nothing in the corpus makes a
-			// rule or option name so -- Dwarf Warriors prints two options named Veteran,
-			// and a keyed each block throws on the duplicate. These lists are rendered
-			// once and never reordered, so a key would buy nothing and cost that.
+			// A key is a promise the value is unique, and nothing promises that of a
+			// printed rule name, an equipment string or a paragraph. These lists are
+			// rendered once and never reordered, so a key would buy nothing and throw
+			// on the first duplicate.
 			'svelte/require-each-key': 'off'
 		}
 	},

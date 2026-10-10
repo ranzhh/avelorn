@@ -310,7 +310,7 @@ def fieldings(data: TOWRepository) -> Iterator[tuple[tuple[str, ...], Contingent
         The options bought, and the fielded unit.
     """
     for slug, unit in sorted(data.units.items()):
-        bought = [()] + [(option.name,) for option in unit.options if option.applies_to is None]
+        bought = [()] + [(option.id,) for option in unit.options if option.applies_to is None]
         for options in bought:
             yield options, Contingent.deploy(slug, unit.unit_size.min, options, data=data)
 

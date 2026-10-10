@@ -309,6 +309,15 @@ class Footprint(BaseModel):
         )
 
 
+class ChosenOption(BaseModel):
+    """An option a block bought: the id a request picks it by, and its printed name."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    name: str
+
+
 class MusteredUnit(BaseModel):
     """A block of an army list: a datasheet sized and equipped, and what it costs.
 
@@ -320,9 +329,10 @@ class MusteredUnit(BaseModel):
     models actually carry rather than what the datasheet offered. ``weapons``
     narrows the equipment to the weapons among it, each saying whether it can
     be used in close combat -- what a caller naming a weapon chooses from.
-    ``footprint`` is the table space the block takes, at the frontage asked for
-    or the datasheet's default, which a caller drawing it needs and cannot
-    derive from a slug.
+    ``options`` are the ones bought, in the datasheet's order. ``footprint`` is
+    the table space the block takes, at the frontage asked for or the
+    datasheet's default, which a caller drawing it needs and cannot derive
+    from a slug.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -330,7 +340,7 @@ class MusteredUnit(BaseModel):
     unit: str
     name: str
     size: int
-    options: list[str]
+    options: list[ChosenOption]
     points: int
     equipment: list[str]
     weapons: list[Wieldable]
@@ -357,7 +367,11 @@ class MusteredUnit(BaseModel):
             unit=complement.unit.id,
             name=complement.unit.name,
             size=complement.size,
-            options=list(complement.options),
+            options=[
+                ChosenOption(id=option.id, name=option.name)
+                for option in complement.unit.options
+                if option.id in complement.options
+            ],
             points=complement.points,
             equipment=complement.equipment,
             footprint=Footprint.of(formed),
