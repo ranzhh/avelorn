@@ -22,6 +22,7 @@ from avelorn.core.graph import (
     Step,
 )
 from avelorn.tow.changes import Folded, Payloads
+from avelorn.tow.contingent import ChargeArc
 from avelorn.tow.fielding import Attacks, Fielding, Held, Initiatives, Part, PerPart, Shots
 from avelorn.tow.kernels import (
     HIGH_BALLISTIC_SKILL,
@@ -790,6 +791,15 @@ def _rank(number: int) -> str:
     return f"rank-{number}"
 
 
+def the_charge_move(inches: int) -> Distribution[int]:
+    """Measure the full inches a side's charge moved this turn, 0 when it made none.
+
+    Returns:
+        The inches.
+    """
+    return Distribution.pure(inches)
+
+
 def who_can_fight(changed: tuple[Hashable, ...]) -> Distribution[frozenset[str]]:
     """Name each rank of the fighting rank: the front rank, and one more for each rank added.
 
@@ -801,19 +811,25 @@ def who_can_fight(changed: tuple[Hashable, ...]) -> Distribution[frozenset[str]]
 
 
 def who_strikes_first(
-    attacker: Fielding, changed: tuple[Hashable, ...]
+    attacker: Fielding, charged: int, arc: ChargeArc, changed: tuple[Hashable, ...]
 ) -> Distribution[Initiatives]:
-    """Read the Initiative each part strikes at, moved by the rules in force.
+    """Read the Initiative each part strikes at, moved by the rules in force and the charge.
 
     A value set replaces the printed one before any amount is added, and the
-    sum stays within the bounds printed.
+    sum stays within the bounds printed. A side that charged this turn adds a
+    point for each full inch it moved, at most the cap of the ``arc`` it
+    charged into, and strikes at 10 at most (the-combat-phase/charging-units).
 
     Returns:
         Each part's Initiative.
     """
     payloads = Payloads.of(changed)
+    bonus = min(charged, arc.initiative_cap)
     moved = (
-        (part.id, _moved(part, Characteristic.INITIATIVE, payloads, Side.ATTACKER))
+        (
+            part.id,
+            min(_moved(part, Characteristic.INITIATIVE, payloads, Side.ATTACKER) + bonus, 10),
+        )
         for part in attacker.parts
     )
     return Distribution.pure(Initiatives(tuple(moved)))
@@ -826,14 +842,16 @@ def how_many_attacks(
     initiatives: Initiatives,
     at_start: Standings,
     standing: Standings,
+    changed: tuple[Hashable, ...],
 ) -> Distribution[Attacks]:
     """Count the attacks of each part that strikes at the slot's Initiative.
 
     The ranks stand as the side stood ``at_start`` of the round, its models
     placed part by part. Each model in a rank Who Can Fight names makes its
-    Attacks. With a supporting attack, each model in the rank behind makes
-    one. A casualty suffered since comes off the fighting rank first, then the
-    supporting rank, and takes its attacks with it (FAQ v1.5.3).
+    Attacks, moved by the rules in force. With a supporting attack, each model
+    in the rank behind makes one. A casualty suffered since comes off the
+    fighting rank first, then the supporting rank, and takes its attacks with
+    it (FAQ v1.5.3).
 
     Returns:
         The attacks of each part.
@@ -847,6 +865,7 @@ def how_many_attacks(
     deep = len(fighting)
     if fighting != {_rank(number) for number in range(1, deep + 1)}:
         raise ValueError(f"{attacker.unit} fights with {_listed(ranks)}, which are not counted")
+    payloads = Payloads.of(changed)
     width = attacker.frontage
     last = deep + int(SUPPORTING_ATTACK in ranks)
     placed = [part for part in attacker.parts for _ in range(at_start.of(part.id).models)]
@@ -858,7 +877,9 @@ def how_many_attacks(
         supporting = max(support.count(part) - max(lost - front.count(part), 0), 0)
         striking = initiatives.of(part.id) == initiative
         made[part.id] = (
-            in_front * _printed(part, Characteristic.ATTACKS) + supporting if striking else 0
+            in_front * _moved(part, Characteristic.ATTACKS, payloads, Side.ATTACKER) + supporting
+            if striking
+            else 0
         )
     return Distribution.pure(Attacks(tuple(made.items())))
 
@@ -926,13 +947,16 @@ def calculate_combat_result(
     standing: Standings,
     enemy_at_start: Standings,
     enemy: Standings,
+    arc: ChargeArc,
     changed: tuple[Hashable, ...],
 ) -> Distribution[int]:
     """Score a side's round: the Wounds it inflicted, its Rank Bonus, and the points rules add.
 
     The Wounds are those the enemy lost since the start of the round
     (the-combat-phase/unsaved-wounds-inflicted); the Rank Bonus is the one the
-    side's standing models claim (the-combat-phase/rank-bonus).
+    side's standing models claim (the-combat-phase/rank-bonus). A side fighting
+    in the enemy's flank or rear claims its points
+    (the-combat-phase/flank-and-rear-attacks).
 
     An enemy part standing more models than at the start of the round fails it.
 
@@ -942,7 +966,8 @@ def calculate_combat_result(
     _since(target, enemy_at_start, enemy)
     inflicted = target.wounds_left(enemy_at_start) - target.wounds_left(enemy)
     added = Payloads.of(changed).added(Quantity.COMBAT_RESULT)
-    return Distribution.pure(inflicted + attacker.rank_bonus(standing) + added)
+    bonus = attacker.rank_bonus(standing) + arc.combat_result_bonus
+    return Distribution.pure(inflicted + bonus + added)
 
 
 def who_is_the_winner(
@@ -1299,6 +1324,15 @@ _SPECS = (
         kernel=fall_back_or_flee,
         readings={"retreat": _offer("fall-back-or-flee")},
     ),
+    Spec(
+        sequence=StepSequence.CHARGE,
+        name="the-charge-move",
+        kind=Kind.CONSEQUENCE,
+        side=Side.ATTACKER,
+        reads=(Fact("charge-move", Side.ATTACKER),),
+        kernel=the_charge_move,
+        readings={"inches": _offer("the-charge-move", _itself, _COUNT)},
+    ),
     Choice(
         sequence=StepSequence.COMBAT,
         name=WEAPON_CHOICE,
@@ -1320,7 +1354,7 @@ _SPECS = (
         name="who-strikes-first",
         kind=Kind.MEASUREMENT,
         side=Side.ATTACKER,
-        reads=(_ATTACKER, CHANGED),
+        reads=(_ATTACKER, Output("the-charge-move"), Fact("enemy-arc", Side.ATTACKER), CHANGED),
         kernel=who_strikes_first,
         runs={
             Operation.SET: frozenset({(Side.ATTACKER, Characteristic.INITIATIVE)}),
@@ -1340,8 +1374,13 @@ _SPECS = (
             Output("who-strikes-first"),
             Fact("standing-at-start-of-round", Side.ATTACKER),
             Fact("standing", Side.ATTACKER),
+            CHANGED,
         ),
         kernel=how_many_attacks,
+        runs={
+            Operation.SET: frozenset({(Side.ATTACKER, Characteristic.ATTACKS)}),
+            Operation.ADD: frozenset({(Side.ATTACKER, Characteristic.ATTACKS)}),
+        },
         readings={
             "attacks": _offer("how-many-attacks", _total, _COUNT),
             "parts": _offer("how-many-attacks", str),
@@ -1421,6 +1460,7 @@ _SPECS = (
             Fact("standing", Side.ATTACKER),
             Fact("standing-at-start-of-round", Side.TARGET),
             _TARGET_STANDING,
+            Fact("enemy-arc", Side.ATTACKER),
             CHANGED,
         ),
         kernel=calculate_combat_result,

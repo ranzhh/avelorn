@@ -319,12 +319,6 @@
 # it needs yet: its landing in one sequence, or the trigger or fact it reads.
 
 - kind: unattached-effect
-  subject: furious-charge/charge/the-charge-move
-  reason: Reads the length of the charge move; no program registers The Charge Move until the charge lands (item 20).
-- kind: unattached-effect
-  subject: impact-hits/charge/the-charge-move
-  reason: Reads the length of the charge move; no program registers The Charge Move until the charge lands (item 20).
-- kind: unattached-effect
   subject: impact-hits/combat/impact-hits
   reason: Fills the Impact Hits slot; no program registers it until the charge lands (item 20).
 - kind: unattached-effect

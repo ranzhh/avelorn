@@ -11,6 +11,14 @@ facts:
     type: int
     per: side
     lasts: turn
+  - fact: charge-move
+    type: int
+    per: side
+    lasts: turn
+  - fact: enemy-arc
+    type: arc
+    per: side
+    lasts: combat
   - fact: charges-received
     type: int
     per: side

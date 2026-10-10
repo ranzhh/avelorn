@@ -8,8 +8,8 @@ import pytest
 
 from avelorn.core.distribution import Probability
 from avelorn.core.graph import Decision
-from avelorn.tow.changes import Uses
-from avelorn.tow.contingent import Contingent
+from avelorn.tow.changes import Added, Uses
+from avelorn.tow.contingent import ChargeArc, Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.fielding import SHIELD, Fielding, Held
 from avelorn.tow.kernels import Standing, Standings
@@ -17,6 +17,7 @@ from avelorn.tow.programs import ROUND, Evaluated, Loaded, load_program
 from avelorn.tow.schema.effect import Effect, Role
 from avelorn.tow.schema.rule import Clause, RuleGraph
 from avelorn.tow.schema.stage import Side
+from avelorn.tow.schema.unit import Characteristic
 from avelorn.tow.steps import (
     NO_ROLL,
     WEAPON_CHOICE,
@@ -24,10 +25,12 @@ from avelorn.tow.steps import (
     Fought,
     loser_falls_back_in_good_order,
     who_is_the_winner,
+    who_strikes_first,
 )
 
 REPO = TOWRepository()
 ROUND_PROGRAM = load_program(ROUND, REPO.rules)
+SCORE = "round/attacker/calculate-combat-result"
 
 
 class _Armed(NamedTuple):
@@ -62,6 +65,8 @@ def _lanes(
     attacker_charges: int = 0,
     wielding: bool = False,
     attacker_at_start: int | None = None,
+    charge_move: int = 0,
+    enemy_arc: ChargeArc = ChargeArc.FRONT,
 ) -> tuple[Evaluated, ...]:
     built = program.built({Side.ATTACKER: attacker.side, Side.TARGET: target.side})
     choices = {Side.ATTACKER: attacker.held, Side.TARGET: target.held}
@@ -78,6 +83,10 @@ def _lanes(
             "target/rounds-fought": 1,
             "attacker/charges-made": attacker_charges,
             "target/charges-made": 0,
+            "attacker/charge-move": charge_move,
+            "target/charge-move": 0,
+            "attacker/enemy-arc": enemy_arc,
+            "target/enemy-arc": ChargeArc.FRONT,
             "attacker/charges-received": 0,
             "target/charges-received": attacker_charges,
             "attacker/break-tests-taken": 0,
@@ -104,6 +113,8 @@ def _fought(
     program: Loaded = ROUND_PROGRAM,
     attacker_charges: int = 0,
     attacker_at_start: int | None = None,
+    charge_move: int = 0,
+    enemy_arc: ChargeArc = ChargeArc.FRONT,
 ) -> Evaluated:
     lanes = _lanes(
         attacker,
@@ -113,6 +124,8 @@ def _fought(
         attacker_charges,
         True,
         attacker_at_start,
+        charge_move,
+        enemy_arc,
     )
     (fought,) = (each for each in lanes if not each.lane.out)
     return fought
@@ -201,7 +214,9 @@ def test_a_list_of_sides_builds_the_entry_once_for_each_in_order() -> None:
     program = ROUND_PROGRAM.built({Side.ATTACKER: spearman, Side.TARGET: spearman}).program
 
     paths = [program.paths[step] for step in program.steps]
-    assert paths[:6] == [
+    assert paths[:8] == [
+        "round/attacker/the-charge-move",
+        "round/target/the-charge-move",
         "round/attacker/choose-combat-and-determine-who-can-fight",
         "round/target/choose-combat-and-determine-who-can-fight",
         "round/attacker/who-can-fight",
@@ -309,6 +324,58 @@ def _strikes_at(fought: Evaluated, side: Side) -> int:
         .read("attacks")
         .prob(lambda attacks: attacks > 0)
     )
+
+
+@pytest.mark.parametrize(
+    ("inches", "arc", "slot"),
+    [
+        pytest.param(2, ChargeArc.FRONT, 6, id="two-inches"),
+        pytest.param(5, ChargeArc.FRONT, 7, id="front-at-most-3"),
+        pytest.param(5, ChargeArc.FLANK, 8, id="flank-at-most-4"),
+        pytest.param(5, ChargeArc.REAR, 8, id="rear-at-most-4"),
+    ],
+)
+def test_a_charge_adds_an_initiative_point_for_each_full_inch_up_to_its_arc_s_cap(
+    inches: int, arc: ChargeArc, slot: int
+) -> None:
+    """An Initiative 4 Spearman that charged strikes at 4 plus its inches, capped by the arc."""
+    spearman = _fielded("elven-spearmen", "Hand Weapon", 1)
+    dwarf = _fielded("dwarf-warriors", "Hand Weapon", 1)
+
+    fought = _fought(spearman, dwarf, attacker_charges=1, charge_move=inches, enemy_arc=arc)
+
+    assert _strikes_at(fought, Side.ATTACKER) == slot
+
+
+def test_a_charge_never_takes_initiative_past_10() -> None:
+    """A Swordmaster at Initiative 6, +1 by a rule, charging 6" into the rear strikes at 10."""
+    swordmaster = _fielded("swordmasters-of-hoeth", "Sword of Hoeth", 1).side
+    quickened = (Added(Characteristic.INITIATIVE, 1, of=Side.ATTACKER),)
+
+    (initiatives,) = who_strikes_first(swordmaster, 6, ChargeArc.REAR, quickened).mass
+
+    assert {initiatives.of(part.id) for part in swordmaster.parts} == {10}
+
+
+@pytest.mark.parametrize(
+    ("arc", "points"),
+    [
+        pytest.param(ChargeArc.FLANK, 1, id="flank"),
+        pytest.param(ChargeArc.REAR, 2, id="rear"),
+    ],
+)
+def test_a_side_in_the_enemy_s_flank_or_rear_claims_its_points(
+    arc: ChargeArc, points: int
+) -> None:
+    """One Spearman a side: in the enemy's flank it scores 1 more, in its rear 2 more."""
+    spearman = _fielded("elven-spearmen", "Hand Weapon", 1)
+
+    front, behind = (
+        set(_fought(spearman, spearman, enemy_arc=each).at(SCORE).read("score").mass)
+        for each in (ChargeArc.FRONT, arc)
+    )
+
+    assert behind == {score + points for score in front}
 
 
 def test_a_rule_also_granted_by_the_unit_is_in_force_whatever_the_weapon() -> None:
