@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+	CAPTION,
 	LEAST,
 	METRICS,
 	caption,
@@ -484,6 +485,56 @@ describe('captions', () => {
 	it('takes the expected value of a numeric distribution and none of a named one', () => {
 		expect(expected(x)).toBe(1);
 		expect(expected(z)).toBeNull();
+	});
+
+	it('captions what leaves a step once, beside it, however far its edges run', () => {
+		const reread = {
+			...program,
+			nodes: program.nodes.map((node) =>
+				node.path === 'p/d' ? { ...node, inputs: [...node.inputs, 'p/a'] } : node
+			)
+		};
+		const drawn = layout(reread, []);
+		const a = drawn.steps.find((step) => step.path === 'p/a')!.box;
+		expect(drawn.edges.filter((edge) => edge.from === 'p/a').map((edge) => edge.to)).toEqual([
+			'p/d',
+			GROUP
+		]);
+		expect(drawn.captions.filter((each) => each.text === 'n 2')).toEqual([
+			{ text: 'n 2', at: { x: a.x + a.width + drawn.metrics.gap / 2, y: a.y + a.height / 2 } }
+		]);
+	});
+
+	it('holds every caption clear of the cards on either side of it, however squeezed', () => {
+		const wordy = {
+			...program,
+			nodes: program.nodes.map((node) =>
+				node.path === 'p/g/b'
+					? {
+							...node,
+							edge: {
+								readings: node.edge.readings.map((each) => ({ ...each, label: 'wounds-lost' }))
+							}
+						}
+					: node
+			)
+		};
+		for (const metrics of [METRICS, LEAST]) {
+			const drawn = layout(wordy, [], metrics);
+			expect(drawn.captions.map((each) => each.text)).toContain('wounds-lost · 1.0');
+			for (const each of drawn.captions) {
+				const half = (each.text.length * CAPTION.glyph) / 2 + CAPTION.pad;
+				for (const { box } of drawn.steps) {
+					expect(each.at.x + half <= box.x || each.at.x - half >= box.x + box.width).toBe(true);
+				}
+			}
+		}
+	});
+
+	it('leaves what leaves a folded group to the summary on its card', () => {
+		expect(collapsed.edges.some((edge) => edge.from === GROUP)).toBe(true);
+		expect(collapsed.captions.map((each) => each.text)).toEqual(['n 2', 'z']);
+		expect(expanded.captions.map((each) => each.text)).toEqual(['x · 1.0', 'y · 1.0', 'n 2', 'z']);
 	});
 
 	it('captions an edge with its first reading, one line', () => {

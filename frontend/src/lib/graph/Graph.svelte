@@ -251,16 +251,8 @@
 					</div>
 				{/each}
 
-				{#each drawn.edges as edge}
-					{#if caption(edge.readings)}
-						<span
-							class="caption"
-							style="left: {(edge.start.x + edge.end.x) / 2}px; top: {(edge.start.y + edge.end.y) /
-								2}px"
-						>
-							{caption(edge.readings)}
-						</span>
-					{/if}
+				{#each drawn.captions as each}
+					<span class="caption" style="left: {each.at.x}px; top: {each.at.y}px">{each.text}</span>
 				{/each}
 
 				{#each drawn.rail as placed (placed.rule.id)}
