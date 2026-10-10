@@ -273,7 +273,11 @@ svg {
 .surface .block {
 	cursor: grab;
 }
-.surface .block rect {
+.surface .footprint {
+	fill: var(--ordinal-1);
+	stroke: #333;
+}
+.surface .edge rect {
 	fill: #fff;
 	stroke: #333;
 }
@@ -281,9 +285,16 @@ svg {
 	stroke: #333;
 	stroke-width: 3px;
 }
-.surface .path {
-	stroke: #333;
-	stroke-width: 1.5px;
+.surface .picked .footprint {
+	stroke: var(--accent);
+}
+.surface .origin {
+	opacity: 0.4;
+}
+.surface .under .footprint {
+	fill: #f3d3cf;
+	stroke: var(--series-2);
+	stroke-width: 2px;
 }
 .surface text {
 	fill: #111;
@@ -297,6 +308,36 @@ svg {
 	paint-order: stroke;
 	stroke: #fff;
 	stroke-width: 3px;
+}
+.surface .path,
+.surface .ghost rect,
+.surface .ghost .front {
+	stroke: var(--series-1);
+}
+.surface .path,
+.surface .ghost rect,
+.surface .halo {
+	stroke-width: 1.5px;
+}
+.surface .trace .path,
+.surface .ghost rect,
+.surface .halo {
+	stroke-dasharray: 4 3;
+}
+.surface .trace,
+.surface .ghost,
+.surface .halo {
+	pointer-events: none;
+}
+.surface .trace {
+	opacity: 0.7;
+}
+.surface .ghost rect {
+	fill: rgb(57 117 184 / 0.15);
+}
+.surface .halo {
+	fill: none;
+	stroke: var(--accent);
 }
 
 .pane {

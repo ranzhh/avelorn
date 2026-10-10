@@ -303,6 +303,7 @@
 			>
 				<g transform="rotate({block.facing} {block.x} {block.y})">
 					<rect
+						class="footprint"
 						x={block.x - size.width / 2}
 						y={block.y - size.depth / 2}
 						width={size.width}
