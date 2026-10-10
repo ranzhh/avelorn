@@ -141,6 +141,9 @@ button,
 .field {
 	justify-content: space-between;
 }
+.field input[type='number'] {
+	width: 5rem;
+}
 .meta,
 .dim,
 .side {
@@ -261,6 +264,9 @@ svg {
 	touch-action: none;
 	user-select: none;
 }
+.surface svg.inbound {
+	outline: 2px dashed var(--accent);
+}
 .surface svg * {
 	vector-effect: non-scaling-stroke;
 }
@@ -367,6 +373,103 @@ svg {
 	fill: var(--accent);
 	fill-opacity: 0.6;
 }
+.menu {
+	position: absolute;
+	z-index: 2;
+	display: grid;
+	gap: var(--space-1);
+	padding: var(--space-2);
+	background: var(--panel);
+	border: 1px solid var(--line);
+	box-shadow: 0 2px 8px rgb(0 0 0 / 0.2);
+	transform: translate(-50%, var(--space-2));
+	white-space: nowrap;
+}
+.menu.above {
+	transform: translate(-50%, calc(-100% - var(--space-2)));
+}
+.menu .head {
+	font: var(--text-xs) / 1.5 var(--font-mono);
+	color: var(--dim);
+}
+.hint {
+	margin-top: var(--space-2);
+	font-size: var(--text-xs);
+}
+.carried {
+	position: absolute;
+	top: -100px;
+	display: grid;
+	place-items: center;
+	background: rgb(57 117 184 / 0.2);
+	border: 1px solid var(--series-1);
+	font-size: var(--text-xs);
+}
+
+.stacked {
+	display: flex;
+	height: 1.25rem;
+	margin: var(--space-2) 0 var(--space-1);
+}
+.stacked .cell {
+	display: grid;
+	place-items: center;
+	min-width: 0;
+	overflow: hidden;
+	font-size: var(--text-xs);
+}
+.stacked + .legend {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0 var(--space-3);
+	margin-bottom: var(--space-3);
+	font-size: var(--text-xs);
+}
+.stacked + .legend i {
+	display: inline-block;
+	width: 0.6rem;
+	height: 0.6rem;
+	margin-right: var(--space-1);
+}
+.plot {
+	position: relative;
+	padding-top: var(--space-2);
+}
+.plot svg {
+	display: block;
+	overflow: visible;
+}
+.plot .tick {
+	font-size: 10px;
+	fill: var(--dim);
+}
+.plot .grid {
+	stroke: #eee;
+}
+.plot .baseline {
+	stroke: var(--line);
+}
+.plot .fill {
+	fill: var(--series-1);
+}
+.plot .fill.lit {
+	fill: var(--accent);
+	opacity: 0.7;
+}
+.plot .mean {
+	stroke: var(--ink);
+	stroke-dasharray: 3 2;
+}
+.plot .tip {
+	position: absolute;
+	transform: translate(-50%, -100%);
+	padding: 0 var(--space-1);
+	background: #fff;
+	border: 1px solid var(--line);
+	font: var(--text-xs) var(--font-mono);
+	white-space: nowrap;
+	pointer-events: none;
+}
 
 .pane {
 	position: fixed;
@@ -378,9 +481,35 @@ svg {
 	border: 1px solid var(--line);
 }
 .pane > header {
+	display: flex;
+	gap: var(--space-2);
+	align-items: center;
 	padding: 0 0 var(--space-2);
 	border-bottom: 1px solid var(--line);
 	cursor: grab;
+}
+.pane > header h3 {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.pane .eyebrow {
+	font-size: var(--text-xs);
+	color: var(--dim);
+}
+.pane .split {
+	display: flex;
+	gap: var(--space-3);
+}
+.pane .split > .body {
+	flex: 1;
+	min-width: 0;
+}
+.pane .split > aside {
+	flex: none;
+	width: calc(var(--aside-w) - var(--space-3));
 }
 
 @media (max-width: 1000px) {

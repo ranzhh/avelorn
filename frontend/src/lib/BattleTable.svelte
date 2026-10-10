@@ -29,10 +29,22 @@
 		ondropunit: (unit: string, size: number, x: number, y: number) => void;
 		/** A block double-clicked: open its size and options. */
 		onedit: (id: number) => void;
+		/** The pair a menu is open on or was last resolved, drawn as an arrow between them. */
+		linked: { mover: number; target: number } | null;
 	}
 
-	let { placed, picked, onpick, onmove, onturn, ondrop, onreform, ondropunit, onedit }: Props =
-		$props();
+	let {
+		placed,
+		picked,
+		onpick,
+		onmove,
+		onturn,
+		ondrop,
+		onreform,
+		ondropunit,
+		onedit,
+		linked
+	}: Props = $props();
 
 	/** A datasheet being dragged in from the panel, over the table. */
 	let inbound = $state(false);
@@ -102,21 +114,40 @@
 	/** A side edge being dragged, and the width it currently reads. */
 	let widening = $state<{ id: number; files: number } | null>(null);
 
-	/** The last drag, kept on the table after the pointer lets go. */
+	/** The last move, kept on the table while the block still stands where it went. */
 	let trace = $state<{
+		id: number;
 		fromX: number;
 		fromY: number;
-		toX: number;
-		toY: number;
+		to: Placed;
 		reading: string;
 	} | null>(null);
 
-	// A block arriving or leaving makes the standing trace a lie about the table.
-	let counted: number | null = null;
-	$effect(() => {
-		const now = placed.length;
-		if (counted !== null && now !== counted) trace = null;
-		counted = now;
+	const standing = (now: Placed, then: Placed) =>
+		now.x === then.x &&
+		now.y === then.y &&
+		now.facing === then.facing &&
+		now.block.footprint?.width_mm === then.block.footprint?.width_mm &&
+		now.block.footprint?.depth_mm === then.block.footprint?.depth_mm;
+
+	const moved = $derived.by(() => {
+		const last = trace;
+		if (!last || flight) return null;
+		const now = placed.find((each) => each.id === last.id);
+		return now && standing(now, last.to) ? last : null;
+	});
+
+	const pairing = $derived.by(() => {
+		const pair = linked;
+		if (!pair || flight) return null;
+		const mover = placed.find((each) => each.id === pair.mover);
+		const target = placed.find((each) => each.id === pair.target);
+		if (!mover || !target) return null;
+		return {
+			mover,
+			target,
+			reading: `${Math.round(separation(mover, target))}in · ${arc(mover, target)}`
+		};
 	});
 
 	const chosen = $derived(placed.find((each) => each.id === picked) ?? null);
@@ -232,18 +263,19 @@
 
 	function release() {
 		if (flight && moving) {
-			const mark = {
-				fromX: moving.x,
-				fromY: moving.y,
-				toX: over ? over.x : flight.x,
-				toY: over ? over.y : flight.y,
-				reading: reading ?? ''
-			};
 			// On another block the drop is an action, so the mover stays where it
 			// stands and the menu measures from there. Anywhere else it is a move.
 			if (over) ondrop(moving.id, over.id);
-			else if (carrying) onmove(moving.id, flight.x, flight.y);
-			if (carrying) trace = mark;
+			else if (carrying) {
+				trace = {
+					id: moving.id,
+					fromX: moving.x,
+					fromY: moving.y,
+					to: { ...moving, x: flight.x, y: flight.y },
+					reading: reading ?? ''
+				};
+				onmove(moving.id, flight.x, flight.y);
+			}
 		}
 		const wide = widening;
 		if (wide) {
@@ -293,6 +325,48 @@
 	{#each rows as inches}
 		<line class="foot" x1="0" y1={inches} x2={TABLE.width} y2={inches} />
 	{/each}
+
+	{#if pairing}
+		<g class="trace">
+			<line
+				class="path"
+				x1={pairing.mover.x}
+				y1={pairing.mover.y}
+				x2={pairing.target.x}
+				y2={pairing.target.y}
+				marker-end="url(#arrow)"
+			/>
+			<text
+				class="reading"
+				x={(pairing.mover.x + pairing.target.x) / 2}
+				y={(pairing.mover.y + pairing.target.y) / 2 - 10 * px}
+				font-size={12 * px}
+			>
+				{pairing.reading}
+			</text>
+		</g>
+	{/if}
+
+	{#if moved}
+		<g class="trace">
+			<line
+				class="path"
+				x1={moved.fromX}
+				y1={moved.fromY}
+				x2={moved.to.x}
+				y2={moved.to.y}
+				marker-end="url(#arrow)"
+			/>
+			<text
+				class="reading"
+				x={(moved.fromX + moved.to.x) / 2}
+				y={(moved.fromY + moved.to.y) / 2 - 10 * px}
+				font-size={12 * px}
+			>
+				{moved.reading}
+			</text>
+		</g>
+	{/if}
 
 	{#if chosen && knob && !flight}
 		{@const print = chosen.block.footprint}
@@ -406,29 +480,6 @@
 				</text>
 			{/if}
 		{/if}
-	{/if}
-
-	{#if trace && !flight}
-		<g class="trace">
-			<line
-				class="path"
-				x1={trace.fromX}
-				y1={trace.fromY}
-				x2={trace.toX}
-				y2={trace.toY}
-				marker-end="url(#arrow)"
-			/>
-			{#if trace.reading}
-				<text
-					class="reading"
-					x={(trace.fromX + trace.toX) / 2}
-					y={(trace.fromY + trace.toY) / 2 - 10 * px}
-					font-size={12 * px}
-				>
-					{trace.reading}
-				</text>
-			{/if}
-		</g>
 	{/if}
 
 	{#if ghost && moving && carrying}

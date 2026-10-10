@@ -8,7 +8,19 @@
 	import { battle } from '$lib/battle.svelte';
 	import { entry } from '$lib/corpus';
 	import { fielded, listing } from '$lib/listing';
-	import { TABLE, arc, identifier, room, separation, span, usable, type Placed } from '$lib/table';
+	import {
+		TABLE,
+		arc,
+		bounds,
+		identifier,
+		inside,
+		refit,
+		room,
+		separation,
+		span,
+		usable,
+		type Placed
+	} from '$lib/table';
 
 	let { data } = $props();
 
@@ -17,6 +29,7 @@
 	let picked = $state<number | null>(null);
 	let refusal = $state('');
 	let resolving = $state('');
+	let menuWidth = $state(0);
 
 	const fight = $derived(battle.resolved?.action === 'fight' ? battle.resolved.report : null);
 	const volley = $derived(battle.resolved?.action === 'volley' ? battle.resolved.report : null);
@@ -32,14 +45,26 @@
 		const mover = battle.placed.find((each) => each.id === open.mover);
 		const target = battle.placed.find((each) => each.id === open.target);
 		if (!mover || !target) return null;
+		const box = bounds(target);
+		const below = box.bottom / TABLE.depth < 0.6;
 		return {
 			mover,
 			target,
 			inches: Math.round(separation(mover, target)),
 			into: arc(mover, target),
-			shoots: usable(mover.block, 'missile').length > 0
+			shoots: usable(mover.block, 'missile').length > 0,
+			below,
+			left: (target.x / TABLE.width) * 100,
+			top: ((below ? box.bottom : box.top) / TABLE.depth) * 100
 		};
 	});
+
+	const linked = $derived(
+		battle.asking ??
+			(battle.resolved
+				? { mover: battle.resolved.between[0], target: battle.resolved.between[1] }
+				: null)
+	);
 
 	// Footprints for the panel's drag image, costed once on hover so dragstart
 	// has one to hand: it is synchronous and cannot wait for a round trip.
@@ -184,8 +209,18 @@
 		const standing = battle.placed.find((each) => each.id === id);
 		if (!standing) return;
 		const costed = await muster(standing.block.unit, size, options);
-		if (!costed) return;
-		battle.amend(id, { block: costed });
+		const now = battle.placed.find((each) => each.id === id);
+		if (!costed || !now) return;
+		const { x, y } = refit(now, costed);
+		battle.amend(id, { block: costed, x, y });
+	}
+
+	/** Turn a block about its centre, nudged back onto the table if a corner swings off it. */
+	function turn(id: number, facing: number) {
+		const standing = battle.placed.find((each) => each.id === id);
+		if (!standing) return;
+		const { x, y } = inside({ ...standing, facing });
+		battle.amend(id, { facing, x, y });
 	}
 
 	/** Re-form a block to a new width, asking the engine for the footprint it takes. */
@@ -207,7 +242,10 @@
 			refusal = typeof refused?.detail === 'string' ? refused.detail : 'could not re-form that';
 			return;
 		}
-		battle.amend(id, { block: costed });
+		const now = battle.placed.find((each) => each.id === id);
+		if (!now) return;
+		const { x, y } = refit(now, costed);
+		battle.amend(id, { block: costed, x, y });
 	}
 
 	/** Open a block's own pane: the datasheet it fields, with its options beside it. */
@@ -269,10 +307,13 @@
 			<BattleTable
 				placed={battle.placed}
 				{picked}
+				{linked}
 				onpick={(id) => (picked = id)}
 				onmove={(id, x, y) => battle.amend(id, { x, y })}
-				onturn={(id, facing) => battle.amend(id, { facing })}
-				ondrop={(mover, target) => (battle.asking = { mover, target })}
+				onturn={turn}
+				ondrop={(mover, target) => {
+					battle.asking = { mover, target };
+				}}
 				onreform={reform}
 				ondropunit={(unit, size, x, y) => deploy(unit, size, { x, y })}
 				onedit={(id) => ((picked = id), sheet(id))}
@@ -280,17 +321,23 @@
 			{#if pair}
 				<div
 					class="menu"
-					style="left: {(pair.target.x / TABLE.width) * 100}%; top: {(pair.target.y / TABLE.depth) *
-						100}%"
+					class:above={!pair.below}
+					bind:offsetWidth={menuWidth}
+					style:left="clamp({menuWidth / 2}px, {pair.left}%, calc(100% - {menuWidth / 2}px))"
+					style:top="{pair.top}%"
 				>
-					<span class="head">{pair.inches}in · {pair.into}</span>
+					<span class="head"
+						>{pair.mover.mark} → {pair.target.mark} · {pair.inches}in · {pair.into}</span
+					>
 					<button class="btn btn-sm btn-primary" onclick={() => meet(true)}>
 						charge {pair.inches}in
 					</button>
 					<button class="btn btn-sm" disabled={!pair.shoots} onclick={loose}>
 						{pair.shoots ? `shoot at ${pair.inches}in` : 'no missile weapon'}
 					</button>
-					<button class="btn btn-sm" onclick={() => meet(false)}>fight, engaged</button>
+					{#if pair.inches === 0}
+						<button class="btn btn-sm" onclick={() => meet(false)}>fight, engaged</button>
+					{/if}
 					<button class="btn btn-ghost btn-sm" onclick={() => (battle.asking = null)}>
 						cancel
 					</button>
@@ -352,14 +399,16 @@
 				{/if}
 				<div class="cluster acts">
 					<button class="btn btn-sm" onclick={() => sheet(block.id)}>datasheet</button>
-					<button class="btn btn-sm" onclick={() => battle.amend(block.id, { facing: 0 })}>
-						face up
-					</button>
+					<button class="btn btn-sm" onclick={() => turn(block.id, 0)}>face up</button>
 					<button class="btn btn-sm" onclick={() => remove(block.id)}>remove</button>
 				</div>
+				<p class="meta hint">drag it onto another block to charge or shoot</p>
 			{:else}
 				<div class="field"><span>blocks</span><span class="num">{battle.placed.length}</span></div>
 				<div class="field"><span>points</span><span class="num">{points}</span></div>
+				<p class="meta hint">
+					click a unit to deploy it, then drag one block onto another to charge or shoot
+				</p>
 			{/if}
 		</Dock>
 
