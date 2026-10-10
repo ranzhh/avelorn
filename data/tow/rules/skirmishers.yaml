@@ -6,8 +6,6 @@ category: Special Rules
 flavour: Units of skirmishers move quickly and freely, harassing the enemy's flanks.
 paragraphs:
   - A unit consisting of models with this special rule may adopt a Skirmish formation.
-# The graph grants the formation, which the player may decline. The legacy
-# engine takes the formation as adopted and grants its -1 To Hit directly.
 may: true
 needs: [formations]
 effects:
@@ -15,5 +13,5 @@ effects:
     to: this-model
     legacy:
       grants: enemy-fire-skirmishers
-notes: the legacy engine takes a unit with this rule to be in Skirmish
-  formation at all times.
+notes: the volley and the round report the lane in which the formation is
+  adopted.

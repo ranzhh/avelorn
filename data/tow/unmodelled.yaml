@@ -371,7 +371,7 @@
   reason: Flank and rear facings are not modelled, so Martial Prowess's supporting attacks to the flank and rear have no combat to land in.
 - kind: missing-mechanic
   subject: formations
-  reason: Formations are not modelled; Shieldwall's Close Order and Press of Battle's Combat Order are not read, a Skirmish formation keeps its Rank Bonus, and the legacy engine takes every unit with Skirmishers to be in the formation.
+  reason: Formations are not modelled; Shieldwall's Close Order and Press of Battle's Combat Order are not read, and a Skirmish formation keeps its Rank Bonus.
   issue: 28
 - kind: missing-mechanic
   subject: magic-items

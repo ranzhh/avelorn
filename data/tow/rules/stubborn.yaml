@@ -10,10 +10,8 @@ paragraphs:
     when joined by a character that is. A Stubborn character cannot use this special rule whilst part
     of a unit that is not Stubborn.
 notes: >-
-  The legacy engine models it for a single round with no player choice: the "first Break test of the
-  battle" limit is not tracked (no multi-turn state) and the rule is always applied, never declined.
-  A would-be Give Ground is folded into the automatic Fall Back in Good Order; and the "more than
-  twice the Unit Strength" clause is moot, since the auto-rout it overrides is not modelled.
+  The round reports the lane in which it is taken. Each round starts with no Break test taken, so
+  the "first time" limit is not carried from one round to the next.
 may: true
 needs: [characters]
 effects:
