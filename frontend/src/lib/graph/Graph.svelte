@@ -51,13 +51,13 @@
 		consequence: 'C',
 		group: 'G'
 	};
-	const STRIP = 236;
+	const STRIP = 212;
 
 	const printed = (slug: string) => slug.replaceAll('-', ' ');
 	const last = (path: string) => path.slice(path.lastIndexOf('/') + 1);
 	const within = (path: string) => path.slice(path.indexOf('/') + 1);
 	const named = (id: string) => program.rules.find((each) => each.id === id)?.name ?? id;
-	const held = (holder: Holder) => `${holder.part} (${holder.side})`;
+	const held = (holder: Holder) => `${printed(holder.part)} (${holder.side})`;
 	const tint = (side: string) => `side-${program.sides.indexOf(side)}`;
 	const is = (kind: Pick['kind'], id: string) => selected?.kind === kind && selected.id === id;
 
@@ -202,9 +202,11 @@
 								<button class="fold" title="collapse" onclick={() => toggle(each.path)}>▼</button>
 							{/if}
 							<span class="mark" title={each.block.kind}>{MARK.group}</span>
-							<h3>{printed(last(each.path))}</h3>
+							<h3 title={printed(last(each.path))}>{printed(last(each.path))}</h3>
 							{#if each.block.kind === 'repeat'}
-								<span class="side">× {caption(each.multiplier)}</span>
+								<span class="side" title={caption(each.multiplier)}
+									>× {caption(each.multiplier)}</span
+								>
 							{/if}
 						</div>
 					{/if}
@@ -229,7 +231,7 @@
 					>
 						<header>
 							<span class="mark" title={node.kind}>{MARK[node.kind]}</span>
-							<h3>{printed(node.step)}</h3>
+							<h3 title={printed(node.step)}>{printed(node.step)}</h3>
 						</header>
 					</div>
 				{/each}
@@ -242,13 +244,11 @@
 
 		<footer class="unmodelled">
 			<span class="eyebrow">not modelled</span>
-			{#if drawn.unmodelled.length}
-				{#each drawn.unmodelled as each, index (each.id)}
-					<span>{index ? '· ' : ''}{each.name} <span class="meta">{held(each.holder)}</span></span>
-				{/each}
+			{#each drawn.unmodelled as each (each.id)}
+				<span class="entry">{each.name} <span class="meta">{held(each.holder)}</span></span>
 			{:else}
 				<span class="meta">none</span>
-			{/if}
+			{/each}
 		</footer>
 	</div>
 
@@ -377,21 +377,31 @@
 	.shell {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) 15rem;
-		min-height: 32rem;
+		grid-template-rows: minmax(0, 1fr);
+		height: calc(100dvh - 6.5rem);
+		min-height: 24rem;
 		border: 1px solid #bbb;
 	}
 	.stage {
 		display: flex;
 		flex-direction: column;
 		min-width: 0;
+		min-height: 0;
 	}
 	.head,
 	.unmodelled {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
-		gap: 1rem;
+		gap: 0.2rem 1rem;
 		padding: 0.6rem;
 		border-bottom: 1px solid #bbb;
+	}
+	.unmodelled {
+		font-size: var(--text-sm);
+	}
+	.entry {
+		white-space: nowrap;
 	}
 	.cluster,
 	.who,
@@ -422,6 +432,7 @@
 	}
 	.scroll {
 		flex: 1;
+		min-height: 0;
 		overflow: auto;
 		padding: 1rem;
 		background: #fafafa;
@@ -471,6 +482,31 @@
 	.card.side-1 {
 		border-left: 3px solid #b84a3d;
 	}
+	.card h3 {
+		min-width: 0;
+		font-size: var(--text-sm);
+		line-height: 1.25;
+	}
+	.card header h3 {
+		display: -webkit-box;
+		overflow: hidden;
+		overflow-wrap: anywhere;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 3;
+		line-clamp: 3;
+	}
+	.frame-head {
+		padding: 0 0.35rem;
+		font-size: var(--text-xs);
+		white-space: nowrap;
+	}
+	.frame-head h3,
+	.frame-head .side {
+		min-width: 0;
+		overflow: hidden;
+		font-size: inherit;
+		text-overflow: ellipsis;
+	}
 	.card.on,
 	.frame.on {
 		outline: 2px solid #111;
@@ -480,12 +516,13 @@
 		transform: translate(-50%, -50%);
 		padding: 0 0.2rem;
 		background: #fff;
+		white-space: nowrap;
 		font:
 			0.7rem ui-monospace,
 			monospace;
 	}
 	.card.group h3 {
-		min-width: 0;
+		display: block;
 		overflow: hidden;
 		white-space: nowrap;
 		text-overflow: ellipsis;
@@ -520,8 +557,18 @@
 		cursor: pointer;
 	}
 	.explore {
+		min-width: 0;
+		overflow: auto;
 		padding: 0.75rem;
 		border-left: 1px solid #bbb;
+		overflow-wrap: break-word;
+	}
+	.explore .field > :last-child {
+		text-align: right;
+	}
+	.explore .path {
+		min-width: 0;
+		overflow-wrap: anywhere;
 	}
 	.explore .line {
 		white-space: normal;
