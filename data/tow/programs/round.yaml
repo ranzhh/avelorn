@@ -10,6 +10,12 @@ inputs:
   - {fact: rounds-fought, of: target}
   - {fact: charges-made, of: attacker}
   - {fact: charges-made, of: target}
+  - {fact: charges-received, of: attacker}
+  - {fact: charges-received, of: target}
+  - {fact: break-tests-taken, of: attacker}
+  - {fact: break-tests-taken, of: target}
+  - {fact: uses-this-game, of: attacker}
+  - {fact: uses-this-game, of: target}
 items:
   - {step: choose-combat-and-determine-who-can-fight, of: [attacker, target]}
   - {step: who-can-fight, of: [attacker, target]}

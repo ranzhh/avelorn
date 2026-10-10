@@ -7,6 +7,7 @@ from enum import StrEnum
 
 from avelorn.core.distribution import Distribution, Probability
 from avelorn.core.registry import Registry
+from avelorn.tow.changes import Uses
 from avelorn.tow.contingent import Charge, ChargeArc, Contingent, Movement
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.fielding import SHIELD, Fielding, Held
@@ -68,7 +69,8 @@ class Side:
     """A datasheet fielded at ``models``; ``charged`` is the inches of a front-arc charge.
 
     In combat it fights with ``weapon``, and with its shield when it wears one
-    unless ``shield`` is False.
+    unless ``shield`` is False. It has used each rule ``used`` names once this
+    game.
     """
 
     unit: str
@@ -82,6 +84,7 @@ class Side:
     weapon_rules: tuple[Ref, ...] = ()
     dropped: frozenset[str] = frozenset()
     shield: bool = True
+    used: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -154,8 +157,8 @@ class Panic:
 class Outcome:
     """What a scenario resolved to.
 
-    ``margin`` is the attacker's lead in combat result, and ``breaks`` each
-    side's Break test as rolled.
+    ``margin`` is the attacker's lead in combat result, ``breaks`` each side's
+    Break test as rolled, and ``results`` what each side then does.
     """
 
     attacks: int | None = None
@@ -165,6 +168,7 @@ class Outcome:
     initiative: Mapping[Role, int] = field(default_factory=dict)
     margin: Mapping[int, Probability] = field(default_factory=dict)
     breaks: Mapping[Role, Break] = field(default_factory=dict)
+    results: Mapping[Role, Break] = field(default_factory=dict)
     panic: Panic | None = None
 
 
@@ -210,7 +214,9 @@ def resolve(scenario: Scenario) -> Outcome:
             if scenario.kind is Kind.FIGHT:
                 return outcome
             return replace(
-                outcome, breaks={role: _broken(fought, side) for role, side in _SIDES.items()}
+                outcome,
+                breaks={role: _broken(fought, side) for role, side in _SIDES.items()},
+                results={role: _settled(fought, side) for role, side in _SIDES.items()},
             )
         case Kind.STAND_AND_SHOOT:
             move = attacker.movement.charge
@@ -272,10 +278,20 @@ def _round(attacker: Contingent, defender: Contingent, scenario: Scenario) -> Ev
                 "target/rounds-fought": rounds_fought,
                 "attacker/charges-made": int(scenario.attacker.charged is not None),
                 "target/charges-made": int(scenario.defender.charged is not None),
+                "attacker/charges-received": int(scenario.defender.charged is not None),
+                "target/charges-received": int(scenario.attacker.charged is not None),
+                "attacker/break-tests-taken": 0,
+                "target/break-tests-taken": 0,
+                "attacker/uses-this-game": _uses(scenario.attacker),
+                "target/uses-this-game": _uses(scenario.defender),
             },
             held,
         )
     )
+
+
+def _uses(side: Side) -> Uses:
+    return Uses(tuple((rule, 1) for rule in side.used))
 
 
 def _held(side: Side, contingent: Contingent) -> Held:
@@ -379,11 +395,18 @@ def _margin(fought: Evaluated) -> dict[int, Probability]:
 
 
 def _broken(fought: Evaluated, side: stage.Side) -> Break:
-    test = fought.at(f"round/{side}/break-test").read("test").mass
+    return _break(fought.at(f"round/{side}/break-test").read("test").mass)
+
+
+def _settled(fought: Evaluated, side: stage.Side) -> Break:
+    return _break(fought.at(f"round/{side}/loser-falls-back-in-good-order").read("result").mass)
+
+
+def _break(outcomes: Mapping[BreakTest, Probability]) -> Break:
     return Break(
-        test.get(BreakTest.GIVES_GROUND, 0),
-        test.get(BreakTest.FALLS_BACK_IN_GOOD_ORDER, 0),
-        test.get(BreakTest.BREAKS, 0),
+        outcomes.get(BreakTest.GIVES_GROUND, 0),
+        outcomes.get(BreakTest.FALLS_BACK_IN_GOOD_ORDER, 0),
+        outcomes.get(BreakTest.BREAKS, 0),
     )
 
 

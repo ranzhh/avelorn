@@ -390,7 +390,7 @@ class Limit(BaseModel):
 
 _ATTRIBUTES = {Operation.SET: "set_"}
 
-_CHOSEN = frozenset({StepKind.ROLL, StepKind.DECISION})
+_CHOSEN = frozenset({StepKind.ROLL, StepKind.DECISION, StepKind.CONSEQUENCE})
 
 _SLOTS = frozenset({Step.IMPACT_HITS, Step.STOMP_ATTACKS})
 
@@ -587,9 +587,7 @@ class Effect(BaseModel):
         if self.deny and step.kind is not StepKind.ROLL:
             raise ValueError(f"deny takes away a roll; {step} is a {step.kind}")
         if (self.force is not None or self.substitute is not None) and step.kind not in _CHOSEN:
-            raise ValueError(
-                f"{self.operation} settles a roll or a decision; {step} is a {step.kind}"
-            )
+            raise ValueError(f"{self.operation} settles an outcome; {step} is a {step.kind}")
         if self.reroll is not None and not step.rolls:
             raise ValueError(f"reroll needs a die; {step} rolls none")
         if (self.hits is not None or self.fill) and step not in _SLOTS:

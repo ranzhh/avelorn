@@ -40,14 +40,16 @@ from avelorn.tow.changes import (
     Operated,
     Shows,
     Sources,
+    Unspent,
 )
-from avelorn.tow.fielding import Fielding, Part
+from avelorn.tow.fielding import SHIELD, Fielding, Part
 from avelorn.tow.schema.effect import (
     Address,
     Effect,
     FactGate,
     FactRef,
     Gates,
+    Limit,
     Operation,
     Role,
     WeaponMatch,
@@ -349,7 +351,7 @@ class _Fielding:
         self, rule: Rule, side: Side, at: Step[Any], effect: Effect
     ) -> Contribution[Any] | None:
         named = effect.allow or effect.forbid
-        if named is None or effect.limit is not None:
+        if named is None:
             return None
         gate = self.gate(rule, side, at, effect)
         if gate is None or any(isinstance(check, Attacks) for check in gate.checks):
@@ -369,7 +371,7 @@ class _Fielding:
         self, rule: Rule, side: Side, at: Decision[Any], effect: Effect
     ) -> Contribution[Any] | None:
         carriers = self.sources(rule.id, side, at).weapons
-        if effect.bar is None or effect.limit is not None or not carriers:
+        if effect.bar is None or not carriers:
             return None
         gate = self.gate(rule, side, at, effect)
         if gate is None or any(isinstance(check, Attacks) for check in gate.checks):
@@ -403,7 +405,7 @@ class _Fielding:
             return None
         runs = spec.runs
         operation = effect.operation
-        if effect.limit is not None or not runs:
+        if not runs:
             return None
         keys: tuple[Any, ...] = (None,)
         whose = self.whose(side, at, effect.of)
@@ -416,7 +418,7 @@ class _Fielding:
             case Operation.REROLL:
                 if effect.reroll not in runs.get(operation, frozenset()):
                     return None
-            case Operation.DENY | Operation.MULTIPLY:
+            case Operation.DENY | Operation.MULTIPLY | Operation.FORCE | Operation.SUBSTITUTE:
                 if operation not in runs:
                     return None
             case Operation.CANCELS:
@@ -451,12 +453,21 @@ class _Fielding:
             if triggered is None or gated is None:
                 return None
             when = [*triggered, *gated]
+        if effect.limit is not None:
+            unspent = self.unspent(rule, side, effect.limit)
+            if unspent is None:
+                return None
+            when.append(unspent)
         unless = None
         if effect.unless is not None:
             unless = self.gates(rule, side, at, effect.unless)
             if unless is None:
                 return None
         return Gate.folded(tuple(when), None if unless is None else tuple(unless))
+
+    def unspent(self, rule: Rule, side: Side, limit: Limit) -> Unspent | None:
+        uses = self.inputs.get(f"{side}/uses-this-{limit.per}")
+        return None if uses is None else Unspent(uses, rule.id, limit.times)
 
     def trigger(self, rule: Rule, side: Side, at: Step[Any], when: When) -> list[Check] | None:
         if when.step is None:
@@ -474,9 +485,11 @@ class _Fielding:
         return checks or None
 
     def gates(self, rule: Rule, side: Side, at: Step[Any], gates: Gates) -> list[Check] | None:
-        if gates.worn is not None or gates.carried_by is not None:
+        if gates.carried_by is not None:
             return None
         checks: list[Check] = []
+        if gates.worn is not None:
+            checks.append(self.worn(side, at, gates.worn.armour))
         if gates.with_ is not None:
             chosen = self.choice(side, at)
             wielded = self.fielded[side].hit.wielded
@@ -505,6 +518,12 @@ class _Fielding:
                 return None
             checks.append(check)
         return checks
+
+    def worn(self, side: Side, at: Step[Any], armour: str) -> Check:
+        chosen = self.choice(side, at)
+        if chosen is not None and armour == SHIELD:
+            return Holds(chosen, frozenset({SHIELD}))
+        return Constant(armour in {piece.id for piece in self.fielded[side].hit.worn})
 
     def fact(self, rule: Rule, side: Side, at: Step[Any], fact: FactGate) -> Check | None:
         comparator, value = fact.compared

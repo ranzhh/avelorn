@@ -42,11 +42,11 @@ LANDS = {"at": {"step": "make-armour-saves", "by": "the-enemy"}}
         ({"at": {"step": "check-range", "by": "this-model"}, "fill": True}, "no slot"),
         (
             {"at": {"step": "check-range", "by": "this-model"}, "force": ["long"]},
-            "or a decision",
+            "settles an outcome",
         ),
         (
             {"at": {"step": "check-range", "by": "this-model"}, "substitute": {"long": "short"}},
-            "or a decision",
+            "settles an outcome",
         ),
         ({"at": {"step": "impact-hits", "by": "this-model"}, "hits": 0}, "at least one"),
         ({"at": {"step": "check-range", "by": "this-model"}, "multiply": 1}, "less than 2"),
@@ -200,9 +200,14 @@ def test_two_rules_forcing_different_options_conflict() -> None:
     gives = tuple(
         effect.model_copy(update={"force": ("gives-ground",)}) for effect in graph.effects
     )
-    (found,) = conflicts({"stubborn": graph.effects, "doctored": gives})
-    assert found.startswith("doctored and stubborn force gives-ground against")
-    assert "at break-test by this-model" in found
+    found = conflicts({"stubborn": graph.effects, "doctored": gives})
+    assert all(
+        each.startswith("doctored and stubborn force gives-ground against") for each in found
+    )
+    assert [each.rsplit(" at ", 1)[-1] for each in found] == [
+        "break-test by this-model, and neither cancels",
+        "loser-falls-back-in-good-order by this-model, and neither cancels",
+    ]
 
 
 def _landing(slug: str, at: dict[str, str]) -> tuple[Effect, ...]:

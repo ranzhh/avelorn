@@ -367,13 +367,6 @@
 
 # held-effect: a corpus side carries the effect to a step that cannot run it yet.
 
-- kind: held-effect
-  subject: shieldwall/break/break-test
-  reason: Swaps a Fall Back in Good Order for a Give Ground; the Break Test runs no substitute, no once-per-game limit, no worn-shield gate and no charges received until Stubborn and Shieldwall land (item 19).
-- kind: held-effect
-  subject: stubborn/break/break-test
-  reason: Forces a Fall Back in Good Order; the Break Test runs no force and no Break tests taken until Stubborn and Shieldwall land (item 19).
-
 # missing-mechanic: a printed clause needs a mechanic the engine lacks.
 
 - kind: missing-mechanic

@@ -23,3 +23,7 @@ effects:
     at: {step: break-test, by: this-model}
     legacy:
       forces: {break: fall-back-in-good-order}
+  - when:
+      facts: [{fact: break-tests-taken, of: this-model, is: 0}]
+    force: [fall-back-in-good-order]
+    at: {step: loser-falls-back-in-good-order, by: this-model}

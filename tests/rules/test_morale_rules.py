@@ -41,6 +41,10 @@ def _breaks(outcome: Outcome, side: Role) -> Break:
     return outcome.breaks[side]
 
 
+def _results(outcome: Outcome, side: Role) -> Break:
+    return outcome.results[side]
+
+
 def _failed(panic: Panic | None) -> Probability:
     assert panic is not None
     return panic.falls_back + panic.flees
@@ -123,11 +127,6 @@ def test_massed_infantry(
             8,
             True,
             id="charged",
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason="Shieldwall needs a substitute at the Break test, its once-per-game "
-                "limit, the shield it wears and the charges received",
-            ),
         ),
         pytest.param(
             Scenario(Kind.BREAK, replace(CHARGING, charged=None), WALL, first_round=False).adding(
@@ -149,10 +148,21 @@ def test_massed_infantry(
             False,
             id="charged-without-a-shield",
         ),
+        pytest.param(
+            Scenario(
+                Kind.BREAK, CHARGING, replace(WALL, used=("shieldwall",)), first_round=True
+            ).adding("shieldwall", Role.DEFENDER),
+            Scenario(Kind.BREAK, CHARGING, replace(WALL, used=("shieldwall",)), first_round=True),
+            8,
+            False,
+            id="used-this-game",
+        ),
     ],
 )
 def test_shieldwall(printed: Scenario, plain: Scenario, leadership: int, walled: bool) -> None:
     """A shielded unit charged this turn Gives Ground where it would Fall Back in Good Order.
+
+    Once a game: a wall used before falls back.
 
     Ten Elves cannot wipe out fifteen Spearmen in a round, so a beaten wall
     always takes its test.
@@ -161,34 +171,47 @@ def test_shieldwall(printed: Scenario, plain: Scenario, leadership: int, walled:
     rolled = _break_test_rolled(with_rule, Role.DEFENDER, leadership)
     wall = Break(rolled.gives_ground + rolled.falls_back, 0, rolled.breaks)
     assert with_rule.margin == without.margin
-    assert (_breaks(with_rule, Role.DEFENDER), _breaks(without, Role.DEFENDER)) == (
+    assert (_results(with_rule, Role.DEFENDER), _results(without, Role.DEFENDER)) == (
         wall if walled else rolled,
         _break_test_rolled(without, Role.DEFENDER, leadership),
     )
 
 
-@pytest.mark.xfail(
-    strict=True, reason="Stubborn needs a force at the Break test and the Break tests taken"
+@pytest.mark.parametrize(
+    ("spearmen", "ironbreakers", "overwhelmed"),
+    [
+        pytest.param(
+            replace(SPEARMEN, models=5, frontage=5),
+            Side("ironbreakers", 10, "Hand Weapon"),
+            False,
+            id="first-break-test",
+        ),
+        pytest.param(
+            Side("elven-spearmen", 19, "Thrusting Spear", frontage=2),
+            Side("ironbreakers", 7, "Hand Weapon", frontage=2),
+            True,
+            id="outnumbered-more-than-twice",
+        ),
+    ],
 )
-def test_stubborn() -> None:
+def test_stubborn(spearmen: Side, ironbreakers: Side, overwhelmed: bool) -> None:
     """Ironbreakers that lose Fall Back in Good Order instead of taking the Break test.
 
-    Five Spearmen cannot wipe out ten Ironbreakers in a round, so beaten
-    Ironbreakers always face the test.
+    They fall back even from Spearmen over twice their Unit Strength, who would
+    turn a rolled fall back into a Break. Neither side can wipe out the other in
+    a round, so beaten Ironbreakers always face the test.
     """
-    scenario = Scenario(
-        Kind.BREAK,
-        replace(SPEARMEN, models=5, frontage=5),
-        Side("ironbreakers", 10, "Hand Weapon"),
-        first_round=False,
-    )
+    scenario = Scenario(Kind.BREAK, spearmen, ironbreakers, first_round=False)
     printed = resolve(scenario)
     plain = resolve(scenario.without("stubborn", Role.DEFENDER))
     lost = sum(p for lead, p in printed.margin.items() if lead > 0)
+    rolled = _break_test_rolled(plain, Role.DEFENDER, 9)
+    if overwhelmed:
+        rolled = Break(rolled.gives_ground, 0, rolled.falls_back + rolled.breaks)
     assert printed.margin == plain.margin
-    assert (_breaks(printed, Role.DEFENDER), _breaks(plain, Role.DEFENDER)) == (
+    assert (_results(printed, Role.DEFENDER), _results(plain, Role.DEFENDER)) == (
         Break(0, lost, 0),
-        _break_test_rolled(plain, Role.DEFENDER, 9),
+        rolled,
     )
 
 
