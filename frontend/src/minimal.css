@@ -389,6 +389,10 @@ svg {
 	font: var(--text-xs) / 1.5 var(--font-mono);
 	color: var(--dim);
 }
+.hint {
+	margin-top: var(--space-2);
+	font-size: var(--text-xs);
+}
 .carried {
 	position: absolute;
 	top: -100px;
