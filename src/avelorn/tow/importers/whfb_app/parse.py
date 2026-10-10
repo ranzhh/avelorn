@@ -408,12 +408,27 @@ def _append_option(
     warnings: list[str],
 ) -> None:
     try:
-        options.append(_parse_option_line(slug, line, group, printed, refer, warnings))
+        option = _parse_option_line(slug, line, group, printed, refer, warnings)
     except ValidationError:
         # e.g. a verbatim-fallback line with no parseable cost, which the
         # schema's points-xor-budget rule rejects. Dropping it silently
         # would hide source data, so say exactly what is missing.
         warnings.append(f"{slug}: option not representable by the schema, DROPPED: {line.text!r}")
+        return
+    if any(each.id == option.id for each in options):
+        option = option.model_copy(update={"id": _distinct_id(option)})
+        warnings.append(f"{slug}: a second option prints {option.name!r}; its id is {option.id}")
+    options.append(option)
+
+
+def _distinct_id(option: UnitOption) -> str:
+    """The id of an option printing a name an earlier option of its unit prints.
+
+    Returns:
+        The name's slug and the last word of the option's kind: a Veteran
+        special rule beside a Veteran champion is ``veteran-rule``.
+    """
+    return f"{option.id}-{option.kind.value.rpartition('_')[2]}"
 
 
 def _parse_subject(subject: str, printed: set[str]) -> OptionGroup | None:

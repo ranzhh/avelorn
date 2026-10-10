@@ -2008,6 +2008,10 @@
             "type": "string",
             "title": "Name"
           },
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
           "kind": {
             "$ref": "#/components/schemas/OptionKind",
             "default": "other"
@@ -2110,12 +2114,13 @@
         "type": "object",
         "required": [
           "name",
+          "id",
           "scope",
           "adds_rules",
           "removes_rules"
         ],
         "title": "OptionDetail",
-        "description": "One option, the rules it adds and removes resolved."
+        "description": "One option, carrying its id and the rules it adds and removes resolved."
       },
       "OptionKind": {
         "type": "string",

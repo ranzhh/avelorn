@@ -15,7 +15,7 @@ from pydantic.functional_validators import BeforeValidator
 
 from avelorn.core.graph import Carrier, Source
 from avelorn.core.registry import Registry
-from avelorn.tow.schema.reference import RuleRef
+from avelorn.tow.schema.reference import RuleRef, slugified
 from avelorn.tow.schema.troop_type import TroopTypeProfile
 
 
@@ -199,12 +199,15 @@ class UnitOption(BaseModel):
     (e.g. magic standards).
 
     `scope` says who takes the option, as the printed line's subject does.
-    A champion option names its profile row in `profile`.
+    A champion option names its profile row in `profile`. `id` picks the
+    option out of its unit: the slug of its printed name, unless a datasheet
+    prints that name twice and sets the second one's.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     name: str
+    id: str = Field(default_factory=lambda printed: slugified(printed["name"]))
     kind: OptionKind = OptionKind.OTHER
     scope: OptionScope
     profile: str | None = None
@@ -285,6 +288,13 @@ class Unit(BaseModel):
         )
         if unknown:
             raise ValueError(f"options attach to models with no profile: {unknown}")
+        return self
+
+    @model_validator(mode="after")
+    def _option_ids_unique(self) -> Self:
+        ids = [option.id for option in self.options]
+        if shared := sorted({each for each in ids if ids.count(each) > 1}):
+            raise ValueError(f"{self.name}: options share an id: {shared}")
         return self
 
     @model_validator(mode="after")

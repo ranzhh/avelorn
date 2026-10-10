@@ -47,6 +47,7 @@ def test_option_row_writes_every_field_of_the_schema() -> None:
     )
     champion = UnitOption(
         name="Ironbeard",
+        id="ironbeard-champion",
         kind=OptionKind.CHAMPION,
         scope=OptionScope.UNIT,
         profile="Ironbeard",

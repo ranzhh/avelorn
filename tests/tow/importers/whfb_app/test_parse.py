@@ -655,6 +655,22 @@ def test_unrecognised_line_is_kept_verbatim_as_other() -> None:
     assert any("kept verbatim" in w for w in warnings)
 
 
+def test_a_second_option_printing_a_name_takes_an_id_of_its_own() -> None:
+    """Dwarf Warriors print two Veterans, imported with the ids the corpus files them under."""
+    options: list[UnitOption] = []
+    warnings: list[str] = []
+    for text in (
+        "Upgrade one model to a Veteran (champion) (+5 points)",
+        "0-1 unit per 1,000 points may have the Veteran special rule (+1 point per model)",
+    ):
+        _append_option(
+            options, "dwarf-warriors", _line(text), OptionGroup(), {"Veteran"}, REFER, warnings
+        )
+    filed = TOWRepository().units["dwarf-warriors"].options
+    assert options == [option for option in filed if option.name == "Veteran"]
+    assert warnings == ["dwarf-warriors: a second option prints 'Veteran'; its id is veteran-rule"]
+
+
 def test_unrepresentable_line_is_dropped_loudly() -> None:
     """A costless unrecognised line fails the schema: dropped, but reported."""
     options: list[UnitOption] = []

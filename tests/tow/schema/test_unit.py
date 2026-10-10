@@ -212,6 +212,10 @@ def _unit_scope_for_a_named_model(unit: dict) -> None:
     unit["options"][3].update(applies_to="Sentinel", scope="unit")
 
 
+def _two_options_printing_one_name(unit: dict) -> None:
+    unit["options"].append({**unit["options"][2], "kind": "other"})
+
+
 def _equipment_on_the_rank_and_file(unit: dict) -> None:
     unit["profiles"][0]["equipment"] = ["Hand Weapon"]
 
@@ -235,6 +239,7 @@ def _two_mount_rows(unit: dict) -> None:
         (_champion_naming_the_rank_and_file, "name no champion row"),
         (_champion_naming_no_row, "names a profile row"),
         (_unit_scope_for_a_named_model, "must have model scope"),
+        (_two_options_printing_one_name, "options share an id: \\['musician'\\]"),
         (_equipment_on_the_rank_and_file, "only a mount row lists equipment"),
         (_no_rank_and_file_row, "needs one rank-and-file row, has 0"),
         (_two_rank_and_file_rows, "needs one rank-and-file row, has 2"),
@@ -245,6 +250,7 @@ def _two_mount_rows(unit: dict) -> None:
         "champion-names-rank-and-file",
         "champion-names-no-row",
         "named-model-unit-scope",
+        "two-options-one-id",
         "rank-and-file-lists-equipment",
         "no-rank-and-file",
         "two-rank-and-file",

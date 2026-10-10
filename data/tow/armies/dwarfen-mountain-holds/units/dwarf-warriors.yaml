@@ -54,6 +54,7 @@ options:
     adds_rules: [drilled]
     limit: 0-1 unit per 1000 points
   - name: Veteran
+    id: veteran-rule
     kind: special_rule
     scope: unit
     points: 1

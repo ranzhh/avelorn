@@ -140,8 +140,9 @@ class Reference(BaseModel):
 
 
 class OptionDetail(UnitOption):
-    """One option, the rules it adds and removes resolved."""
+    """One option, carrying its id and the rules it adds and removes resolved."""
 
+    id: str
     adds_rules: list[Reference]
     removes_rules: list[Reference]
 
