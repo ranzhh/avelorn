@@ -24,8 +24,6 @@ class ShootingPhase(Phase):
         target: Contingent,
         *,
         distance: int,
-        shooter_options: tuple[str, ...] = (),
-        target_options: tuple[str, ...] = (),
         battle_strength: int | None = None,
     ) -> Volley:
         """One unit shoots another with the weapon in hand, and the target tests its nerve.
@@ -38,7 +36,5 @@ class ShootingPhase(Phase):
             shooter,
             target,
             distance=distance,
-            shooter_options=shooter_options,
-            target_options=target_options,
             battle_strength=battle_strength,
         )

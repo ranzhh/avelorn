@@ -322,13 +322,11 @@ class Fielding:
         cls,
         contingent: Contingent,
         weapon: str | None = None,
-        options: tuple[str, ...] = (),
         *,
         combat: bool = False,
     ) -> "Fielding":
         """Field a contingent as its rank and file, with a champion part for each champion bought.
 
-        ``options`` are the ids of the options the contingent was mustered with.
         A champion stands in the front rank, so its part is placed first
         (command-groups/position-within-the-unit). Every part carries the unit's
         equipment and rules. The armour value folds from the armour worn. A ward
@@ -344,9 +342,8 @@ class Fielding:
             The fielded side.
 
         Raises:
-            ValueError: ``weapon`` has no profile to shoot with, an option is not
-                offered, a side fielded for combat names a weapon, or a mount
-                carries a weapon its unit does not.
+            ValueError: ``weapon`` has no profile to shoot with, a side fielded for
+                combat names a weapon, or a mount carries a weapon its unit does not.
         """
         unit = contingent.unit
         if combat and weapon is not None:
@@ -365,13 +362,10 @@ class Fielding:
         if combat:
             carried += [pair for each in weapons for pair in _fought(each)]
         offered = {option.id: option for option in unit.options}
-        unknown = [chosen for chosen in options if chosen not in offered]
-        if unknown:
-            raise ValueError(f"{unit.id} offers no option {', '.join(unknown)}")
         rows = {row.name: row for row in unit.profiles}
         champions = [
             rows[profile_name]
-            for chosen in options
+            for chosen in contingent.options
             if (profile_name := offered[chosen].profile) is not None
         ]
         armour = defender_armour(contingent.loadout.armour)

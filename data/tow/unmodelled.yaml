@@ -162,86 +162,6 @@
   subject: warriors-of-the-white-tower
   reason: Limits which characters may join; characters joining units are not modelled.
 
-# profile-row-unread: a champion fights as the rank and file; only its
-# Leadership reaches the maths, through highest-value characteristic tests.
-
-- kind: profile-row-unread
-  subject: chracian-woodsmen/Chracian Captain
-  reason: Champion; split profiles are not modelled.
-  issue: 46
-- kind: profile-row-unread
-  subject: dragon-princes/Drakemaster
-  reason: Champion; split profiles are not modelled.
-  issue: 46
-- kind: profile-row-unread
-  subject: dwarf-warriors/Veteran
-  reason: Champion; split profiles are not modelled.
-  issue: 46
-- kind: profile-row-unread
-  subject: ellyrian-reavers/Harbinger
-  reason: Champion; split profiles are not modelled.
-  issue: 46
-- kind: profile-row-unread
-  subject: elven-archers/Sentinel
-  reason: Champion; split profiles are not modelled.
-  issue: 46
-- kind: profile-row-unread
-  subject: elven-spearmen/Sentinel
-  reason: Champion; split profiles are not modelled.
-  issue: 46
-- kind: profile-row-unread
-  subject: ironbreakers/Ironbeard
-  reason: Champion; split profiles are not modelled.
-  issue: 46
-- kind: profile-row-unread
-  subject: lion-guard/Lion Guard Captain
-  reason: Champion; split profiles are not modelled.
-  issue: 46
-- kind: profile-row-unread
-  subject: longbeards/Elder
-  reason: Champion; split profiles are not modelled.
-  issue: 46
-- kind: profile-row-unread
-  subject: lothern-sea-guard/Sea Master
-  reason: Champion; split profiles are not modelled.
-  issue: 46
-- kind: profile-row-unread
-  subject: maneaters/Maneater Captain
-  reason: Champion; split profiles are not modelled.
-  issue: 46
-- kind: profile-row-unread
-  subject: phoenix-guard/Keeper of the Flame
-  reason: Champion; split profiles are not modelled.
-  issue: 46
-- kind: profile-row-unread
-  subject: shadow-warriors/Shadow-walker
-  reason: Champion; split profiles are not modelled.
-  issue: 46
-- kind: profile-row-unread
-  subject: ships-company/Bosun
-  reason: Champion, the alternative to the Midshipman; split profiles are not modelled.
-  issue: 46
-- kind: profile-row-unread
-  subject: ships-company/Midshipman
-  reason: Champion; split profiles are not modelled.
-  issue: 46
-- kind: profile-row-unread
-  subject: silver-helms/High Helm
-  reason: Champion; split profiles are not modelled.
-  issue: 46
-- kind: profile-row-unread
-  subject: sisters-of-avelorn/High Sister
-  reason: Champion; split profiles are not modelled.
-  issue: 46
-- kind: profile-row-unread
-  subject: swordmasters-of-hoeth/Bladelord
-  reason: Champion; split profiles are not modelled.
-  issue: 46
-- kind: profile-row-unread
-  subject: white-lions-of-chrace/Guardian
-  reason: Champion; split profiles are not modelled.
-  issue: 46
-
 # printed-notes: the notes stay in the weapon file once modelled, so these never
 # go stale on their own. Delete an entry when its note is modelled.
 
@@ -290,10 +210,6 @@
 # inert-option: a command model is one entry per kind, covering every datasheet
 # that sells one.
 
-- kind: inert-option
-  subject: champion
-  reason: A champion fights as the rank and file (its row is unread) and challenges are not modelled; buying one changes only the cost.
-  issue: 46
 - kind: inert-option
   subject: musician
   reason: The +1 combat result on a drawn combat is not scored; its +1 Leadership to march and to rally needs movement and rallying, neither modelled.

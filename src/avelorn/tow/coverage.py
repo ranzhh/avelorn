@@ -83,8 +83,7 @@ class Coverage(BaseModel):
         return not self.stale and all(gap.reason is not None for gap in self.gaps)
 
 
-# The engine reads no command model, so each kind is one gap across every datasheet.
-_COMMAND = {OptionKind.CHAMPION, OptionKind.STANDARD_BEARER, OptionKind.MUSICIAN}
+_INERT_COMMAND = {OptionKind.STANDARD_BEARER, OptionKind.MUSICIAN}
 
 
 def coverage(data: TOWRepository) -> Coverage:
@@ -214,13 +213,12 @@ def _scan(data: TOWRepository) -> Iterator[tuple[GapKind, str, Site]]:
     for slug in sorted(referenced):
         yield from _graph_gaps(slug, data.rules[slug])
     yield from _program_gaps(data, referenced)
+    yield from _unread_rows(data)
     for slug, unit in sorted(data.units.items()):
-        for row in unit.unread_rows:
-            yield GapKind.PROFILE_ROW_UNREAD, f"{slug}/{row.name}", Site(entry=Entry.UNIT, id=slug)
         for option in unit.options:
             subject = f"{slug}/{option.name}"
             bought = Site(entry=Entry.OPTION, id=subject)
-            if option.kind in _COMMAND:
+            if option.kind in _INERT_COMMAND:
                 yield GapKind.INERT_OPTION, option.kind.value, bought
             elif _inert(option):
                 yield GapKind.INERT_OPTION, subject, bought
@@ -265,7 +263,7 @@ def _program_gaps(
                 for sequence in effect.at.sequences:
                     if (sequence, effect.at.step) in have:
                         expected.add((slug, index, sequence, effect.at.step))
-        for _, contingent in fieldings(data):
+        for contingent in fieldings(data):
             for attacker, target, counted in facings(contingent):
                 built = program.built({Side.ATTACKER: attacker, Side.TARGET: target})
                 attached = built.attachment
@@ -303,28 +301,48 @@ def _fighting(contingent: Contingent) -> Iterator[Facing]:
     yield fighter, fighter, _BOTH
 
 
-def fieldings(data: TOWRepository) -> Iterator[tuple[tuple[str, ...], Contingent]]:
+def _unread_rows(data: TOWRepository) -> Iterator[tuple[GapKind, str, Site]]:
+    """Every profile row that no part fielded for combat stands on.
+
+    Each unit is fielded bare and with each option alone. Characteristic tests
+    read every row's Leadership and do not count.
+
+    Yields:
+        The gap's kind, ``<unit>/<row>``, and the unit as its site.
+    """
+    read = set()
+    for contingent in fieldings(data):
+        fielded = Fielding.of(contingent, combat=True)
+        read |= {(fielded.unit, part.row.name) for part in fielded.fighters}
+    for slug, unit in sorted(data.units.items()):
+        site = Site(entry=Entry.UNIT, id=slug)
+        for row in unit.profiles:
+            if (slug, row.name) not in read:
+                yield GapKind.PROFILE_ROW_UNREAD, f"{slug}/{row.name}", site
+
+
+def fieldings(data: TOWRepository) -> Iterator[Contingent]:
     """Every unit at its minimum size and default frontage, bare and with each option alone.
 
     Yields:
-        The options bought, and the fielded unit.
+        The fielded unit.
     """
     for slug, unit in sorted(data.units.items()):
         bought = [()] + [(option.id,) for option in unit.options if option.applies_to is None]
         for options in bought:
-            yield options, Contingent.deploy(slug, unit.unit_size.min, options, data=data)
+            yield Contingent.deploy(slug, unit.unit_size.min, options, data=data)
 
 
 def _inert(option: UnitOption) -> bool:
     """Whether buying the option changes nothing the engine reads but its cost.
 
     An option for one named model never reaches the engine: the muster
-    refuses it (#120). A points budget buys magic items, unmodelled (#31) and
-    left out here.
+    refuses it (#120). A champion is fielded as a part of its own. A points
+    budget buys magic items, unmodelled (#31) and left out here.
 
     Returns:
-        True for an option that is no budget and folds no rule or equipment
-        into the whole unit.
+        True for an option that is no budget, fields no champion, and folds no
+        rule or equipment into the whole unit.
     """
     folds = (
         option.adds_rules,
@@ -332,6 +350,6 @@ def _inert(option: UnitOption) -> bool:
         option.adds_equipment,
         option.removes_equipment,
     )
-    if option.points_budget is not None:
+    if option.points_budget is not None or option.profile is not None:
         return False
     return option.applies_to is not None or not any(folds)

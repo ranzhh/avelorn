@@ -370,19 +370,6 @@ class Unit(BaseModel):
         """
         return next((p for p in self.profiles if p.role is ProfileRole.MOUNT), None)
 
-    @property
-    def unread_rows(self) -> list[Profile]:
-        """The rows the engine never reads: all but :attr:`main` and :attr:`mount`.
-
-        Those two accessors are how the engine reads a datasheet's rows, so a
-        new one (a champion's, #46) shrinks this list beside it. Characteristic
-        tests read every row's Leadership (:meth:`highest`) and do not count.
-
-        Returns:
-            The profile rows nothing fights with, in printed order.
-        """
-        return [p for p in self.profiles if p is not self.main and p is not self.mount]
-
     def with_troop_type(self, troop_types: Registry[TroopTypeProfile]) -> "Unit":
         """This datasheet with its troop-type profile resolved from the registry.
 

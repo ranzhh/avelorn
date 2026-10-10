@@ -327,7 +327,8 @@ class Contingent:
 
     A contingent is one body of models; :meth:`~avelorn.tow.fielding.Fielding.of`
     splits it into the parts a program resolves: its rank and file, each
-    champion bought, and the mount each rides.
+    champion bought, and the mount each rides. ``options`` are the ids of the
+    options it was mustered with; a bare datasheet is fielded with none.
     """
 
     unit: Unit
@@ -338,6 +339,7 @@ class Contingent:
     # the fielding boundary. (Skirmishers, who form no ranks, are not
     # modelled yet.)
     frontage: int
+    options: tuple[str, ...] = ()
     # What the unit did in its Movement phase, as one tagged value: whether
     # it moved and the charge it made, if any (a charge is a move, folded
     # here so the two never disagree). A freshly fielded body is stationary;
@@ -581,6 +583,7 @@ class Contingent:
         repository = data if data is not None else default_repository()
         if isinstance(source, Complement):
             size = source.size
+            options = tuple(source.options)
             datasheet = source.unit.model_copy(
                 update={"equipment": source.equipment, "special_rules": source.special_rules}
             )
@@ -588,6 +591,7 @@ class Contingent:
             if models is None:
                 raise ValueError("field(unit, models) needs a model count for a bare datasheet")
             size = models
+            options = ()
             datasheet = source
         loadout, unknown = _resolve_loadout(
             datasheet,
@@ -600,7 +604,7 @@ class Contingent:
         width = (
             frontage if frontage is not None else datasheet.rank_and_file.default_frontage(size)
         )
-        return cls(datasheet, size, loadout, width)
+        return cls(datasheet, size, loadout, width, options)
 
 
 def _resolve_loadout(
