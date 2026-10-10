@@ -19,9 +19,6 @@ effects:
       facts: [{fact: moved, of: this-model, is: true}]
     allow: [half-of-each-rear-rank]
     at: {step: who-can-shoot, by: this-model, not_in: stand-and-shoot}
-    legacy:
-      when: {movement: {moved: false}, shooting: {stand_and_shoot: false}}
-      volley: half-of-each-rear-rank
 notes: >-
   The hill variant (the front two ranks shoot, the volley counted behind them) is
   terrain, which is not modelled; rear ranks' line of sight is assumed, as the

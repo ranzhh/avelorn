@@ -11,5 +11,3 @@ effects:
       facts: [{fact: moved, of: this-model, is: true}]
     add: {to-hit: -1}
     at: {step: roll-to-hit, by: this-model, in: shooting}
-    legacy:
-      when: {movement: {moved: true}}

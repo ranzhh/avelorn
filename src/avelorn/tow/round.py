@@ -11,7 +11,7 @@ from avelorn.tow.contingent import ChargeArc, Contingent
 from avelorn.tow.fielding import SHIELD, Fielding, Held
 from avelorn.tow.kernels import Standings
 from avelorn.tow.programs import Evaluated, Knowns, Loaded
-from avelorn.tow.schema.stage import Side
+from avelorn.tow.schema.side import Side
 from avelorn.tow.steps import WEAPON_CHOICE, BreakTest, Fought
 from avelorn.tow.volley import Volley
 
@@ -125,8 +125,7 @@ def _held(side: Contingent) -> Held:
     barred = {
         effect.bar
         for rule in side.in_hand_rules()
-        if rule.graph is not None
-        for effect in rule.graph.effects
+        for effect in rule.effects
         if effect.bar is not None and effect.at is not None and effect.at.step == WEAPON_CHOICE
     }
     worn = {piece.id for piece in side.loadout.armour}

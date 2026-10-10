@@ -13,7 +13,7 @@ from avelorn.tow.importers.whfb_app.yamlout import (
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import Rule
-from avelorn.tow.schema.unit import OptionKind, OptionScope, Unit, UnitOption
+from avelorn.tow.schema.unit import OptionKind, OptionScope, ProfileRole, Unit, UnitOption
 from avelorn.tow.schema.weapon import Weapon
 
 REPO = TOWRepository()
@@ -85,7 +85,14 @@ def test_weapon_writer_emits_every_schema_field() -> None:
 def test_rule_writer_emits_every_schema_field() -> None:
     """Likewise for a rule: its parameter, effects and notes are hand-authored."""
     rule = REPO.rules["armour-bane"].model_copy(
-        update={"notes": "What the engine does with it.", "flavour": "Piercing.", "page": 166}
+        update={
+            "notes": "What the engine does with it.",
+            "flavour": "Piercing.",
+            "page": 166,
+            "may": True,
+            "not_on": (ProfileRole.MOUNT,),
+            "needs": ("spells",),
+        }
     )
     assert rule.parameter and rule.effects and rule.notes and rule.category
     assert _written(rule_to_yaml(rule)) == set(Rule.model_fields)

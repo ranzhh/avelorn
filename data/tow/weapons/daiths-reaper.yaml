@@ -4,8 +4,7 @@
 # the re-import check skips this file. The printed profile's special rules
 # name only Magical Attacks; the item's Notes are its own rule, filed under
 # the item's name in data/tow/armies/wood-elf-realms/magic-items/ and
-# referenced here so the one weapon-rules path compiles it exactly when
-# the Reaper is in use.
+# referenced here so it applies exactly when the Reaper is in use.
 id: daiths-reaper
 name: Daith's Reaper
 profiles:

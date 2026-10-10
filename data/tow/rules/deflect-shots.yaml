@@ -12,5 +12,3 @@ effects:
   - when: {attack: {magical: false}}
     set: {ward-save: 6}
     at: {step: ward-saves, by: this-model, in: shooting}
-    legacy:
-      when: {target_of: {kind: shooting, magical: false}}

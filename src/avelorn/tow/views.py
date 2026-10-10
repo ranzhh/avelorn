@@ -37,7 +37,7 @@ from avelorn.tow.round import Fight
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import Rule
-from avelorn.tow.schema.stage import Side
+from avelorn.tow.schema.side import Side
 from avelorn.tow.schema.unit import TroopType, Unit, UnitOption, UnitSize
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile, WeaponType
 from avelorn.tow.steps import BreakTest, Fought, Retreat

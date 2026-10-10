@@ -15,5 +15,3 @@ effects:
     add: {A: 1}
     of: this-model
     at: {step: how-many-attacks, by: this-model}
-    legacy:
-      when: {movement: {charge: {distance: {at_least: 3}}}}

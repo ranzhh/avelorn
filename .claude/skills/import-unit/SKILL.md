@@ -96,10 +96,9 @@ then hand-author `effects:`. Read `src/avelorn/tow/schema/effect.py` for the
 effect vocabulary and `src/avelorn/tow/schema/step.py` for the printed step
 names first. Each effect states its trigger and gates under `when`, where it
 lands under `at` (a step, the role acting there, and optionally `in` or
-`not_in`), and one operation. The keys only the legacy engine reads go under
-`legacy:`, in the vocabulary of `src/avelorn/tow/schema/rule.py`; a block that
-names no operation of its own takes the add, set, grants or hits beside it. An
-effect without an address fails the load. Templates in `data/tow/rules/`:
+`not_in`), and one operation. An effect without an address fails the load,
+unless it is a grant, which names who receives it under `to`. Templates in
+`data/tow/rules/`:
 
 | shape | template |
 | --- | --- |
@@ -111,7 +110,7 @@ effect without an address fails the load. Templates in `data/tow/rules/`:
 | confer another rule by name | `arrows-of-isha.yaml` |
 
 Where the effect leaves part of the printed rule out, say so in `notes:` --
-the seam surfaces it to the user (`gromril-weapons.yaml`, `stubborn.yaml`).
+`avelorn rules show` prints it to the user (`gromril-weapons.yaml`, `stubborn.yaml`).
 Where a printed clause needs a mechanic the engine lacks, name it in `needs:`;
 each name is a `missing-mechanic` subject in the ledger.
 
@@ -125,9 +124,8 @@ earns its place it is a line or three (`volley-fire.yaml`, `killing-blow.yaml`).
 **If it cannot fold, import the entry text-only**
 (`uv run python scripts/import_whfb_app.py rule <slug>`), with no `effects:` and
 no `notes:`. Every referenced rule needs an entry: a reference is the slug, or
-`{rule: <slug>, X: <value>}` where the rule prints an X. A text-only entry
-reports `special rule not factored`, and coverage lists it as
-`rule-without-effects` under its slug. The site files a bracketed rule under its
+`{rule: <slug>, X: <value>}` where the rule prints an X. Coverage lists a
+text-only entry as `rule-without-effects` under its slug. The site files a bracketed rule under its
 template ("Multiple Shots (X)", "Extra Attacks (+X)"); keep that name and
 declare its X as `parameter:` -- `{kind: amount, dice: true}` where a dice roll
 may stand for it, `min`/`max` where the text bounds it, or
@@ -158,8 +156,8 @@ Tests are not enough. Field the unit through `TOWGame.load_data()` and:
 3. `make lint` clean and `make test` passing -- `tests/tow/test_coverage.py`
    fails on an unacknowledged gap or a stale ledger entry. Paste both.
 
-Add a test only for an effect you authored, next to its seam's existing tests
-(`tests/tow/phases/test_morale.py` has the panic-re-roll precedent). Do not add
+Add a test only for an effect you authored: one per rule, named for it, in its
+family under `tests/rules/` (`test_morale_rules.py` has the panic re-rolls). Do not add
 a test asserting a rule stays unmodelled -- it would need rewriting the day
 someone models it.
 

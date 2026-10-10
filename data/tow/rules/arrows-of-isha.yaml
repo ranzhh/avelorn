@@ -15,9 +15,5 @@ effects:
   - when: {with: {type: bow}}
     add: {armour-piercing: 1}
     at: {step: make-armour-saves, by: the-enemy, in: shooting}
-    legacy:
-      when: {wielding: {type: bow}}
   - grants: {rule: armour-bane, X: 1}
     to: {type: bow}
-    legacy:
-      when: {wielding: {type: bow}}

@@ -21,9 +21,6 @@ effects:
       facts: [{fact: the-charge-move, of: this-model, at-least: 3}]
     hits: X
     at: {step: impact-hits, by: this-model}
-    legacy:
-      when: {movement: {charge: {distance: {at_least: 3}}}}
-      order: first
   - cancels: {op: add, quantity: S}
     at: {step: roll-to-wound, by: this-model, in: impact-hits}
 notes: >-

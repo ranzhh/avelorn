@@ -13,10 +13,10 @@ from avelorn.tow.contingent import Charge, ChargeArc, Contingent, Movement
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.fielding import SHIELD, Fielding, Held
 from avelorn.tow.programs import ROUND, STAND_AND_SHOOT, VOLLEY, Evaluated, load_program
-from avelorn.tow.schema import stage
 from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import Rule
+from avelorn.tow.schema.side import Side as AttackSide
 from avelorn.tow.schema.weapon import Weapon
 from avelorn.tow.steps import BreakTest, Retreat
 
@@ -51,7 +51,7 @@ class Role(StrEnum):
     DEFENDER = "defender"
 
 
-_SIDES = {Role.ATTACKER: stage.Side.ATTACKER, Role.DEFENDER: stage.Side.TARGET}
+_SIDES = {Role.ATTACKER: AttackSide.ATTACKER, Role.DEFENDER: AttackSide.TARGET}
 
 
 class Carrier(StrEnum):
@@ -209,8 +209,8 @@ def resolve(scenario: Scenario) -> Outcome:
         case Kind.FIGHT | Kind.BREAK:
             fought = _round(attacker, defender, scenario)
             outcome = Outcome(
-                casualties=_lost(fought, stage.Side.TARGET, defender.models, ROUND_END),
-                attacker_casualties=_lost(fought, stage.Side.ATTACKER, attacker.models, ROUND_END),
+                casualties=_lost(fought, AttackSide.TARGET, defender.models, ROUND_END),
+                attacker_casualties=_lost(fought, AttackSide.ATTACKER, attacker.models, ROUND_END),
                 margin=_margin(fought),
             )
             if scenario.kind is Kind.FIGHT:
@@ -229,8 +229,8 @@ def resolve(scenario: Scenario) -> Outcome:
 
 def _stood(shooter: Contingent, charger: Contingent, scenario: Scenario) -> Evaluated:
     fielded = {
-        stage.Side.ATTACKER: Fielding.of(shooter, shooter.shooting_weapon().name),
-        stage.Side.TARGET: Fielding.of(charger),
+        AttackSide.ATTACKER: Fielding.of(shooter, shooter.shooting_weapon().name),
+        AttackSide.TARGET: Fielding.of(charger),
     }
     return _taken(
         load_program(STAND_AND_SHOOT, _rules(scenario))
@@ -241,8 +241,8 @@ def _stood(shooter: Contingent, charger: Contingent, scenario: Scenario) -> Eval
                 "can-shoot": True,
                 "line-of-sight": True,
                 "attacker/moved": False,
-                "attacker/standing": fielded[stage.Side.ATTACKER].standing(shooter.models),
-                "target/standing": fielded[stage.Side.TARGET].standing(charger.models),
+                "attacker/standing": fielded[AttackSide.ATTACKER].standing(shooter.models),
+                "target/standing": fielded[AttackSide.TARGET].standing(charger.models),
             }
         )
     )
@@ -250,8 +250,8 @@ def _stood(shooter: Contingent, charger: Contingent, scenario: Scenario) -> Eval
 
 def _volley(attacker: Contingent, defender: Contingent, scenario: Scenario) -> Evaluated:
     fielded = {
-        stage.Side.ATTACKER: Fielding.of(attacker, attacker.shooting_weapon().name),
-        stage.Side.TARGET: Fielding.of(defender),
+        AttackSide.ATTACKER: Fielding.of(attacker, attacker.shooting_weapon().name),
+        AttackSide.TARGET: Fielding.of(defender),
     }
     return _taken(
         load_program(VOLLEY, _rules(scenario))
@@ -262,8 +262,8 @@ def _volley(attacker: Contingent, defender: Contingent, scenario: Scenario) -> E
                 "can-shoot": True,
                 "line-of-sight": True,
                 "attacker/moved": attacker.movement.moved,
-                "attacker/standing": fielded[stage.Side.ATTACKER].standing(attacker.models),
-                "target/standing": fielded[stage.Side.TARGET].standing(defender.models),
+                "attacker/standing": fielded[AttackSide.ATTACKER].standing(attacker.models),
+                "target/standing": fielded[AttackSide.TARGET].standing(defender.models),
                 "target/models-at-start-of-phase": defender.models,
                 "target/battle-strength": defender.models,
             }
@@ -273,29 +273,29 @@ def _volley(attacker: Contingent, defender: Contingent, scenario: Scenario) -> E
 
 def _round(attacker: Contingent, defender: Contingent, scenario: Scenario) -> Evaluated:
     fielded = {
-        stage.Side.ATTACKER: Fielding.of(attacker, combat=True),
-        stage.Side.TARGET: Fielding.of(defender, combat=True),
+        AttackSide.ATTACKER: Fielding.of(attacker, combat=True),
+        AttackSide.TARGET: Fielding.of(defender, combat=True),
     }
     held = {
-        stage.Side.ATTACKER: _held(scenario.attacker, attacker),
-        stage.Side.TARGET: _held(scenario.defender, defender),
+        AttackSide.ATTACKER: _held(scenario.attacker, attacker),
+        AttackSide.TARGET: _held(scenario.defender, defender),
     }
     rounds_fought = 0 if scenario.first_round else 1
     standing = {
-        stage.Side.ATTACKER: fielded[stage.Side.ATTACKER].standing(attacker.models),
-        stage.Side.TARGET: fielded[stage.Side.TARGET].standing(defender.models),
+        AttackSide.ATTACKER: fielded[AttackSide.ATTACKER].standing(attacker.models),
+        AttackSide.TARGET: fielded[AttackSide.TARGET].standing(defender.models),
     }
     return _taken(
         load_program(ROUND, _rules(scenario))
         .built(fielded)
         .evaluate(
             {
-                "attacker/standing": standing[stage.Side.ATTACKER],
-                "target/standing": standing[stage.Side.TARGET],
-                "attacker/standing-at-start-of-round": standing[stage.Side.ATTACKER],
-                "target/standing-at-start-of-round": standing[stage.Side.TARGET],
-                "attacker/standing-at-start-of-turn": standing[stage.Side.ATTACKER],
-                "target/standing-at-start-of-turn": standing[stage.Side.TARGET],
+                "attacker/standing": standing[AttackSide.ATTACKER],
+                "target/standing": standing[AttackSide.TARGET],
+                "attacker/standing-at-start-of-round": standing[AttackSide.ATTACKER],
+                "target/standing-at-start-of-round": standing[AttackSide.TARGET],
+                "attacker/standing-at-start-of-turn": standing[AttackSide.ATTACKER],
+                "target/standing-at-start-of-turn": standing[AttackSide.TARGET],
                 "attacker/rounds-fought": rounds_fought,
                 "target/rounds-fought": rounds_fought,
                 "attacker/charges-made": int(scenario.attacker.charged is not None),
@@ -369,24 +369,24 @@ def _struck(fought: Evaluated, attackers: int, models: int) -> Outcome:
         .read("unsaved")
         .expect(lambda wounds: wounds)
         for slot in INITIATIVES
-        for part in fought.built.fielded[stage.Side.ATTACKER].parts
+        for part in fought.built.fielded[AttackSide.ATTACKER].parts
     )
     return Outcome(
         attacks=_certain(attacks),
         unsaved=unsaved / sum(made.expect(lambda n: n) for made in attacks),
-        casualties=_lost(fought, stage.Side.TARGET, models, BLOWS_END),
-        attacker_casualties=_lost(fought, stage.Side.ATTACKER, attackers, BLOWS_END),
+        casualties=_lost(fought, AttackSide.TARGET, models, BLOWS_END),
+        attacker_casualties=_lost(fought, AttackSide.ATTACKER, attackers, BLOWS_END),
         initiative={role: _initiative(fought, side) for role, side in _SIDES.items()},
     )
 
 
-def _lost(fought: Evaluated, side: stage.Side, models: int, after: str) -> dict[int, Probability]:
+def _lost(fought: Evaluated, side: AttackSide, models: int, after: str) -> dict[int, Probability]:
     left = fought.at(f"round/{after}/{side}/remove-casualties").read("models")
     lost = left.map(lambda standing: models - standing)
     return {count: p for count, p in lost.mass.items() if p}
 
 
-def _initiative(fought: Evaluated, side: stage.Side) -> int:
+def _initiative(fought: Evaluated, side: AttackSide) -> int:
     return max(
         slot
         for slot in INITIATIVES
@@ -420,11 +420,11 @@ def _margin(fought: Evaluated) -> dict[int, Probability]:
     return {by: p for by, p in lead.mass.items() if p}
 
 
-def _broken(fought: Evaluated, side: stage.Side) -> Break:
+def _broken(fought: Evaluated, side: AttackSide) -> Break:
     return _break(fought.at(f"round/{side}/break-test").read("test").mass)
 
 
-def _settled(fought: Evaluated, side: stage.Side) -> Break:
+def _settled(fought: Evaluated, side: AttackSide) -> Break:
     return _break(fought.at(f"round/{side}/loser-falls-back-in-good-order").read("result").mass)
 
 
@@ -438,14 +438,8 @@ def _break(outcomes: Mapping[BreakTest, Probability]) -> Break:
 
 def _chapter(phase: Phase) -> dict[str, Rule]:
     return {
-        rule.name: rule
-        for rule in REPO.rules.values()
-        if rule.category == phase and _effected(rule)
+        rule.name: rule for rule in REPO.rules.values() if rule.category == phase and rule.effects
     }
-
-
-def _effected(rule: Rule) -> bool:
-    return bool(rule.effects) or (rule.graph is not None and bool(rule.graph.effects))
 
 
 def _reference(ref: Ref) -> RuleRef:

@@ -13,6 +13,3 @@ paragraphs:
 effects:
   - reroll: natural-1
     at: {step: make-armour-saves, by: this-model}
-    legacy:
-      reroll: make-armour-saves
-      on_natural: 1

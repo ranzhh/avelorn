@@ -9,9 +9,7 @@ REPO = TOWRepository()
 
 
 def _effect(rule: str, index: int) -> Effect:
-    graph = REPO.rules[rule].graph
-    assert graph is not None
-    return graph.effects[index]
+    return REPO.rules[rule].effects[index]
 
 
 def _operated(rule: str, effect: Effect, key: Quantity | None) -> Operated:

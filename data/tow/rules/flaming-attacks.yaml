@@ -12,8 +12,6 @@ paragraphs:
     any spells cast by the model are unaffected, as are any attacks made with magic weapons they might be wielding).
 needs: [spells, magic-items]
 effects:
-  - legacy:
-      attack: {flaming: true}
   - when: {foe: {troop_type: [War Beast, Swarm]}}
     grants: fear
     to: this-model

@@ -352,8 +352,8 @@ class Unit(BaseModel):
         A cavalry unit's steed: the model on the table is the rider *and*
         this. The mount supplies the model's Movement and fights beside the
         rider with its own Weapon Skill, Strength, Initiative and Attacks
-        (troop-types-in-detail/split-profile-cavalry); the fight folds it in
-        as a second attack batch.
+        (troop-types-in-detail/split-profile-cavalry); a side fielded for combat
+        fights it as a part beside each rider.
 
         Returns:
             The mount row, or None for a unit that rides nothing.

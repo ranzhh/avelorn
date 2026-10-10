@@ -83,7 +83,7 @@ def test_rules_show_prints_the_text_the_effects_and_what_is_left_out() -> None:
     printed = "\n".join(commands.show_rule(REPO, "stubborn"))
     assert "Stubborn  (stubborn)" in printed
     assert "Special Rules, page 178" in printed
-    assert "break: fall-back-in-good-order" in printed
+    assert "- fall-back-in-good-order" in printed
     assert "Not covered:" in printed
 
 

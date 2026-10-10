@@ -13,6 +13,5 @@ effects:
   - set: {I: 10}
     of: this-model
     at: {step: who-strikes-first, by: this-model}
-    legacy: {}
   - cancels: {rule: strike-last}
     at: {step: who-strikes-first, by: this-model}

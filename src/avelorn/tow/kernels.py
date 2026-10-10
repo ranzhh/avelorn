@@ -17,7 +17,7 @@ from enum import StrEnum
 from fractions import Fraction
 from functools import partial
 from itertools import product
-from typing import NamedTuple, cast
+from typing import NamedTuple
 
 from avelorn.core.distribution import Distribution
 
@@ -42,11 +42,11 @@ def shooting_hit_target(ballistic_skill: int, modifier: int = 0) -> int:
     ``modifier`` follows the rulebook's sign convention: penalties are
     negative (e.g. -1 for long range), so they raise the target.
 
-    This is legacy's reading of BS 6 or higher: a target of 1 or less, where
-    only a natural 1 fails. :func:`shooting_hit` rolls it as printed.
+    BS 6 or higher reads as a target of 1 or less, where only a natural 1
+    fails; :func:`shooting_hit` rolls it as printed.
 
     Returns:
-        The required roll; may exceed 6 (see :func:`hit_probability`).
+        The required roll; may exceed 6, where 7 to Hit applies.
     """
     target = 7 - ballistic_skill - modifier
     logger.debug(
@@ -218,52 +218,6 @@ def shooting_hit(ballistic_skill: int, modifier: int = 0) -> Distribution[Die]:
         return Distribution({die: Fraction(1)}) if die.success else retry
 
     return d6(first).bind(rerolled)
-
-
-def success(dice: Distribution[Die]) -> Fraction:
-    """The exact probability that a roll succeeds.
-
-    Returns:
-        The summed mass of the successful dice.
-    """
-    return sum((cast(Fraction, p) for die, p in dice.mass.items() if die.success), Fraction(0))
-
-
-def hit_probability(target: int) -> Fraction:
-    """Probability that one shooting attack hits, given its To Hit target.
-
-    A natural 1 always fails; targets of 7+ confirm on a second die
-    ("7 to Hit").
-
-    Returns:
-        The hit probability, in [0, 5/6], exact.
-    """
-    p = success(d6(target, confirm=Confirm.SECOND_DIE))
-    logger.debug("hit %s -> p=%.3f", _fmt_target(target), p)
-    return p
-
-
-def wound_probability(target: int | None) -> Fraction:
-    """Probability that one wound roll succeeds; a natural 1 always fails.
-
-    Returns:
-        The exact success probability, or 0 when ``target`` is None (the
-        chart shows "-": the attack cannot wound).
-    """
-    p = Fraction(0) if target is None else success(d6(target))
-    logger.debug("wound %s -> p=%.3f", _fmt_target(target), p)
-    return p
-
-
-def save_probability(target: int | None) -> Fraction:
-    """Probability that a save roll succeeds; a natural 1 always fails.
-
-    Returns:
-        The exact success probability, or 0 when ``target`` is None (no save).
-    """
-    p = Fraction(0) if target is None else success(d6(target))
-    logger.debug("save %s -> p=%.3f", _fmt_target(target), p)
-    return p
 
 
 def leadership_test(value: int | None, reroll_failed: bool = False) -> Fraction:

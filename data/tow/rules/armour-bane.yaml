@@ -16,5 +16,3 @@ effects:
   - when: {step: roll-to-wound, by: this-model, natural: 6}
     add: {armour-piercing: X}
     at: {step: make-armour-saves, by: the-enemy}
-    legacy:
-      when: {natural: {face: 6, roll: roll-to-wound}}

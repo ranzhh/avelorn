@@ -11,10 +11,6 @@ effects:
   - when: {step: check-range, by: the-enemy, is: long}
     add: {to-hit: -2}
     at: {step: roll-to-hit, by: the-enemy, in: shooting, not_in: stand-and-shoot}
-    legacy:
-      enemy: true
-      when: {target_of: {kind: shooting, at_long_range: true}}
-      add: {to-hit: -1}
   - when: {step: check-range, by: the-enemy, is: long}
     cancels: {rule: firing-at-long-range}
     at: {step: roll-to-hit, by: the-enemy, in: shooting, not_in: stand-and-shoot}

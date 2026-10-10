@@ -14,7 +14,4 @@ effects:
   - when: {with: {weapon: hand-weapon}}
     set: {armour-piercing: 1}
     at: {step: make-armour-saves, by: the-enemy, in: combat}
-    legacy:
-      when: {wielding: {name: Hand Weapon}}
-      add: {armour-piercing: 1}
 notes: 'Not modelled: the exclusion for a hand weapon bearing Weapon runes.'

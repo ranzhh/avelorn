@@ -5,7 +5,7 @@ from avelorn.tow.contingent import Charge, ChargeArc, Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.programs import ROUND, STAND_AND_SHOOT, load_program
 from avelorn.tow.round import fight_round
-from avelorn.tow.schema.stage import Side
+from avelorn.tow.schema.side import Side
 from avelorn.tow.steps import NO_ROLL
 from avelorn.tow.volley import stand_and_shoot
 

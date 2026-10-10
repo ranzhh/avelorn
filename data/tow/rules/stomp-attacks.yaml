@@ -19,9 +19,6 @@ needs: [base-contact, multiple-units-in-combat]
 effects:
   - hits: X
     at: {step: stomp-attacks, by: this-model}
-    legacy:
-      when: {combat: true}
-      order: last
   - cancels: {op: add, quantity: S}
     at: {step: roll-to-wound, by: this-model, in: stomp-attacks}
 notes: >-

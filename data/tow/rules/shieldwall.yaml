@@ -17,10 +17,7 @@ effects:
     substitute: {fall-back-in-good-order: gives-ground}
     at: {step: loser-falls-back-in-good-order, by: this-model}
     limit: {per: game, times: 1}
-    legacy:
-      when: {combat: {was_charged: true}, worn: {name: Shield}}
-      replaces: {break: {fall-back-in-good-order: gives-ground}}
 notes: >-
-  The legacy engine models it with no player choice ("may ... rather than" is always taken) and no
-  once-per-game tracking. The Close Order requirement is a formation, which the engine does not
-  model (#28), so it is not gated.
+  The round reports the lane in which it is taken. Each round starts with no use recorded, so the
+  once-per-game limit is not carried from one round to the next. The Close Order requirement is a
+  formation, which the engine does not model (#28), so it is not gated.

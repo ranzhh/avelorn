@@ -15,7 +15,3 @@ effects:
   - when: {with: {weapon: hand-weapon}}
     reroll: natural-1
     at: {step: roll-to-hit, by: this-model, in: combat}
-    legacy:
-      when: {combat: true, wielding: {name: Hand Weapon}}
-      reroll: roll-to-hit
-      on_natural: 1

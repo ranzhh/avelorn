@@ -25,8 +25,8 @@ from avelorn.tow.schema.effect import Effect
 from avelorn.tow.schema.ledger import Acknowledgement, GapKind
 from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.reference import RuleRef
-from avelorn.tow.schema.rule import GrantEffect, Rule
-from avelorn.tow.schema.stage import Side
+from avelorn.tow.schema.rule import Rule
+from avelorn.tow.schema.side import Side
 from avelorn.tow.schema.step import Step, StepSequence
 from avelorn.tow.schema.unit import OptionKind, UnitOption
 from avelorn.tow.steps import STEPS
@@ -138,11 +138,8 @@ def rule_references(data: TOWRepository) -> Iterator[tuple[RuleRef, Site]]:
     for slug, rule in sorted(data.rules.items()):
         site = Site(entry=Entry.RULE, id=slug)
         for effect in rule.effects:
-            if isinstance(effect, GrantEffect):
+            if effect.grants is not None:
                 yield effect.grants, site
-        for addressed in () if rule.graph is None else rule.graph.effects:
-            if addressed.grants is not None:
-                yield addressed.grants, site
 
 
 def rule_gap(rule: Rule) -> GapKind | None:
@@ -191,13 +188,11 @@ def _graph_gaps(slug: str, rule: Rule) -> Iterator[tuple[GapKind, str, Site]]:
     Yields:
         Each gap's kind, its ledger subject, and the rule as its site.
     """
-    if rule.graph is None:
-        return
     site = Site(entry=Entry.RULE, id=slug)
-    for effect in rule.graph.effects:
+    for effect in rule.effects:
         for sequence, step in unattached(effect):
             yield GapKind.UNATTACHED_EFFECT, f"{slug}/{sequence}/{step}", site
-    for mechanic in rule.graph.needs:
+    for mechanic in rule.needs:
         yield GapKind.MISSING_MECHANIC, mechanic, site
 
 
@@ -264,8 +259,7 @@ def _program_gaps(
         have = {spec.key for spec in program.specs}
         names = {spec.name for spec in program.specs} | {program.file.program}
         for slug in sorted(referenced | core):
-            graph = data.rules[slug].graph
-            for index, effect in enumerate(() if graph is None else graph.effects):
+            for index, effect in enumerate(data.rules[slug].effects):
                 if effect.at is None or not all(step in names for step in _read_steps(effect)):
                     continue
                 for sequence in effect.at.sequences:

@@ -13,5 +13,4 @@ needs: [wizards]
 effects:
   - set: {ward-save: 6}
     at: {step: ward-saves, by: this-model}
-    legacy: {}
 notes: The armour-without-penalty clause is for Wizards, and no Wizard exists to wear it (#10).

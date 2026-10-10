@@ -14,5 +14,3 @@ effects:
   - when: {attack: {magical: false}}
     set: {ward-save: 6}
     at: {step: ward-saves, by: this-model}
-    legacy:
-      when: {target_of: {magical: false}}

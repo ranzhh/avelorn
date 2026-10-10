@@ -16,8 +16,8 @@ from avelorn.tow.fielding import Fielding
 from avelorn.tow.programs import VOLLEY, Built, Evaluated, load_program
 from avelorn.tow.schema.effect import Effect
 from avelorn.tow.schema.reference import RuleRef
-from avelorn.tow.schema.rule import Clause, Rule, RuleGraph
-from avelorn.tow.schema.stage import Side
+from avelorn.tow.schema.rule import Rule
+from avelorn.tow.schema.side import Side
 
 REPO = TOWRepository()
 VOLLEY_PROGRAM = load_program(VOLLEY, REPO.rules)
@@ -194,11 +194,10 @@ def test_valour_of_ages_applies_where_heavy_casualties_force_a_panic_test() -> N
 
 def test_a_gate_reading_a_band_check_range_never_outputs_is_refused() -> None:
     printed = REPO.rules["firing-at-long-range"]
-    assert printed.graph is not None
-    (effect,) = printed.graph.effects
+    (effect,) = printed.effects
     assert effect.when is not None
     far = effect.model_copy(update={"when": effect.when.model_copy(update={"is_": "far"})})
-    misread = printed.with_graph(RuleGraph(clauses=(Clause(effect=far),)))
+    misread = printed.model_copy(update={"effects": (far,)})
 
     with pytest.raises(
         AttachError,
@@ -232,13 +231,11 @@ def test_a_grant_to_a_weapon_reaches_no_side_that_is_shot_at() -> None:
     A side shot at holds no weapon, so the grant has nothing to ride.
     """
     printed = REPO.rules["valour-of-ages"]
-    assert printed.graph is not None
-    grant = {"grants": "deflect-shots", "to": {"weapon": "hand-weapon"}}
-    clauses = (
-        *(Clause(effect=effect) for effect in printed.graph.effects),
-        Clause(effect=Effect.model_validate(grant)),
-    )
-    rules = {**REPO.rules, "valour-of-ages": printed.with_graph(RuleGraph(clauses=clauses))}
+    grant = Effect.model_validate({"grants": "deflect-shots", "to": {"weapon": "hand-weapon"}})
+    rules = {
+        **REPO.rules,
+        "valour-of-ages": printed.model_copy(update={"effects": (*printed.effects, grant)}),
+    }
 
     built = _attached(_archers(), Fielding.of(_deployed("elven-spearmen")), rules)
 

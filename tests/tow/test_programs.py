@@ -11,7 +11,7 @@ from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.fielding import Fielding
 from avelorn.tow.programs import ROUND, VOLLEY, ProgramError, load_program
-from avelorn.tow.schema.stage import Side
+from avelorn.tow.schema.side import Side
 
 type Edit = Callable[[dict[str, Any]], None]
 

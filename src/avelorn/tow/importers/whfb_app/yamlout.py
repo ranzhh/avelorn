@@ -122,14 +122,12 @@ def rule_to_yaml(rule: Rule, source_url: str | None = None) -> str:
     doc["paragraphs"] = list(rule.paragraphs)
     if rule.notes is not None:
         doc["notes"] = rule.notes
-    if rule.graph is not None:
-        doc.update(rule.graph.written())
-    elif rule.effects:
-        # by_alias so an operation prints as the rulebook names it: a
-        # ModifierEffect's `set` is `set_` on the model only to clear the
-        # keyword.
+    doc.update(
+        rule.model_dump(mode="json", include={"may", "not_on", "needs"}, exclude_defaults=True)
+    )
+    if rule.effects:
         doc["effects"] = [
-            e.model_dump(mode="json", exclude_none=True, by_alias=True) for e in rule.effects
+            e.model_dump(mode="json", by_alias=True, exclude_defaults=True) for e in rule.effects
         ]
     return _dump(doc, source_url)
 

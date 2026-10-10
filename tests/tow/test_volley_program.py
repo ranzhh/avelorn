@@ -12,7 +12,7 @@ from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.fielding import Fielding, Part
 from avelorn.tow.programs import VOLLEY, Evaluated, load_program
-from avelorn.tow.schema.stage import Side
+from avelorn.tow.schema.side import Side
 from avelorn.tow.schema.unit import Characteristic
 from avelorn.tow.schema.weapon import WeaponStrength
 from avelorn.tow.steps import Band

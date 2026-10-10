@@ -60,7 +60,7 @@ from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.program import DerivedFact
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import Rule
-from avelorn.tow.schema.stage import Side
+from avelorn.tow.schema.side import Side
 from avelorn.tow.schema.step import Step as Printed
 from avelorn.tow.schema.step import StepSequence
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile
@@ -134,7 +134,7 @@ def rules_in_scope(
         for side, slug in unread:
             read.add((side, slug))
             via = f"{holders[side]}/{slug}"
-            for effect in _effects(rules[slug]):
+            for effect in rules[slug].effects:
                 if effect.grants is not None:
                     chooses = side in choosing
                     _grant(effect.grants, effect.to, via, chooses, side, fielded, scopes)
@@ -242,7 +242,7 @@ def attach_rules(
     reaches: list[Reach] = []
     for side, scope in scopes.items():
         for slug in scope:
-            effects = _effects(rules[slug])
+            effects = rules[slug].effects
             if not effects:
                 kept.add((side, slug))
             for index, effect in enumerate(effects):
@@ -311,7 +311,7 @@ class _Fielding:
             holder=holder,
             sources=tuple(source for _, source in carried),
             landings=tuple(landings),
-            may=rule.graph is not None and rule.graph.may,
+            may=rule.may,
         )
         return node, held
 
@@ -410,7 +410,7 @@ class _Fielding:
             effect.grants is not None
             and effect.grants.rule == rule.id
             and (effect.when is not None or effect.unless is not None)
-            for effect in _effects(self.rules[granter])
+            for effect in self.rules[granter].effects
         )
 
     def operated(
@@ -457,7 +457,7 @@ class _Fielding:
         if gate is None:
             return None
         sources = self.sources_at(rule.id, side, at)
-        not_on = frozenset(() if rule.graph is None else rule.graph.not_on)
+        not_on = frozenset(rule.not_on)
         return [
             Operated(rule.id, effect, key, whose, gate, sources, rule.parameter, not_on)
             for key in keys
@@ -675,12 +675,8 @@ def _holders(fielded: Mapping[Side, Fielding]) -> dict[Side, Holder]:
 
 def _core(rules: Mapping[str, Rule]) -> list[str]:
     return sorted(
-        slug for slug, rule in rules.items() if rule.category in _PHASES and _effects(rule)
+        slug for slug, rule in rules.items() if rule.category in _PHASES and rule.effects
     )
-
-
-def _effects(rule: Rule) -> tuple[Effect, ...]:
-    return () if rule.graph is None else rule.graph.effects
 
 
 def _grant(

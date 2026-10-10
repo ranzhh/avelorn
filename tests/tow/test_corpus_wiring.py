@@ -1,11 +1,9 @@
 """The corpus wired up: printed rules reaching the maths on real datasheets.
 
-`tests/tow/phases/test_combat_spec.py` pins what the rules *mean*, using
-stripped synthetic bodies so every figure is exact. This file asks the other
-question: do the datasheets actually connect? A rule can be authored, tested
-against a doctored unit, and still never fire for the unit that prints it --
-the name misspelled, the gate unanswerable from that seat, the entry filed
-where nothing looks. Nothing above catches that.
+Do the datasheets actually connect? A rule can be authored, tested against a
+doctored unit, and still never fire for the unit that prints it -- the name
+misspelled, the gate unanswerable for that unit, the entry filed where nothing
+looks.
 
 What each rule changes on a real datasheet is tested in ``tests/rules/``; what
 stays here is that every datasheet printing a rule reaches it.

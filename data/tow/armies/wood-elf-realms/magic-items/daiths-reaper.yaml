@@ -13,11 +13,7 @@ flavour: Amongst the most finely crafted weapons in all Athel Loren, this blade 
 paragraphs:
   - 'Notes: Enemy models must re-roll any successful Armour Save rolls against wounds caused by this weapon.'
 # "against wounds caused by this weapon" needs no gate: the entry is referenced
-# from the weapon's own profile, so it compiles only when the Reaper is in use.
+# from the weapon's own profile, so it applies only when the Reaper is in use.
 effects:
   - reroll: successful
     at: {step: make-armour-saves, by: the-enemy, in: combat}
-    legacy:
-      reroll: make-armour-saves
-      of: successful
-      enemy: true

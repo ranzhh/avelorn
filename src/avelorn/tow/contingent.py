@@ -17,7 +17,7 @@ from avelorn.tow.data import TOWRepository, default_repository
 from avelorn.tow.muster import Complement
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.reference import RuleRef
-from avelorn.tow.schema.rule import GrantEffect, Rule, bind
+from avelorn.tow.schema.rule import Rule, bind
 from avelorn.tow.schema.unit import Unit
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile
 
@@ -31,9 +31,8 @@ class Loadout:
     will read; the weapons are what a per-action choice will pick from.
     ``own`` are the datasheet's special rules and ``conferred`` the troop
     type's, each bound to its X (:func:`~avelorn.tow.schema.rule.bind`).
-    ``bound`` holds the rules the weapons' profiles print and the rules any
-    of these grant, bound, by reference: a weapon profile and a grant
-    effect look their rules up there.
+    ``bound`` holds the rules the weapons' profiles print, bound, by
+    reference: a weapon profile looks its rules up there.
 
     Equipment coverage is complete, so an unresolvable equipment name fails
     the deploy, and so does a rule reference that does not bind.
@@ -55,24 +54,17 @@ class Loadout:
         *,
         rules: Mapping[str, Rule],
     ) -> "Loadout":
-        """A loadout whose weapons' rules and grants are bound against ``rules``.
+        """A loadout whose weapons' rules are bound against ``rules``.
 
         Returns:
             The loadout, its ``bound`` index filled.
         """
-        printed = {
+        bound = {
             ref: bind(ref, rules)
             for weapon in weapons
             for profile in weapon.profiles
             for ref in profile.special_rules
         }
-        granted = {
-            effect.grants: bind(effect.grants, rules)
-            for rule in (*own, *conferred, *printed.values())
-            for effect in rule.effects
-            if isinstance(effect, GrantEffect)
-        }
-        bound = {**printed, **granted}
         return cls(tuple(weapons), tuple(armour), tuple(own), tuple(conferred), bound)
 
     @property

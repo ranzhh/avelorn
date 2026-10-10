@@ -99,6 +99,9 @@
   subject: magic-resistance
   reason: It modifies enemy Casting rolls; magic is not modelled.
 - kind: rule-without-effects
+  subject: magical-attacks
+  reason: It marks an attack and changes nothing itself; the graph reads the mark where another rule gates on a magical attack, as Runes of Protection does.
+- kind: rule-without-effects
   subject: motley-crew
   reason: Models armed and armoured differently in one unit; a fielded unit has one loadout.
 - kind: rule-without-effects
@@ -368,7 +371,7 @@
   reason: Flank and rear facings are not modelled, so Martial Prowess's supporting attacks to the flank and rear have no combat to land in.
 - kind: missing-mechanic
   subject: formations
-  reason: Formations are not modelled; Shieldwall's Close Order and Press of Battle's Combat Order are not read, a Skirmish formation keeps its Rank Bonus, and the legacy engine takes every unit with Skirmishers to be in the formation.
+  reason: Formations are not modelled; Shieldwall's Close Order and Press of Battle's Combat Order are not read, and a Skirmish formation keeps its Rank Bonus.
   issue: 28
 - kind: missing-mechanic
   subject: magic-items

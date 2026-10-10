@@ -6,7 +6,7 @@ from avelorn.tow.contingent import Charge, ChargeArc, Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.game import TOWGame
 from avelorn.tow.phases.movement import StandAndShoot
-from avelorn.tow.schema.stage import Side
+from avelorn.tow.schema.side import Side
 
 REPO = TOWRepository()
 GAME = TOWGame.assemble(REPO)

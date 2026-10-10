@@ -211,21 +211,9 @@ def test_a_reference_that_does_not_bind_fails_the_load(
         _ = corpus.rules, corpus.troop_types, corpus.units, corpus.weapons
 
 
-GROMRIL_ARMOUR = """  - reroll: natural-1
-    at: {step: make-armour-saves, by: this-model}
-    legacy:
-      reroll: make-armour-saves
-      on_natural: 1
-"""
-
-
 @pytest.mark.parametrize(
     ("edits", "refusal"),
     [
-        (
-            [("rules/gromril-armour.yaml", GROMRIL_ARMOUR, "  - reroll: make-armour-saves\n")],
-            "rule gromril-armour: its effects state no addresses",
-        ),
         (
             [("rules/stubborn.yaml", "fact: break-tests-taken", "fact: break-tests-takn")],
             "rule stubborn: no fact is named break-tests-takn",
@@ -283,14 +271,6 @@ GROMRIL_ARMOUR = """  - reroll: natural-1
             "rule killing-blow: moved is no number",
         ),
         (
-            [("rules/skirmish-formation.yaml", "legacy: {}", "legacy:")],
-            "a legacy block is a mapping",
-        ),
-        (
-            [("rules/dragon-armour.yaml", "effects:", "when: {combat: true}\neffects:")],
-            "a rule written for the graph gates each effect with its own when",
-        ),
-        (
             [
                 ("rules/strike-first.yaml", "cancels: {rule: strike-last}", "cancels: {op: add}"),
                 ("rules/strike-last.yaml", "cancels: {rule: strike-first}", "cancels: {op: add}"),
@@ -299,7 +279,6 @@ GROMRIL_ARMOUR = """  - reroll: natural-1
         ),
     ],
     ids=[
-        "no-addresses",
         "no-fact",
         "cancel-no-rule",
         "grant-no-rule",
@@ -311,8 +290,6 @@ GROMRIL_ARMOUR = """  - reroll: natural-1
         "int-fact-against-flag",
         "flag-fact-against-number",
         "amount-not-a-number",
-        "legacy-null",
-        "rule-level-when",
         "conflict",
     ],
 )

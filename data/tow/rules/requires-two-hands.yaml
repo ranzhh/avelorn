@@ -12,7 +12,4 @@ paragraphs:
 effects:
   - bar: shield
     at: {step: choose-combat-and-determine-who-can-fight, by: this-model}
-    legacy:
-      when: {combat: true}
-      bars: Shield
 notes: That the model cannot even be armed with the pairing is equipment legality (#17).

@@ -2,10 +2,11 @@
 
 from collections.abc import Hashable, Mapping, Sequence
 from fractions import Fraction
+from math import comb
 
 import pytest
 
-from avelorn.core.dice import binomial_distribution, cap_distribution, group_distribution
+from avelorn.core.dice import cap_distribution, group_distribution
 from avelorn.core.distribution import Distribution, Monoid, Probability
 
 
@@ -246,7 +247,7 @@ def test_floordiv_rejects_a_group_size_below_one(group_size: int) -> None:
 
 def test_matmul_sums_independent_copies() -> None:
     """``4 @ coin`` is Binomial(4, 0.5) — four throws totalled."""
-    assert _same(4 @ _coin, _counts(binomial_distribution(4, 0.5)))
+    assert _same(4 @ _coin, _counts([comb(4, k) / 16 for k in range(5)]))
 
 
 def test_matmul_of_one_copy_is_the_distribution() -> None:
@@ -296,11 +297,6 @@ def test_only_count_at_distribution_is_defined() -> None:
 def test_matmul_conserves_mass() -> None:
     """Repeated convolution is still a distribution."""
     assert (6 @ _coin).total() == pytest.approx(1.0)
-
-
-def test_matmul_matches_the_binomial_it_should_defer_to() -> None:
-    """The closed form and the repeat agree, which is what makes preferring it safe."""
-    assert _same(12 @ _coin, _counts(binomial_distribution(12, 0.5)))
 
 
 def test_rshift_is_bind() -> None:

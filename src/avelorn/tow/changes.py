@@ -13,7 +13,7 @@ from avelorn.tow.kernels import Die
 from avelorn.tow.schema.effect import Bounded, Effect, Operation, RerollOn
 from avelorn.tow.schema.quantity import Quantity
 from avelorn.tow.schema.rule import DiceQuantity, Parameter
-from avelorn.tow.schema.stage import Side
+from avelorn.tow.schema.side import Side
 from avelorn.tow.schema.unit import Characteristic, ProfileRole
 
 type Changeable = Quantity | Characteristic

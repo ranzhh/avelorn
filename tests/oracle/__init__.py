@@ -1,1 +1,1 @@
-"""An oracle for the printed attack procedure, independent of both engines."""
+"""An oracle for the printed attack procedure, independent of the engine."""

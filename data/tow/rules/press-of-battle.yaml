@@ -13,5 +13,3 @@ effects:
       facts: [{fact: charges-made, of: this-model, more-than: 0}]
     add: {fighting-ranks: 1}
     at: {step: who-can-fight, by: this-model}
-    legacy:
-      when: {movement: {charge: false}}

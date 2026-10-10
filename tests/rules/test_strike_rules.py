@@ -510,6 +510,12 @@ HOETH_INTO_IRONBREAKERS = Attack(
             HOETH_INTO_IRONBREAKERS,
             id="magical-swords",
         ),
+        pytest.param(
+            Scenario(Kind.STRIKE, SPEARS, IRONBREAKERS).adding("magical-attacks", Role.ATTACKER),
+            replace(IRONBREAKERS_PARRY, ward=None),
+            replace(IRONBREAKERS_PARRY, ward=None),
+            id="spears-of-a-unit-with-magical-attacks",
+        ),
     ],
 )
 def test_runes_of_protection(attackers: Scenario, printed: Attack, plain: Attack) -> None:

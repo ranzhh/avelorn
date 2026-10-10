@@ -5,7 +5,6 @@ from pydantic import ValidationError
 
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.schema.effect import Address, Effect, Operation, Role, conflicts
-from avelorn.tow.schema.rule import Clause, ModifierEffect
 from avelorn.tow.schema.step import StepSequence
 
 REPO = TOWRepository()
@@ -105,42 +104,9 @@ def test_an_address_excluding_a_sequence_lands_in_the_others() -> None:
     assert address.sequences == (StepSequence.COMBAT,)
 
 
-def test_a_legacy_block_without_an_operation_reads_the_graphs() -> None:
-    """The legacy engine takes the graph's add when its block names no operation."""
-    clause = Clause.read(
-        {
-            "when": {"step": "roll-to-wound", "by": "this-model", "natural": 6},
-            **LANDS,
-            "add": {"armour-piercing": 1},
-            "legacy": {"when": {"natural": {"face": 6, "roll": "roll-to-wound"}}},
-        }
-    )
-    assert isinstance(clause.legacy, ModifierEffect)
-    assert clause.legacy.add == {"armour-piercing": 1}
-    assert clause.legacy.natural is not None and clause.legacy.natural.face == 6
-
-
-def test_a_legacy_block_with_an_operation_reads_its_own() -> None:
-    """A block naming its own operation is the legacy effect entire."""
-    clause = Clause.read(
-        {**LANDS, "set": {"armour-piercing": 1}, "legacy": {"add": {"to-hit": 1}}}
-    )
-    assert isinstance(clause.legacy, ModifierEffect)
-    assert clause.legacy.add == {"to-hit": 1}
-    assert clause.legacy.set_ is None
-
-
-def test_an_effect_without_a_legacy_block_is_the_graphs_alone() -> None:
-    """Without a legacy block the legacy engine never sees the effect."""
-    clause = Clause.read({**LANDS, "add": {"armour-piercing": 1}})
-    assert clause.effect is not None
-    assert clause.legacy is None
-
-
 def _uncancelled(slug: str) -> tuple[Effect, ...]:
-    graph = REPO.rules[slug].graph
-    assert graph is not None
-    return tuple(effect for effect in graph.effects if effect.operation is not Operation.CANCELS)
+    effects = REPO.rules[slug].effects
+    return tuple(effect for effect in effects if effect.operation is not Operation.CANCELS)
 
 
 def test_two_rules_setting_one_value_conflict_unless_one_cancels() -> None:
@@ -151,20 +117,17 @@ def test_two_rules_setting_one_value_conflict_unless_one_cancels() -> None:
         "and neither cancels"
     ]
     for slug in both:
-        graph = REPO.rules[slug].graph
-        assert graph is not None
-        assert conflicts({**both, slug: graph.effects}) == []
+        assert conflicts({**both, slug: REPO.rules[slug].effects}) == []
 
 
 def test_a_cancel_reaches_only_its_own_address() -> None:
     """Strike First's cancel, moved to where the enemy acts, no longer reaches Strike Last."""
-    graph = REPO.rules["strike-first"].graph
-    assert graph is not None
+    rule = REPO.rules["strike-first"]
     moved = tuple(
         effect.model_copy(update={"at": effect.at.mirrored()})
         if effect.cancels is not None and effect.at is not None
         else effect
-        for effect in graph.effects
+        for effect in rule.effects
     )
     assert conflicts({"strike-first": moved, "strike-last": _uncancelled("strike-last")}) != []
 
@@ -195,12 +158,11 @@ def test_rules_landing_for_different_roles_never_conflict() -> None:
 
 def test_two_rules_forcing_different_options_conflict() -> None:
     """A second rule forcing another Break test result clashes with Stubborn."""
-    graph = REPO.rules["stubborn"].graph
-    assert graph is not None
+    rule = REPO.rules["stubborn"]
     gives = tuple(
-        effect.model_copy(update={"force": ("gives-ground",)}) for effect in graph.effects
+        effect.model_copy(update={"force": ("gives-ground",)}) for effect in rule.effects
     )
-    found = conflicts({"stubborn": graph.effects, "doctored": gives})
+    found = conflicts({"stubborn": rule.effects, "doctored": gives})
     assert all(
         each.startswith("doctored and stubborn force gives-ground against") for each in found
     )

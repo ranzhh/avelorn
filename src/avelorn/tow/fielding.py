@@ -1,13 +1,12 @@
 """Fielded sides, made of parts."""
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from typing import NamedTuple
 
 from avelorn.core.graph import Source
 from avelorn.tow.contingent import Contingent
-from avelorn.tow.engine.armour import defender_armour
-from avelorn.tow.kernels import Standing, Standings
+from avelorn.tow.kernels import BEST_ARMOUR_VALUE, UNARMOURED, Standing, Standings
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.reference import RuleRef, slugified
 from avelorn.tow.schema.troop_type import TroopTypeProfile
@@ -394,6 +393,25 @@ class Fielding:
         )
         mounts = () if not combat else _mounted(contingent, parts)
         return cls(unit.id, unit.rank_and_file, parts, contingent.frontage, mounts)
+
+
+def defender_armour(worn: Sequence[Armour]) -> int | None:
+    """Fold worn armour into one armour value (the-shooting-phase/determining-armour-value).
+
+    The best suit worn, improved by every stacking bonus (a shield's +1), floored at 2+.
+
+    Returns:
+        The armour value, or None when the model is effectively unarmoured.
+    """
+    suit = UNARMOURED
+    improvement = 0
+    for piece in worn:
+        if piece.armour_value is not None:
+            suit = min(suit, piece.armour_value)
+        elif piece.armour_value_improvement is not None:
+            improvement += piece.armour_value_improvement
+    value = max(suit - improvement, BEST_ARMOUR_VALUE)
+    return value if value < UNARMOURED else None
 
 
 def _mounted(contingent: Contingent, riders: tuple[Part, ...]) -> tuple[Part, ...]:

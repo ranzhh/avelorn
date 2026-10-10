@@ -10,7 +10,7 @@ from avelorn.tow.data import TOWRepository
 from avelorn.tow.game import TOWGame
 from avelorn.tow.phases.movement import StandAndShoot
 from avelorn.tow.schema.phase import Phase
-from avelorn.tow.schema.stage import Side
+from avelorn.tow.schema.side import Side
 from avelorn.tow.schema.unit import Unit
 
 REPO = TOWRepository()

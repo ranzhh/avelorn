@@ -17,15 +17,11 @@ from avelorn.tow.kernels import (
     d6,
     falls_back_in_good_order,
     heavy_casualties,
-    hit_probability,
     leadership_test,
     melee_hit_target,
     remove_casualties,
-    save_probability,
     shooting_hit,
     shooting_hit_target,
-    success,
-    wound_probability,
     wound_target,
 )
 
@@ -107,23 +103,6 @@ def test_armour_save_target(
     assert armour_save_target(armour_value, armour_piercing) == expected
 
 
-@pytest.mark.parametrize(
-    ("target", "expected"),
-    [
-        (3, 4 / 6),
-        (6, 1 / 6),
-        (1, 5 / 6),  # natural 1 always fails
-        (7, 1 / 12),  # natural 6 confirmed on 4+
-        (8, 1 / 18),
-        (9, 1 / 36),
-        (10, 0.0),
-    ],
-)
-def test_hit_probability(target: int, expected: float) -> None:
-    """Hit probabilities, including the 7+ confirm rule."""
-    assert hit_probability(target) == pytest.approx(expected)
-
-
 @pytest.mark.parametrize("modifier", [0, -1, -2])
 @pytest.mark.parametrize("ballistic_skill", range(6, 11))
 def test_ballistic_skill_six_or_higher_hits_as_the_oracle(
@@ -135,7 +114,7 @@ def test_ballistic_skill_six_or_higher_hits_as_the_oracle(
     )
     always_wounds = Fraction(5, 6)
 
-    hit = success(shooting_hit(ballistic_skill, modifier))
+    hit = shooting_hit(ballistic_skill, modifier).prob(lambda die: die.success)
 
     assert hit * always_wounds == one_attack(attack).unsaved
 
@@ -149,20 +128,6 @@ def test_shooting_hit_refuses_a_roll_the_chart_does_not_print(
 ) -> None:
     with pytest.raises(ValueError, match=re.escape(message)):
         shooting_hit(ballistic_skill, modifier)
-
-
-def test_save_probability_none_means_no_save() -> None:
-    """No save target means the wound always goes through."""
-    assert save_probability(None) == 0.0
-    assert save_probability(5) == pytest.approx(2 / 6)
-
-
-def test_wound_probability() -> None:
-    """Wound probabilities follow the target; None (cannot wound) is 0."""
-    assert wound_probability(None) == 0.0
-    assert wound_probability(4) == pytest.approx(3 / 6)
-    assert wound_probability(2) == pytest.approx(5 / 6)
-    assert wound_probability(6) == pytest.approx(1 / 6)
 
 
 _SIXTH = Fraction(1, 6)
