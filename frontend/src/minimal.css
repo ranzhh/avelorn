@@ -277,10 +277,6 @@ svg {
 	fill: var(--ordinal-1);
 	stroke: #333;
 }
-.surface .edge rect {
-	fill: #fff;
-	stroke: #333;
-}
 .surface .front {
 	stroke: #333;
 	stroke-width: 3px;
@@ -334,6 +330,7 @@ svg {
 .surface .trace,
 .surface .ghost,
 .surface .halo,
+.surface .grip,
 .surface .tether {
 	pointer-events: none;
 }
@@ -347,6 +344,15 @@ svg {
 	fill: none;
 	stroke: var(--accent);
 }
+.surface .edge {
+	cursor: ew-resize;
+}
+.surface .reach {
+	fill: transparent;
+}
+.surface .grip {
+	fill: var(--accent);
+}
 .surface .tether {
 	stroke: var(--accent);
 }
@@ -356,7 +362,8 @@ svg {
 	stroke-width: 2px;
 	cursor: grab;
 }
-.surface .handle:hover {
+.surface .handle:hover,
+.surface .edge:hover .grip {
 	fill: var(--accent);
 	fill-opacity: 0.6;
 }

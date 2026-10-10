@@ -299,6 +299,7 @@
 		{#if print}
 			{@const size = span(print)}
 			{@const pad = 4 * px}
+			{@const reach = Math.max(size.depth, 24 * px)}
 			<g class="chrome" transform="rotate({chosen.facing} {chosen.x} {chosen.y})">
 				<rect
 					class="halo"
@@ -307,27 +308,29 @@
 					width={size.width + 2 * pad}
 					height={size.depth + 2 * pad}
 				/>
-				{#each [-1, 1] as side}
-					{@const edge = chosen.x + (side * size.width) / 2}
-					<!-- svelte-ignore a11y_no_static_element_interactions -->
-					<g class="edge" onpointerdown={(event) => grabEdge(event, chosen)}>
-						<rect x={edge - 0.75} y={chosen.y - 1.6} width="1.5" height="3.2" rx="0.4" />
-						<line
-							class="grip"
-							x1={edge - 0.25}
-							y1={chosen.y - 0.8}
-							x2={edge - 0.25}
-							y2={chosen.y + 0.8}
-						/>
-						<line
-							class="grip"
-							x1={edge + 0.25}
-							y1={chosen.y - 0.8}
-							x2={edge + 0.25}
-							y2={chosen.y + 0.8}
-						/>
-					</g>
-				{/each}
+				{#if chosen.block.size > 1}
+					{#each [-1, 1] as side}
+						{@const edge = chosen.x + (side * size.width) / 2}
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<g class="edge" onpointerdown={(event) => grabEdge(event, chosen)}>
+							<rect
+								class="reach"
+								x={side < 0 ? edge - 16 * px : edge}
+								y={chosen.y - reach / 2}
+								width={16 * px}
+								height={reach}
+							/>
+							<rect
+								class="grip"
+								x={edge + side * pad - 3 * px}
+								y={chosen.y - size.depth / 2 - pad}
+								width={6 * px}
+								height={size.depth + 2 * pad}
+								rx={3 * px}
+							/>
+						</g>
+					{/each}
+				{/if}
 			</g>
 		{/if}
 	{/if}
