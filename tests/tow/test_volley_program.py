@@ -360,7 +360,7 @@ def test_a_champion_shoots_from_the_front_rank(moved: bool, standing: int, parts
     archers = Contingent.deploy("elven-archers", 10, ("sentinel",), data=REPO, frontage=5)
     spearmen = Contingent.deploy("elven-spearmen", 20, data=REPO, frontage=5)
     volley = _volley(
-        Fielding.of(archers, "Longbow", ("sentinel",)),
+        Fielding.of(archers, "Longbow"),
         Fielding.of(spearmen),
         shooters=standing,
         models=20,
@@ -376,7 +376,7 @@ def test_a_champion_shoots_at_its_own_ballistic_skill() -> None:
     archers = Contingent.deploy("elven-archers", 10, ("sentinel",), data=REPO, frontage=5)
     spearmen = Contingent.deploy("elven-spearmen", 20, data=REPO, frontage=5)
     volley = _volley(
-        Fielding.of(archers, "Longbow", ("sentinel",)),
+        Fielding.of(archers, "Longbow"),
         Fielding.of(spearmen),
         shooters=10,
         models=20,

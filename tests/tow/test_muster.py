@@ -63,7 +63,7 @@ def test_dwarf_warriors_buy_one_of_the_two_veterans(
     mustered = Complement(unit=REPO.units["dwarf-warriors"], size=10, options=[option])
     assert mustered.points == points
     assert (RuleRef(rule="veteran") in mustered.special_rules) is rule
-    fielded = Fielding.of(Contingent.field(mustered, data=REPO), options=(option,))
+    fielded = Fielding.of(Contingent.field(mustered, data=REPO))
     assert [part.id for part in fielded.parts] == parts
 
 

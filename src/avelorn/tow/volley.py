@@ -124,8 +124,6 @@ def fire(
     target: Contingent,
     *,
     distance: int,
-    shooter_options: tuple[str, ...] = (),
-    target_options: tuple[str, ...] = (),
     battle_strength: int | None = None,
 ) -> Volley:
     """Shoot one contingent at another with the weapon in hand.
@@ -139,8 +137,8 @@ def fire(
     """
     weapon = shooter.shooting_weapon()
     fielded = {
-        Side.ATTACKER: Fielding.of(shooter, weapon.name, shooter_options),
-        Side.TARGET: Fielding.of(target, options=target_options),
+        Side.ATTACKER: Fielding.of(shooter, weapon.name),
+        Side.TARGET: Fielding.of(target),
     }
     built = loaded.built(fielded)
     lanes = built.evaluate(

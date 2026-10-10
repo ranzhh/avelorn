@@ -344,8 +344,6 @@ def _fired(request: Volley, data: TOWRepository) -> tuple[Contingent, Contingent
         shooter,
         target,
         distance=request.distance,
-        shooter_options=tuple(request.shooter.options),
-        target_options=tuple(request.target.options),
         battle_strength=request.battle_strength,
     )
     return shooter, target, fired

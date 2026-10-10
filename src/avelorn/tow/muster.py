@@ -57,14 +57,12 @@ class Complement(BaseModel):
     leaves open.
 
     ``options`` picks entries from ``unit.options`` by id; a chosen option's
-    ``adds``/``removes`` fold into :attr:`equipment` and :attr:`special_rules`.
-    Command and heterogeneous profiles (a champion, an embedded character —
-    each its own profile) affect only ``points`` today: the fielded body is
-    still homogeneous, so they are recorded, not yet resolved into distinct
-    parts (#46). For the same reason an option bought for one model — one
-    carrying :attr:`~avelorn.tow.schema.unit.UnitOption.applies_to` — cannot
-    be mustered at all: there is no part to fold it into, and folding it
-    unit-wide would arm every model (#120). Options priced by a
+    ``adds``/``removes`` fold into :attr:`equipment` and :attr:`special_rules`,
+    and a chosen champion is fielded as a part of its own
+    (:meth:`~avelorn.tow.fielding.Fielding.of`). Every part carries the whole
+    loadout, so an option bought for one model, one carrying
+    :attr:`~avelorn.tow.schema.unit.UnitOption.applies_to`, cannot be mustered
+    at all: folding it would arm every model (#120). Options priced by a
     ``points_budget`` (a magic standard) contribute no fixed cost until magic
     items are modelled.
     """

@@ -130,3 +130,49 @@ def test_a_stand_and_shoot_scores_only_in_the_turn_it_was_made() -> None:
     }
     margin = stood.casualties.bind(lambda felled: left[felled].margin)
     assert _mass(fought.margin) == _mass(margin)
+
+
+def test_a_champion_fights_with_its_own_attacks() -> None:
+    """Ten Dwarf Warriors fight their like, both striking at Initiative 2.
+
+    Heavy Infantry stand four to a rank: four in the front rank at A1 and four
+    supporting make 8 attacks. A Veteran at A2 stands in the front rank, so it
+    makes 9.
+    """
+    foes = Contingent.deploy("dwarf-warriors", 10, data=REPO).wielding("Hand Weapon")
+    attacks = "round/initiative-2/attacker/how-many-attacks"
+
+    made = [
+        fight_round(
+            ROUND_PROGRAM,
+            Contingent.deploy("dwarf-warriors", 10, options, data=REPO).wielding("Hand Weapon"),
+            foes,
+            first_round=True,
+        )
+        .evaluated.at(attacks)
+        .read("attacks")
+        .mass
+        for options in ((), ("veteran",))
+    ]
+
+    assert made == [{8: 1}, {9: 1}]
+
+
+def test_a_champion_stands_and_shoots_at_its_own_ballistic_skill() -> None:
+    """Ten Archers five wide with a Sentinel stand and shoot at charging Spearmen.
+
+    Only the front rank shoots, the Sentinel among it. Stand & Shoot's -1 To
+    Hit takes the Sentinel's BS 5 to 3+ and the Archers' BS 4 to 4+.
+    """
+    charger = _fielded("elven-spearmen", 10, "Thrusting Spear").charging(
+        Charge(8, ChargeArc.FRONT)
+    )
+    archers = Contingent.deploy("elven-archers", 10, ("sentinel",), data=REPO, frontage=5)
+
+    stood = stand_and_shoot(STAND_AND_SHOOT_PROGRAM, archers.wielding("Longbow"), charger)
+
+    shots = stood.evaluated.at("stand-and-shoot/how-many-shots").read("parts").mass
+    sentinel = stood.evaluated.at("stand-and-shoot/attacker/attack/sentinel/roll-to-hit")
+    assert shots == {"sentinel 1, elven-archer 4": 1}
+    assert sentinel.read("needed").mass == {"3+": 1}
+    assert stood.needed("roll-to-hit") == "4+"
