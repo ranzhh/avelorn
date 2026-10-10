@@ -68,7 +68,7 @@ def test_show_covers_every_field_the_detail_endpoint_serves() -> None:
         "special_rules": all(
             REPO.rules[ref.rule].display(ref.x) in printed for ref in unit.special_rules
         ),
-        "options": all(option.name in printed for option in unit.options),
+        "options": all(option.id in printed and option.name in printed for option in unit.options),
     }
     assert set(shown) == set(Unit.model_fields)
     assert [field for field, found in shown.items() if not found] == []
