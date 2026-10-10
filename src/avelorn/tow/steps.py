@@ -4,6 +4,7 @@ from collections.abc import Callable, Hashable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from fractions import Fraction
+from functools import partial
 from itertools import takewhile
 from types import MappingProxyType
 from typing import Any, ClassVar
@@ -23,7 +24,16 @@ from avelorn.core.graph import (
 )
 from avelorn.tow.changes import Folded, Payloads
 from avelorn.tow.contingent import ChargeArc
-from avelorn.tow.fielding import Attacks, Fielding, Held, Initiatives, Part, PerPart, Shots
+from avelorn.tow.fielding import (
+    Attacks,
+    Fielding,
+    Held,
+    Hits,
+    Initiatives,
+    Part,
+    PerPart,
+    Shots,
+)
 from avelorn.tow.kernels import (
     HIGH_BALLISTIC_SKILL,
     UNARMOURED,
@@ -378,6 +388,8 @@ class Choice:
 
 WEAPON_CHOICE = "choose-combat-and-determine-who-can-fight"
 
+AUTOMATIC_HITS = ("impact-hits", "stomp-attacks")
+
 
 def weapon_choices(specs: Mapping[Step[Any], "Spec | Choice"]) -> dict[Side, Decision[Any]]:
     """The decision each side makes at its weapon choice, by side.
@@ -596,11 +608,11 @@ def _wound_target(
 
 
 def _wounded(
-    weapon: WeaponProfile, attacker: Part, target: Part, hit: Die, changed: tuple[Hashable, ...]
+    weapon: WeaponProfile, attacker: Part, target: Part, hit: bool, changed: tuple[Hashable, ...]
 ) -> Distribution[Die | None]:
     payloads = Payloads.of(changed)
     needed = _wound_target(weapon, attacker, target, payloads)
-    if not hit.success or needed is None:
+    if not hit or needed is None:
         return Distribution.pure(None)
     return _thrown(needed, payloads.rerolls())
 
@@ -611,7 +623,7 @@ def roll_to_wound(attacker: Part, target: Part, hit: Die) -> Distribution[Die | 
     Returns:
         The die as it lands, or None when no die is rolled.
     """
-    return _wounded(_profile(attacker), attacker, target, hit, ())
+    return _wounded(_profile(attacker), attacker, target, hit.success, ())
 
 
 def roll_to_wound_in_combat(
@@ -626,7 +638,88 @@ def roll_to_wound_in_combat(
     Returns:
         The die as it lands, or None when no die is rolled.
     """
-    return _wounded(attacker.weapon_with(held), attacker, target, hit, changed)
+    return _wounded(attacker.weapon_with(held), attacker, target, hit.success, changed)
+
+
+def _front_rank(side: Fielding, at_start: Standings, standing: Standings) -> dict[str, int]:
+    placed = [part for part in side.parts for _ in range(at_start.of(part.id).models)]
+    front = placed[: side.frontage]
+    return {
+        part.id: max(
+            front.count(part) - at_start.of(part.id).models + standing.of(part.id).models, 0
+        )
+        for part in side.parts
+    }
+
+
+def automatic_hits(
+    attacker: Fielding, at_start: Standings, standing: Standings, changed: tuple[Hashable, ...]
+) -> Distribution[Hits]:
+    """Roll the automatic hits each part makes, as the rules in force fill the slot.
+
+    Each model of the front rank still standing, the models in base contact
+    as the engine reads contact, makes the hits of every rule in force: a
+    number or a dice roll each (special-rules/impact-hits,
+    special-rules/stomp-attacks). A casualty suffered since the start of the
+    round comes off the front rank first.
+
+    Returns:
+        The hits each part makes.
+    """
+    _since(attacker, at_start, standing)
+    each = Distribution.pure(0)
+    for per_model in Payloads.of(changed).hits():
+        each = each.combine(_rolled(per_model), _COUNT.operation)
+    front = _front_rank(attacker, at_start, standing)
+    made = Distribution.pure(Hits(()))
+    for part in attacker.parts:
+        theirs = each.repeat(front[part.id], _COUNT)
+        made = made.bind(partial(_joined, part.id, theirs))
+    return made
+
+
+def _joined(part: str, theirs: Distribution[int], made: Hits) -> Distribution[Hits]:
+    return theirs.map(lambda count: Hits((*made.parts, (part, count))))
+
+
+def _hits_shown(changed: tuple[Hashable, ...]) -> str:
+    return " + ".join(str(each) for each in Payloads.of(changed).hits()) or NO_ROLL
+
+
+def _unshown() -> str:
+    return NO_ROLL
+
+
+_BARE = WeaponProfile.model_validate({"R": "Combat", "S": "S"})
+
+
+def _automatic_wound_target(attacker: Part, target: Part, payloads: Payloads) -> int | None:
+    return _wound_target(_BARE, attacker, target, payloads)
+
+
+def roll_to_wound_automatically(
+    attacker: Part, target: Part, changed: tuple[Hashable, ...]
+) -> Distribution[Die | None]:
+    """Roll an automatic hit To Wound, the model's own Strength against Toughness.
+
+    The hit needs no roll and no weapon strikes it; the Strength moves by the
+    rules in force, which the rules that make such hits cancel.
+
+    Returns:
+        The die as it lands.
+    """
+    return _wounded(_BARE, attacker, target, True, changed)
+
+
+def make_armour_saves_against_automatic_hits(
+    target: Part, wound: Die | None, held: Held, changed: tuple[Hashable, ...]
+) -> Distribution[Die | None]:
+    """Roll the armour save against an automatic hit, which no weapon pierces.
+
+    Returns:
+        The die as it lands, or None when no die is rolled.
+    """
+    return _saved(target.armour_with(held), _BARE, wound, changed)
 
 
 def _piercing(weapon: WeaponProfile, payloads: Payloads) -> int:
@@ -726,7 +819,7 @@ def _unsaved(wound: Die | None, save: Die | None, ward: Die | None) -> int:
     return int(_succeeded(wound) and not _succeeded(save) and not _succeeded(ward))
 
 
-def _lost(by: int | DiceQuantity) -> Distribution[int]:
+def _rolled(by: int | DiceQuantity) -> Distribution[int]:
     if isinstance(by, int):
         return Distribution.pure(by)
     return Distribution({face + by.plus: Fraction(1, by.sides) for face in range(1, by.sides + 1)})
@@ -739,7 +832,7 @@ def _remove_casualties(
         case ():
             return Distribution.pure(back_rank(standing, wounds, target.removal))
         case (by,):
-            return back_rank_multiplied(standing, wounds, _lost(by), target.removal)
+            return back_rank_multiplied(standing, wounds, _rolled(by), target.removal)
         case many:
             raise ValueError(f"{target.unit}'s unsaved wounds are multiplied {len(many)} times")
 
@@ -1362,6 +1455,26 @@ _SPECS = (
         },
         readings={"initiatives": _offer("who-strikes-first", str)},
     ),
+    *(
+        Spec(
+            sequence=StepSequence.COMBAT,
+            name=name,
+            kind=Kind.ROLL,
+            side=Side.ATTACKER,
+            reads=(
+                _ATTACKER,
+                Fact("standing-at-start-of-round", Side.ATTACKER),
+                Fact("standing", Side.ATTACKER),
+                CHANGED,
+            ),
+            kernel=automatic_hits,
+            runs={Operation.HITS: frozenset()},
+            target=Offered((CHANGED,), _hits_shown, _UNITED),
+            printed=Offered((), _unshown, _UNITED),
+            readings={"hits": _offer(name, _total, _COUNT)},
+        )
+        for name in AUTOMATIC_HITS
+    ),
     Spec(
         sequence=StepSequence.COMBAT,
         name="how-many-attacks",
@@ -1526,4 +1639,58 @@ _SPECS = (
 
 STEPS: Mapping[tuple[StepSequence, str], Spec | Choice] = MappingProxyType(
     {spec.key: spec for spec in _SPECS}
+)
+
+_HIT_AUTOMATICALLY = (
+    Spec(
+        sequence=StepSequence.COMBAT,
+        name="roll-to-wound",
+        kind=Kind.ROLL,
+        fighter=True,
+        side=Side.ATTACKER,
+        reads=(_ATTACKER, _TARGET, CHANGED),
+        kernel=roll_to_wound_automatically,
+        runs={
+            Operation.ADD: frozenset({(Side.ATTACKER, Characteristic.STRENGTH)}),
+            Operation.REROLL: _ALL_REROLLS,
+        },
+        target=Offered(
+            (_ATTACKER, _TARGET, CHANGED),
+            lambda attacker, target, changed: _shown(
+                _automatic_wound_target(attacker, target, Payloads.of(changed))
+            ),
+            _UNITED,
+        ),
+        printed=Offered(
+            (_ATTACKER, _TARGET),
+            lambda attacker, target: _shown(_automatic_wound_target(attacker, target, _PRINTED)),
+            _UNITED,
+        ),
+        readings={"wounds": _counted("roll-to-wound")},
+    ),
+    Spec(
+        sequence=StepSequence.COMBAT,
+        name="make-armour-saves",
+        kind=Kind.ROLL,
+        fighter=True,
+        side=Side.TARGET,
+        reads=(_TARGET, Output("roll-to-wound"), _HELD, CHANGED),
+        kernel=make_armour_saves_against_automatic_hits,
+        runs=_SAVE_RUNS,
+        target=Offered(
+            (_TARGET, _HELD, CHANGED),
+            lambda target, held, changed: _save_needed(target.armour_with(held), _BARE, changed),
+            _UNITED,
+        ),
+        printed=Offered(
+            (_TARGET, _HELD),
+            lambda target, held: _save_needed(target.armour_with(held), _BARE, ()),
+            _UNITED,
+        ),
+        readings={"saves": _counted("make-armour-saves")},
+    ),
+)
+
+SLOTTED: Mapping[tuple[str, str], Spec] = MappingProxyType(
+    {(slot, spec.name): spec for slot in AUTOMATIC_HITS for spec in _HIT_AUTOMATICALLY}
 )

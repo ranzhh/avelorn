@@ -170,6 +170,15 @@ class SlotsEntry(BaseModel):
         return range(self.from_, self.to + step, step)
 
 
+class SlotEntry(BaseModel):
+    """A slot named after the step that opens it, its steps run with that step's own."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    slot: str
+    items: list[GroupEntry | StepEntry | str] = Field(min_length=1)
+
+
 class ProgramFile(BaseModel):
     """A program file; ``fielded`` names the sides each build fields."""
 
@@ -179,4 +188,4 @@ class ProgramFile(BaseModel):
     sequence: StepSequence
     fielded: list[Side]
     inputs: list[FactInput | KnownInput]
-    items: list[GroupEntry | SlotsEntry | StepEntry | str] = Field(min_length=1)
+    items: list[GroupEntry | SlotEntry | SlotsEntry | StepEntry | str] = Field(min_length=1)

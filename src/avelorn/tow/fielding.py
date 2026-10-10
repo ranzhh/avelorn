@@ -143,6 +143,10 @@ class Initiatives(PerPart):
     """The Initiative each part strikes at."""
 
 
+class Hits(PerPart):
+    """The automatic hits each part makes."""
+
+
 @dataclass(frozen=True, eq=False)
 class Fielding:
     """A side on the table, of one troop type: its parts in placement order, front to back."""

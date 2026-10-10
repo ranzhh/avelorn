@@ -218,13 +218,14 @@ def test_stubborn(spearmen: Side, ironbreakers: Side, overwhelmed: bool) -> None
 def test_terror() -> None:
     """Spearmen beaten by the Merwyrm test at Leadership 7; the Merwyrm, beaten, keeps its 8.
 
-    Neither five Spearmen nor the Merwyrm's four blows can wipe out the other in
-    a round, so the loser always tests.
+    Two files of Spearmen strike four blows at most, and the Merwyrm's four blows and
+    four stomps at most fell eight of nine, so neither side is wiped out and the
+    loser always tests.
     """
     scenario = Scenario(
         Kind.BREAK,
         Side("merwyrm", 1, "Lashing Talons"),
-        replace(SPEARMEN, models=5, frontage=5),
+        Side("elven-spearmen", 9, "Hand Weapon", frontage=2),
         first_round=False,
     )
     printed = resolve(scenario)

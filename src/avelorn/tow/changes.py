@@ -26,6 +26,7 @@ _ORDERS = {
     Operation.DENY: Order.DENY,
     Operation.FORCE: Order.DENY,
     Operation.SUBSTITUTE: Order.DENY,
+    Operation.HITS: Order.ADD,
     Operation.REROLL: Order.REROLL,
     Operation.MULTIPLY: Order.MULTIPLY,
 }
@@ -88,9 +89,18 @@ class Substituted:
     replaced: tuple[tuple[str, str], ...]
 
 
-type Payload = Added | Fixed | Denied | Rerolled | Multiplied | Forced | Substituted
+@dataclass(frozen=True)
+class AutomaticHits:
+    """The automatic hits each model makes: a number, or a dice roll."""
 
-_PAYLOADS = (Added, Fixed, Denied, Rerolled, Multiplied, Forced, Substituted)
+    per_model: int | DiceQuantity
+
+
+type Payload = (
+    Added | Fixed | Denied | Rerolled | Multiplied | Forced | Substituted | AutomaticHits
+)
+
+_PAYLOADS = (Added, Fixed, Denied, Rerolled, Multiplied, Forced, Substituted, AutomaticHits)
 
 
 @dataclass(frozen=True)
@@ -191,6 +201,14 @@ class Payloads:
             if isinstance(each, Substituted):
                 outcome = dict(each.replaced).get(outcome, outcome)
         return outcome
+
+    def hits(self) -> tuple[int | DiceQuantity, ...]:
+        """Read the automatic hits each model makes, one entry for each rule.
+
+        Returns:
+            Every number or dice roll, in the order written.
+        """
+        return tuple(each.per_model for each in self.payloads if isinstance(each, AutomaticHits))
 
     def multiplied(self) -> tuple[int | DiceQuantity, ...]:
         """Read what the unsaved wounds are multiplied by.
@@ -575,7 +593,7 @@ class Operated:
 
         Returns:
             An added amount, a value set, a deny, a re-roll, a multiplier, an outcome
-            forced or replaced, or the cancel itself.
+            forced or replaced, automatic hits, or the cancel itself.
 
         Raises:
             ValueError: the operation is not one a step folds.
@@ -595,7 +613,9 @@ class Operated:
             case Operation.REROLL if effect.reroll is not None:
                 return Rerolled(effect.reroll)
             case Operation.MULTIPLY if effect.multiply is not None:
-                return Multiplied(self.multiplier(effect.multiply, sources))
+                return Multiplied(self.quantity(effect.multiply, sources))
+            case Operation.HITS if effect.hits is not None:
+                return AutomaticHits(self.quantity(effect.hits, sources))
             case Operation.FORCE if effect.force is not None:
                 return Forced(frozenset(effect.force))
             case Operation.SUBSTITUTE if effect.substitute is not None:
@@ -619,20 +639,20 @@ class Operated:
             raise TypeError(f"{self.rule} adds {written!r}, which is no number")
         return written
 
-    def multiplier(self, written: object, sources: tuple[Granted, ...]) -> int | DiceQuantity:
-        """A multiplier as written, with X combined over ``sources``.
+    def quantity(self, written: object, sources: tuple[Granted, ...]) -> int | DiceQuantity:
+        """A number or a dice roll as written, with X combined over ``sources``.
 
         Returns:
-            The number, or the dice rolled for each wound.
+            The number, or the dice rolled.
 
         Raises:
-            TypeError: the multiplier is no number and no dice roll once X is read.
+            TypeError: what is written is no number and no dice roll once X is read.
         """
         if written == "X" and self.parameter is not None:
             xs = [each.x for each in sources if each.x is not None]
             written = self.parameter.value(self.parameter.combined(xs))
         if not isinstance(written, int | DiceQuantity):
-            raise TypeError(f"{self.rule} multiplies by {written!r}, which is no number or roll")
+            raise TypeError(f"{self.rule} reads {written!r}, which is no number or roll")
         return written
 
     def cancels(self, other: Change) -> bool:
@@ -680,6 +700,8 @@ class Operated:
                 return f"force {', '.join(sorted(options))}"
             case Substituted(replaced):
                 return ", ".join(f"{old} becomes {new}" for old, new in replaced)
+            case AutomaticHits(per_model):
+                return f"{per_model} hits each"
         cancels = self.effect.cancels
         named = () if cancels is None else (cancels.rule, cancels.op, cancels.quantity)
         return " ".join(["cancels", *(str(each) for each in named if each is not None)])
