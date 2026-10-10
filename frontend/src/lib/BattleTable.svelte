@@ -71,6 +71,20 @@
 
 	let surface = $state<SVGSVGElement | null>(null);
 
+	/** Screen pixels to the inch, so handles and readings keep one size however large the table is drawn. */
+	let perInch = $state(12);
+	$effect(() => {
+		const drawn = surface;
+		if (!drawn) return;
+		const watch = new ResizeObserver(() => {
+			const width = drawn.getBoundingClientRect().width;
+			if (width > 0) perInch = width / TABLE.width;
+		});
+		watch.observe(drawn);
+		return () => watch.disconnect();
+	});
+	const px = $derived(1 / perInch);
+
 	/**
 	 * A drag in flight.
 	 *
@@ -369,7 +383,7 @@
 				<g class="ghost" transform="rotate({block.facing} {block.x} {block.y})">
 					<rect x={block.x - wide / 2} y={block.y - deep / 2} width={wide} height={deep} />
 				</g>
-				<text class="reading" x={block.x} y={block.y - deep / 2 - 1}>
+				<text class="reading" x={block.x} y={block.y - deep / 2 - 10 * px} font-size={12 * px}>
 					{reform.files}×{ranks}
 				</text>
 			{/if}
@@ -390,7 +404,8 @@
 				<text
 					class="reading"
 					x={(trace.fromX + trace.toX) / 2}
-					y={(trace.fromY + trace.toY) / 2 - 1}
+					y={(trace.fromY + trace.toY) / 2 - 10 * px}
+					font-size={12 * px}
 				>
 					{trace.reading}
 				</text>
@@ -426,7 +441,12 @@
 				/>
 			</g>
 			{#if reading}
-				<text class="reading" x={(moving.x + ghost.x) / 2} y={(moving.y + ghost.y) / 2 - 1}>
+				<text
+					class="reading"
+					x={(moving.x + ghost.x) / 2}
+					y={(moving.y + ghost.y) / 2 - 10 * px}
+					font-size={12 * px}
+				>
 					{reading}
 				</text>
 			{/if}

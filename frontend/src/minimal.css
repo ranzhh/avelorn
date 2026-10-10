@@ -259,26 +259,39 @@ svg {
 	width: 100%;
 	border: 1px solid var(--line);
 }
+.surface svg * {
+	vector-effect: non-scaling-stroke;
+}
 .surface .cloth {
 	fill: #fff;
 }
 .surface .foot {
 	stroke: #ccc;
-	stroke-width: 0.06;
 }
 .surface .block rect {
 	fill: #fff;
 	stroke: #333;
-	stroke-width: 0.1;
 }
-.surface .front,
+.surface .front {
+	stroke: #333;
+	stroke-width: 3px;
+}
 .surface .path {
 	stroke: #333;
-	stroke-width: 0.12;
+	stroke-width: 1.5px;
 }
 .surface text {
 	fill: #111;
+}
+.surface .mark,
+.surface .count {
 	font-size: 2px;
+}
+.surface .reading {
+	font-family: var(--font-mono);
+	paint-order: stroke;
+	stroke: #fff;
+	stroke-width: 3px;
 }
 
 .pane {
