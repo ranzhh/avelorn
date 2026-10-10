@@ -9,7 +9,6 @@ from avelorn.core.dice import (
     binomial_distribution,
     binomial_pmf,
     cap_distribution,
-    expected_value,
     group_distribution,
     multinomial_outcomes,
     p_d6_at_least,
@@ -38,11 +37,6 @@ def test_binomial_distribution_sums_to_one() -> None:
     distribution = binomial_distribution(10, 2 / 9)
     assert len(distribution) == 11
     assert sum(distribution) == pytest.approx(1.0)
-
-
-def test_expected_value_matches_n_times_p() -> None:
-    """E[Binomial(n, p)] = n * p."""
-    assert expected_value(binomial_distribution(12, 0.25)) == pytest.approx(3.0)
 
 
 def test_cap_distribution_folds_tail_onto_cap() -> None:

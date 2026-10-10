@@ -630,7 +630,7 @@
         "additionalProperties": false,
         "type": "object",
         "title": "AttackGate",
-        "description": "A gate on the attack a model is the target of.\n\nThe incoming attack, from the defender's side: its ``kind`` (Lion Cloak\nfires only ``against ... shooting attacks``), whether it is ``magical``\n(Lion Cloak wants non-magical, the reason it does not help against a magical\nbow), and whether it is ``flaming`` \u2014 carries the Flaming Attacks rule.\nOrthogonal facts \u2014 a shooting or a close-combat attack may be either.\n``at_long_range`` is a fourth, and a mistake kept for now: see #179 and the\nnote on the field."
+        "description": "A gate on the attack a model is the target of.\n\nThe incoming attack, from the defender's side: its ``kind`` (Lion Cloak\nfires only ``against ... shooting attacks``), whether it is ``magical``\n(Lion Cloak wants non-magical, the reason it does not help against a magical\nbow), and whether it is ``flaming`` \u2014 carries the Flaming Attacks rule.\nOrthogonal facts \u2014 a shooting or a close-combat attack may be either.\n``at_long_range`` is a fourth, and a mistake kept for now (#179): a range\nband is a measurement between two units, not a fact of the attack. Only\n``legacy:`` effects gate on it; a graph rule reads the band at Check Range.\nDo not add another positional fact here."
       },
       "AttackKind": {
         "type": "string",

@@ -168,14 +168,3 @@ def sample(distribution: Sequence[Probability], rng: random.Random | None = None
     outcome = generator.choices(range(len(distribution)), weights=distribution, k=1)[0]
     logger.debug("sampled %d from a %d-outcome distribution", outcome, len(distribution))
     return outcome
-
-
-def expected_value(distribution: Sequence[Probability]) -> Probability:
-    """Expected outcome of a distribution over the indices 0..n.
-
-    Returns:
-        The index-weighted mean (e.g. the mean number of successes or
-        casualties, whichever the distribution counts), in whatever numeric type
-        the masses carry.
-    """
-    return sum(k * p for k, p in enumerate(distribution))

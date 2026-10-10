@@ -11,7 +11,6 @@ from .procedure import (
     Attack,
     AttackOdds,
     BreakOdds,
-    Order,
     Phase,
     ReRoll,
     break_test,
@@ -20,7 +19,6 @@ from .procedure import (
     leadership_test,
     most_removed,
     one_attack,
-    remove_casualties,
     removed,
 )
 
@@ -166,18 +164,6 @@ def test_the_most_removed_order_puts_a_killing_blow_on_a_fresh_model() -> None:
     """Two Wounds then a Killing Blow, rolled, waste the Wounds; ordered, they need not."""
     assert removed([1, 1, None, 1], models=3, wounds=3) == 1
     assert most_removed([1, 1, None, 1], models=3, wounds=3) == 2
-
-
-def test_the_monte_carlo_is_seeded() -> None:
-    """The same seed gives the same histogram, so a sized tolerance is a fixed verdict."""
-    odds = one_attack(Attack(Phase.SHOOTING, skill=4, strength=3, toughness=3))
-
-    def run() -> dict[int, float]:
-        return remove_casualties(
-            10, odds, models=3, wounds=2, order=Order.AS_ROLLED, trials=500, seed=3
-        )
-
-    assert run() == run()
 
 
 def test_ballistic_skill_six_applies_a_modifier_to_the_first_roll_only() -> None:

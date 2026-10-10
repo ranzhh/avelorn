@@ -1,12 +1,10 @@
 """The printed attack procedure, re-derived from the rulebook to settle engine disputes.
 
-One attack is enumerated die face by die face, and Remove Casualties is a seeded
-Monte Carlo. The oracle reads plain numbers and imports no engine: its charts are
-transcribed from the printed tables on tow.whfb.app, each cited where it is used.
+One attack is enumerated die face by die face, and Remove Casualties wound by wound.
+The oracle reads plain numbers and imports no engine: its charts are transcribed
+from the printed tables on tow.whfb.app, each cited where it is used.
 """
 
-import math
-import random
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -70,20 +68,6 @@ class ReRoll(StrEnum):
     ONES = "ones"
     FAILED = "failed"
     SUCCESSFUL = "successful"
-
-
-class Order(StrEnum):
-    """The order a strike's unsaved wounds reach the unit, an input of Remove Casualties.
-
-    removing-casualties/multiple-wound-models prints "you must remove as many whole
-    models as possible" but no order between plain, multiplied and slaying wounds.
-    ``KILLS_FIRST`` applies Killing Blows, then the rest as rolled; ``MOST_REMOVED``
-    takes whichever order removes the most models.
-    """
-
-    AS_ROLLED = "as-rolled"
-    KILLS_FIRST = "kills-first"
-    MOST_REMOVED = "most-removed"
 
 
 @dataclass(frozen=True)
@@ -406,57 +390,6 @@ def _most_felled(counts: tuple[tuple[int, int], ...], remaining: int, wounds: in
     return best
 
 
-def remove_casualties(
-    attacks: int,
-    odds: AttackOdds,
-    *,
-    models: int,
-    wounds: int,
-    order: Order,
-    trials: int,
-    seed: int,
-    damage: Mapping[int, Fraction] | None = None,
-) -> dict[int, float]:
-    """Monte Carlo of ``attacks`` identical attacks against a unit, then Remove Casualties.
-
-    ``damage`` is the Wounds each unsaved wound takes, as a distribution (Multiple
-    Wounds (D3) is a third on each of 1, 2, 3); None is one Wound. Sources as
-    :func:`removed` and :class:`Order`.
-
-    Returns:
-        The frequency of each casualty count 0..``models``.
-    """
-    rng = random.Random(seed)
-    values, weights = zip(*(damage or {1: Fraction(1)}).items(), strict=True)
-    p_kill, p_unsaved = float(odds.kill), float(odds.unsaved)
-    counts = dict.fromkeys(range(models + 1), 0)
-    for _ in range(trials):
-        losses: list[int | None] = []
-        for _ in range(attacks):
-            draw = rng.random()
-            if draw < p_kill:
-                losses.append(None)
-            elif draw < p_unsaved:
-                losses.append(rng.choices(values, weights)[0])
-        if order is Order.KILLS_FIRST:
-            losses.sort(key=lambda loss: loss is not None)
-        fold = most_removed if order is Order.MOST_REMOVED else removed
-        counts[fold(losses, models, wounds)] += 1
-    return {casualties: n / trials for casualties, n in counts.items()}
-
-
-def trials_for(tolerance: float, *, z: float = 4.0) -> int:
-    """Trials that put every frequency within ``tolerance`` of its probability at ``z`` sigma.
-
-    A frequency's standard error is at most 1 / (2 sqrt(n)), its value at p = 1/2.
-    To settle a dispute between two probabilities d apart, ask for d / 2.
-
-    Returns:
-        The number of trials.
-    """
-    return math.ceil((z / (2 * tolerance)) ** 2)
-
-
 def casualties(
     attacks: Sequence[AttackOdds],
     *,
@@ -466,10 +399,10 @@ def casualties(
 ) -> dict[int, Fraction]:
     """The exact casualty distribution of ``attacks`` applied as rolled, one after another.
 
-    Each attack has its own odds; ``damage`` is as in :func:`remove_casualties`.
-    Wounds land as :func:`removed` lands them: on one model until it is removed,
-    the excess lost. Only :attr:`Order.AS_ROLLED` is enumerated; mixing Killing
-    Blows with plain wounds on multi-Wound models needs :func:`remove_casualties`.
+    Each attack has its own odds; ``damage`` is the Wounds each unsaved wound
+    takes, as a distribution (Multiple Wounds (D3) is a third on each of 1, 2,
+    3), None for one Wound. Wounds land as :func:`removed` lands them: on one
+    model until it is removed, the excess lost.
 
     Returns:
         The probability of each casualty count reached, zeros left out.

@@ -14,22 +14,11 @@ from enum import StrEnum
 
 from avelorn.core.registry import Registry
 from avelorn.tow.data import TOWRepository, default_repository
-from avelorn.tow.engine.rules import (
-    ArmourFacts,
-    ChargeEvent,
-    EffectiveValue,
-    GateContext,
-    MovementFacts,
-    WeaponFacts,
-    effective_characteristic,
-    effective_fighting_ranks,
-    effective_supporting_ranks,
-)
 from avelorn.tow.muster import Complement
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import GrantEffect, Rule, bind
-from avelorn.tow.schema.unit import Characteristic, Unit
+from avelorn.tow.schema.unit import Unit
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile
 
 
@@ -159,13 +148,11 @@ class ChargeArc(StrEnum):
 class Charge:
     """A charge move: how far it carried, into which arc. A pure record.
 
-    Both facts are read by the rules the charge feeds — the Combat-phase
-    Initiative bonus computes in
-    :func:`~avelorn.tow.phases.combat.effective_initiative`, and the arc
-    claims its combat-result points in
-    :func:`~avelorn.tow.phases.combat.fight`. The arc has no default:
-    which arc a charge struck is a fact of the move, not a parameter to
-    assume.
+    Both facts are read by the round a charge opens
+    (:func:`~avelorn.tow.round.fight_round`): the distance sets the
+    charger's Initiative bonus, and the arc its combat-result points. The
+    arc has no default: which arc a charge struck is a fact of the move,
+    not a parameter to assume.
     """
 
     full_inches: int
@@ -180,22 +167,6 @@ class Charge:
         """
         if self.full_inches < 0:
             raise ValueError(f"a charge cannot move a negative distance ({self.full_inches})")
-
-    @property
-    def initiative_bonus(self) -> int:
-        """The Initiative bonus this charge grants its charger.
-
-        +1 per full inch moved, capped by the arc struck (+3 into the
-        front, +4 into the flank or rear; the-combat-phase/charging-units).
-        A charge knows only its own contribution: the rulebook's total
-        Initiative ceiling of 10 is the striking-order assembler's to
-        apply (:func:`~avelorn.tow.phases.combat.effective_initiative`),
-        not the charge's.
-
-        Returns:
-            The arc-capped Initiative bonus, +0 for a standing start.
-        """
-        return min(self.full_inches, self.arc.initiative_cap)
 
 
 class MovementKind(StrEnum):
@@ -323,31 +294,6 @@ class Formation:
         """The depth: how many ranks, the rear one possibly incomplete."""
         return self.full_ranks + (1 if self.remainder else 0)
 
-    @property
-    def rear_rank_sizes(self) -> tuple[int, ...]:
-        """The model count of each rank behind the front, front to back.
-
-        Empty for a single-rank formation. The ranks a Volley Fire draws
-        its extra shots from, and the supporting ranks a melee will draw
-        on, read their sizes from here.
-        """
-        sizes = [self.frontage] * self.full_ranks
-        if self.remainder:
-            sizes.append(self.remainder)
-        return tuple(sizes[1:])
-
-    def front_ranks(self, depth: int) -> int:
-        """The models standing in the front ``depth`` ranks.
-
-        The front rank plus the ``depth - 1`` ranks directly behind it —
-        the geometry a fighting rank of a given depth draws its models
-        from. ``depth`` of one is just the front rank (:attr:`files`).
-
-        Returns:
-            The model count in the front ``depth`` ranks.
-        """
-        return self.files + sum(self.rear_rank_sizes[: depth - 1])
-
 
 @dataclass(frozen=True)
 class Contingent:
@@ -383,18 +329,13 @@ class Contingent:
     through :meth:`wielding` (which picks one from the loadout by name) and
     read back through :meth:`in_hand`. A freshly fielded body has none in
     hand; every verb reads the wielded weapon off the side that acts
-    (:func:`~avelorn.tow.phases.combat.fight`,
-    :func:`~avelorn.tow.phases.movement.stand_and_shoot`), so a contingent
+    (:func:`~avelorn.tow.round.fight_round`,
+    :func:`~avelorn.tow.volley.stand_and_shoot`), so a contingent
     is armed before it fights or shoots.
 
-    Today a contingent is a body of identical models — one rank-and-file
-    profile (``unit.main``), plus the mount every model rides where the
-    datasheet prints one (``unit.mount``, whose attacks the melee folds in
-    as a second batch). A champion or an embedded character, each a *count*
-    of differently-profiled models, is deliberately not modelled yet (#46);
-    when it is, this grows a notion of *parts* and the single-body fields
-    become the one-part case. Callers read only ``unit.main`` and
-    ``unit.mount``, so the assumption stays localized to that migration.
+    A contingent is one body of models; :meth:`~avelorn.tow.fielding.Fielding.of`
+    splits it into the parts a program resolves: its rank and file, each
+    champion bought, and the mount each rides.
     """
 
     unit: Unit
@@ -409,9 +350,6 @@ class Contingent:
     # it moved and the charge it made, if any (a charge is a move, folded
     # here so the two never disagree). A freshly fielded body is stationary;
     # a caller that moved it sets this through :meth:`after` / :meth:`charging`.
-    # Read by the movement-gated rules (Moving and Shooting; Volley Fire's
-    # stationary condition) and by :func:`~avelorn.tow.phases.combat.fight`
-    # for the striking order's charge Initiative bonus.
     movement: Movement = field(default_factory=Movement.stationary)
     # The weapon selected for the current action, picked from the loadout by
     # name through :meth:`wielding`. A per-action choice (a unit shoots its
@@ -438,123 +376,6 @@ class Contingent:
         """
         return Formation(self.models, self.frontage)
 
-    @property
-    def rank_bonus(self) -> int:
-        """The combat-result Rank Bonus this contingent's formation claims.
-
-        +1 for each rank behind the first that is wide enough to count,
-        capped by the troop type. A full rank at the frontage counts; an
-        incomplete rear rank counts when it holds the troop type's
-        required models. A troop type that does not rank up claims none.
-        Counted from the fielded models — the round's starting formation.
-
-        Returns:
-            The Rank Bonus, from 0 up to the troop type's maximum.
-        """
-        profile = self.unit.rank_and_file
-        per_rank = profile.models_per_rank
-        if per_rank is None or self.frontage < per_rank:
-            return 0
-        formation = self.formation
-        rear = 1 if formation.remainder >= per_rank else 0
-        ranks_behind_first = formation.full_ranks + rear - 1
-        return min(max(ranks_behind_first, 0), profile.max_rank_bonus)
-
-    @property
-    def weapon_facts(self) -> WeaponFacts:
-        """The weapon in hand, as a gate on the weapon in hand reads it.
-
-        The equipment-in-use facts a producer puts on its
-        :class:`~avelorn.tow.engine.rules.GateContext` so a rule gated on the
-        weapon (Ithilmar Weapons' hand weapon, Arrows of Isha's bow) can be
-        answered. Unarmed reads as facts with nothing set — the choice has not
-        been made, so such a gate is unknown, not False.
-
-        Returns:
-            The weapon's family and name, both None while nothing is in hand.
-        """
-        if self.weapon is None:
-            return WeaponFacts()
-        return WeaponFacts(type=self.weapon.weapon_type, name=self.weapon.name)
-
-    @property
-    def armour_facts(self) -> tuple[ArmourFacts, ...]:
-        """The armour worn, as a gate on a piece worn reads it.
-
-        The ``worn`` peer of :attr:`weapon_facts`: every piece the contingent was
-        fielded in, so a membership gate (Parry's shield) can be answered against
-        the collection. Unlike the weapon in hand there is nothing to choose — the
-        loadout settles it — so this is always known, and a contingent in no
-        armour honestly reads as the empty collection rather than as unknown.
-
-        Returns:
-            One facts entry per piece of armour worn, empty if unarmoured.
-        """
-        return tuple(ArmourFacts(name=piece.name) for piece in self.loadout.armour)
-
-    def _charge_context(self) -> GateContext:
-        # The movement facts a charge-sensitive read is evaluated against: the
-        # charge event (present with its distance when this contingent charged,
-        # absent otherwise) and whether it moved. Both are always known, so a
-        # rule gated on the model's movement is never left unfactored for want
-        # of the fact. The equipment in use rides along for the same reason —
-        # this body knows its own gear, so a rank rule gated on the weapon it
-        # fights with is answerable here rather than reported unanswered.
-        charge = self.movement.charge
-        event = ChargeEvent(distance=charge.full_inches) if charge is not None else None
-        return GateContext(
-            movement=MovementFacts(moved=self.movement.moved, charge=event),
-            wielding=self.weapon_facts,
-            worn=self.armour_facts,
-        )
-
-    def fighting_ranks(self) -> EffectiveValue:
-        """How many ranks fight at full Attacks, and the rules behind the count.
-
-        One rank by default — only the front rank fights
-        (the-combat-phase/who-can-fight) — deepened by the rank-modifying
-        rules the contingent carries: Press of Battle takes it to two, except
-        on a turn it charged. The rules are read from the loadout and gated on
-        the contingent's own charge, so the depth holds whatever a survivor
-        count; ``factored`` / ``unfactored`` name the rules evaluated into it,
-        for the combat notes.
-
-        Returns:
-            The fighting-rank depth, with the rule names factored into it and
-            those left unfactored.
-        """
-        return effective_fighting_ranks(1, self.loadout.rules, self._charge_context())
-
-    def fighting_rank(self) -> int:
-        """The models that fight at their full Attacks — the fighting rank.
-
-        The front rank, in base contact with the foe, plus the ranks a rule
-        deepens it to (:meth:`fighting_ranks`); the whole front rank is taken
-        to be engaged, an equally wide foe. Models further back press forward
-        but do not fight.
-
-        Returns:
-            The number of models in the fighting rank.
-        """
-        return self.formation.front_ranks(self.fighting_ranks().value)
-
-    def supporting_ranks(self) -> EffectiveValue:
-        """How many ranks support at one attack each, and the rules behind it.
-
-        None by default — only the fighting rank fights. A weapon in hand that
-        allows supporting attacks (the thrusting spear's Fight in Extra Rank)
-        lets the rank directly behind the fighting rank strike at one attack
-        each, except on a charge. Read from the weapon in hand's Combat-profile
-        rules — the grant is the weapon's, not the unit's — gated on the
-        contingent's own charge; ``factored`` / ``unfactored`` name the rules
-        evaluated in, for the combat notes.
-
-        Returns:
-            The supporting-rank count, with the rule names factored into it and
-            those left unfactored.
-        """
-        return effective_supporting_ranks(0, self.in_hand_rules(), self._charge_context())
-
     def in_hand_rules(self) -> list[Rule]:
         """The resolved rules on the weapon in hand's Combat profile.
 
@@ -562,9 +383,7 @@ class Contingent:
         loadout (:meth:`Loadout.profile_rules`) — the rules that ride with the weapon a
         contingent chose to swing (a great weapon's Strike Last, a thrusting
         spear's Fight in Extra Rank). Empty when nothing is in hand or the
-        weapon has no Combat profile. Read wherever a weapon-in-hand rule
-        modifies a quantity: the supporting-rank query and the striking-order
-        Initiative read.
+        weapon has no Combat profile.
 
         Returns:
             The resolved in-hand weapon rules, empty when none apply.
@@ -574,87 +393,6 @@ class Contingent:
         if profile is None:
             return []
         return self.loadout.profile_rules(profile)
-
-    def effective_attacks(self) -> EffectiveValue:
-        """The Attacks each fighting-rank model makes, rule modifiers included.
-
-        The rank-and-file Attacks characteristic, modified by the rule-granted
-        characteristic modifiers the contingent carries (Furious Charge's +1 on
-        a turn it charged), gated on its own charge. A profile with no printed
-        Attacks counts as 0. This shapes the fighting rank's blows only —
-        a supporting attack is one regardless of the Attacks characteristic.
-        ``factored`` / ``unfactored`` name the rules evaluated in, for the
-        combat notes.
-
-        Returns:
-            The effective Attacks, with the rule names factored into it and
-            those left unfactored.
-        """
-        base = self.unit.main[Characteristic.ATTACKS] or 0
-        return effective_characteristic(
-            base, Characteristic.ATTACKS, self.loadout.rules, self._charge_context()
-        )
-
-    def melee_attacks(self) -> int:
-        """The attacks this body throws striking a frontal melee.
-
-        Its fighting rank (:meth:`fighting_rank`) each make their full effective
-        Attacks (:meth:`effective_attacks` — the printed characteristic plus a
-        rule's charge bonus, Furious Charge); each model in the supporting ranks
-        behind it (:meth:`supporting_ranks`, granted by a weapon like the
-        thrusting spear) makes a single supporting attack, whatever the Attacks
-        characteristic. A profile with no printed Attacks throws none from its
-        fighting rank.
-
-        Returns:
-            The number of attacks thrown this round.
-        """
-        attacks_per_model = self.effective_attacks().value
-        fighting = self.fighting_ranks().value
-        supporting = self.supporting_ranks().value
-        formation = self.formation
-        fighting_models = formation.front_ranks(fighting)
-        supporting_models = formation.front_ranks(fighting + supporting) - fighting_models
-        return fighting_models * attacks_per_model + supporting_models
-
-    def mount_attacks(self) -> int:
-        """The attacks the fighting rank's mounts throw striking a frontal melee.
-
-        Every fighting-rank model's mount fights beside its rider with its own
-        Attacks (troop-types-in-detail/split-profile-cavalry), so the count is
-        the fighting rank's models times the mount row's Attacks. Mounts never
-        make supporting attacks -- "only the rider can attack, not the mount"
-        (troop-types-in-detail/cavalry-support) -- so no supporting term joins.
-        Rule-granted Attacks modifiers are the rider's (:meth:`effective_attacks`)
-        and do not reach the mount's printed value here.
-
-        Returns:
-            The number of mount attacks thrown this round; 0 for a unit that
-            rides nothing.
-        """
-        mount = self.unit.mount
-        if mount is None:
-            return 0
-        per_model = mount[Characteristic.ATTACKS] or 0
-        return self.formation.front_ranks(self.fighting_ranks().value) * per_model
-
-    def unit_strength(self) -> int:
-        """This body's Unit Strength: its models' per-model strength, summed.
-
-        The troop type sets each model's Unit Strength — a fixed count, or the
-        model's starting Wounds for the monsters and war machines the table
-        prints as "As Starting Wounds"
-        (:meth:`~avelorn.tow.schema.troop_type.TroopTypeProfile.unit_strength_per_model`) —
-        and this body's is that times its current ``models``, so casualties
-        thin it as they do the model count.
-
-        Returns:
-            The Unit Strength of the models on the table.
-        """
-        per_model = self.unit.rank_and_file.unit_strength_per_model(
-            self.unit.main[Characteristic.WOUNDS]
-        )
-        return self.models * per_model
 
     def after(self, movement: Movement) -> "Contingent":
         """This contingent with its Movement-phase ``movement`` set.

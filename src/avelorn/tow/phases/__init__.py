@@ -1,14 +1,12 @@
 """The turn's phases, one module per printed phase.
 
-Each module implements one phase: a value the game assembles, carrying
-its printed steps, the rules in force it needs, and the phase's
-actions — every action a one-line delegation into its own module's
-resolution functions, never logic of its own (the shared shape is
-:class:`avelorn.core.game.Phase`). The shared, phase-agnostic mathematics
-those functions build on lives in :mod:`avelorn.tow.engine`. The turn's
-order is declared by the game
-itself (:class:`avelorn.tow.game.TOWGame`); the schema's Phase
-vocabulary names the phases for rule data.
+Each module implements one phase: a value the game assembles, holding the
+program its actions run on, loaded with the corpus rules. Every action is a
+delegation to the graph (:mod:`avelorn.tow.volley`, :mod:`avelorn.tow.round`),
+never logic of its own (the shared shape is :class:`avelorn.core.game.Phase`).
+The turn's order is declared by the game itself
+(:class:`avelorn.tow.game.TOWGame`); the schema's Phase vocabulary names the
+phases for rule data.
 """
 
 from avelorn.tow.phases.combat import CombatPhase

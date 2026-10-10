@@ -1,11 +1,12 @@
 """Kernel tests against verbatim rulebook values (tow.whfb.app)."""
 
+import itertools
 import re
 from collections.abc import Callable
 from fractions import Fraction
 
 import pytest
-from oracle.procedure import Attack, Phase, one_attack
+from oracle.procedure import SHOOTING_TO_HIT, Attack, Phase, combat_to_hit, one_attack, to_wound
 
 from avelorn.core.distribution import Distribution
 from avelorn.tow.kernels import (
@@ -18,7 +19,6 @@ from avelorn.tow.kernels import (
     heavy_casualties,
     hit_probability,
     leadership_test,
-    melee_hit_probability,
     melee_hit_target,
     remove_casualties,
     save_probability,
@@ -28,6 +28,15 @@ from avelorn.tow.kernels import (
     wound_probability,
     wound_target,
 )
+
+
+def test_the_charts_match_the_printed_tables() -> None:
+    """Every printed cell of the To Hit tables and the To Wound chart."""
+    for skill in SHOOTING_TO_HIT:
+        assert shooting_hit_target(skill) == SHOOTING_TO_HIT[skill]
+    for row, column in itertools.product(range(1, 11), repeat=2):
+        assert melee_hit_target(row, column) == combat_to_hit(row, column)
+        assert wound_target(row, column) == to_wound(row, column)
 
 
 @pytest.mark.parametrize(
@@ -47,23 +56,6 @@ from avelorn.tow.kernels import (
 def test_melee_hit_target(weapon_skill: int, target_weapon_skill: int, expected: int) -> None:
     """Spot checks against the verbatim WS-vs-WS close-combat To Hit chart."""
     assert melee_hit_target(weapon_skill, target_weapon_skill) == expected
-
-
-@pytest.mark.parametrize(
-    ("target", "expected"),
-    [
-        (2, 5 / 6),
-        (3, 4 / 6),
-        (4, 3 / 6),
-        (6, 1 / 6),
-        (7, 1 / 6),  # no confirm: only a natural 6, still 1/6
-        (9, 1 / 6),
-        (1, 5 / 6),  # natural 1 always fails
-    ],
-)
-def test_melee_hit_probability(target: int, expected: float) -> None:
-    """Natural 6 always hits, natural 1 always fails, no 7+ confirmation."""
-    assert melee_hit_probability(target) == pytest.approx(expected)
 
 
 @pytest.mark.parametrize(
@@ -270,6 +262,20 @@ def test_remove_casualties_carries_wounds_across_models(
 ) -> None:
     """Wounds carry across Two-Wound models."""
     assert remove_casualties(standing, wounds, 2) == after
+
+
+@pytest.mark.parametrize(
+    ("models", "falls_back"),
+    [
+        pytest.param(6, True, id="more-than-half-falls-back"),
+        pytest.param(5, False, id="exactly-half-flees"),
+    ],
+)
+def test_a_failed_panic_test_flees_at_half_the_battle_strength(
+    models: int, falls_back: bool
+) -> None:
+    """Of a battle strength of ten, six left fall back in good order; five left flee."""
+    assert falls_back_in_good_order(models, 10) is falls_back
 
 
 @pytest.mark.parametrize(

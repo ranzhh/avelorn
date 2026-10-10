@@ -1,7 +1,6 @@
 """The rulebook's dice mechanics as pure functions of plain values.
 
-Meant for both engines; legacy calls them today. No game objects and no
-special rules.
+No game objects and no special rules.
 
 Sources (tow.whfb.app): the-shooting-phase/roll-to-hit-shooting,
 the-shooting-phase/roll-to-wound-shooting, the-shooting-phase/7-to-hit,
@@ -241,20 +240,6 @@ def hit_probability(target: int) -> Fraction:
     """
     p = success(d6(target, confirm=Confirm.SECOND_DIE))
     logger.debug("hit %s -> p=%.3f", _fmt_target(target), p)
-    return p
-
-
-def melee_hit_probability(target: int) -> Fraction:
-    """Probability that one close-combat attack hits, given its To Hit target.
-
-    A natural 1 always fails and a natural 6 always hits, with no 7+
-    confirmation (the-combat-phase/roll-to-hit-combat).
-
-    Returns:
-        The hit probability, in [1/6, 5/6], exact.
-    """
-    p = success(d6(target, confirm=Confirm.ALWAYS))
-    logger.debug("melee hit %s -> p=%.3f", _fmt_target(target), p)
     return p
 
 

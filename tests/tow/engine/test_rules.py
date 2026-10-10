@@ -7,7 +7,7 @@ import pytest
 
 from avelorn.core.distribution import Distribution
 from avelorn.core.registry import Registry
-from avelorn.tow.contingent import Contingent, Movement
+from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.engine.attack import AttackProfile, RollState, resolve_attack
 from avelorn.tow.engine.rules import (
@@ -33,8 +33,6 @@ from avelorn.tow.engine.rules import (
     effective_ward_target,
     effective_wound_multiplier,
 )
-from avelorn.tow.phases.shooting import shoot_unit
-from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import (
     Add,
@@ -63,16 +61,9 @@ from avelorn.tow.schema.weapon import WeaponType
 
 REPO = TOWRepository()
 
-# The shooting chapter's rules in force, built directly: these tests
-# exercise the combat layer, which must not depend on game assembly.
-IN_FORCE = {r.name: r for r in REPO.rules.values() if r.category == Phase.SHOOTING and r.effects}
 
-
-def _fielded(unit: Unit, models: int, *, moved: bool = False) -> Contingent:
-    # Field at the printed, optionless loadout, with the real registries;
-    # ``moved`` sets the unit's movement (stationary by default).
-    base = Contingent.field(unit, models, data=REPO)
-    return base.after(Movement.march()) if moved else base
+def _fielded(unit: Unit, models: int) -> Contingent:
+    return Contingent.field(unit, models, data=REPO)
 
 
 def _one_rule(effect: RuleEffect) -> list[Rule]:
@@ -191,79 +182,6 @@ def test_trigger_at_or_after_the_landing_stage_stays_unfactored() -> None:
     compiled = compile_rules(_one_rule(effect))
     assert compiled.modifiers == ()
     assert compiled.unfactored == ("Doctored",)
-
-
-def test_weapon_rules_factor_from_the_loadout_alone() -> None:
-    """No registry at the action: the weapon's rules ride with the unit.
-
-    Fielding resolved the Longbow's Armour Bane (1), so the volley
-    factors it (2/9 -> 13/54 per shot) with no ``rules=`` passed at all;
-    Volley Fire is factored into the shot count. Only the shooting phase's
-    own chapter rules still come from the registry.
-    """
-    result = shoot_unit(
-        _fielded(REPO.units["elven-archers"], 3).wielding("Longbow"),
-        _fielded(REPO.units["elven-spearmen"], 10),
-    )
-    assert result.p_unsaved == pytest.approx(13 / 54)
-    assert not any("Armour Bane" in note for note in result.notes)
-    assert not any("Volley Fire" in note for note in result.notes)
-
-
-def test_unknown_distance_leaves_only_the_range_rule_unfactored() -> None:
-    """An unknown range leaves only Firing at Long Range unfactored.
-
-    A stationary shooter settles Moving and Shooting — honoured, no
-    penalty, no note — so only the range rule is left reported.
-    """
-    result = shoot_unit(
-        _fielded(REPO.units["elven-archers"], 3).wielding("Longbow"),
-        _fielded(REPO.units["elven-spearmen"], 10),
-        phase_rules=IN_FORCE,
-    )
-    assert result.p_unsaved == pytest.approx(13 / 54)
-    assert any("core rule not factored: Firing at Long Range" in n for n in result.notes)
-    assert not any("Moving and Shooting" in n for n in result.notes)
-
-
-def test_both_penalties_stack() -> None:
-    """Moved and at long range: -1 and -1, hit 5+."""
-    result = shoot_unit(
-        _fielded(REPO.units["elven-archers"], 3, moved=True).wielding("Longbow"),
-        _fielded(REPO.units["elven-spearmen"], 10),
-        phase_rules=IN_FORCE,
-        distance=20,
-    )
-    assert result.hit_target == 5
-
-
-def test_staying_still_volley_fires_while_the_to_hit_is_a_wash() -> None:
-    """Warbows at 15": staying and closing hit alike, but staying volley fires.
-
-    Warbow range is 24", so 15" is beyond half range; closing inside 12"
-    removes that penalty but "moved for any reason during this turn"
-    imposes its own -1 — so both plans hit on 4+ with the same per-shot
-    chance. Staying still is not a wash, though: it lets the rear rank
-    volley fire, so it looses more shots and fells more.
-    """
-    sea_guard = REPO.units["lothern-sea-guard"]
-    spearmen = REPO.units["elven-spearmen"]
-    stay = shoot_unit(
-        _fielded(sea_guard, 10).wielding("Warbow"),
-        _fielded(spearmen, 10),
-        phase_rules=IN_FORCE,
-        distance=15,
-    )
-    move_in = shoot_unit(
-        _fielded(sea_guard, 10, moved=True).wielding("Warbow"),
-        _fielded(spearmen, 10),
-        phase_rules=IN_FORCE,
-        distance=12,
-    )
-    assert stay.hit_target == move_in.hit_target == 4  # the To Hit is a wash
-    assert stay.p_unsaved == pytest.approx(move_in.p_unsaved)  # per shot, identical
-    assert stay.shots > move_in.shots  # but staying volley fires
-    assert stay.expected_casualties > move_in.expected_casualties
 
 
 def test_wielding_gate_is_tri_state() -> None:

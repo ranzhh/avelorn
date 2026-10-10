@@ -6,19 +6,13 @@ from avelorn.core.distribution import Distribution, Probability
 from avelorn.core.errors import UnmodelledRuleError
 from avelorn.tow.contingent import Charge, ChargeArc, Contingent
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.phases.combat import CombatPhase, combat_result, fight
-from avelorn.tow.phases.movement import Flee, StandAndShoot, charge, stand_and_shoot
-from avelorn.tow.phases.shooting import shoot_unit
+from avelorn.tow.phases.combat import CombatPhase
+from avelorn.tow.phases.movement import Flee, StandAndShoot, charge
 from avelorn.tow.programs import ROUND, STAND_AND_SHOOT, load_program
-from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.stage import Side
 from avelorn.tow.schema.unit import Unit
 
 REPO = TOWRepository()
-
-# The shooting chapter's rules in force, built directly: these tests
-# exercise the combat layer, which must not depend on game assembly.
-IN_FORCE = {r.name: r for r in REPO.rules.values() if r.category == Phase.SHOOTING and r.effects}
 
 STAND_AND_SHOOT_PROGRAM = load_program(STAND_AND_SHOOT, REPO.rules)
 
@@ -32,138 +26,6 @@ def _fielded(unit: Unit, models: int) -> Contingent:
 
 def _mass(distribution: Distribution[int]) -> dict[int, Probability]:
     return {outcome: p for outcome, p in distribution.mass.items() if p}
-
-
-def test_stand_and_shoot_applies_the_minus_one_to_hit() -> None:
-    """Archers standing and shooting hit at -1: BS4 (3+) becomes 4+."""
-    archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
-    plain = shoot_unit(
-        _fielded(archers, 10).wielding("Longbow"),
-        _fielded(spearmen, 10),
-        phase_rules=IN_FORCE,
-    )
-    reaction = stand_and_shoot(
-        _fielded(archers, 10).wielding("Longbow"),
-        _fielded(spearmen, 10),
-        phase_rules=IN_FORCE,
-    )
-    assert plain.hit_target == 3
-    assert reaction.hit_target == 4  # -1 To Hit for Standing and Shooting
-
-
-def test_stand_and_shoot_is_exempt_from_firing_at_long_range() -> None:
-    """The reaction never carries a Firing at Long Range note: the rule is a no-op.
-
-    A plain volley with no distance leaves the range band unknown, so the
-    rule is reported unfactored; the reaction asserts the exemption, so it
-    is honoured silently instead.
-    """
-    archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
-    plain = shoot_unit(
-        _fielded(archers, 10).wielding("Longbow"),
-        _fielded(spearmen, 10),
-        phase_rules=IN_FORCE,
-    )
-    reaction = stand_and_shoot(
-        _fielded(archers, 10).wielding("Longbow"),
-        _fielded(spearmen, 10),
-        phase_rules=IN_FORCE,
-    )
-    assert any("Firing at Long Range" in note for note in plain.notes)
-    assert not any("Firing at Long Range" in note for note in reaction.notes)
-
-
-def test_stand_and_shoot_caps_casualties_at_the_charging_unit_size() -> None:
-    """A volley cannot fell more chargers than the charging unit contains."""
-    archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
-    reaction = stand_and_shoot(
-        _fielded(archers, 20).wielding("Longbow"),
-        _fielded(spearmen, 5),
-        phase_rules=IN_FORCE,
-    )
-    assert reaction.target_models == 5
-    assert len(reaction.casualties) == 6  # 0..5
-    assert sum(reaction.casualties) == pytest.approx(1.0)
-
-
-# --- The whole sequence: Stand & Shoot feeding the composed melee ---
-
-
-def test_charge_sequence_matches_mixing_the_survivor_fights_by_hand() -> None:
-    """fight() over the reaction pmf equals summing P(k) x the N-k survivor fight.
-
-    The Archers Stand & Shoot the charging Spearmen; feeding that casualty
-    pmf to fight() as ``a_prior_losses`` must reproduce, exactly, a by-hand
-    mixture over each number ``k`` of Spearmen felled before contact.
-    """
-    archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
-    move = Charge(6, ChargeArc.FRONT)
-    models = 3
-    charger = _fielded(spearmen, models).wielding("Thrusting Spear").charging(move)
-    defender = _fielded(archers, 3).wielding("Hand Weapon")
-    reaction = stand_and_shoot(defender.wielding("Longbow"), charger, phase_rules=IN_FORCE)
-
-    composed = fight(
-        charger,
-        defender,
-        a_prior_losses=reaction.casualties,
-    )
-
-    manual = [[0.0] * (defender.models + 1) for _ in range(models + 1)]
-    for felled, p_felled in enumerate(reaction.casualties):
-        survivors = fight(
-            charger.remove_casualties(felled),
-            defender,
-        )
-        for a_lost, row in enumerate(survivors.losses):
-            for b_lost, mass in enumerate(row):
-                manual[a_lost][b_lost] += p_felled * mass
-
-    for composed_row, manual_row in zip(composed.losses, manual, strict=True):
-        assert composed_row == pytest.approx(manual_row)
-    assert composed.first_striker is charger  # the charge still strikes first
-
-
-def test_stand_and_shoot_erodes_the_chargers_combat_result() -> None:
-    """Softening the chargers first lowers their combat-result win chance.
-
-    A charge met by Stand & Shoot brings fewer Spearmen to the melee, so
-    they inflict fewer wounds and win the combat less often than an un-shot
-    charge of the same size would.
-    """
-    archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
-    charger = (
-        _fielded(spearmen, 10).wielding("Thrusting Spear").charging(Charge(8, ChargeArc.FRONT))
-    )
-    defender = _fielded(archers, 10).wielding("Hand Weapon")
-    reaction = stand_and_shoot(defender.wielding("Longbow"), charger, phase_rules=IN_FORCE)
-
-    unshot = combat_result(
-        fight(
-            charger,
-            defender,
-        )
-    )
-    shot = combat_result(
-        fight(
-            charger,
-            defender,
-            a_prior_losses=reaction.casualties,
-        )
-    )
-    assert shot.p_a_wins < unshot.p_a_wins
-
-
-def test_force_short_range_honours_long_range_as_a_no_op() -> None:
-    """shoot_unit's force_short_range treats the shot as within half range."""
-    archers, spearmen = REPO.units["elven-archers"], REPO.units["elven-spearmen"]
-    forced = shoot_unit(
-        _fielded(archers, 10).wielding("Longbow"),
-        _fielded(spearmen, 10),
-        phase_rules=IN_FORCE,
-        force_short_range=True,
-    )
-    assert not any("Firing at Long Range" in note for note in forced.notes)
 
 
 # --- charge(): the Movement-phase charge, its reaction, and the engagement ---

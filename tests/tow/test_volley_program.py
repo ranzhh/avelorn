@@ -5,20 +5,17 @@ from fractions import Fraction
 from itertools import product
 
 import pytest
-from oracle.procedure import NO_ARMOUR, Attack, Phase, one_attack
-from pins.corrections import corrections
+from oracle.procedure import NO_ARMOUR, Attack, Phase, casualties, one_attack
 
 from avelorn.core.distribution import Distribution, Monoid, Probability
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.fielding import Fielding, Part
-from avelorn.tow.kernels import save_probability
-from avelorn.tow.phases.shooting import make_panic_tests, shoot
 from avelorn.tow.programs import VOLLEY, Evaluated, load_program
 from avelorn.tow.schema.stage import Side
 from avelorn.tow.schema.unit import Characteristic
 from avelorn.tow.schema.weapon import WeaponStrength
-from avelorn.tow.steps import Band, Retreat
+from avelorn.tow.steps import Band
 from avelorn.tow.traits import Operand
 
 REPO = TOWRepository()
@@ -26,7 +23,6 @@ VOLLEY_PROGRAM = load_program(VOLLEY, REPO.rules)
 ARCHERS = REPO.units["elven-archers"]
 SPEARMEN = REPO.units["elven-spearmen"]
 LONGBOW = REPO.weapons["longbow"].missile_profile
-CORRECTIONS = corrections()
 
 
 def _shooter(shots: int, ballistic_skill: int, strength: int, armour_piercing: int) -> Fielding:
@@ -95,20 +91,11 @@ def _landed(shots: int, p: Probability) -> Mapping[int, Probability]:
     return once.repeat(shots, Monoid(0)).mass
 
 
-def _read(evaluated: Evaluated, path: str, reading: str) -> Mapping[Hashable, Probability]:
-    return {value: mass for value, mass in evaluated.at(path).read(reading).mass.items() if mass}
-
-
 def _casualties(evaluated: Evaluated, models: int) -> Distribution[int]:
     return evaluated.at("volley/remove-casualties").read("models").map(lambda left: models - left)
 
 
-def _per_shot(evaluated: Evaluated, path: str, reading: str, shots: int) -> Probability:
-    return evaluated.at(path).read(reading).expect(lambda count: count) / shots
-
-
-def _assert_matches_legacy(
-    pin: str,
+def _assert_matches_the_oracle(
     shots: int,
     ballistic_skill: int,
     strength: int,
@@ -120,19 +107,17 @@ def _assert_matches_legacy(
     wounds: int,
     moved: bool = False,
 ) -> None:
-    hit_modifier = -1 if moved else 0
-    legacy = shoot(
-        shots,
-        ballistic_skill,
-        strength,
-        toughness,
-        armour_value=armour,
+    attack = Attack(
+        Phase.SHOOTING,
+        skill=ballistic_skill,
+        strength=strength,
+        toughness=toughness,
+        armour_value=NO_ARMOUR if armour is None else armour,
         armour_piercing=armour_piercing,
-        ward_target=ward,
-        hit_modifier=hit_modifier,
-        wounds_per_model=wounds,
-        targets=models,
+        ward=ward,
+        hit_modifier=-1 if moved else 0,
     )
+    odds = one_attack(attack)
     evaluated = _volley(
         _shooter(shots, ballistic_skill, strength, armour_piercing),
         _target(toughness, wounds, armour, ward, models),
@@ -142,38 +127,12 @@ def _assert_matches_legacy(
         moved=moved,
     )
 
-    correction = CORRECTIONS.get(pin)
-    if correction is not None:
-        attack = Attack(
-            Phase.SHOOTING,
-            skill=ballistic_skill,
-            strength=strength,
-            toughness=toughness,
-            armour_value=NO_ARMOUR if armour is None else armour,
-            armour_piercing=armour_piercing,
-            ward=ward,
-            hit_modifier=hit_modifier,
-        )
-        hit = _per_shot(evaluated, "volley/attacker/attack/archers/roll-to-hit", "hits", shots)
-        unsaved = _per_shot(evaluated, "volley/remove-casualties", "unsaved", shots)
-        assert hit != legacy.p_hit
-        assert (legacy.p_hit, hit) == (correction.old, correction.new)
-        assert unsaved == one_attack(attack).unsaved
-        return
-
-    hit_and_wounded = legacy.p_hit * legacy.p_wound
-    assert _read(evaluated, "volley/attacker/attack/archers/roll-to-hit", "hits") == _landed(
-        shots, legacy.p_hit
+    unsaved = evaluated.at("volley/remove-casualties").read("unsaved").mass
+    assert {count: p for count, p in unsaved.items() if p} == _landed(shots, odds.unsaved)
+    removed = _casualties(evaluated, models).mass
+    assert {count: p for count, p in removed.items() if p} == casualties(
+        [odds] * shots, models=models, wounds=wounds
     )
-    assert _read(evaluated, "volley/attacker/attack/archers/roll-to-wound", "wounds") == _landed(
-        shots, hit_and_wounded
-    )
-    assert _read(
-        evaluated, "volley/attacker/attack/archers/make-armour-saves", "saves"
-    ) == _landed(shots, hit_and_wounded * save_probability(legacy.save_target))
-    unsaved = evaluated.at("volley/remove-casualties").read("unsaved")
-    assert unsaved.mass == Distribution.from_counts(legacy.distribution).mass
-    assert _casualties(evaluated, models).mass == Distribution.from_counts(legacy.casualties).mass
 
 
 _SCENARIOS = [
@@ -201,8 +160,7 @@ _SCENARIOS = [
     ),
     _SCENARIOS,
 )
-def test_the_shooting_scenarios_match_legacy_shoot(
-    request: pytest.FixtureRequest,
+def test_the_shooting_scenarios_match_the_oracle(
     shots: int,
     ballistic_skill: int,
     strength: int,
@@ -213,28 +171,9 @@ def test_the_shooting_scenarios_match_legacy_shoot(
     wounds: int,
     moved: bool,
 ) -> None:
-    _assert_matches_legacy(
-        request.node.nodeid,
-        shots,
-        ballistic_skill,
-        strength,
-        toughness,
-        armour,
-        0,
-        ward,
-        models,
-        wounds,
-        moved,
+    _assert_matches_the_oracle(
+        shots, ballistic_skill, strength, toughness, armour, 0, ward, models, wounds, moved
     )
-
-
-def test_every_correction_pins_a_shooting_scenario(request: pytest.FixtureRequest) -> None:
-    module = request.node.nodeid.split("::")[0]
-    test = test_the_shooting_scenarios_match_legacy_shoot.__name__
-
-    pinned = {pin for pin in CORRECTIONS if pin.startswith(f"{module}::")}
-
-    assert pinned <= {f"{module}::{test}[{each.id}]" for each in _SCENARIOS}
 
 
 _SWEEP = list(
@@ -266,8 +205,7 @@ _SWEEP = list(
         for bs, (s, t), av, ap, ward, shots, (models, wounds) in _SWEEP
     ],
 )
-def test_the_sweep_matches_legacy_shoot(
-    request: pytest.FixtureRequest,
+def test_the_sweep_matches_the_oracle(
     ballistic_skill: int,
     strength_toughness: tuple[int, int],
     armour: int | None,
@@ -278,8 +216,7 @@ def test_the_sweep_matches_legacy_shoot(
 ) -> None:
     strength, toughness = strength_toughness
     models, wounds = unit
-    _assert_matches_legacy(
-        request.node.nodeid,
+    _assert_matches_the_oracle(
         shots,
         ballistic_skill,
         strength,
@@ -290,43 +227,6 @@ def test_the_sweep_matches_legacy_shoot(
         models,
         wounds,
     )
-
-
-@pytest.mark.parametrize(
-    ("shots", "models", "battle_strength"),
-    [
-        pytest.param(10, 5, 5, id="small-unit-may-be-destroyed"),
-        pytest.param(10, 8, 20, id="already-below-half"),
-        pytest.param(20, 10, 12, id="falls-back-or-flees"),
-        pytest.param(3, 20, 20, id="rarely-tests"),
-    ],
-)
-def test_the_panic_steps_match_legacy_make_panic_tests(
-    shots: int, models: int, battle_strength: int
-) -> None:
-    legacy_volley = shoot(shots, 4, 3, 3, armour_value=5, targets=models)
-    ruleless = SPEARMEN.model_copy(update={"special_rules": []})
-    legacy = make_panic_tests(
-        legacy_volley,
-        Contingent.field(ruleless, models, data=REPO),
-        battle_strength=battle_strength,
-    )
-    evaluated = _volley(
-        _shooter(shots, 4, 3, 0),
-        _target(3, 1, 5, None, models),
-        shooters=shots,
-        models=models,
-        battle_strength=battle_strength,
-    )
-
-    tested = evaluated.at("volley/heavy-casualties").read("tested").mass.get(True, 0)
-    retreat = evaluated.at("volley/fall-back-or-flee").read("retreat").mass
-    assert legacy.reroll_from is None
-    assert tested == legacy.p_test
-    assert retreat.get(Retreat.DESTROYED, 0) == legacy.p_destroyed
-    assert retreat.get(Retreat.HOLDS, 0) == legacy.p_holds
-    assert retreat.get(Retreat.FALLS_BACK_IN_GOOD_ORDER, 0) == legacy.p_falls_back
-    assert retreat.get(Retreat.FLEES, 0) == legacy.p_flees
 
 
 def _corpus_volley(
@@ -469,3 +369,19 @@ def test_a_champion_shoots_from_the_front_rank(moved: bool, standing: int, parts
     )
 
     assert volley.at("volley/how-many-shots").read("parts").mass == {parts: 1}
+
+
+def test_a_champion_shoots_at_its_own_ballistic_skill() -> None:
+    """The Sentinel hits on 2+ at its own BS 5, where the Archers at BS 4 need 3+."""
+    archers = Contingent.deploy("elven-archers", 10, ("Sentinel",), data=REPO, frontage=5)
+    spearmen = Contingent.deploy("elven-spearmen", 20, data=REPO, frontage=5)
+    volley = _volley(
+        Fielding.of(archers, "Longbow", ("Sentinel",)),
+        Fielding.of(spearmen),
+        shooters=10,
+        models=20,
+        battle_strength=20,
+    )
+
+    hits = volley.at("volley/attacker/attack/sentinel/roll-to-hit").read("hits").mass
+    assert {count: p for count, p in hits.items() if p} == {0: Fraction(1, 6), 1: Fraction(5, 6)}
