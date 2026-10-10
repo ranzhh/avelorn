@@ -28,6 +28,7 @@ from avelorn.core.graph import (
     State,
     Step,
     Tally,
+    World,
 )
 from avelorn.tow.attach import Attachment, Wielder, attach_rules
 from avelorn.tow.changes import Uses
@@ -75,6 +76,7 @@ from avelorn.tow.traits import Operand
 STATE = DATA_DIR / "tow" / "state.yaml"
 VOLLEY = DATA_DIR / "tow" / "programs" / "volley.yaml"
 ROUND = DATA_DIR / "tow" / "programs" / "round.yaml"
+STAND_AND_SHOOT = DATA_DIR / "tow" / "programs" / "stand-and-shoot.yaml"
 
 TYPES: Mapping[FactType, type] = MappingProxyType(
     {
@@ -177,6 +179,18 @@ class Built:
     ) -> tuple["Evaluated", ...]:
         """Evaluate the program with every input given by name.
 
+        Returns:
+            One evaluation per lane.
+        """
+        return self.evaluate_from(Distribution.pure(Knowns.of(knowns)), choices)
+
+    def evaluate_from(
+        self,
+        starts: Distribution["Knowns"],
+        choices: Mapping[Side, Hashable] = MappingProxyType({}),
+    ) -> tuple["Evaluated", ...]:
+        """Evaluate the program from each way its inputs may be given, weighed by its chance.
+
         ``choices`` gives the option a side takes at its weapon choice, which
         then opens no lane. Each other option a side may take is a lane of its
         own.
@@ -188,6 +202,25 @@ class Built:
             ProgramError: an input is missing, unknown or of the wrong type, or
                 an option given is not taken in every world, as a rule forbids it.
         """
+        for each in starts.mass:
+            self.check(dict(each.given))
+        worlds = starts.map(self.world)
+        pinned = self.pinned(choices)
+        lanes = self.program.evaluate_from(worlds, pinned)
+        for lane in lanes:
+            for decision, option in pinned.items():
+                taken = lane.read(decision, decision.taken)
+                if any(each.by is not By.CHOSEN for each in taken.mass):
+                    path = self.program.paths[decision]
+                    raise ProgramError(f"{option} is not allowed at {path}")
+        return tuple(Evaluated(self, lane) for lane in lanes)
+
+    def check(self, knowns: Mapping[str, Hashable]) -> None:
+        """Refuse inputs the program does not take as given.
+
+        Raises:
+            ProgramError: an input is missing, unknown or of the wrong type.
+        """
         missing = sorted(set(self.inputs) - set(knowns))
         if missing:
             raise ProgramError(f"{self.program.name} needs {', '.join(missing)}")
@@ -198,16 +231,14 @@ class Built:
             expected = self.inputs[name].type
             if type(value) is not expected:
                 raise ProgramError(f"{name} expects {expected.__name__}; got {value!r}")
-        given = {self.inputs[name].state: value for name, value in knowns.items()}
-        pinned = self.pinned(choices)
-        lanes = self.program.evaluate(pinned, given)
-        for lane in lanes:
-            for decision, option in pinned.items():
-                taken = lane.read(decision, decision.taken)
-                if any(each.by is not By.CHOSEN for each in taken.mass):
-                    path = self.program.paths[decision]
-                    raise ProgramError(f"{option} is not allowed at {path}")
-        return tuple(Evaluated(self, lane, MappingProxyType(dict(knowns))) for lane in lanes)
+
+    def world(self, knowns: "Knowns") -> World:
+        """The program's starting world for one way its inputs are given.
+
+        Returns:
+            The world.
+        """
+        return World(frozenset((self.inputs[name].state, value) for name, value in knowns.given))
 
     def pinned(self, choices: Mapping[Side, Hashable]) -> dict[Decision[Any], Hashable]:
         """Each option given, at the weapon choice of its side.
@@ -232,12 +263,27 @@ class Built:
 
 
 @dataclass(frozen=True)
+class Knowns:
+    """The inputs a program is given by name, one way they may be given."""
+
+    given: tuple[tuple[str, Hashable], ...]
+
+    @classmethod
+    def of(cls, knowns: Mapping[str, Hashable]) -> "Knowns":
+        """Gather inputs given by name.
+
+        Returns:
+            The inputs, in name order.
+        """
+        return cls(tuple(sorted(knowns.items())))
+
+
+@dataclass(frozen=True)
 class Evaluated:
     """One lane of an evaluated program, read by path."""
 
     built: Built
     lane: Lane
-    knowns: Mapping[str, Hashable]
 
     def at(self, path: str) -> "At":
         """The step instance at ``path``.

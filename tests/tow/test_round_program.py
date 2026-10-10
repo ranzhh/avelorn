@@ -1,7 +1,8 @@
 """A round of close combat on the graph."""
 
-from collections.abc import Mapping
+from collections.abc import Hashable, Mapping
 from fractions import Fraction
+from functools import partial
 from typing import NamedTuple
 
 import pytest
@@ -13,7 +14,14 @@ from avelorn.tow.contingent import ChargeArc, Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.fielding import SHIELD, Fielding, Held
 from avelorn.tow.kernels import Standing, Standings
-from avelorn.tow.programs import ROUND, Evaluated, Loaded, load_program
+from avelorn.tow.programs import (
+    ROUND,
+    STAND_AND_SHOOT,
+    Evaluated,
+    Knowns,
+    Loaded,
+    load_program,
+)
 from avelorn.tow.schema.effect import Effect, Role
 from avelorn.tow.schema.rule import Clause, RuleGraph
 from avelorn.tow.schema.stage import Side
@@ -57,6 +65,43 @@ def _fielded(
     return _Armed(Fielding.of(contingent, combat=True), held)
 
 
+def _knowns(
+    attacker: _Armed,
+    target: _Armed,
+    attacker_standing: int = 1,
+    attacker_charges: int = 0,
+    attacker_at_start: int | None = None,
+    charge_move: int = 0,
+    enemy_arc: ChargeArc = ChargeArc.FRONT,
+    rounds_fought: int = 1,
+) -> dict[str, Hashable]:
+    fielded = sum(part.count for part in attacker.side.parts)
+    at_start = fielded if attacker_at_start is None else attacker_at_start
+    target_standing = target.side.standing(sum(part.count for part in target.side.parts))
+    return {
+        "attacker/standing": attacker.side.standing(attacker_standing),
+        "target/standing": target_standing,
+        "attacker/standing-at-start-of-round": attacker.side.standing(at_start),
+        "target/standing-at-start-of-round": target_standing,
+        "attacker/standing-at-start-of-turn": attacker.side.standing(at_start),
+        "target/standing-at-start-of-turn": target_standing,
+        "attacker/rounds-fought": rounds_fought,
+        "target/rounds-fought": rounds_fought,
+        "attacker/charges-made": attacker_charges,
+        "target/charges-made": 0,
+        "attacker/charge-move": charge_move,
+        "target/charge-move": 0,
+        "attacker/enemy-arc": enemy_arc,
+        "target/enemy-arc": ChargeArc.FRONT,
+        "attacker/charges-received": 0,
+        "target/charges-received": attacker_charges,
+        "attacker/break-tests-taken": 0,
+        "target/break-tests-taken": 0,
+        "attacker/uses-this-game": Uses(),
+        "target/uses-this-game": Uses(),
+    }
+
+
 def _lanes(
     attacker: _Armed,
     target: _Armed,
@@ -71,32 +116,17 @@ def _lanes(
 ) -> tuple[Evaluated, ...]:
     built = program.built({Side.ATTACKER: attacker.side, Side.TARGET: target.side})
     choices = {Side.ATTACKER: attacker.held, Side.TARGET: target.held}
-    fielded = sum(part.count for part in attacker.side.parts)
-    at_start = fielded if attacker_at_start is None else attacker_at_start
-    target_standing = target.side.standing(sum(part.count for part in target.side.parts))
-    return built.evaluate(
-        {
-            "attacker/standing": attacker.side.standing(attacker_standing),
-            "target/standing": target_standing,
-            "attacker/standing-at-start-of-round": attacker.side.standing(at_start),
-            "target/standing-at-start-of-round": target_standing,
-            "attacker/rounds-fought": rounds_fought,
-            "target/rounds-fought": rounds_fought,
-            "attacker/charges-made": attacker_charges,
-            "target/charges-made": 0,
-            "attacker/charge-move": charge_move,
-            "target/charge-move": 0,
-            "attacker/enemy-arc": enemy_arc,
-            "target/enemy-arc": ChargeArc.FRONT,
-            "attacker/charges-received": 0,
-            "target/charges-received": attacker_charges,
-            "attacker/break-tests-taken": 0,
-            "target/break-tests-taken": 0,
-            "attacker/uses-this-game": Uses(),
-            "target/uses-this-game": Uses(),
-        },
-        choices if wielding else {},
+    knowns = _knowns(
+        attacker,
+        target,
+        attacker_standing,
+        attacker_charges,
+        attacker_at_start,
+        charge_move,
+        enemy_arc,
+        rounds_fought,
     )
+    return built.evaluate(knowns, choices if wielding else {})
 
 
 def _held(fought: Evaluated) -> Mapping[Side, frozenset[str]]:
@@ -542,6 +572,54 @@ def test_a_rule_printed_not_to_reach_mounts_leaves_the_steeds_as_they_are() -> N
     assert attacks == {6: {5: 1}, 5: {0: 1}, 4: {5: 1}}
     assert Verdict.APPLIED in reroll.lane.verdicts(rerolls, rider).mass
     assert Verdict.APPLIED not in reroll.lane.verdicts(rerolls, steed).mass
+
+
+def test_a_stand_and_shoot_volley_thins_the_chargers_from_the_back_and_scores() -> None:
+    """Ten Archers stand and shoot at twenty Spearmen charging 5" into them.
+
+    The Spearmen the volley fells come off the back, so the two ranks that fight
+    strike whole whatever falls; each Wound it caused counts toward the Archers'
+    combat result.
+    """
+    archers = _fielded("elven-archers", "Hand Weapon", 10)
+    spearmen = _fielded("elven-spearmen", "Hand Weapon", 20, frontage=5)
+    shooting = Fielding.of(Contingent.field(REPO.units["elven-archers"], 10, data=REPO), "Longbow")
+    (stood,) = (
+        load_program(STAND_AND_SHOOT, REPO.rules)
+        .built({Side.ATTACKER: shooting, Side.TARGET: spearmen.side})
+        .evaluate(
+            {
+                "distance": 0,
+                "can-shoot": True,
+                "line-of-sight": True,
+                "attacker/moved": False,
+                "attacker/standing": shooting.standing(10),
+                "target/standing": spearmen.side.standing(20),
+            }
+        )
+    )
+    left = stood.at("stand-and-shoot/remove-casualties").read("standing")
+    knowns = _knowns(spearmen, archers, 20, attacker_charges=1, charge_move=5)
+    built = ROUND_PROGRAM.built({Side.ATTACKER: spearmen.side, Side.TARGET: archers.side})
+    choices = {Side.ATTACKER: spearmen.held, Side.TARGET: archers.held}
+
+    def started(credited: bool, standing: Standings) -> Knowns:
+        at_start = {"attacker/standing": standing, "attacker/standing-at-start-of-round": standing}
+        turn = {} if credited else {"attacker/standing-at-start-of-turn": standing}
+        return Knowns.of({**knowns, **at_start, **turn})
+
+    (credited,), (uncredited,) = (
+        built.evaluate_from(left.map(partial(started, each)), choices) for each in (True, False)
+    )
+
+    attacks = credited.at("round/initiative-7/attacker/how-many-attacks").read("attacks")
+    scores = [
+        each.at("round/target/calculate-combat-result").read("score").expect(int)
+        for each in (credited, uncredited)
+    ]
+    felled = 20 - stood.at("stand-and-shoot/remove-casualties").read("models").expect(int)
+    assert len(attacks.mass) == 1
+    assert scores[0] - scores[1] == felled > 0
 
 
 def test_a_rule_also_granted_by_the_unit_is_in_force_whatever_the_weapon() -> None:

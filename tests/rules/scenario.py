@@ -4,6 +4,7 @@ import copy
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
+from pathlib import Path
 
 from avelorn.core.distribution import Distribution, Probability
 from avelorn.core.registry import Registry
@@ -11,8 +12,7 @@ from avelorn.tow.changes import Uses
 from avelorn.tow.contingent import Charge, ChargeArc, Contingent, Movement
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.fielding import SHIELD, Fielding, Held
-from avelorn.tow.phases.movement import StandAndShoot, charge
-from avelorn.tow.programs import ROUND, VOLLEY, Evaluated, load_program
+from avelorn.tow.programs import ROUND, STAND_AND_SHOOT, VOLLEY, Evaluated, load_program
 from avelorn.tow.schema import stage
 from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.reference import RuleRef
@@ -176,7 +176,7 @@ class Outcome:
 
 
 def resolve(scenario: Scenario) -> Outcome:
-    """Resolve ``scenario`` on the graph; a Stand & Shoot still fires on legacy.
+    """Resolve ``scenario`` on the graph.
 
     A program is read in the lane where every rule a player may decline is taken.
 
@@ -198,7 +198,6 @@ def resolve(scenario: Scenario) -> Outcome:
     if unknown:
         raise ValueError(f"not a chapter rule with effects: {sorted(unknown)}")
     attacker, defender = _field(scenario.attacker), _field(scenario.defender)
-    shooting = _chapter(Phase.SHOOTING, scenario.dropped)
     match scenario.kind:
         case Kind.SHOOT:
             return _shot(_volley(attacker, defender, scenario), defender.models)
@@ -222,13 +221,31 @@ def resolve(scenario: Scenario) -> Outcome:
                 results={role: _settled(fought, side) for role, side in _SIDES.items()},
             )
         case Kind.STAND_AND_SHOOT:
-            move = attacker.movement.charge
-            if move is None:
+            if scenario.attacker.charged is None:
                 raise ValueError("a Stand & Shoot answers a charge; the attacker must charge")
-            engagement = charge(attacker, defender, move, shooting_rules=shooting)
-            reaction = engagement.react(StandAndShoot())
-            assert reaction is not None
-            return Outcome(attacks=reaction.shots)
+            stood = _stood(defender, attacker, scenario)
+            return _shot(stood, attacker.models, STAND_AND_SHOOT)
+
+
+def _stood(shooter: Contingent, charger: Contingent, scenario: Scenario) -> Evaluated:
+    fielded = {
+        stage.Side.ATTACKER: Fielding.of(shooter, shooter.shooting_weapon().name),
+        stage.Side.TARGET: Fielding.of(charger),
+    }
+    return _taken(
+        load_program(STAND_AND_SHOOT, _rules(scenario))
+        .built(fielded)
+        .evaluate(
+            {
+                "distance": 0,
+                "can-shoot": True,
+                "line-of-sight": True,
+                "attacker/moved": False,
+                "attacker/standing": fielded[stage.Side.ATTACKER].standing(shooter.models),
+                "target/standing": fielded[stage.Side.TARGET].standing(charger.models),
+            }
+        )
+    )
 
 
 def _volley(attacker: Contingent, defender: Contingent, scenario: Scenario) -> Evaluated:
@@ -277,6 +294,8 @@ def _round(attacker: Contingent, defender: Contingent, scenario: Scenario) -> Ev
                 "target/standing": standing[stage.Side.TARGET],
                 "attacker/standing-at-start-of-round": standing[stage.Side.ATTACKER],
                 "target/standing-at-start-of-round": standing[stage.Side.TARGET],
+                "attacker/standing-at-start-of-turn": standing[stage.Side.ATTACKER],
+                "target/standing-at-start-of-turn": standing[stage.Side.TARGET],
                 "attacker/rounds-fought": rounds_fought,
                 "target/rounds-fought": rounds_fought,
                 "attacker/charges-made": int(scenario.attacker.charged is not None),
@@ -316,9 +335,9 @@ def _taken(lanes: tuple[Evaluated, ...]) -> Evaluated:
     return taken
 
 
-def _shot(volley: Evaluated, models: int) -> Outcome:
-    (shots,) = volley.at("volley/how-many-shots").read("shots").mass
-    removed = volley.at("volley/remove-casualties")
+def _shot(volley: Evaluated, models: int, program: Path = VOLLEY) -> Outcome:
+    (shots,) = volley.at(f"{program.stem}/how-many-shots").read("shots").mass
+    removed = volley.at(f"{program.stem}/remove-casualties")
     lost = removed.read("models").map(lambda left: models - left)
     return Outcome(
         attacks=shots,
@@ -417,12 +436,16 @@ def _break(outcomes: Mapping[BreakTest, Probability]) -> Break:
     )
 
 
-def _chapter(phase: Phase, dropped: frozenset[str] = frozenset()) -> dict[str, Rule]:
+def _chapter(phase: Phase) -> dict[str, Rule]:
     return {
         rule.name: rule
         for rule in REPO.rules.values()
-        if rule.category == phase and rule.effects and rule.id not in dropped
+        if rule.category == phase and _effected(rule)
     }
+
+
+def _effected(rule: Rule) -> bool:
+    return bool(rule.effects) or (rule.graph is not None and bool(rule.graph.effects))
 
 
 def _reference(ref: Ref) -> RuleRef:

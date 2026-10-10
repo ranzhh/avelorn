@@ -1,0 +1,24 @@
+program: stand-and-shoot
+sequence: shooting
+fielded: [attacker, target]
+inputs:
+  - {known: distance, type: int}
+  - {known: can-shoot, type: bool}
+  - {known: line-of-sight, type: bool}
+  - {fact: moved, of: attacker}
+  - {fact: standing, of: attacker}
+  - {fact: standing, of: target}
+items:
+  - {step: who-can-shoot, readings: [ranks]}
+  - {step: check-range, readings: [band]}
+  - {step: how-many-shots, readings: [shots, parts]}
+  - group: attack
+    for: each-fighter
+    of: attacker
+    times: how-many-shots
+    items:
+      - {step: roll-to-hit, readings: [hits]}
+      - {step: roll-to-wound, readings: [wounds]}
+      - {step: make-armour-saves, readings: [saves]}
+      - {step: ward-saves, readings: [saves, unsaved]}
+  - {step: remove-casualties, tallies: [attack], readings: [unsaved, models, standing]}

@@ -1263,15 +1263,38 @@ class Program:
         choices: Mapping[Decision[Any], Any] = MappingProxyType({}),
         state: Mapping[State[Any], Hashable] = MappingProxyType({}),
     ) -> tuple["Lane", ...]:
-        for fact in state:
-            if fact not in self.states:
-                raise GraphError(f"{fact.name} is not a state fact of {self.name}")
-        for fact in self.states:
-            if fact in self.entry and fact not in state:
-                raise GraphError(
-                    f"{self.name} reads {fact.name} before writing it, so needs it given"
-                )
-        start = World(frozenset((fact, state[fact]) for fact in self.states if fact in self.entry))
+        """Run the program from its starting state.
+
+        Returns:
+            The lanes, one per set of options taken.
+        """
+        return self.evaluate_from(Distribution.pure(World(frozenset(state.items()))), choices)
+
+    def evaluate_from(
+        self,
+        starts: Distribution[World],
+        choices: Mapping[Decision[Any], Any] = MappingProxyType({}),
+    ) -> tuple["Lane", ...]:
+        """Run the program from each way it may start, weighed by its chance.
+
+        Returns:
+            The lanes, one per set of options taken.
+
+        Raises:
+            GraphError: a state given is not the program's, one it reads first is
+                missing, a reading was shown after build, or a choice is not an
+                option of a decision of the program.
+        """
+        for world in starts.mass:
+            given = {fact for fact, _ in world.values}
+            for fact in given:
+                if fact not in self.states:
+                    raise GraphError(f"{fact.name} is not a state fact of {self.name}")
+            for fact in self.states:
+                if fact in self.entry and fact not in given:
+                    raise GraphError(
+                        f"{self.name} reads {fact.name} before writing it, so needs it given"
+                    )
         for step in self.steps:
             if step.shown() != self.readings[step]:
                 raise GraphError(f"{self.paths[step]} was shown a reading after build")
@@ -1280,7 +1303,8 @@ class Program:
                 raise GraphError(f"{decision.name} is not a decision in {self.name}")
             if choice not in decision.options:
                 raise GraphError(f"{choice!r} is not an option for {decision.name}")
-        return self._grow(Lane(program=self, given=choices, joint=Distribution.pure(start)))
+        joint = starts.map(partial(World.keeping, keys=self.entry))
+        return self._grow(Lane(program=self, given=choices, joint=joint))
 
     def _grow(self, lane: "Lane") -> tuple["Lane", ...]:
         """Run the lane to the end, splitting it where a decision is open.
