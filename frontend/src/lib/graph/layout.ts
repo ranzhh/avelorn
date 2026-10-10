@@ -11,6 +11,8 @@ export const FRAME = { pad: 12, header: 24 } as const;
 export const RULE = { height: 40, gap: 16 } as const;
 export const RAIL_GAP = 72;
 export const MARGIN = 12;
+/** A caption's monospace glyph and padding as the canvas draws them, and its clearance. */
+export const CAPTION = { glyph: 6.75, pad: 3.2, clear: 8 } as const;
 
 export interface Point {
 	x: number;
@@ -30,13 +32,19 @@ export interface PlacedStep {
 	box: Box;
 }
 
+/** What one side's steps in a block read, one glimpse after another. */
+export interface Summary {
+	side: string;
+	text: string;
+}
+
 export interface PlacedBlock {
 	path: string;
 	block: Block;
 	box: Box;
 	collapsed: boolean;
 	multiplier: Reading[];
-	summary: string;
+	summary: Summary[];
 	steps: string[];
 }
 
@@ -49,6 +57,11 @@ export interface PlacedEdge {
 	readings: Reading[];
 	start: Point;
 	end: Point;
+}
+
+export interface PlacedCaption {
+	text: string;
+	at: Point;
 }
 
 export interface PlacedRule {
@@ -71,6 +84,7 @@ export interface Layout {
 	steps: PlacedStep[];
 	blocks: PlacedBlock[];
 	edges: PlacedEdge[];
+	captions: PlacedCaption[];
 	rail: PlacedRule[];
 	landings: PlacedLanding[];
 	unmodelled: Rule[];
@@ -112,27 +126,39 @@ function isRepeat(block: Block): block is Repeat {
 	return block.kind === 'repeat';
 }
 
-function summaryOf(paths: string[], program: Program): string {
-	const readings = paths.flatMap(
-		(path) => program.nodes.find((node) => node.path === path)?.edge.readings ?? []
-	);
-	const seen = new Set<string>();
-	return readings
-		.filter((reading) => {
-			if (seen.has(reading.label)) return false;
-			seen.add(reading.label);
-			return true;
-		})
-		.map((reading) => {
-			if (!('outcomes' in reading)) return `${reading.label} ${reading.value}`;
-			const values = reading.outcomes.map((outcome) => outcome.value);
-			if (!values.length) return '';
-			const first = values[0];
-			const last = values[values.length - 1];
-			return `${reading.label} ${first === last ? first : `${first}–${last}`}`;
-		})
-		.filter(Boolean)
-		.join(' · ');
+/** Whether a block may be drawn as one card; a decision's body stays open. */
+export function foldable(block: Block): boolean {
+	return block.kind !== 'body';
+}
+
+/** Whether a block starts as one card: a slot does, a sequence or repeat as its program says. */
+export function startsFolded(block: Block): boolean {
+	if (block.kind === 'slot') return true;
+	return block.kind !== 'body' && block.collapsed;
+}
+
+function glimpse(reading: Reading): string {
+	if (!('outcomes' in reading)) return `${reading.label} ${reading.value}`;
+	const values = reading.outcomes.map((outcome) => outcome.value);
+	if (!values.length) return '';
+	const first = values[0];
+	const last = values[values.length - 1];
+	return `${reading.label} ${first === last ? first : `${first}–${last}`}`;
+}
+
+function summaryOf(paths: string[], program: Program): Summary[] {
+	const held = new Set(paths);
+	const steps = program.nodes.filter((node) => held.has(node.path));
+	return program.sides
+		.map((side) => ({
+			side,
+			text: steps
+				.filter((step) => step.side === side)
+				.flatMap((step) => step.edge.readings.map(glimpse))
+				.filter(Boolean)
+				.join(' · ')
+		}))
+		.filter((summary) => summary.text);
 }
 
 function multiplierOf(block: Block, program: Program): Reading[] {
@@ -203,10 +229,18 @@ export function framed(steps: PlacedStep[], blocks: PlacedBlock[]): PlacedBlock[
 	return blocks.map((block) => ({ ...block, box: fitted.get(block.path)! }));
 }
 
-function extent(steps: PlacedStep[], blocks: PlacedBlock[], rail: PlacedRule[], gap: number) {
+function extent(
+	steps: PlacedStep[],
+	blocks: PlacedBlock[],
+	rail: PlacedRule[],
+	edges: PlacedEdge[],
+	gap: number
+) {
 	const boxes = [...steps, ...blocks, ...rail].map((placed) => placed.box);
 	return {
-		width: Math.max(...boxes.map((box) => box.x + box.width)) + gap + MARGIN,
+		width:
+			Math.max(...boxes.map((box) => box.x + box.width + gap), ...edges.map((edge) => edge.end.x)) +
+			MARGIN,
 		height: Math.max(...boxes.map((box) => box.y + box.height)) + MARGIN
 	};
 }
@@ -220,6 +254,27 @@ function nudge(steps: PlacedStep[], blocks: PlacedBlock[], rail: PlacedRule[]): 
 	};
 }
 
+/** The gap after a step, widened to hold its caption clear of the cards on either side. */
+function room(text: string, gap: number): number {
+	if (!text) return gap;
+	return Math.max(gap, text.length * CAPTION.glyph + 2 * (CAPTION.pad + CAPTION.clear));
+}
+
+/**
+ * What leaves each step, captioned once however far its edges run.
+ *
+ * A folded block's card already sums up its readings, so what leaves it goes uncaptioned.
+ */
+function captioned(edges: PlacedEdge[], blocks: PlacedBlock[]): Map<string, string> {
+	const cards = new Set(blocks.filter((block) => block.collapsed).map((block) => block.path));
+	const texts = new Map<string, string>();
+	for (const edge of edges) {
+		const text = caption(edge.readings);
+		if (text && !cards.has(edge.from) && !texts.has(edge.from)) texts.set(edge.from, text);
+	}
+	return texts;
+}
+
 function wire(
 	edges: PlacedEdge[],
 	landings: PlacedLanding[],
@@ -227,14 +282,20 @@ function wire(
 	blocks: PlacedBlock[],
 	rail: PlacedRule[],
 	gap: number
-): { edges: PlacedEdge[]; landings: PlacedLanding[] } {
+): { edges: PlacedEdge[]; captions: PlacedCaption[]; landings: PlacedLanding[] } {
 	const boxes = boxesOf(steps, blocks);
 	const cards = new Map(rail.map((placed) => [placed.rule.id, placed.box]));
+	const texts = captioned(edges, blocks);
 	return {
 		edges: edges.map((edge) => {
 			const start = right(boxes.get(edge.from)!);
-			const end = edge.to ? left(boxes.get(edge.to)!) : { x: start.x + gap, y: start.y };
+			const after = room(texts.get(edge.from) ?? '', gap);
+			const end = edge.to ? left(boxes.get(edge.to)!) : { x: start.x + after, y: start.y };
 			return { ...edge, start, end };
+		}),
+		captions: [...texts].map(([from, text]) => {
+			const start = right(boxes.get(from)!);
+			return { text, at: { x: start.x + room(text, gap) / 2, y: start.y } };
 		}),
 		landings: landings.map((landing) => ({
 			...landing,
@@ -261,20 +322,23 @@ export function layout(program: Program, collapsed: string[], metrics = METRICS)
 	const placed: PlacedBlock[] = [];
 	const standsFor = new Map<string, string>();
 
-	function place(list: Item[], x: number): number {
-		let cursor = x;
+	function place(list: Item[], x: number): { end: number; after: number } {
+		let end = x;
+		let after = 0;
 		for (const item of list) {
+			const at = end + after;
 			if (item.kind === 'step') {
-				const box = { x: cursor, y: rowTop, width: node.width, height: node.height };
+				const box = { x: at, y: rowTop, width: node.width, height: node.height };
 				steps.push({ path: item.node.path, node: item.node, box });
 				standsFor.set(item.node.path, item.node.path);
-				cursor += node.width + gap;
+				end = at + node.width;
+				after = room(caption(item.node.edge.readings), gap);
 				continue;
 			}
 			const multiplier = multiplierOf(item.block, program);
 			const held = stepPaths(item);
 			if (collapsed.includes(item.block.path)) {
-				const box = { x: cursor, y: rowTop, width: node.width, height: node.height };
+				const box = { x: at, y: rowTop, width: node.width, height: node.height };
 				placed.push({
 					path: item.block.path,
 					block: item.block,
@@ -285,23 +349,25 @@ export function layout(program: Program, collapsed: string[], metrics = METRICS)
 					steps: held
 				});
 				for (const path of held) standsFor.set(path, item.block.path);
-				cursor += node.width + gap;
+				end = at + node.width;
+				after = gap;
 				continue;
 			}
 			const pad = FRAME.pad * (1 + depth(item.items));
-			const end = place(item.items, cursor + pad) - gap + pad;
+			const inner = place(item.items, at + pad);
+			end = inner.end + pad;
+			after = Math.max(gap, inner.after - pad);
 			placed.push({
 				path: item.block.path,
 				block: item.block,
-				box: { x: cursor, y: rowTop, width: end - cursor, height: node.height },
+				box: { x: at, y: rowTop, width: end - at, height: node.height },
 				collapsed: false,
 				multiplier,
 				summary: summaryOf(held, program),
 				steps: held
 			});
-			cursor = end + gap;
 		}
-		return cursor;
+		return { end, after };
 	}
 
 	place(items, MARGIN);
@@ -404,30 +470,36 @@ export function layout(program: Program, collapsed: string[], metrics = METRICS)
 		}))
 	);
 
+	const wired = wire(edges, landings, steps, blocks, rail, gap);
 	return {
 		metrics,
-		...extent(steps, blocks, rail, gap),
+		...extent(steps, blocks, rail, wired.edges, gap),
 		steps,
 		blocks,
 		rail,
 		unmodelled,
-		...wire(edges, landings, steps, blocks, rail, gap)
+		...wired
 	};
 }
 
+/**
+ * The widest metrics at which the program fits the width available.
+ *
+ * Squeezing is worth it only when it spares the scroll; when even the floor
+ * overflows, the cards keep their full size. Between the floor and full size the
+ * drawing widens no faster than the straight line joining them, so a share of
+ * the way along that line always fits.
+ */
 export function fitted(program: Program, collapsed: string[], available: number): Metrics {
-	const natural = layout(program, collapsed, METRICS);
-	if (natural.width <= available) return METRICS;
-	const columns = natural.steps.length + natural.blocks.filter((block) => block.collapsed).length;
-	const gaps = columns - 1 + natural.edges.filter((edge) => edge.kind === 'output').length;
-	const scalable = columns * METRICS.node.width + gaps * METRICS.gap;
-	const ratio = Math.max(0, (available - (natural.width - scalable)) / scalable);
+	const widest = layout(program, collapsed, METRICS).width;
+	if (widest <= available) return METRICS;
+	const narrowest = layout(program, collapsed, LEAST).width;
+	if (narrowest > available) return METRICS;
+	const share = (available - narrowest) / (widest - narrowest);
+	const between = (least: number, most: number) => Math.floor(least + share * (most - least));
 	return {
-		node: {
-			width: Math.max(Math.floor(METRICS.node.width * ratio), LEAST.node.width),
-			height: METRICS.node.height
-		},
-		gap: Math.max(Math.floor(METRICS.gap * ratio), LEAST.gap)
+		node: { width: between(LEAST.node.width, METRICS.node.width), height: METRICS.node.height },
+		gap: between(LEAST.gap, METRICS.gap)
 	};
 }
 
@@ -467,13 +539,14 @@ export function moved(drawn: Layout, moves: Moves): Layout {
 	const steps = dragged.map((step) => ({ ...step, box: shifted(step.box, by) }));
 	const blocks = reframed.map((block) => ({ ...block, box: shifted(block.box, by) }));
 	const rail = carded.map((placed) => ({ ...placed, box: shifted(placed.box, by) }));
+	const wired = wire(drawn.edges, drawn.landings, steps, blocks, rail, drawn.metrics.gap);
 	return {
 		...drawn,
-		...extent(steps, blocks, rail, drawn.metrics.gap),
+		...extent(steps, blocks, rail, wired.edges, drawn.metrics.gap),
 		steps,
 		blocks,
 		rail,
-		...wire(drawn.edges, drawn.landings, steps, blocks, rail, drawn.metrics.gap)
+		...wired
 	};
 }
 

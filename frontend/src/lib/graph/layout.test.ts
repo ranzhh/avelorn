@@ -1,8 +1,20 @@
 import { describe, expect, it } from 'vitest';
 
-import { LEAST, METRICS, caption, expected, fitted, layout, moved, type Box } from './layout';
+import {
+	CAPTION,
+	LEAST,
+	METRICS,
+	caption,
+	expected,
+	fitted,
+	foldable,
+	layout,
+	moved,
+	startsFolded,
+	type Box
+} from './layout';
 import type { Point } from './layout';
-import type { Distribution, Program, Reading, Roll } from './types';
+import type { Block, Distribution, Program, Reading, Roll } from './types';
 
 const program: Program = {
 	program: 'p',
@@ -263,7 +275,10 @@ describe('layout', () => {
 		const node = collapsed.blocks.find((block) => block.path === GROUP)!;
 		expect(node.collapsed).toBe(true);
 		expect(node.box.width).toBe(expanded.steps[0].box.width);
-		expect(node.summary).toBe('x 0–2 · y 0–2');
+		expect(node.summary).toEqual([
+			{ side: 'one', text: 'x 0–2' },
+			{ side: 'two', text: 'y 0–2' }
+		]);
 		expect(collapsed.width).toBeLessThan(expanded.width);
 	});
 
@@ -274,7 +289,43 @@ describe('layout', () => {
 		};
 		const drawn = layout(semantic, [GROUP]);
 		expect(drawn.steps.map((step) => step.path)).not.toContain('p/g/b');
-		expect(drawn.blocks.find((block) => block.path === GROUP)?.summary).toBe('x 0–2 · y 0–2');
+		expect(drawn.blocks.find((block) => block.path === GROUP)?.summary).toEqual([
+			{ side: 'one', text: 'x 0–2' },
+			{ side: 'two', text: 'y 0–2' }
+		]);
+	});
+
+	it('sums up a folded group one side to a line, keeping every reading', () => {
+		const relabelled = (side: string) => ({
+			...program,
+			nodes: program.nodes.map((node) =>
+				node.path === 'p/g/c'
+					? {
+							...node,
+							side,
+							edge: { readings: node.edge.readings.map((each) => ({ ...each, label: 'x' })) }
+						}
+					: node
+			)
+		});
+		const summed = (side: string) =>
+			layout(relabelled(side), [GROUP]).blocks.find((block) => block.path === GROUP)!.summary;
+		expect(summed('two')).toEqual([
+			{ side: 'one', text: 'x 0–2' },
+			{ side: 'two', text: 'x 0–2' }
+		]);
+		expect(summed('one')).toEqual([{ side: 'one', text: 'x 0–2 · x 0–2' }]);
+	});
+
+	it('starts a slot folded and a sequence or repeat as its program prints it', () => {
+		const blocks: Block[] = [
+			{ path: 'p/s', kind: 'slot', empty: false },
+			{ path: 'p/q', kind: 'sequence', collapsed: false },
+			{ path: 'p/r', kind: 'repeat', times: 'p/a', collapsed: true },
+			{ path: 'p/b', kind: 'body', decision: 'p/a' }
+		];
+		expect(blocks.map(startsFolded)).toEqual([true, false, true, false]);
+		expect(blocks.map(foldable)).toEqual([true, true, true, false]);
 	});
 
 	it('keeps the edges into and out of the collapsed group', () => {
@@ -311,14 +362,18 @@ describe('layout', () => {
 		expect(card('one/p/r3').y).toBeGreaterThan(card('one/p/r1').y + card('one/p/r1').height);
 	});
 
-	it('fits the flow into a narrower width and no narrower than the floor', () => {
-		expect(fitted(program, [], 2000)).toEqual(METRICS);
-		const snug = fitted(program, [], 700);
-		expect(snug).not.toEqual(METRICS);
-		expect(layout(program, [], snug).width).toBeLessThanOrEqual(700);
-		expect(snug.node.width).toBeGreaterThanOrEqual(LEAST.node.width);
-		expect(snug.gap).toBeGreaterThanOrEqual(LEAST.gap);
-		expect(fitted(program, [], 100)).toEqual(LEAST);
+	it('squeezes the flow to fit, and keeps it full size when even the floor overflows', () => {
+		const widest = layout(program, [], METRICS).width;
+		const narrowest = layout(program, [], LEAST).width;
+		expect(fitted(program, [], widest)).toEqual(METRICS);
+		for (const available of [narrowest, (narrowest + widest) / 2, widest - 1]) {
+			const snug = fitted(program, [], available);
+			expect(snug).not.toEqual(METRICS);
+			expect(layout(program, [], snug).width).toBeLessThanOrEqual(available);
+			expect(snug.node.width).toBeGreaterThanOrEqual(LEAST.node.width);
+			expect(snug.gap).toBeGreaterThanOrEqual(LEAST.gap);
+		}
+		expect(fitted(program, [], narrowest - 1)).toEqual(METRICS);
 	});
 });
 
@@ -430,6 +485,56 @@ describe('captions', () => {
 	it('takes the expected value of a numeric distribution and none of a named one', () => {
 		expect(expected(x)).toBe(1);
 		expect(expected(z)).toBeNull();
+	});
+
+	it('captions what leaves a step once, beside it, however far its edges run', () => {
+		const reread = {
+			...program,
+			nodes: program.nodes.map((node) =>
+				node.path === 'p/d' ? { ...node, inputs: [...node.inputs, 'p/a'] } : node
+			)
+		};
+		const drawn = layout(reread, []);
+		const a = drawn.steps.find((step) => step.path === 'p/a')!.box;
+		expect(drawn.edges.filter((edge) => edge.from === 'p/a').map((edge) => edge.to)).toEqual([
+			'p/d',
+			GROUP
+		]);
+		expect(drawn.captions.filter((each) => each.text === 'n 2')).toEqual([
+			{ text: 'n 2', at: { x: a.x + a.width + drawn.metrics.gap / 2, y: a.y + a.height / 2 } }
+		]);
+	});
+
+	it('holds every caption clear of the cards on either side of it, however squeezed', () => {
+		const wordy = {
+			...program,
+			nodes: program.nodes.map((node) =>
+				node.path === 'p/g/b'
+					? {
+							...node,
+							edge: {
+								readings: node.edge.readings.map((each) => ({ ...each, label: 'wounds-lost' }))
+							}
+						}
+					: node
+			)
+		};
+		for (const metrics of [METRICS, LEAST]) {
+			const drawn = layout(wordy, [], metrics);
+			expect(drawn.captions.map((each) => each.text)).toContain('wounds-lost · 1.0');
+			for (const each of drawn.captions) {
+				const half = (each.text.length * CAPTION.glyph) / 2 + CAPTION.pad;
+				for (const { box } of drawn.steps) {
+					expect(each.at.x + half <= box.x || each.at.x - half >= box.x + box.width).toBe(true);
+				}
+			}
+		}
+	});
+
+	it('leaves what leaves a folded group to the summary on its card', () => {
+		expect(collapsed.edges.some((edge) => edge.from === GROUP)).toBe(true);
+		expect(collapsed.captions.map((each) => each.text)).toEqual(['n 2', 'z']);
+		expect(expanded.captions.map((each) => each.text)).toEqual(['x · 1.0', 'y · 1.0', 'n 2', 'z']);
 	});
 
 	it('captions an edge with its first reading, one line', () => {
