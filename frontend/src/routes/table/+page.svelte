@@ -93,6 +93,7 @@
 		if (!pair) return;
 		cleared();
 		resolving = 'melee';
+		const between: [number, number] = [pair.mover.id, pair.target.id];
 		const body: FightBody = {
 			a: deployment(pair.mover, 'melee'),
 			b: deployment(pair.target, 'melee'),
@@ -108,13 +109,14 @@
 			refusal = typeof refused?.detail === 'string' ? refused.detail : 'could not resolve that';
 			return;
 		}
-		battle.resolved = { action: 'fight', body, report };
+		battle.resolved = { action: 'fight', between, body, report };
 	}
 
 	async function loose() {
 		if (!pair) return;
 		cleared();
 		resolving = 'shooting';
+		const between: [number, number] = [pair.mover.id, pair.target.id];
 		const body: VolleyBody = {
 			shooter: deployment(pair.mover, 'missile'),
 			target: deployment(pair.target, 'melee'),
@@ -131,7 +133,7 @@
 			refusal = typeof refused?.detail === 'string' ? refused.detail : 'could not resolve that';
 			return;
 		}
-		battle.resolved = { action: 'volley', body, report };
+		battle.resolved = { action: 'volley', between, body, report };
 	}
 
 	async function muster(unit: string, size: number, options: string[], frontage?: number) {
@@ -183,7 +185,7 @@
 		if (!standing) return;
 		const costed = await muster(standing.block.unit, size, options);
 		if (!costed) return;
-		amend(id, { block: costed });
+		battle.amend(id, { block: costed });
 	}
 
 	/** Re-form a block to a new width, asking the engine for the footprint it takes. */
@@ -205,7 +207,7 @@
 			refusal = typeof refused?.detail === 'string' ? refused.detail : 'could not re-form that';
 			return;
 		}
-		amend(id, { block: costed });
+		battle.amend(id, { block: costed });
 	}
 
 	/** Open a block's own pane: the datasheet it fields, with its options beside it. */
@@ -220,12 +222,8 @@
 		});
 	}
 
-	function amend(id: number, change: Partial<Placed>) {
-		battle.placed = battle.placed.map((each) => (each.id === id ? { ...each, ...change } : each));
-	}
-
 	function remove(id: number) {
-		battle.placed = battle.placed.filter((each) => each.id !== id);
+		battle.remove(id);
 		if (picked === id) picked = null;
 	}
 </script>
@@ -272,8 +270,8 @@
 				placed={battle.placed}
 				{picked}
 				onpick={(id) => (picked = id)}
-				onmove={(id, x, y) => amend(id, { x, y })}
-				onturn={(id, facing) => amend(id, { facing })}
+				onmove={(id, x, y) => battle.amend(id, { x, y })}
+				onturn={(id, facing) => battle.amend(id, { facing })}
 				ondrop={(mover, target) => (battle.asking = { mover, target })}
 				onreform={reform}
 				ondropunit={(unit, size, x, y) => deploy(unit, size, { x, y })}
@@ -328,7 +326,7 @@
 						<select
 							class="select"
 							value={block.melee}
-							onchange={(e) => amend(block.id, { melee: e.currentTarget.value })}
+							onchange={(e) => battle.amend(block.id, { melee: e.currentTarget.value })}
 						>
 							<option value="">default</option>
 							{#each usable(block.block, 'melee') as weapon}
@@ -343,7 +341,7 @@
 						<select
 							class="select"
 							value={block.missile}
-							onchange={(e) => amend(block.id, { missile: e.currentTarget.value })}
+							onchange={(e) => battle.amend(block.id, { missile: e.currentTarget.value })}
 						>
 							<option value="">default</option>
 							{#each usable(block.block, 'missile') as weapon}
@@ -354,7 +352,7 @@
 				{/if}
 				<div class="cluster acts">
 					<button class="btn btn-sm" onclick={() => sheet(block.id)}>datasheet</button>
-					<button class="btn btn-sm" onclick={() => amend(block.id, { facing: 0 })}>
+					<button class="btn btn-sm" onclick={() => battle.amend(block.id, { facing: 0 })}>
 						face up
 					</button>
 					<button class="btn btn-sm" onclick={() => remove(block.id)}>remove</button>
