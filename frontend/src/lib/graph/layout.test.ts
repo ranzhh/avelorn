@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
 	CAPTION,
+	FRAME,
+	LANE,
 	LEAST,
 	METRICS,
 	caption,
@@ -15,7 +17,7 @@ import {
 	type Box
 } from './layout';
 import type { Point } from './layout';
-import type { Block, Distribution, Judged, Program, Reading, Roll } from './types';
+import type { Block, Distribution, Judged, Node, Program, Reading, Roll } from './types';
 
 const program: Program = {
 	program: 'p',
@@ -277,8 +279,8 @@ describe('layout', () => {
 		expect(node.collapsed).toBe(true);
 		expect(node.box.width).toBe(expanded.steps[0].box.width);
 		expect(node.summary).toEqual([
-			{ side: 'one', text: 'x 0–2' },
-			{ side: 'two', text: 'y 0–2' }
+			{ side: 'one', text: 'x · 1.0', every: 'x · 1.0' },
+			{ side: 'two', text: 'y · 1.0', every: 'y · 1.0' }
 		]);
 		expect(collapsed.width).toBeLessThan(expanded.width);
 	});
@@ -291,31 +293,23 @@ describe('layout', () => {
 		const drawn = layout(semantic, [GROUP]);
 		expect(drawn.steps.map((step) => step.path)).not.toContain('p/g/b');
 		expect(drawn.blocks.find((block) => block.path === GROUP)?.summary).toEqual([
-			{ side: 'one', text: 'x 0–2' },
-			{ side: 'two', text: 'y 0–2' }
+			{ side: 'one', text: 'x · 1.0', every: 'x · 1.0' },
+			{ side: 'two', text: 'y · 1.0', every: 'y · 1.0' }
 		]);
 	});
 
-	it('sums up a folded group one side to a line, keeping every reading', () => {
-		const relabelled = (side: string) => ({
+	it('sums up a folded group by the reading each side ends on, keeping every reading', () => {
+		const onSide = (side: string) => ({
 			...program,
-			nodes: program.nodes.map((node) =>
-				node.path === 'p/g/c'
-					? {
-							...node,
-							side,
-							edge: { readings: node.edge.readings.map((each) => ({ ...each, label: 'x' })) }
-						}
-					: node
-			)
+			nodes: program.nodes.map((node) => (node.path === 'p/g/c' ? { ...node, side } : node))
 		});
 		const summed = (side: string) =>
-			layout(relabelled(side), [GROUP]).blocks.find((block) => block.path === GROUP)!.summary;
-		expect(summed('two')).toEqual([
-			{ side: 'one', text: 'x 0–2' },
-			{ side: 'two', text: 'x 0–2' }
+			layout(onSide(side), [GROUP]).blocks.find((block) => block.path === GROUP)!.summary;
+		expect(summed('two').map((line) => [line.side, line.text])).toEqual([
+			['one', 'x · 1.0'],
+			['two', 'y · 1.0']
 		]);
-		expect(summed('one')).toEqual([{ side: 'one', text: 'x 0–2 · x 0–2' }]);
+		expect(summed('one')).toEqual([{ side: 'one', text: 'y · 1.0', every: 'x · 1.0, y · 1.0' }]);
 	});
 
 	it('starts a slot folded and a sequence or repeat as its program prints it', () => {
@@ -355,6 +349,124 @@ describe('layout', () => {
 			expect(snug.gap).toBeGreaterThanOrEqual(LEAST.gap);
 		}
 		expect(fitted(program, [], narrowest - 1)).toEqual(METRICS);
+	});
+});
+
+const measured = (path: string, side: string, inputs: string[] = []): Node => ({
+	path,
+	step: path.slice(path.lastIndexOf('/') + 1),
+	kind: 'measurement',
+	side,
+	ran: true,
+	inputs,
+	edge: { readings: [{ label: 'v', value: 1 }] },
+	changes: []
+});
+
+const fought: Program = {
+	program: 'r',
+	sides: ['one', 'two'],
+	nodes: [
+		measured('r/two/ready', 'two'),
+		measured('r/one/ready', 'one'),
+		measured('r/one/count', 'one', ['r/one/ready']),
+		measured('r/one/attack/champion/hit', 'one'),
+		measured('r/one/attack/champion/wound', 'one', ['r/one/attack/champion/hit']),
+		measured('r/one/attack/ranks/hit', 'one'),
+		measured('r/one/attack/ranks/wound', 'one', ['r/one/attack/ranks/hit']),
+		measured('r/slot-2/one/strike', 'one', ['r/two/ready']),
+		measured('r/slot-1/one/strike', 'one', ['r/one/ready'])
+	],
+	blocks: [
+		{ path: 'r/one/attack', kind: 'sequence', collapsed: false },
+		{ path: 'r/one/attack/champion', kind: 'repeat', times: 'r/one/count', collapsed: false },
+		{ path: 'r/one/attack/ranks', kind: 'repeat', times: 'r/one/count', collapsed: false }
+	],
+	rules: [],
+	lanes: []
+};
+
+describe('columns', () => {
+	const drawn = layout(fought, []);
+	const box = (path: string) => drawn.steps.find((step) => step.path === path)!.box;
+	const frame = (path: string) => drawn.blocks.find((block) => block.path === path)!.box;
+	const above = (upper: Box, lower: Box) => upper.y + upper.height < lower.y;
+
+	it('stacks the step each side makes in one column, in side order', () => {
+		expect(box('r/two/ready').x).toBe(box('r/one/ready').x);
+		expect(above(box('r/one/ready'), box('r/two/ready'))).toBe(true);
+	});
+
+	it('stacks the group each part attacks in, step by step', () => {
+		for (const step of ['hit', 'wound']) {
+			expect(box(`r/one/attack/ranks/${step}`).x).toBe(box(`r/one/attack/champion/${step}`).x);
+		}
+		expect(above(frame('r/one/attack/champion'), frame('r/one/attack/ranks'))).toBe(true);
+	});
+
+	it('moves one column right for each step that follows another', () => {
+		const xs = [
+			'r/one/ready',
+			'r/one/count',
+			'r/one/attack/champion/hit',
+			'r/one/attack/champion/wound',
+			'r/slot-2/one/strike',
+			'r/slot-1/one/strike'
+		].map((path) => box(path).x);
+		xs.slice(1).forEach((x, index) => expect(x).toBeGreaterThan(xs[index] + METRICS.node.width));
+		expect(new Set(drawn.steps.map((step) => step.box.x))).toEqual(new Set(xs));
+	});
+
+	it('adds up what the parts of a folded group end on side by side', () => {
+		const wounds = (mean: number): Reading => ({
+			label: 'wounds',
+			outcomes: [
+				{ value: 0, p: 1 - mean / 2 },
+				{ value: 2, p: mean / 2 }
+			]
+		});
+		const rolled = {
+			...fought,
+			nodes: fought.nodes.map((node) =>
+				node.step === 'wound'
+					? { ...node, edge: { readings: [wounds(node.path.includes('champion') ? 0.5 : 1.5)] } }
+					: node
+			)
+		};
+		const card = layout(rolled, ['r/one/attack']).blocks.find(
+			(block) => block.path === 'r/one/attack'
+		)!;
+		expect(card.summary.map((line) => [line.side, line.text])).toEqual([['one', 'wounds · 2.0']]);
+	});
+
+	it('carries a read past columns on a lane clear of their cards, and ends no output on one', () => {
+		const along = (a: Point, b: Point) =>
+			Array.from({ length: 19 }, (_, index) => ({
+				x: a.x + ((b.x - a.x) * (index + 1)) / 20,
+				y: a.y + ((b.y - a.y) * (index + 1)) / 20
+			}));
+		const covers = (box: Box, point: Point) =>
+			point.x > box.x &&
+			point.x < box.x + box.width &&
+			point.y > box.y &&
+			point.y < box.y + box.height;
+		for (const each of [drawn, layout(fought, ['r/one/attack'])]) {
+			const cards = [...each.steps, ...each.blocks.filter((block) => block.collapsed)];
+			for (const edge of each.edges) {
+				const route = [edge.start, ...edge.via, edge.end];
+				const points = route.slice(1).flatMap((point, index) => along(route[index], point));
+				for (const { box } of cards) {
+					const beside = { ...box, x: box.x - LANE.step, width: box.width + 2 * LANE.step };
+					expect(points.some((point) => covers(box, point))).toBe(false);
+					expect(edge.via.some((corner) => covers(beside, corner))).toBe(false);
+				}
+				if (!edge.to) expect(cards.some((card) => onBoundary(edge.end, card.box))).toBe(false);
+			}
+		}
+		const sent = drawn.edges.filter((edge) => edge.from === 'r/two/ready');
+		expect(sent.map((edge) => [edge.kind, edge.to])).toEqual([['input', 'r/slot-2/one/strike']]);
+		const reader = box('r/slot-2/one/strike');
+		expect(sent[0].end).toEqual({ x: reader.x, y: reader.y + reader.height / 2 });
 	});
 });
 
@@ -414,7 +526,7 @@ describe('moving what was laid out', () => {
 			expect(inside(shifted.steps.find((each) => each.path === path)!.box, after)).toBe(true);
 		}
 		const into = shifted.edges.find((edge) => edge.kind === 'times')!;
-		expect(into.end).toEqual({ x: after.x, y: after.y + after.height / 2 });
+		expect(into.end).toEqual({ x: after.x, y: after.y + (after.height + FRAME.header) / 2 });
 		expect(shifted.width).toBeGreaterThanOrEqual(after.x + after.width);
 		expect(shifted.height).toBeGreaterThanOrEqual(after.y + after.height);
 	});
@@ -490,21 +602,16 @@ describe('captions', () => {
 		expect(expected(z)).toBeNull();
 	});
 
-	it('captions what leaves a step once, beside it, however far its edges run', () => {
-		const reread = {
-			...program,
-			nodes: program.nodes.map((node) =>
-				node.path === 'p/d' ? { ...node, inputs: [...node.inputs, 'p/a'] } : node
-			)
-		};
-		const drawn = layout(reread, []);
-		const a = drawn.steps.find((step) => step.path === 'p/a')!.box;
-		expect(drawn.edges.filter((edge) => edge.from === 'p/a').map((edge) => edge.to)).toEqual([
-			'p/d',
-			GROUP
+	it('captions what leaves a step once, beside it, however many edges it sends', () => {
+		const drawn = layout(fought, []);
+		const from = 'r/one/count';
+		const count = drawn.steps.find((step) => step.path === from)!.box;
+		expect(drawn.edges.filter((edge) => edge.from === from).map((edge) => edge.to)).toEqual([
+			'r/one/attack/champion',
+			'r/one/attack/ranks'
 		]);
-		expect(drawn.captions.filter((each) => each.text === 'n 2')).toEqual([
-			{ text: 'n 2', at: { x: a.x + a.width + drawn.metrics.gap / 2, y: a.y + a.height / 2 } }
+		expect(drawn.captions.filter((each) => each.from === from).map((each) => each.at)).toEqual([
+			{ x: count.x + count.width + drawn.metrics.gap / 2, y: count.y + count.height / 2 }
 		]);
 	});
 
