@@ -1,8 +1,8 @@
 """The shared skeleton of turn-structured games.
 
-At this altitude, a game is an ordered sequence of phases, each phase a
-sequence of steps carrying actions. This module owns that shape and
-nothing else — no rules, no data, no math. A concrete game (e.g.
+At this altitude, a game is an ordered sequence of phases, each phase
+carrying actions. This module owns that shape and nothing else: no rules,
+no data, no math. A concrete game (e.g.
 :class:`avelorn.tow.game.TOWGame`) declares its printed phase sequence
 and binds each phase to its actions; this base only walks it.
 """
@@ -13,17 +13,12 @@ from typing import ClassVar
 
 @dataclass(frozen=True)
 class Phase:
-    """A phase of a game's turn: printed steps, and actions as thin delegates.
+    """A phase of a game's turn: actions as thin delegates.
 
     A phase is a value the game assembles, owning exactly what it
-    needs — no reference back to the game. ``steps`` is the phase's
-    printed step sequence; what a step *is* stays the concrete game's
-    concern (by convention, something that knows how it resolves — its
-    dice, its procedure). Actions are methods, each a thin delegation
-    into the game's logic modules, never logic of their own.
+    needs, with no reference back to the game. Actions are methods, each a
+    thin delegation into the game's logic modules, never logic of their own.
     """
-
-    steps: ClassVar[tuple[object, ...]] = ()
 
 
 class Game:

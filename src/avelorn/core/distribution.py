@@ -24,12 +24,10 @@ Naming that gap here rather than guessing at an operator for it.
 
 Formally this is the discrete probability monad: :meth:`pure` is a point mass,
 :meth:`bind` is the mix, and the two obey the monad laws (checked in the tests).
-Everything the engine passes around as a bare ``list[float]`` count-pmf is
-:meth:`from_counts` of this type.
 """
 
 import operator
-from collections.abc import Callable, Hashable, Mapping, Sequence
+from collections.abc import Callable, Hashable, Mapping
 from dataclasses import dataclass
 from fractions import Fraction
 from typing import cast
@@ -128,18 +126,6 @@ class Distribution[T: Hashable]:
             A distribution certain to yield ``outcome``.
         """
         return cls({outcome: 1})
-
-    @staticmethod
-    def from_counts(pmf: Sequence[Probability]) -> "Distribution[int]":
-        """Lift a count-pmf (index ``k`` = P(value == ``k``)) into a distribution.
-
-        The adapter for the engine's existing ``list[float]`` distributions —
-        a volley's casualties, a round's losses. Zero-mass counts are dropped.
-
-        Returns:
-            A distribution over the integer counts ``0 .. len(pmf) - 1``.
-        """
-        return Distribution({count: p for count, p in enumerate(pmf) if p != 0.0})
 
     def map[U: Hashable](self, relabel: Callable[[T], U]) -> "Distribution[U]":
         """Relabel every outcome by ``relabel``, merging any that collide.

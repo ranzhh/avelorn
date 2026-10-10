@@ -28,7 +28,7 @@ uv run avelorn coverage
 
 ### Muster units and resolve battles
 
-A datasheet can be fielded with a chosen size and loadout. The existing phase resolvers can then calculate:
+A datasheet can be fielded with a chosen size and loadout. The graph programs can then calculate:
 
 - shooting volleys and the panic they cause;
 - a full round of close combat, including Initiative order, casualties, combat result, and Break tests;
@@ -85,15 +85,16 @@ The graph core can currently:
 - attach rule nodes to the steps they land on and record whether a landing was applied, honoured, held, or inapplicable;
 - serialize an evaluated program into the shape consumed by the graph frontend.
 
-The graph frontend is available at `/graph`. It lays out steps left to right, draws groups as frames, displays readings on edges, and connects rule nodes to their landings. The current graph work is deliberately a foundation: program loading from YAML and rule effects are the next layers, and the existing shooting and combat resolvers remain the production game surface while that migration proceeds.
+The graph frontend is available at `/graph`. It lays out steps left to right, draws groups as frames, displays readings on edges, and connects rule nodes to their landings. Every phase of the game runs on these programs: a volley, a Stand & Shoot reaction, and a round of combat are each a program loaded from YAML with the corpus rules attached.
 
 ## Project shape
 
 - `src/avelorn/tow/schema` — validated corpus models.
 - `src/avelorn/tow/data.py` — the repository and YAML loader.
 - `src/avelorn/tow/game.py` and `src/avelorn/tow/contingent.py` — loaded games and fielded units.
-- `src/avelorn/tow/engine` — exact dice, attack, casualty, and rule calculations.
-- `src/avelorn/tow/phases` — shooting, combat, movement, and strategy callers.
+- `src/avelorn/tow/programs.py`, `steps.py` and `kernels.py` — the graph programs, their steps, and the exact dice they roll.
+- `src/avelorn/tow/volley.py` and `src/avelorn/tow/round.py` — a volley and a round of combat, resolved on the graph.
+- `src/avelorn/tow/phases` — the turn's phases; their actions run on the graph programs.
 - `src/avelorn/core/distribution.py` — the reusable exact-distribution machinery.
 - `src/avelorn/core/graph.py` — the graph-program execution core.
 - `frontend` — the SvelteKit browser and graph view.

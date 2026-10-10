@@ -543,21 +543,15 @@ class AttackGate(Gate):
     (Lion Cloak wants non-magical, the reason it does not help against a magical
     bow), and whether it is ``flaming`` — carries the Flaming Attacks rule.
     Orthogonal facts — a shooting or a close-combat attack may be either.
-    ``at_long_range`` is a fourth, and a mistake kept for now: see #179 and the
-    note on the field.
+    ``at_long_range`` is a fourth, and a mistake kept for now (#179): a range
+    band is a measurement between two units, not a fact of the attack. Only
+    ``legacy:`` effects gate on it; a graph rule reads the band at Check Range.
+    Do not add another positional fact here.
     """
 
     kind: AttackKind | None = None
     magical: bool | None = None
     flaming: bool | None = None
-    # Do not follow this field's example: see #179 before adding another.
-    # ``kind``, ``magical`` and ``flaming`` are intrinsic to the attack, carried
-    # wherever it is fired from. A range band is not -- it is a measurement
-    # between two units, and it already exists as ``ShootingFacts.at_long_range``
-    # for the shooter's own rules, which ``shoot_unit`` copies into here so the
-    # target's rules can see it. One fact, two names, chosen by which side
-    # authored the rule. A positional fact a defender-side rule needs belongs in
-    # the volley's own facts, read from the defender's seat, not duplicated here.
     at_long_range: bool | None = None
 
 

@@ -14,7 +14,6 @@ from enum import StrEnum
 
 from avelorn.core.registry import Registry
 from avelorn.tow.data import TOWRepository, default_repository
-from avelorn.tow.engine.rules import ArmourFacts, WeaponFacts
 from avelorn.tow.muster import Complement
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.reference import RuleRef
@@ -295,19 +294,6 @@ class Formation:
         """The depth: how many ranks, the rear one possibly incomplete."""
         return self.full_ranks + (1 if self.remainder else 0)
 
-    @property
-    def rear_rank_sizes(self) -> tuple[int, ...]:
-        """The model count of each rank behind the front, front to back.
-
-        Empty for a single-rank formation. The ranks a Volley Fire draws
-        its extra shots from, and the supporting ranks a melee will draw
-        on, read their sizes from here.
-        """
-        sizes = [self.frontage] * self.full_ranks
-        if self.remainder:
-            sizes.append(self.remainder)
-        return tuple(sizes[1:])
-
 
 @dataclass(frozen=True)
 class Contingent:
@@ -389,38 +375,6 @@ class Contingent:
             The formation geometry for this contingent's models and frontage.
         """
         return Formation(self.models, self.frontage)
-
-    @property
-    def weapon_facts(self) -> WeaponFacts:
-        """The weapon in hand, as a gate on the weapon in hand reads it.
-
-        The equipment-in-use facts a producer puts on its
-        :class:`~avelorn.tow.engine.rules.GateContext` so a rule gated on the
-        weapon (Ithilmar Weapons' hand weapon, Arrows of Isha's bow) can be
-        answered. Unarmed reads as facts with nothing set — the choice has not
-        been made, so such a gate is unknown, not False.
-
-        Returns:
-            The weapon's family and name, both None while nothing is in hand.
-        """
-        if self.weapon is None:
-            return WeaponFacts()
-        return WeaponFacts(type=self.weapon.weapon_type, name=self.weapon.name)
-
-    @property
-    def armour_facts(self) -> tuple[ArmourFacts, ...]:
-        """The armour worn, as a gate on a piece worn reads it.
-
-        The ``worn`` peer of :attr:`weapon_facts`: every piece the contingent was
-        fielded in, so a membership gate (Parry's shield) can be answered against
-        the collection. Unlike the weapon in hand there is nothing to choose — the
-        loadout settles it — so this is always known, and a contingent in no
-        armour honestly reads as the empty collection rather than as unknown.
-
-        Returns:
-            One facts entry per piece of armour worn, empty if unarmoured.
-        """
-        return tuple(ArmourFacts(name=piece.name) for piece in self.loadout.armour)
 
     def in_hand_rules(self) -> list[Rule]:
         """The resolved rules on the weapon in hand's Combat profile.
