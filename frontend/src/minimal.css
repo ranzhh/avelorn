@@ -118,6 +118,20 @@ button,
 	display: grid;
 	gap: var(--space-4);
 }
+.tabletop {
+	display: grid;
+	grid-template-columns: 17rem minmax(0, 1fr) 17rem;
+	gap: var(--space-3);
+	align-items: start;
+}
+.tabletop > aside {
+	position: sticky;
+	top: var(--space-4);
+	max-height: calc(100vh - 5rem);
+	overflow: auto;
+	padding: 0;
+	border: 0;
+}
 .head,
 .field {
 	display: flex;
@@ -169,6 +183,26 @@ summary {
 	background: transparent;
 	text-align: left;
 }
+.tabletop .row {
+	min-width: 0;
+	font-size: var(--text-sm);
+}
+.tabletop .pick {
+	min-width: 0;
+	gap: var(--space-2);
+}
+.tabletop .pick span:first-child {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.tabletop .cost,
+.tabletop .sheet {
+	font-size: var(--text-xs);
+	white-space: nowrap;
+}
+.tabletop .cost {
+	color: var(--dim);
+}
 .sheet,
 .link {
 	border: 0;
@@ -215,6 +249,11 @@ th {
 svg {
 	max-width: 100%;
 }
+.surface {
+	position: relative;
+	max-width: calc((100vh - 6rem) * var(--aspect));
+	margin-inline: auto;
+}
 .surface svg {
 	display: block;
 	width: 100%;
@@ -257,8 +296,34 @@ svg {
 	cursor: grab;
 }
 
+@media (max-width: 1000px) {
+	.tabletop {
+		grid-template-columns: 16rem minmax(0, 1fr);
+		grid-template-rows: auto 1fr;
+	}
+	.tabletop > .left {
+		grid-row: span 2;
+	}
+	.tabletop > .right {
+		grid-column: 2;
+	}
+}
+
 @media (max-width: 700px) {
 	main {
 		padding: var(--space-3);
+	}
+	.tabletop {
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-rows: none;
+	}
+	.tabletop > .centre {
+		order: -1;
+	}
+	.tabletop > .left,
+	.tabletop > .right {
+		grid-area: auto;
+		position: static;
+		max-height: 60vh;
 	}
 }

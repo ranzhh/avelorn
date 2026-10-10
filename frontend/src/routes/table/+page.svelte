@@ -228,7 +228,7 @@
 	}
 </script>
 
-<div class="shell">
+<div class="tabletop">
 	<aside class="left">
 		<Dock title="deploy" keep="deploy" value={`${battle.placed.length} on the table`}>
 			<input class="input filter" bind:value={needle} placeholder="filter" />
@@ -265,7 +265,7 @@
 	</aside>
 
 	<div class="centre">
-		<div class="surface">
+		<div class="surface" style="--aspect: {TABLE.width / TABLE.depth}">
 			<BattleTable
 				placed={battle.placed}
 				{picked}
