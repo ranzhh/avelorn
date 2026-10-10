@@ -280,7 +280,9 @@
 				onpick={(id) => (picked = id)}
 				onmove={(id, x, y) => battle.amend(id, { x, y })}
 				onturn={(id, facing) => battle.amend(id, { facing })}
-				ondrop={(mover, target) => (battle.asking = { mover, target })}
+				ondrop={(mover, target) => {
+					battle.asking = { mover, target };
+				}}
 				onreform={reform}
 				ondropunit={(unit, size, x, y) => deploy(unit, size, { x, y })}
 				onedit={(id) => ((picked = id), sheet(id))}
