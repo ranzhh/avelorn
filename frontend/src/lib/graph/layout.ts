@@ -8,8 +8,6 @@ export interface Metrics {
 export const METRICS: Metrics = { node: { width: 168, height: 72 }, gap: 64 };
 export const LEAST: Metrics = { node: { width: 88, height: 72 }, gap: 32 };
 export const FRAME = { pad: 12, header: 24 } as const;
-export const RULE = { height: 40, gap: 16 } as const;
-export const RAIL_GAP = 72;
 export const MARGIN = 12;
 /** A caption's monospace glyph and padding as the canvas draws them, and its clearance. */
 export const CAPTION = { glyph: 6.75, pad: 3.2, clear: 8 } as const;
@@ -64,19 +62,6 @@ export interface PlacedCaption {
 	at: Point;
 }
 
-export interface PlacedRule {
-	rule: Rule;
-	box: Box;
-}
-
-export interface PlacedLanding {
-	rule: string;
-	at: string;
-	verdicts: Judged[];
-	start: Point;
-	end: Point;
-}
-
 export interface Layout {
 	metrics: Metrics;
 	width: number;
@@ -85,8 +70,6 @@ export interface Layout {
 	blocks: PlacedBlock[];
 	edges: PlacedEdge[];
 	captions: PlacedCaption[];
-	rail: PlacedRule[];
-	landings: PlacedLanding[];
 	unmodelled: Rule[];
 }
 
@@ -178,14 +161,6 @@ function left(box: Box): Point {
 	return { x: box.x, y: box.y + box.height / 2 };
 }
 
-function top(box: Box): Point {
-	return { x: box.x + box.width / 2, y: box.y };
-}
-
-function bottom(box: Box): Point {
-	return { x: box.x + box.width / 2, y: box.y + box.height };
-}
-
 function boxesOf(steps: PlacedStep[], blocks: PlacedBlock[]): Map<string, Box> {
 	return new Map([
 		...steps.map((step): [string, Box] => [step.path, step.box]),
@@ -229,14 +204,8 @@ export function framed(steps: PlacedStep[], blocks: PlacedBlock[]): PlacedBlock[
 	return blocks.map((block) => ({ ...block, box: fitted.get(block.path)! }));
 }
 
-function extent(
-	steps: PlacedStep[],
-	blocks: PlacedBlock[],
-	rail: PlacedRule[],
-	edges: PlacedEdge[],
-	gap: number
-) {
-	const boxes = [...steps, ...blocks, ...rail].map((placed) => placed.box);
+function extent(steps: PlacedStep[], blocks: PlacedBlock[], edges: PlacedEdge[], gap: number) {
+	const boxes = [...steps, ...blocks].map((placed) => placed.box);
 	return {
 		width:
 			Math.max(...boxes.map((box) => box.x + box.width + gap), ...edges.map((edge) => edge.end.x)) +
@@ -246,8 +215,8 @@ function extent(
 }
 
 // The svg clips to its own viewport, so nothing may sit left of or above the origin.
-function nudge(steps: PlacedStep[], blocks: PlacedBlock[], rail: PlacedRule[]): Point {
-	const boxes = [...steps, ...blocks, ...rail].map((placed) => placed.box);
+function nudge(steps: PlacedStep[], blocks: PlacedBlock[]): Point {
+	const boxes = [...steps, ...blocks].map((placed) => placed.box);
 	return {
 		x: MARGIN - Math.min(MARGIN, ...boxes.map((box) => box.x)),
 		y: MARGIN - Math.min(MARGIN, ...boxes.map((box) => box.y))
@@ -277,14 +246,11 @@ function captioned(edges: PlacedEdge[], blocks: PlacedBlock[]): Map<string, stri
 
 function wire(
 	edges: PlacedEdge[],
-	landings: PlacedLanding[],
 	steps: PlacedStep[],
 	blocks: PlacedBlock[],
-	rail: PlacedRule[],
 	gap: number
-): { edges: PlacedEdge[]; captions: PlacedCaption[]; landings: PlacedLanding[] } {
+): { edges: PlacedEdge[]; captions: PlacedCaption[] } {
 	const boxes = boxesOf(steps, blocks);
-	const cards = new Map(rail.map((placed) => [placed.rule.id, placed.box]));
 	const texts = captioned(edges, blocks);
 	return {
 		edges: edges.map((edge) => {
@@ -296,12 +262,7 @@ function wire(
 		captions: [...texts].map(([from, text]) => {
 			const start = right(boxes.get(from)!);
 			return { text, at: { x: start.x + room(text, gap) / 2, y: start.y } };
-		}),
-		landings: landings.map((landing) => ({
-			...landing,
-			start: top(cards.get(landing.rule)!),
-			end: bottom(boxes.get(landing.at)!)
-		}))
+		})
 	};
 }
 
@@ -316,7 +277,6 @@ export function layout(program: Program, collapsed: string[], metrics = METRICS)
 	const items = tree(program, undefined);
 	const levels = depth(items);
 	const rowTop = MARGIN + levels * (FRAME.header + FRAME.pad);
-	const rowBottom = rowTop + node.height + levels * FRAME.pad;
 
 	const steps: PlacedStep[] = [];
 	const placed: PlacedBlock[] = [];
@@ -424,62 +384,43 @@ export function layout(program: Program, collapsed: string[], metrics = METRICS)
 		});
 	}
 
-	const rows = [program.rules.filter((rule) => rule.landings.length > 0)];
-	const modelled = new Set(rows[0].map((rule) => rule.id));
-	while (rows[rows.length - 1].length) {
+	const wired = wire(edges, steps, blocks, gap);
+	return {
+		metrics,
+		...extent(steps, blocks, wired.edges, gap),
+		steps,
+		blocks,
+		unmodelled: unmodelled(program),
+		...wired
+	};
+}
+
+/** The rules that land on no step, nor grant a rule that does. */
+function unmodelled(program: Program): Rule[] {
+	const modelled = new Set(program.rules.filter((rule) => rule.landings.length).map((r) => r.id));
+	for (let grown = true; grown;) {
 		const next = program.rules.filter(
 			(rule) =>
 				!modelled.has(rule.id) && grants(program, rule).some((each) => modelled.has(each.id))
 		);
 		for (const rule of next) modelled.add(rule.id);
-		rows.push(next);
+		grown = next.length > 0;
 	}
-	const unmodelled = program.rules.filter((rule) => !modelled.has(rule.id));
+	return program.rules.filter((rule) => !modelled.has(rule.id));
+}
 
-	const railTop = rowBottom + RAIL_GAP;
-	const centres = new Map<string, number>();
-	const rail: PlacedRule[] = [];
-	rows.forEach((row, depth) => {
-		const wanted = row
-			.map((rule) => {
-				const xs = depth
-					? grants(program, rule)
-							.filter((each) => centres.has(each.id))
-							.map((each) => centres.get(each.id)!)
-					: rule.landings.map((landing) => top(boxes.get(standsFor.get(landing.at)!)!).x);
-				return { rule, centre: xs.reduce((sum, x) => sum + x, 0) / xs.length };
-			})
-			.sort((a, b) => a.centre - b.centre);
-		const y = railTop + depth * (RULE.height + RULE.gap);
-		let edge = MARGIN;
-		for (const { rule, centre } of wanted) {
-			const x = Math.max(centre - node.width / 2, edge);
-			rail.push({ rule, box: { x, y, width: node.width, height: RULE.height } });
-			centres.set(rule.id, x + node.width / 2);
-			edge = x + node.width + RULE.gap;
-		}
-	});
+/** Whether a rule applied in any of the worlds a landing was judged in. */
+export function applied(verdicts: Judged[]): boolean {
+	return verdicts.some((each) => each.verdict === 'applied' && each.p > 0);
+}
 
-	const landings: PlacedLanding[] = rail.flatMap(({ rule }) =>
-		rule.landings.map((landing) => ({
-			rule: rule.id,
-			at: standsFor.get(landing.at)!,
-			verdicts: landing.verdicts,
-			start: NOWHERE,
-			end: NOWHERE
-		}))
+/** The rules that land on a step, each with whether it applied there. */
+export function landed(program: Program, path: string): { rule: Rule; applied: boolean }[] {
+	return program.rules.flatMap((rule) =>
+		rule.landings
+			.filter((landing) => landing.at === path)
+			.map((landing) => ({ rule, applied: applied(landing.verdicts) }))
 	);
-
-	const wired = wire(edges, landings, steps, blocks, rail, gap);
-	return {
-		metrics,
-		...extent(steps, blocks, rail, wired.edges, gap),
-		steps,
-		blocks,
-		rail,
-		unmodelled,
-		...wired
-	};
 }
 
 /**
@@ -531,21 +472,15 @@ export function moved(drawn: Layout, moves: Moves): Layout {
 			box: shifted(block.box, sum([of(block.path), ...carriers(block.path)]))
 		}))
 	);
-	const carded = drawn.rail.map((placed) => ({
-		...placed,
-		box: shifted(placed.box, of(placed.rule.id))
-	}));
-	const by = nudge(dragged, reframed, carded);
+	const by = nudge(dragged, reframed);
 	const steps = dragged.map((step) => ({ ...step, box: shifted(step.box, by) }));
 	const blocks = reframed.map((block) => ({ ...block, box: shifted(block.box, by) }));
-	const rail = carded.map((placed) => ({ ...placed, box: shifted(placed.box, by) }));
-	const wired = wire(drawn.edges, drawn.landings, steps, blocks, rail, drawn.metrics.gap);
+	const wired = wire(drawn.edges, steps, blocks, drawn.metrics.gap);
 	return {
 		...drawn,
-		...extent(steps, blocks, rail, wired.edges, drawn.metrics.gap),
+		...extent(steps, blocks, wired.edges, drawn.metrics.gap),
 		steps,
 		blocks,
-		rail,
 		...wired
 	};
 }

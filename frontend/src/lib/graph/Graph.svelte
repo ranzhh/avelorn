@@ -3,17 +3,19 @@
 	import {
 		FRAME,
 		MARGIN,
+		applied,
 		caption,
 		fitted,
 		foldable,
 		grants,
+		landed,
 		layout,
 		moved,
 		startsFolded,
 		type Moves,
 		type Point
 	} from './layout';
-	import type { Holder, Judged, Program, StepKind, Verdict } from '$lib/graph/types';
+	import type { Holder, Program, StepKind } from '$lib/graph/types';
 
 	let { program }: { program: Program } = $props();
 
@@ -32,8 +34,8 @@
 	type Pick = { kind: 'step' | 'block' | 'rule'; id: string };
 	let selected = $state<Pick | null>(null);
 
-	const step = $derived(
-		selected?.kind === 'step' ? drawn.steps.find((each) => each.path === selected!.id) : undefined
+	const node = $derived(
+		selected?.kind === 'step' ? program.nodes.find((each) => each.path === selected!.id) : undefined
 	);
 	const block = $derived(
 		selected?.kind === 'block' ? drawn.blocks.find((each) => each.path === selected!.id) : undefined
@@ -49,25 +51,15 @@
 		consequence: 'C',
 		group: 'G'
 	};
-	const VERDICTS: Verdict[] = ['applied', 'cancelled', 'honoured', 'held', 'inapplicable'];
 	const STRIP = 236;
 
 	const printed = (slug: string) => slug.replaceAll('-', ' ');
 	const last = (path: string) => path.slice(path.lastIndexOf('/') + 1);
+	const within = (path: string) => path.slice(path.indexOf('/') + 1);
 	const named = (id: string) => program.rules.find((each) => each.id === id)?.name ?? id;
 	const held = (holder: Holder) => `${holder.part} (${holder.side})`;
 	const tint = (side: string) => `side-${program.sides.indexOf(side)}`;
 	const is = (kind: Pick['kind'], id: string) => selected?.kind === kind && selected.id === id;
-	const percent = (p: number) => `${Math.round(p * 100)}%`;
-	const leading = (verdicts: Judged[]) =>
-		verdicts.reduce<Judged | undefined>(
-			(best, each) => (best && best.p >= each.p ? best : each),
-			undefined
-		)?.verdict ?? '';
-	const shares = (verdicts: Judged[]) =>
-		verdicts.length === 1
-			? verdicts[0].verdict
-			: verdicts.map((each) => `${each.verdict} ${percent(each.p)}`).join(' · ') || 'no verdict';
 
 	function toggle(path: string) {
 		folded = { ...folded, [path]: !collapsed.includes(path) };
@@ -107,6 +99,10 @@
 			event.preventDefault();
 			selected = pick;
 		}
+	}
+
+	function choose(kind: Pick['kind'], id: string) {
+		selected = { kind, id };
 	}
 </script>
 
@@ -161,16 +157,6 @@
 							x2={edge.end.x}
 							y2={edge.end.y}
 							marker-end="url(#edge-arrow)"
-						/>
-					{/each}
-					{#each drawn.landings as landing}
-						<line
-							class="landing {leading(landing.verdicts)}"
-							class:on={is('rule', landing.rule)}
-							x1={landing.start.x}
-							y1={landing.start.y}
-							x2={landing.end.x}
-							y2={landing.end.y}
 						/>
 					{/each}
 				</svg>
@@ -254,38 +240,6 @@
 				{#each drawn.captions as each}
 					<span class="caption" style="left: {each.at.x}px; top: {each.at.y}px">{each.text}</span>
 				{/each}
-
-				{#each drawn.rail as placed (placed.rule.id)}
-					{@const pick = { kind: 'rule', id: placed.rule.id } as const}
-					<div
-						class="card rule"
-						class:on={is('rule', placed.rule.id)}
-						class:held={grip?.id === placed.rule.id}
-						role="button"
-						tabindex="0"
-						style="left: {placed.box.x}px; top: {placed.box.y}px; width: {placed.box
-							.width}px; height: {placed.box.height}px"
-						onpointerdown={(event) => grab(event, pick)}
-						onpointermove={drag}
-						onpointerup={release}
-						onpointercancel={release}
-						onkeydown={(event) => key(event, pick)}
-					>
-						<h3>{placed.rule.name}</h3>
-						<span class="side">{held(placed.rule.holder)}</span>
-					</div>
-				{/each}
-
-				{#each drawn.landings as landing}
-					<span
-						class="verdict {leading(landing.verdicts)}"
-						style="left: {(landing.start.x + landing.end.x) / 2}px; top: {(landing.start.y +
-							landing.end.y) /
-							2}px"
-					>
-						{shares(landing.verdicts)}
-					</span>
-				{/each}
 			</div>
 		</div>
 
@@ -298,17 +252,11 @@
 			{:else}
 				<span class="meta">none</span>
 			{/if}
-			<span class="cluster legend">
-				{#each VERDICTS as verdict}
-					<span class="verdict {verdict}">{verdict}</span>
-				{/each}
-			</span>
 		</footer>
 	</div>
 
 	<aside class="explore">
-		{#if step}
-			{@const node = step.node}
+		{#if node}
 			<header>
 				<span class="mark" title={node.kind}>{MARK[node.kind]}</span>
 				<h3>{printed(node.step)}</h3>
@@ -337,6 +285,19 @@
 			{:else}
 				<span class="meta">none</span>
 			{/if}
+			<h2>rules</h2>
+			{#each landed(program, node.path) as each (each.rule.id)}
+				<div class="ruled">
+					<input type="checkbox" checked={each.applied} disabled aria-label={each.rule.name} />
+					<button
+						class="link"
+						title={held(each.rule.holder)}
+						onclick={() => choose('rule', each.rule.id)}>{each.rule.name}</button
+					>
+				</div>
+			{:else}
+				<span class="meta">none</span>
+			{/each}
 			{#if node.kind === 'roll'}
 				<h2>{node.printed ? 'in force' : 'target'}</h2>
 				<Readings readings={[node.target]} width={STRIP} />
@@ -381,11 +342,18 @@
 			</header>
 			<div class="field"><span>holder</span><span>{held(rule.holder)}</span></div>
 			<div class="field"><span>id</span><span class="path">{rule.id}</span></div>
-			<h2>landings</h2>
-			{#each rule.landings as landing}
-				<div class="field">
-					<span>{printed(last(landing.at))}</span>
-					<span class="verdict {leading(landing.verdicts)}">{shares(landing.verdicts)}</span>
+			<h2>lands on</h2>
+			{#each rule.landings as landing (landing.at)}
+				<div class="ruled">
+					<input
+						type="checkbox"
+						checked={applied(landing.verdicts)}
+						disabled
+						aria-label={within(landing.at)}
+					/>
+					<button class="link path" onclick={() => choose('step', landing.at)}
+						>{within(landing.at)}</button
+					>
 				</div>
 			{:else}
 				<span class="meta">none</span>
@@ -397,7 +365,7 @@
 				{/each}
 			{/if}
 		{:else}
-			<span class="meta">select a step, group or rule to explore it</span>
+			<span class="meta">select a step or group to explore it</span>
 		{/if}
 	</aside>
 </div>
@@ -471,8 +439,7 @@
 		stroke: #999;
 		stroke-dasharray: 4 3;
 	}
-	.edge,
-	.landing {
+	.edge {
 		stroke: #555;
 		stroke-width: 1;
 	}
@@ -500,15 +467,11 @@
 	.card.side-1 {
 		border-left: 3px solid #b84a3d;
 	}
-	.card.rule {
-		background: #f5f5f5;
-	}
 	.card.on,
 	.frame.on {
 		outline: 2px solid #111;
 	}
-	.caption,
-	.verdict {
+	.caption {
 		position: absolute;
 		transform: translate(-50%, -50%);
 		padding: 0 0.2rem;
@@ -561,5 +524,16 @@
 	}
 	.explore > * + * {
 		margin-top: 0.5rem;
+	}
+	.ruled {
+		display: flex;
+		align-items: baseline;
+		gap: 0.4rem;
+	}
+	.ruled .link {
+		min-width: 0;
+		padding: 0;
+		text-align: left;
+		overflow-wrap: anywhere;
 	}
 </style>
