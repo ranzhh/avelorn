@@ -8,7 +8,17 @@
 	import { battle } from '$lib/battle.svelte';
 	import { entry } from '$lib/corpus';
 	import { fielded, listing } from '$lib/listing';
-	import { TABLE, arc, identifier, room, separation, span, usable, type Placed } from '$lib/table';
+	import {
+		TABLE,
+		arc,
+		bounds,
+		identifier,
+		room,
+		separation,
+		span,
+		usable,
+		type Placed
+	} from '$lib/table';
 
 	let { data } = $props();
 
@@ -17,6 +27,7 @@
 	let picked = $state<number | null>(null);
 	let refusal = $state('');
 	let resolving = $state('');
+	let menuWidth = $state(0);
 
 	const fight = $derived(battle.resolved?.action === 'fight' ? battle.resolved.report : null);
 	const volley = $derived(battle.resolved?.action === 'volley' ? battle.resolved.report : null);
@@ -32,12 +43,17 @@
 		const mover = battle.placed.find((each) => each.id === open.mover);
 		const target = battle.placed.find((each) => each.id === open.target);
 		if (!mover || !target) return null;
+		const box = bounds(target);
+		const below = box.bottom / TABLE.depth < 0.6;
 		return {
 			mover,
 			target,
 			inches: Math.round(separation(mover, target)),
 			into: arc(mover, target),
-			shoots: usable(mover.block, 'missile').length > 0
+			shoots: usable(mover.block, 'missile').length > 0,
+			below,
+			left: (target.x / TABLE.width) * 100,
+			top: ((below ? box.bottom : box.top) / TABLE.depth) * 100
 		};
 	});
 
@@ -290,10 +306,14 @@
 			{#if pair}
 				<div
 					class="menu"
-					style="left: {(pair.target.x / TABLE.width) * 100}%; top: {(pair.target.y / TABLE.depth) *
-						100}%"
+					class:above={!pair.below}
+					bind:offsetWidth={menuWidth}
+					style:left="clamp({menuWidth / 2}px, {pair.left}%, calc(100% - {menuWidth / 2}px))"
+					style:top="{pair.top}%"
 				>
-					<span class="head">{pair.inches}in · {pair.into}</span>
+					<span class="head"
+						>{pair.mover.mark} → {pair.target.mark} · {pair.inches}in · {pair.into}</span
+					>
 					<button class="btn btn-sm btn-primary" onclick={() => meet(true)}>
 						charge {pair.inches}in
 					</button>

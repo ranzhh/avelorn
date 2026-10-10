@@ -370,6 +370,25 @@ svg {
 	fill: var(--accent);
 	fill-opacity: 0.6;
 }
+.menu {
+	position: absolute;
+	z-index: 2;
+	display: grid;
+	gap: var(--space-1);
+	padding: var(--space-2);
+	background: var(--panel);
+	border: 1px solid var(--line);
+	box-shadow: 0 2px 8px rgb(0 0 0 / 0.2);
+	transform: translate(-50%, var(--space-2));
+	white-space: nowrap;
+}
+.menu.above {
+	transform: translate(-50%, calc(-100% - var(--space-2)));
+}
+.menu .head {
+	font: var(--text-xs) / 1.5 var(--font-mono);
+	color: var(--dim);
+}
 .carried {
 	position: absolute;
 	top: -100px;
