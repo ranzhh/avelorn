@@ -141,6 +141,9 @@ button,
 .field {
 	justify-content: space-between;
 }
+.field input[type='number'] {
+	width: 5rem;
+}
 .meta,
 .dim,
 .side {
@@ -478,9 +481,35 @@ svg {
 	border: 1px solid var(--line);
 }
 .pane > header {
+	display: flex;
+	gap: var(--space-2);
+	align-items: center;
 	padding: 0 0 var(--space-2);
 	border-bottom: 1px solid var(--line);
 	cursor: grab;
+}
+.pane > header h3 {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.pane .eyebrow {
+	font-size: var(--text-xs);
+	color: var(--dim);
+}
+.pane .split {
+	display: flex;
+	gap: var(--space-3);
+}
+.pane .split > .body {
+	flex: 1;
+	min-width: 0;
+}
+.pane .split > aside {
+	flex: none;
+	width: calc(var(--aside-w) - var(--space-3));
 }
 
 @media (max-width: 1000px) {
