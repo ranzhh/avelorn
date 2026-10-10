@@ -321,7 +321,8 @@ svg {
 }
 .surface .path,
 .surface .ghost rect,
-.surface .halo {
+.surface .halo,
+.surface .tether {
 	stroke-width: 1.5px;
 }
 .surface .trace .path,
@@ -332,7 +333,8 @@ svg {
 .surface text,
 .surface .trace,
 .surface .ghost,
-.surface .halo {
+.surface .halo,
+.surface .tether {
 	pointer-events: none;
 }
 .surface .trace {
@@ -344,6 +346,19 @@ svg {
 .surface .halo {
 	fill: none;
 	stroke: var(--accent);
+}
+.surface .tether {
+	stroke: var(--accent);
+}
+.surface .handle {
+	fill: #fff;
+	stroke: var(--accent);
+	stroke-width: 2px;
+	cursor: grab;
+}
+.surface .handle:hover {
+	fill: var(--accent);
+	fill-opacity: 0.6;
 }
 
 .pane {

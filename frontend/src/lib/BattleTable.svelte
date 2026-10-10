@@ -5,8 +5,8 @@
 		arc,
 		base,
 		bearing,
-		bounds,
 		legend,
+		pivot,
 		reformed,
 		separation,
 		snap,
@@ -85,6 +85,7 @@
 		return () => watch.disconnect();
 	});
 	const px = $derived(1 / perInch);
+	const KNOB = 10;
 
 	/**
 	 * A drag in flight.
@@ -96,7 +97,8 @@
 	let flight = $state<{ id: number; grabX: number; grabY: number; x: number; y: number } | null>(
 		null
 	);
-	let turning = $state<number | null>(null);
+	/** A block being turned, how far from its facing the handle was grabbed, and off which edge. */
+	let turning = $state<{ id: number; offset: number; side: number } | null>(null);
 	/** A side edge being dragged, and the width it currently reads. */
 	let widening = $state<{ id: number; files: number } | null>(null);
 
@@ -116,6 +118,19 @@
 		if (counted !== null && now !== counted) trace = null;
 		counted = now;
 	});
+
+	const chosen = $derived(placed.find((each) => each.id === picked) ?? null);
+	const knob = $derived(
+		chosen?.block.footprint
+			? pivot(
+					chosen,
+					placed,
+					KNOB * px,
+					2 * KNOB * px,
+					turning?.id === chosen.id ? turning.side : undefined
+				)
+			: null
+	);
 
 	const moving = $derived.by(() => {
 		const out = flight;
@@ -177,7 +192,11 @@
 	function grabHandle(event: PointerEvent, block: Placed) {
 		event.stopPropagation();
 		(event.currentTarget as Element).setPointerCapture(event.pointerId);
-		turning = block.id;
+		turning = {
+			id: block.id,
+			offset: angleTo(block, at(event)) - block.facing,
+			side: knob?.side ?? 0
+		};
 		onpick(block.id);
 	}
 
@@ -190,11 +209,12 @@
 			if (within(wanted)) flight = { ...flight, x: wanted.x, y: wanted.y };
 			return;
 		}
-		if (turning !== null) {
-			const block = placed.find((each) => each.id === turning);
+		const turn = turning;
+		if (turn) {
+			const block = placed.find((each) => each.id === turn.id);
 			if (!block) return;
-			const facing = angleTo({ x: block.x, y: block.y }, at(event));
-			onturn(block.id, event.shiftKey ? snap(facing) : Math.round(facing));
+			const facing = (angleTo(block, at(event)) - turn.offset + 360) % 360;
+			onturn(block.id, event.shiftKey ? snap(facing) : Math.round(facing) % 360);
 			return;
 		}
 		const wide = widening;
@@ -236,20 +256,6 @@
 		turning = null;
 		widening = null;
 	}
-
-	/** Where the rotation handle sits: on a stalk off the block's front. */
-	function stalk(block: Placed) {
-		const footprint = block.block.footprint;
-		if (!footprint) return null;
-		const reach = span(footprint).depth / 2 + 2.5;
-		const radians = (block.facing * Math.PI) / 180;
-		return {
-			x: block.x + Math.sin(radians) * reach,
-			y: block.y - Math.cos(radians) * reach,
-			fromX: block.x + Math.sin(radians) * (reach - 2.5),
-			fromY: block.y - Math.cos(radians) * (reach - 2.5)
-		};
-	}
 </script>
 
 <svg
@@ -288,12 +294,49 @@
 		<line class="foot" x1="0" y1={inches} x2={TABLE.width} y2={inches} />
 	{/each}
 
+	{#if chosen && knob && !flight}
+		{@const print = chosen.block.footprint}
+		{#if print}
+			{@const size = span(print)}
+			{@const pad = 4 * px}
+			<g class="chrome" transform="rotate({chosen.facing} {chosen.x} {chosen.y})">
+				<rect
+					class="halo"
+					x={chosen.x - size.width / 2 - pad}
+					y={chosen.y - size.depth / 2 - pad}
+					width={size.width + 2 * pad}
+					height={size.depth + 2 * pad}
+				/>
+				{#each [-1, 1] as side}
+					{@const edge = chosen.x + (side * size.width) / 2}
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<g class="edge" onpointerdown={(event) => grabEdge(event, chosen)}>
+						<rect x={edge - 0.75} y={chosen.y - 1.6} width="1.5" height="3.2" rx="0.4" />
+						<line
+							class="grip"
+							x1={edge - 0.25}
+							y1={chosen.y - 0.8}
+							x2={edge - 0.25}
+							y2={chosen.y + 0.8}
+						/>
+						<line
+							class="grip"
+							x1={edge + 0.25}
+							y1={chosen.y - 0.8}
+							x2={edge + 0.25}
+							y2={chosen.y + 0.8}
+						/>
+					</g>
+				{/each}
+			</g>
+		{/if}
+	{/if}
+
 	{#each placed as block (block.id)}
 		{@const print = block.block.footprint}
 		{#if print}
 			{@const size = span(print)}
 			{@const label = legend(block)}
-			{@const box = bounds(block)}
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<g
 				class="block"
@@ -324,54 +367,23 @@
 							>{block.block.size}</tspan
 						>{/if}
 				</text>
-
-				{#if block.id === picked && !flight}
-					<!-- svelte-ignore a11y_no_static_element_interactions -->
-					<g transform="rotate({block.facing} {block.x} {block.y})">
-						{#each [-1, 1] as side}
-							{@const at = block.x + (side * size.width) / 2}
-							<g class="edge" onpointerdown={(event) => grabEdge(event, block)}>
-								<rect x={at - 0.75} y={block.y - 1.6} width="1.5" height="3.2" rx="0.4" />
-								<line
-									class="grip"
-									x1={at - 0.25}
-									y1={block.y - 0.8}
-									x2={at - 0.25}
-									y2={block.y + 0.8}
-								/>
-								<line
-									class="grip"
-									x1={at + 0.25}
-									y1={block.y - 0.8}
-									x2={at + 0.25}
-									y2={block.y + 0.8}
-								/>
-							</g>
-						{/each}
-					</g>
-					{@const handle = stalk(block)}
-					{#if handle}
-						<line class="tether" x1={handle.fromX} y1={handle.fromY} x2={handle.x} y2={handle.y} />
-						<!-- svelte-ignore a11y_no_static_element_interactions -->
-						<circle
-							class="handle"
-							cx={handle.x}
-							cy={handle.y}
-							r="1.1"
-							onpointerdown={(event) => grabHandle(event, block)}
-						/>
-					{/if}
-					<rect
-						class="halo"
-						x={box.left - 0.4}
-						y={box.top - 0.4}
-						width={box.width + 0.8}
-						height={box.height + 0.8}
-					/>
-				{/if}
 			</g>
 		{/if}
 	{/each}
+
+	{#if chosen && knob && !flight}
+		<g class="chrome">
+			<line class="tether" x1={knob.from.x} y1={knob.from.y} x2={knob.at.x} y2={knob.at.y} />
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<circle
+				class="handle"
+				cx={knob.at.x}
+				cy={knob.at.y}
+				r={KNOB * px}
+				onpointerdown={(event) => grabHandle(event, chosen)}
+			/>
+		</g>
+	{/if}
 
 	{#if widening !== null}
 		{@const reform = widening}

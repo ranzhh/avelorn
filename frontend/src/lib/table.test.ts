@@ -6,9 +6,11 @@ import {
 	arc,
 	base,
 	bounds,
+	clearance,
 	corners,
 	identifier,
 	legend,
+	pivot,
 	reformed,
 	room,
 	separation,
@@ -277,5 +279,43 @@ describe('legend', () => {
 		const { count, size } = legend(placed(36, 24, 90, LINE));
 		expect(count).toBe(false);
 		expect(size).toBeLessThan(SHALLOW);
+	});
+});
+
+describe('clearance', () => {
+	it('is nothing inside the block and the gap to its edge outside it', () => {
+		expect(clearance({ x: 36, y: 24 }, placed(36, 24))).toBe(0);
+		expect(clearance({ x: 36, y: 24 - DEEP / 2 - 3 }, placed(36, 24))).toBeCloseTo(3);
+	});
+});
+
+describe('pivot', () => {
+	it('stands off the front when nothing is in the way', () => {
+		const { at } = pivot(placed(36, 24), [], 1, 2);
+		expect(at.x).toBeCloseTo(36);
+		expect(at.y).toBeCloseTo(24 - DEEP / 2 - 2);
+	});
+
+	it('moves behind the block when another stands just ahead of it', () => {
+		const ahead = { ...placed(36, 24 - DEEP - 0.5), id: 2 };
+		const { at } = pivot(placed(36, 24), [ahead], 1, 2);
+		expect(clearance(at, ahead)).toBeGreaterThan(1);
+		expect(at.y).toBeGreaterThan(24);
+	});
+
+	it('keeps to the edge it was grabbed by while the block turns', () => {
+		const ahead = { ...placed(36, 24 - DEEP - 0.5), id: 2 };
+		const { side } = pivot(placed(36, 24), [ahead], 1, 2);
+		const { at } = pivot(placed(36, 24, 90), [ahead], 1, 2, side);
+		expect(at.x).toBeCloseTo(36 - DEEP / 2 - 2);
+		expect(at.y).toBeCloseTo(24);
+	});
+
+	it('stays on the table for a block facing its edge', () => {
+		for (const block of [placed(36, DEEP / 2 + 0.5), placed(36, 48 - DEEP / 2 - 0.5, 180)]) {
+			const { at } = pivot(block, [], 1, 2);
+			expect(at.y).toBeGreaterThanOrEqual(1);
+			expect(at.y).toBeLessThanOrEqual(48 - 1);
+		}
 	});
 });
