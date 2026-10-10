@@ -6,27 +6,6 @@
     "version": "0.1.0"
   },
   "paths": {
-    "/graph/volley": {
-      "get": {
-        "summary": "Evaluate the volley program with both sides' rules attached",
-        "description": "Ten Elven Archers shoot twenty Elven Spearmen at 12 inches.\n\nEach side's rules attach to the steps they reach.\n\nReturns:\n    The evaluated volley program.",
-        "operationId": "graph_volley_graph_volley_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
-                  "title": "Response Graph Volley Graph Volley Get"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/units": {
       "get": {
         "summary": "List every datasheet in the corpus",
@@ -168,6 +147,47 @@
         }
       }
     },
+    "/graph/fight": {
+      "post": {
+        "summary": "Evaluate the round program a fight resolves",
+        "description": "Fight the round ``/fight`` fights, and show the program it ran on.\n\nReturns:\n    The evaluated round program, in the lane ``/fight`` reports on.",
+        "operationId": "graph_fight_graph_fight_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Fight"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Graph Fight Graph Fight Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/volley": {
       "post": {
         "summary": "Resolve one volley of shooting, and the panic it causes",
@@ -190,6 +210,47 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/VolleyReport"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/graph/volley": {
+      "post": {
+        "summary": "Evaluate the volley program a volley resolves",
+        "description": "Fire the volley ``/volley`` fires, and show the program it ran on.\n\nReturns:\n    The evaluated volley program, in the lane ``/volley`` reports on.",
+        "operationId": "graph_volley_graph_volley_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Volley"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Graph Volley Graph Volley Post"
                 }
               }
             }

@@ -25,13 +25,11 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from avelorn.tow.contingent import Charge, ChargeArc, Contingent, Movement
 from avelorn.tow.coverage import Coverage, coverage
 from avelorn.tow.data import TOWRepository, default_repository
-from avelorn.tow.fielding import Fielding
 from avelorn.tow.game import TOWGame
 from avelorn.tow.muster import Complement
-from avelorn.tow.programs import VOLLEY, load_program
+from avelorn.tow.round import Fight as Round
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
-from avelorn.tow.schema.side import Side
 from avelorn.tow.schema.weapon import Weapon
 from avelorn.tow.views import (
     FightReport,
@@ -44,6 +42,7 @@ from avelorn.tow.views import (
     WeaponSummary,
     rule_summaries,
 )
+from avelorn.tow.volley import Volley as Fired
 
 app = FastAPI(
     title="Avelorn",
@@ -66,37 +65,6 @@ def corpus() -> TOWRepository:
 
 
 Corpus = Annotated[TOWRepository, Depends(corpus)]
-
-
-@app.get("/graph/volley", summary="Evaluate the volley program with both sides' rules attached")
-def graph_volley(data: Corpus) -> dict[str, object]:
-    """Ten Elven Archers shoot twenty Elven Spearmen at 12 inches.
-
-    Each side's rules attach to the steps they reach.
-
-    Returns:
-        The evaluated volley program.
-    """
-    archers = Contingent.deploy("elven-archers", 10, data=data, frontage=5)
-    spearmen = Contingent.deploy("elven-spearmen", 20, data=data, frontage=5)
-    fielded = {Side.ATTACKER: Fielding.of(archers, "Longbow"), Side.TARGET: Fielding.of(spearmen)}
-    (volley,) = (
-        load_program(VOLLEY, data.rules)
-        .built(fielded)
-        .evaluate(
-            {
-                "distance": 12,
-                "can-shoot": True,
-                "line-of-sight": True,
-                "attacker/moved": False,
-                "attacker/standing": fielded[Side.ATTACKER].standing(archers.models),
-                "target/standing": fielded[Side.TARGET].standing(spearmen.models),
-                "target/models-at-start-of-phase": spearmen.models,
-                "target/battle-strength": spearmen.models,
-            }
-        )
-    )
-    return volley.lane.to_view()
 
 
 @app.get("/units", summary="List every datasheet in the corpus")
@@ -230,6 +198,21 @@ def fight(request: Fight, data: Corpus) -> FightReport:
         The round resolved: each side's casualty distribution and Break-test
         outcomes, who won, and every rule the engine held without applying.
     """
+    return FightReport.of(*_fought(request, data))
+
+
+@app.post("/graph/fight", summary="Evaluate the round program a fight resolves")
+def graph_fight(request: Fight, data: Corpus) -> dict[str, object]:
+    """Fight the round ``/fight`` fights, and show the program it ran on.
+
+    Returns:
+        The evaluated round program, in the lane ``/fight`` reports on.
+    """
+    *_, fought = _fought(request, data)
+    return fought.evaluated.lane.to_view()
+
+
+def _fought(request: Fight, data: TOWRepository) -> tuple[Contingent, Contingent, Round]:
     game = TOWGame.assemble(data)
     a = _deploy(game, data, request.a, "side a")
     b = _deploy(game, data, request.b, "side b")
@@ -239,7 +222,7 @@ def fight(request: Fight, data: Corpus) -> FightReport:
             a = a.charging(charged)
         else:
             b = b.charging(charged)
-    return FightReport.of(a, b, game.combat.fight(a, b))
+    return a, b, game.combat.fight(a, b)
 
 
 class _Wields(NamedTuple):
@@ -337,6 +320,21 @@ def volley(request: Volley, data: Corpus) -> VolleyReport:
         distributions, what the target's nerve does, and every rule the volley
         holds without applying.
     """
+    return VolleyReport.of(*_fired(request, data))
+
+
+@app.post("/graph/volley", summary="Evaluate the volley program a volley resolves")
+def graph_volley(request: Volley, data: Corpus) -> dict[str, object]:
+    """Fire the volley ``/volley`` fires, and show the program it ran on.
+
+    Returns:
+        The evaluated volley program, in the lane ``/volley`` reports on.
+    """
+    *_, fired = _fired(request, data)
+    return fired.evaluated.lane.to_view()
+
+
+def _fired(request: Volley, data: TOWRepository) -> tuple[Contingent, Contingent, Fired]:
     game = TOWGame.assemble(data)
     shooter = _deploy(game, data, request.shooter, "shooter", MISSILE)
     if request.moved:
@@ -350,7 +348,7 @@ def volley(request: Volley, data: Corpus) -> VolleyReport:
         target_options=tuple(request.target.options),
         battle_strength=request.battle_strength,
     )
-    return VolleyReport.of(shooter, target, fired)
+    return shooter, target, fired
 
 
 @app.get("/weapons", summary="List every weapon entry in the corpus")
