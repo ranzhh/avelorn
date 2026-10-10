@@ -73,7 +73,7 @@
 	{/each}
 
 	{#if fight.first_striker}
-		<p class="note">first strike {fight.first_striker}</p>
+		<p class="note">first strike {fight.first_striker === 'a' ? fight.a.name : fight.b.name}</p>
 	{/if}
 {/if}
 
