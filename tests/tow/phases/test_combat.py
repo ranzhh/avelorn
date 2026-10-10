@@ -9,7 +9,6 @@ from avelorn.tow.contingent import Charge, ChargeArc, Contingent, Loadout
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.engine.rules import GateContext
 from avelorn.tow.phases.combat import (
-    CombatPhase,
     FightResult,
     combat_result,
     effective_initiative,
@@ -25,13 +24,6 @@ from avelorn.tow.schema.unit import Characteristic, ProfileRole, Unit
 from avelorn.tow.schema.weapon import Weapon
 
 REPO = TOWRepository()
-
-# The shooting chapter's rules in force, built directly: these tests
-# exercise the combat layer, which must not depend on game assembly.
-IN_FORCE = {r.name: r for r in REPO.rules.values() if r.category == Phase.SHOOTING and r.effects}
-
-# The Combat phase with no chapter rules in force, for fighting an engagement.
-COMBAT = CombatPhase(in_play={})
 
 
 def _fielded(unit: Unit, models: int, *, frontage: int | None = None) -> Contingent:
@@ -919,49 +911,15 @@ def test_charge_factors_elven_reflexes_structurally() -> None:
     cancels in the order (charge bonus still decides it), and neither
     side's Elven Reflexes is left in the notes — the rule is in the math.
     """
-    from avelorn.tow.phases.movement import charge
-
-    engagement = charge(
-        _deployed("elven-spearmen", 5).wielding("Thrusting Spear"),
+    melee = fight(
+        _deployed("elven-spearmen", 5)
+        .wielding("Thrusting Spear")
+        .charging(Charge(3, ChargeArc.FRONT)),
         _deployed("elven-archers", 5).wielding("Hand Weapon"),
-        Charge(3, ChargeArc.FRONT),
-        shooting_rules=IN_FORCE,
+        first_round=True,
     )
-    melee = COMBAT.fight(engagement)
     assert melee.a_initiative.value == melee.b_initiative.value + 3  # charge bonus only
     assert not any("Elven Reflexes" in note for note in melee.notes)
-
-
-def test_first_round_flag_governs_the_first_round_rules() -> None:
-    """CombatPhase.fight reads first_round off the engagement.
-
-    Elven Reflexes grants +1 Initiative only in the first round of combat, so
-    the charger's Initiative is one higher for the charge's first round than
-    for a later round of the same engagement (after end_turn) — the charge
-    bonus, which comes from the move, applies in both.
-    """
-    from avelorn.tow.phases.movement import charge
-
-    move = Charge(3, ChargeArc.FRONT)
-
-    fresh_engagement = charge(
-        _deployed("elven-spearmen", 5).wielding("Thrusting Spear"),
-        _deployed("elven-archers", 5).wielding("Hand Weapon"),
-        move,
-        shooting_rules=IN_FORCE,
-    )
-    fresh = COMBAT.fight(fresh_engagement)
-
-    later_engagement = charge(
-        _deployed("elven-spearmen", 5).wielding("Thrusting Spear"),
-        _deployed("elven-archers", 5).wielding("Hand Weapon"),
-        move,
-        shooting_rules=IN_FORCE,
-    )
-    later_engagement.end_turn()
-    later = COMBAT.fight(later_engagement)
-
-    assert fresh.a_initiative.value == later.a_initiative.value + 1
 
 
 # --- Martial Prowess, the +1 Weapon Skill in the first round, from data/ ---

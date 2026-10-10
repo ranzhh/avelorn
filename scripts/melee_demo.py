@@ -8,6 +8,7 @@ swings with three. Receiving wins the combat more often than delivering it.
 
 from avelorn.tow.contingent import Charge, ChargeArc
 from avelorn.tow.game import TOWGame
+from avelorn.tow.steps import Fought
 
 
 def main() -> None:
@@ -19,13 +20,14 @@ def main() -> None:
     receivers = game.field(spearmen, 20).wielding("Thrusting Spear")
     engagement = game.movement.charge(chargers, receivers, Charge(8, ChargeArc.FRONT))
     engagement.react()  # Hold — Spearmen carry no missile weapon to Stand & Shoot with
-    scored = game.combat.result(game.combat.fight(engagement))
+    fought = game.combat.fight(engagement).fought.mass
+    won, drawn, lost = (fought.get(each, 0) for each in (Fought.WON, Fought.DRAWN, Fought.LOST))
 
-    total = scored.p_a_wins + scored.p_draw + scored.p_b_wins
+    total = won + drawn + lost
     print('20 Elven Spearmen charge 20 Elven Spearmen (8"):')
-    print(f"  P(charger wins)   {scored.p_a_wins:.3f}")
-    print(f"  P(draw)           {scored.p_draw:.3f}")
-    print(f"  P(receiver wins)  {scored.p_b_wins:.3f}   <- the charger's ranks lapse")
+    print(f"  P(charger wins)   {won:.3f}")
+    print(f"  P(draw)           {drawn:.3f}")
+    print(f"  P(receiver wins)  {lost:.3f}   <- the charger's ranks lapse")
     # Resolved in exact rationals, so this is 1 and not 0.9999999999999999. The
     # fractions themselves run to fifteen digits, which is why the rounded
     # figures above are the readable form.

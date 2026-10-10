@@ -1214,7 +1214,7 @@
           "not_modelled"
         ],
         "title": "FightReport",
-        "description": "One round of close combat, resolved exactly.\n\nThe engine works in rationals; these are floats, because JSON has no\nother number and a caller plotting a distribution wants one. The exact\nvalues stay reachable from Python.\n\n``first_striker`` names the side Initiative put first, or is ``None`` when\nequal Initiative made the blows simultaneous -- a Great Weapon's Strike\nLast is why a higher-Initiative unit can still swing second.\n``not_modelled`` is every note the round produced, gathered from the\nmelee, the scoring and the Break test: what the engine held and did not\napply, so a figure is never quietly wrong."
+        "description": "One round of close combat, resolved exactly.\n\nThe engine works in rationals; these are floats, because JSON has no\nother number and a caller plotting a distribution wants one. The exact\nvalues stay reachable from Python.\n\n``first_striker`` names the side Initiative put first, or is ``None`` when\nequal Initiative made the blows simultaneous -- a Great Weapon's Strike\nLast is why a higher-Initiative unit can still swing second.\n``not_modelled`` names the rules the round held without applying, so a\nfigure is never quietly wrong."
       },
       "FightSide": {
         "properties": {
@@ -1287,7 +1287,7 @@
           "breaks"
         ],
         "title": "FightSide",
-        "description": "One side of a resolved round: what it fielded, what it lost, whether it held.\n\n``casualties`` is the marginal distribution of models this side loses in\nthe melee -- index ``k`` is the probability it loses exactly ``k`` -- and\n``expected_casualties`` its mean, which is the number an averaging\nsimulator would report and the one the distribution exists to replace.\nThe three Break-test figures are conditional on nothing: each is the\nprobability of that outcome *over the whole round*, so they sum to this\nside's chance of losing, and a side that mostly wins shows three small\nnumbers."
+        "description": "One side of a resolved round: what it fielded, what it lost, whether it held.\n\n``casualties`` is the distribution of models this side has lost by the end\nof the round -- index ``k`` is the probability it loses exactly ``k`` -- and\n``expected_casualties`` its mean, which is the number an averaging\nsimulator would report and the one the distribution exists to replace.\nThe three Break-test figures are conditional on nothing: each is the\nprobability of that outcome *over the whole round*, so they sum to this\nside's chance of losing with models left to test, and a side that mostly\nwins shows three small numbers."
       },
       "FoeGate": {
         "properties": {

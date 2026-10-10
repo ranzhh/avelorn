@@ -239,9 +239,7 @@ def fight(request: Fight, data: Corpus) -> FightReport:
             a = a.charging(charged)
         else:
             b = b.charging(charged)
-    fought = game.combat.fight(a, b)
-    scored = game.combat.result(fought)
-    return FightReport.of(a, b, fought, scored, game.combat.break_test(scored, a, b))
+    return FightReport.of(a, b, game.combat.fight(a, b))
 
 
 class _Wields(NamedTuple):

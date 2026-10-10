@@ -12,7 +12,6 @@ from avelorn.tow.contingent import Contingent, Movement
 from avelorn.tow.coverage import fieldings
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.fielding import Fielding
-from avelorn.tow.game import TOWGame
 from avelorn.tow.phases.shooting import make_panic_tests, shoot_unit
 from avelorn.tow.programs import VOLLEY, Built, Evaluated, load_program
 from avelorn.tow.schema.phase import Phase
@@ -21,7 +20,11 @@ from avelorn.tow.schema.unit import Characteristic
 from avelorn.tow.steps import Retreat
 
 REPO = TOWRepository()
-IN_PLAY = TOWGame.assemble(REPO).in_play[Phase.SHOOTING]
+IN_PLAY = {
+    rule.name: rule
+    for rule in REPO.rules.values()
+    if rule.category == Phase.SHOOTING and rule.effects
+}
 VOLLEY_PROGRAM = load_program(VOLLEY, REPO.rules)
 CORRECTIONS = corrections()
 

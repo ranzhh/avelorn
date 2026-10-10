@@ -32,13 +32,13 @@ from fractions import Fraction
 from avelorn.core.registry import Registry
 from avelorn.tow.contingent import Charge, ChargeArc, Contingent
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.game import TOWGame
 from avelorn.tow.phases.combat import (
     CombatResult,
     FightResult,
     StrikeResult,
     break_test,
     combat_result,
+    fight,
     strike_unit,
 )
 from avelorn.tow.schema.reference import RuleRef
@@ -195,8 +195,7 @@ class _Field:
         Returns:
             The round's result.
         """
-        with TOWGame.assemble(self._repo).turn().combat() as combat:
-            return combat.fight(self.field(a, a_models), self.field(b, b_models))
+        return fight(self.field(a, a_models), self.field(b, b_models))
 
 
 def _mean(pmf: list) -> Fraction:
@@ -402,11 +401,8 @@ def _a_rear_attack_scores(f: _Field) -> tuple:
 def _arc_bonus(f: _Field, arc: ChargeArc) -> int:
     # The combat-result points the charging side claims for the arc it hit.
     plain = f.unit()
-    game = TOWGame.assemble(f._repo)
-    with game.turn().movement() as movement:
-        engagement = movement.charge(f.field(plain, 5), f.field(plain, 5), Charge(6, arc))
-    with game.turn().combat() as combat:
-        return combat.fight(engagement).a_combat_result_bonus
+    charger = f.field(plain, 5).charging(Charge(6, arc))
+    return fight(charger, f.field(plain, 5), first_round=True).a_combat_result_bonus
 
 
 def _the_break_test_rolls_the_printed_bands(f: _Field) -> tuple:

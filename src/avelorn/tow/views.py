@@ -27,19 +27,20 @@ from fractions import Fraction
 
 from pydantic import BaseModel, ConfigDict
 
-from avelorn.core.distribution import Distribution, Probability
+from avelorn.core.distribution import Distribution
 from avelorn.core.registry import Registry
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.coverage import Site, rule_references
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.muster import Complement
-from avelorn.tow.phases.combat import BreakResult, CombatResult, FightResult, SideBreak
+from avelorn.tow.round import Fight
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import Rule
+from avelorn.tow.schema.stage import Side
 from avelorn.tow.schema.unit import TroopType, Unit, UnitOption, UnitSize
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile, WeaponType
-from avelorn.tow.steps import Retreat
+from avelorn.tow.steps import BreakTest, Fought, Retreat
 from avelorn.tow.volley import Volley
 
 
@@ -377,14 +378,14 @@ class MusteredUnit(BaseModel):
 class FightSide(BaseModel):
     """One side of a resolved round: what it fielded, what it lost, whether it held.
 
-    ``casualties`` is the marginal distribution of models this side loses in
-    the melee -- index ``k`` is the probability it loses exactly ``k`` -- and
+    ``casualties`` is the distribution of models this side has lost by the end
+    of the round -- index ``k`` is the probability it loses exactly ``k`` -- and
     ``expected_casualties`` its mean, which is the number an averaging
     simulator would report and the one the distribution exists to replace.
     The three Break-test figures are conditional on nothing: each is the
     probability of that outcome *over the whole round*, so they sum to this
-    side's chance of losing, and a side that mostly wins shows three small
-    numbers.
+    side's chance of losing with models left to test, and a side that mostly
+    wins shows three small numbers.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -413,9 +414,8 @@ class FightReport(BaseModel):
     ``first_striker`` names the side Initiative put first, or is ``None`` when
     equal Initiative made the blows simultaneous -- a Great Weapon's Strike
     Last is why a higher-Initiative unit can still swing second.
-    ``not_modelled`` is every note the round produced, gathered from the
-    melee, the scoring and the Break test: what the engine held and did not
-    apply, so a figure is never quietly wrong.
+    ``not_modelled`` names the rules the round held without applying, so a
+    figure is never quietly wrong.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -430,74 +430,42 @@ class FightReport(BaseModel):
     not_modelled: list[str]
 
     @classmethod
-    def of(
-        cls,
-        a: Contingent,
-        b: Contingent,
-        fought: FightResult,
-        scored: CombatResult,
-        broke: BreakResult,
-    ) -> "FightReport":
-        """Gather a resolved round into one answer.
+    def of(cls, a: Contingent, b: Contingent, fight: Fight) -> "FightReport":
+        """Gather a resolved round into one answer, ``a`` its attacker and ``b`` its target.
 
         Returns:
             The report both surfaces show.
         """
-        first = None
-        if fought.first_striker is a:
-            first = "a"
-        elif fought.first_striker is b:
-            first = "b"
+        fought = fight.fought.mass
+        first = {Side.ATTACKER: "a", Side.TARGET: "b"}
         return cls(
-            a=_side(
-                a,
-                fought.a_casualties,
-                fought.a_initiative.value,
-                fought.a_rank_bonus,
-                fought.a_unit_strength,
-                broke.a,
-            ),
-            b=_side(
-                b,
-                fought.b_casualties,
-                fought.b_initiative.value,
-                fought.b_rank_bonus,
-                fought.b_unit_strength,
-                broke.b,
-            ),
-            p_a_wins=float(scored.p_a_wins),
-            p_draw=float(scored.p_draw),
-            p_b_wins=float(scored.p_b_wins),
-            first_striker=first,
-            margin={lead: float(mass) for lead, mass in sorted(scored.margin.items())},
-            not_modelled=sorted({*fought.notes, *scored.notes, *broke.notes}),
+            a=_side(a, fight, Side.ATTACKER),
+            b=_side(b, fight, Side.TARGET),
+            p_a_wins=float(fought.get(Fought.WON, 0)),
+            p_draw=float(fought.get(Fought.DRAWN, 0)),
+            p_b_wins=float(fought.get(Fought.LOST, 0)),
+            first_striker=None if fight.first_striker is None else first[fight.first_striker],
+            margin={lead: float(mass) for lead, mass in sorted(fight.margin.mass.items()) if mass},
+            not_modelled=list(fight.held),
         )
 
 
-def _side(
-    side: Contingent,
-    casualties: Sequence[Probability],
-    initiative: int,
-    rank_bonus: int,
-    unit_strength: int,
-    broke: SideBreak,
-) -> FightSide:
-    # The weapon is set before a contingent fights, so in_hand() is never None
-    # here; a caller that skipped arming it would have failed in the resolver.
-    losses = [float(mass) for mass in casualties]
+def _side(side: Contingent, fight: Fight, seat: Side) -> FightSide:
+    casualties = fight.casualties(seat)
+    settled = fight.settled(seat).mass
     return FightSide(
         unit=side.unit.id,
         name=side.unit.name,
         size=side.models,
         weapon=side.in_hand().name,
-        initiative=initiative,
-        rank_bonus=rank_bonus,
-        unit_strength=unit_strength,
-        casualties=losses,
-        expected_casualties=sum(k * mass for k, mass in enumerate(losses)),
-        gives_ground=float(broke.p_gives_ground),
-        falls_back=float(broke.p_falls_back),
-        breaks=float(broke.p_breaks),
+        initiative=fight.initiative(seat),
+        rank_bonus=fight.rank_bonus(seat),
+        unit_strength=fight.unit_strength(seat),
+        casualties=_listed(casualties),
+        expected_casualties=float(casualties.expect(Fraction)),
+        gives_ground=float(settled.get(BreakTest.GIVES_GROUND, 0)),
+        falls_back=float(settled.get(BreakTest.FALLS_BACK_IN_GOOD_ORDER, 0)),
+        breaks=float(settled.get(BreakTest.BREAKS, 0)),
     )
 
 
