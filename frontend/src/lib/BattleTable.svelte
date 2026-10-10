@@ -5,7 +5,8 @@
 		arc,
 		base,
 		bearing,
-		bounds,
+		legend,
+		pivot,
 		reformed,
 		separation,
 		snap,
@@ -71,6 +72,21 @@
 
 	let surface = $state<SVGSVGElement | null>(null);
 
+	/** Screen pixels to the inch, so handles and readings keep one size however large the table is drawn. */
+	let perInch = $state(12);
+	$effect(() => {
+		const drawn = surface;
+		if (!drawn) return;
+		const watch = new ResizeObserver(() => {
+			const width = drawn.getBoundingClientRect().width;
+			if (width > 0) perInch = width / TABLE.width;
+		});
+		watch.observe(drawn);
+		return () => watch.disconnect();
+	});
+	const px = $derived(1 / perInch);
+	const KNOB = 10;
+
 	/**
 	 * A drag in flight.
 	 *
@@ -81,7 +97,8 @@
 	let flight = $state<{ id: number; grabX: number; grabY: number; x: number; y: number } | null>(
 		null
 	);
-	let turning = $state<number | null>(null);
+	/** A block being turned, how far from its facing the handle was grabbed, and off which edge. */
+	let turning = $state<{ id: number; offset: number; side: number } | null>(null);
 	/** A side edge being dragged, and the width it currently reads. */
 	let widening = $state<{ id: number; files: number } | null>(null);
 
@@ -102,6 +119,19 @@
 		counted = now;
 	});
 
+	const chosen = $derived(placed.find((each) => each.id === picked) ?? null);
+	const knob = $derived(
+		chosen?.block.footprint
+			? pivot(
+					chosen,
+					placed,
+					KNOB * px,
+					2 * KNOB * px,
+					turning?.id === chosen.id ? turning.side : undefined
+				)
+			: null
+	);
+
 	const moving = $derived.by(() => {
 		const out = flight;
 		return out ? (placed.find((each) => each.id === out.id) ?? null) : null;
@@ -111,9 +141,14 @@
 		const out = flight;
 		return moving && out ? ({ ...moving, x: out.x, y: out.y } as Placed) : null;
 	});
+	/** How far the ghost has been carried; a press that has not left the block is a click. */
+	const travelled = $derived(
+		ghost && moving ? Math.hypot(ghost.x - moving.x, ghost.y - moving.y) : 0
+	);
+	const carrying = $derived(travelled > 3 * px);
 	/** The block the ghost is over, if any. */
 	const over = $derived(
-		ghost
+		ghost && carrying
 			? (placed.find((each) => each.id !== ghost.id && separation(ghost, each) === 0) ?? null)
 			: null
 	);
@@ -121,7 +156,7 @@
 	const reading = $derived.by(() => {
 		if (!moving || !ghost) return null;
 		if (over) return `${Math.round(separation(moving, over))}in · ${arc(moving, over)}`;
-		return `${Math.round(Math.hypot(ghost.x - moving.x, ghost.y - moving.y))}in`;
+		return `${Math.round(travelled)}in`;
 	});
 
 	function at(event: PointerEvent) {
@@ -157,7 +192,11 @@
 	function grabHandle(event: PointerEvent, block: Placed) {
 		event.stopPropagation();
 		(event.currentTarget as Element).setPointerCapture(event.pointerId);
-		turning = block.id;
+		turning = {
+			id: block.id,
+			offset: angleTo(block, at(event)) - block.facing,
+			side: knob?.side ?? 0
+		};
 		onpick(block.id);
 	}
 
@@ -170,11 +209,12 @@
 			if (within(wanted)) flight = { ...flight, x: wanted.x, y: wanted.y };
 			return;
 		}
-		if (turning !== null) {
-			const block = placed.find((each) => each.id === turning);
+		const turn = turning;
+		if (turn) {
+			const block = placed.find((each) => each.id === turn.id);
 			if (!block) return;
-			const facing = angleTo({ x: block.x, y: block.y }, at(event));
-			onturn(block.id, event.shiftKey ? snap(facing) : Math.round(facing));
+			const facing = (angleTo(block, at(event)) - turn.offset + 360) % 360;
+			onturn(block.id, event.shiftKey ? snap(facing) : Math.round(facing) % 360);
 			return;
 		}
 		const wide = widening;
@@ -202,8 +242,8 @@
 			// On another block the drop is an action, so the mover stays where it
 			// stands and the menu measures from there. Anywhere else it is a move.
 			if (over) ondrop(moving.id, over.id);
-			else onmove(moving.id, flight.x, flight.y);
-			trace = mark;
+			else if (carrying) onmove(moving.id, flight.x, flight.y);
+			if (carrying) trace = mark;
 		}
 		const wide = widening;
 		if (wide) {
@@ -215,20 +255,6 @@
 		flight = null;
 		turning = null;
 		widening = null;
-	}
-
-	/** Where the rotation handle sits: on a stalk off the block's front. */
-	function stalk(block: Placed) {
-		const footprint = block.block.footprint;
-		if (!footprint) return null;
-		const reach = span(footprint).depth / 2 + 2.5;
-		const radians = (block.facing * Math.PI) / 180;
-		return {
-			x: block.x + Math.sin(radians) * reach,
-			y: block.y - Math.cos(radians) * reach,
-			fromX: block.x + Math.sin(radians) * (reach - 2.5),
-			fromY: block.y - Math.cos(radians) * (reach - 2.5)
-		};
 	}
 </script>
 
@@ -268,24 +294,64 @@
 		<line class="foot" x1="0" y1={inches} x2={TABLE.width} y2={inches} />
 	{/each}
 
+	{#if chosen && knob && !flight}
+		{@const print = chosen.block.footprint}
+		{#if print}
+			{@const size = span(print)}
+			{@const pad = 4 * px}
+			{@const reach = Math.max(size.depth, 24 * px)}
+			<g class="chrome" transform="rotate({chosen.facing} {chosen.x} {chosen.y})">
+				<rect
+					class="halo"
+					x={chosen.x - size.width / 2 - pad}
+					y={chosen.y - size.depth / 2 - pad}
+					width={size.width + 2 * pad}
+					height={size.depth + 2 * pad}
+				/>
+				{#if chosen.block.size > 1}
+					{#each [-1, 1] as side}
+						{@const edge = chosen.x + (side * size.width) / 2}
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<g class="edge" onpointerdown={(event) => grabEdge(event, chosen)}>
+							<rect
+								class="reach"
+								x={side < 0 ? edge - 16 * px : edge}
+								y={chosen.y - reach / 2}
+								width={16 * px}
+								height={reach}
+							/>
+							<rect
+								class="grip"
+								x={edge + side * pad - 3 * px}
+								y={chosen.y - size.depth / 2 - pad}
+								width={6 * px}
+								height={size.depth + 2 * pad}
+								rx={3 * px}
+							/>
+						</g>
+					{/each}
+				{/if}
+			</g>
+		{/if}
+	{/if}
+
 	{#each placed as block (block.id)}
 		{@const print = block.block.footprint}
 		{#if print}
 			{@const size = span(print)}
-			{@const box = bounds(block)}
+			{@const label = legend(block)}
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<g
 				class="block"
 				class:picked={block.id === picked}
-				class:origin={flight?.id === block.id}
+				class:origin={flight?.id === block.id && carrying}
 				class:under={over?.id === block.id}
+				onpointerdown={(event) => grab(event, block)}
+				ondblclick={() => onedit(block.id)}
 			>
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<g
-					transform="rotate({block.facing} {block.x} {block.y})"
-					onpointerdown={(event) => grab(event, block)}
-					ondblclick={() => onedit(block.id)}
-				>
+				<g transform="rotate({block.facing} {block.x} {block.y})">
 					<rect
+						class="footprint"
 						x={block.x - size.width / 2}
 						y={block.y - size.depth / 2}
 						width={size.width}
@@ -298,63 +364,29 @@
 						x2={block.x + size.width / 2}
 						y2={block.y - size.depth / 2}
 					/>
-					{#if size.depth > 3}
-						<text class="mark" x={block.x} y={block.y - 0.1}>{block.mark}</text>
-						<text class="count" x={block.x} y={block.y + 1.7}>{block.block.size}</text>
-					{:else}
-						<text class="mark" x={block.x} y={block.y + 0.7}>
-							{block.mark}<tspan class="count"> {block.block.size}</tspan>
-						</text>
-					{/if}
 				</g>
-
-				{#if block.id === picked && !flight}
-					<!-- svelte-ignore a11y_no_static_element_interactions -->
-					<g transform="rotate({block.facing} {block.x} {block.y})">
-						{#each [-1, 1] as side}
-							{@const at = block.x + (side * size.width) / 2}
-							<g class="edge" onpointerdown={(event) => grabEdge(event, block)}>
-								<rect x={at - 0.75} y={block.y - 1.6} width="1.5" height="3.2" rx="0.4" />
-								<line
-									class="grip"
-									x1={at - 0.25}
-									y1={block.y - 0.8}
-									x2={at - 0.25}
-									y2={block.y + 0.8}
-								/>
-								<line
-									class="grip"
-									x1={at + 0.25}
-									y1={block.y - 0.8}
-									x2={at + 0.25}
-									y2={block.y + 0.8}
-								/>
-							</g>
-						{/each}
-					</g>
-					{@const handle = stalk(block)}
-					{#if handle}
-						<line class="tether" x1={handle.fromX} y1={handle.fromY} x2={handle.x} y2={handle.y} />
-						<!-- svelte-ignore a11y_no_static_element_interactions -->
-						<circle
-							class="handle"
-							cx={handle.x}
-							cy={handle.y}
-							r="1.1"
-							onpointerdown={(event) => grabHandle(event, block)}
-						/>
-					{/if}
-					<rect
-						class="halo"
-						x={box.left - 0.4}
-						y={box.top - 0.4}
-						width={box.width + 0.8}
-						height={box.height + 0.8}
-					/>
-				{/if}
+				<text class="mark" x={block.x} y={block.y} font-size={label.size}>
+					{block.mark}{#if label.count}<tspan class="count" dx={label.size * 0.3}
+							>{block.block.size}</tspan
+						>{/if}
+				</text>
 			</g>
 		{/if}
 	{/each}
+
+	{#if chosen && knob && !flight}
+		<g class="chrome">
+			<line class="tether" x1={knob.from.x} y1={knob.from.y} x2={knob.at.x} y2={knob.at.y} />
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<circle
+				class="handle"
+				cx={knob.at.x}
+				cy={knob.at.y}
+				r={KNOB * px}
+				onpointerdown={(event) => grabHandle(event, chosen)}
+			/>
+		</g>
+	{/if}
 
 	{#if widening !== null}
 		{@const reform = widening}
@@ -369,7 +401,7 @@
 				<g class="ghost" transform="rotate({block.facing} {block.x} {block.y})">
 					<rect x={block.x - wide / 2} y={block.y - deep / 2} width={wide} height={deep} />
 				</g>
-				<text class="reading" x={block.x} y={block.y - deep / 2 - 1}>
+				<text class="reading" x={block.x} y={block.y - deep / 2 - 10 * px} font-size={12 * px}>
 					{reform.files}×{ranks}
 				</text>
 			{/if}
@@ -390,7 +422,8 @@
 				<text
 					class="reading"
 					x={(trace.fromX + trace.toX) / 2}
-					y={(trace.fromY + trace.toY) / 2 - 1}
+					y={(trace.fromY + trace.toY) / 2 - 10 * px}
+					font-size={12 * px}
 				>
 					{trace.reading}
 				</text>
@@ -398,7 +431,7 @@
 		</g>
 	{/if}
 
-	{#if ghost && moving}
+	{#if ghost && moving && carrying}
 		{@const print = ghost.block.footprint}
 		{#if print}
 			{@const size = span(print)}
@@ -426,7 +459,12 @@
 				/>
 			</g>
 			{#if reading}
-				<text class="reading" x={(moving.x + ghost.x) / 2} y={(moving.y + ghost.y) / 2 - 1}>
+				<text
+					class="reading"
+					x={(moving.x + ghost.x) / 2}
+					y={(moving.y + ghost.y) / 2 - 10 * px}
+					font-size={12 * px}
+				>
 					{reading}
 				</text>
 			{/if}

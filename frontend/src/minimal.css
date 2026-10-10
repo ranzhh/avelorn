@@ -118,6 +118,20 @@ button,
 	display: grid;
 	gap: var(--space-4);
 }
+.tabletop {
+	display: grid;
+	grid-template-columns: 17rem minmax(0, 1fr) 17rem;
+	gap: var(--space-3);
+	align-items: start;
+}
+.tabletop > aside {
+	position: sticky;
+	top: var(--space-4);
+	max-height: calc(100vh - 5rem);
+	overflow: auto;
+	padding: 0;
+	border: 0;
+}
 .head,
 .field {
 	display: flex;
@@ -169,6 +183,26 @@ summary {
 	background: transparent;
 	text-align: left;
 }
+.tabletop .row {
+	min-width: 0;
+	font-size: var(--text-sm);
+}
+.tabletop .pick {
+	min-width: 0;
+	gap: var(--space-2);
+}
+.tabletop .pick span:first-child {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.tabletop .cost,
+.tabletop .sheet {
+	font-size: var(--text-xs);
+	white-space: nowrap;
+}
+.tabletop .cost {
+	color: var(--dim);
+}
 .sheet,
 .link {
 	border: 0;
@@ -215,31 +249,123 @@ th {
 svg {
 	max-width: 100%;
 }
+.surface {
+	position: relative;
+	max-width: calc((100vh - 6rem) * var(--aspect));
+	margin-inline: auto;
+}
 .surface svg {
 	display: block;
 	width: 100%;
 	border: 1px solid var(--line);
+	touch-action: none;
+	user-select: none;
+}
+.surface svg * {
+	vector-effect: non-scaling-stroke;
 }
 .surface .cloth {
 	fill: #fff;
 }
 .surface .foot {
 	stroke: #ccc;
-	stroke-width: 0.06;
 }
-.surface .block rect {
-	fill: #fff;
-	stroke: #333;
-	stroke-width: 0.1;
+.surface .block {
+	cursor: grab;
 }
-.surface .front,
-.surface .path {
+.surface .footprint {
+	fill: var(--ordinal-1);
 	stroke: #333;
-	stroke-width: 0.12;
+}
+.surface .front {
+	stroke: #333;
+	stroke-width: 3px;
+}
+.surface .picked .footprint {
+	stroke: var(--accent);
+}
+.surface .origin {
+	opacity: 0.4;
+}
+.surface .under .footprint {
+	fill: #f3d3cf;
+	stroke: var(--series-2);
+	stroke-width: 2px;
 }
 .surface text {
-	fill: #111;
-	font-size: 2px;
+	fill: var(--ink);
+	text-anchor: middle;
+	dominant-baseline: central;
+}
+.surface .mark {
+	font-weight: 700;
+}
+.surface .count {
+	fill: var(--dim);
+	font-weight: 400;
+}
+.surface .reading {
+	font-family: var(--font-mono);
+	paint-order: stroke;
+	stroke: #fff;
+	stroke-width: 3px;
+}
+.surface .path,
+.surface .ghost rect,
+.surface .ghost .front {
+	stroke: var(--series-1);
+}
+.surface .path,
+.surface .ghost rect,
+.surface .halo,
+.surface .tether {
+	stroke-width: 1.5px;
+}
+.surface .trace .path,
+.surface .ghost rect,
+.surface .halo {
+	stroke-dasharray: 4 3;
+}
+.surface text,
+.surface .trace,
+.surface .ghost,
+.surface .halo,
+.surface .grip,
+.surface .tether {
+	pointer-events: none;
+}
+.surface .trace {
+	opacity: 0.7;
+}
+.surface .ghost rect {
+	fill: rgb(57 117 184 / 0.15);
+}
+.surface .halo {
+	fill: none;
+	stroke: var(--accent);
+}
+.surface .edge {
+	cursor: ew-resize;
+}
+.surface .reach {
+	fill: transparent;
+}
+.surface .grip {
+	fill: var(--accent);
+}
+.surface .tether {
+	stroke: var(--accent);
+}
+.surface .handle {
+	fill: #fff;
+	stroke: var(--accent);
+	stroke-width: 2px;
+	cursor: grab;
+}
+.surface .handle:hover,
+.surface .edge:hover .grip {
+	fill: var(--accent);
+	fill-opacity: 0.6;
 }
 
 .pane {
@@ -257,8 +383,34 @@ svg {
 	cursor: grab;
 }
 
+@media (max-width: 1000px) {
+	.tabletop {
+		grid-template-columns: 16rem minmax(0, 1fr);
+		grid-template-rows: auto 1fr;
+	}
+	.tabletop > .left {
+		grid-row: span 2;
+	}
+	.tabletop > .right {
+		grid-column: 2;
+	}
+}
+
 @media (max-width: 700px) {
 	main {
 		padding: var(--space-3);
+	}
+	.tabletop {
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-rows: none;
+	}
+	.tabletop > .centre {
+		order: -1;
+	}
+	.tabletop > .left,
+	.tabletop > .right {
+		grid-area: auto;
+		position: static;
+		max-height: 60vh;
 	}
 }

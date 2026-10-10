@@ -270,3 +270,99 @@ export function room(candidate: Placed, taken: Placed[]): Placed {
 	}
 	return candidate;
 }
+
+/** How wide a glyph of the block's label is, and how tall its line, per unit of font size. */
+const GLYPH = 0.62;
+const LINE = 1;
+/** How much of the room the label may take, so it never touches the block's edge. */
+const FILL = 0.85;
+/** The largest label worth drawing, in inches: past this a big block only shouts. */
+const LARGEST = 1.6;
+/** Below this the count is dropped so the mark can stand larger. */
+const SMALLEST = 0.7;
+
+/**
+ * The largest font, in inches, at which a label of `characters` glyphs fits
+ * inside the block upright, however the block is turned.
+ *
+ * Never taller than the block's narrower side, so a label does not grow as its
+ * block is turned on end.
+ */
+export function lettering(placed: Placed, characters: number): number {
+	const { width, depth } = measured(placed);
+	const radians = (placed.facing * Math.PI) / 180;
+	const cos = Math.abs(Math.cos(radians));
+	const sin = Math.abs(Math.sin(radians));
+	const wide = characters * GLYPH;
+	const fits = Math.min(width / (wide * cos + LINE * sin), depth / (wide * sin + LINE * cos));
+	return Math.min(FILL * Math.min(fits, width, depth), LARGEST);
+}
+
+/** What the block's label shows and at what size: its mark, and its count where that fits. */
+export function legend(placed: Placed): { count: boolean; size: number } {
+	const full = lettering(placed, `${placed.mark} ${placed.block.size}`.length);
+	if (full >= SMALLEST) return { count: true, size: full };
+	return { count: false, size: lettering(placed, placed.mark.length) };
+}
+
+/** How far a point stands from a block's rectangle, in inches; nothing inside it. */
+export function clearance(point: Point, placed: Placed): number {
+	const { width, depth } = measured(placed);
+	const { front, right } = bearing(placed.facing);
+	const dx = point.x - placed.x;
+	const dy = point.y - placed.y;
+	const across = Math.abs(dx * right.x + dy * right.y) - width / 2;
+	const along = Math.abs(dx * front.x + dy * front.y) - depth / 2;
+	return Math.hypot(Math.max(across, 0), Math.max(along, 0));
+}
+
+/**
+ * Where a block's rotation handle stands, `offset` inches off one of its edges.
+ *
+ * Off the front where that is on the table and clear of every other block,
+ * else off the rear or a flank, so the handle never hides under a neighbour or
+ * past the table's edge. `from` is the middle of the edge it stands off, and
+ * `side` which edge that is. A `held` side is kept as it is, so a handle being
+ * turned stays under the pointer instead of hopping to another edge.
+ */
+export function pivot(
+	placed: Placed,
+	others: Placed[],
+	radius: number,
+	offset: number,
+	held?: number
+): { at: Point; from: Point; side: number } {
+	const { width, depth } = measured(placed);
+	const { front, right } = bearing(placed.facing);
+	const sides: [Point, number][] = [
+		[front, depth / 2],
+		[{ x: -front.x, y: -front.y }, depth / 2],
+		[right, width / 2],
+		[{ x: -right.x, y: -right.y }, width / 2]
+	];
+	const choices = sides.map(([axis, half], side) => ({
+		at: { x: placed.x + axis.x * (half + offset), y: placed.y + axis.y * (half + offset) },
+		from: { x: placed.x + axis.x * half, y: placed.y + axis.y * half },
+		side
+	}));
+	if (held !== undefined) return choices[held];
+	const onTable = ({ at }: { at: Point }) =>
+		at.x >= radius &&
+		at.y >= radius &&
+		at.x <= TABLE.width - radius &&
+		at.y <= TABLE.depth - radius;
+	const clear = (choice: { at: Point }) =>
+		onTable(choice) &&
+		others.every((other) => other.id === placed.id || clearance(choice.at, other) > radius);
+	const [ahead] = choices;
+	return (
+		choices.find(clear) ??
+		choices.find(onTable) ?? {
+			...ahead,
+			at: {
+				x: Math.min(Math.max(ahead.at.x, radius), TABLE.width - radius),
+				y: Math.min(Math.max(ahead.at.y, radius), TABLE.depth - radius)
+			}
+		}
+	);
+}
