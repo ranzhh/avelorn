@@ -28,6 +28,7 @@ from avelorn.core.graph import (
     State,
     Step,
     Tally,
+    Verdict,
     World,
 )
 from avelorn.tow.attach import Attachment, Wielder, attach_rules
@@ -301,6 +302,20 @@ class Evaluated:
         if step not in self.lane.edges:
             raise ProgramError(f"{path} did not run in this lane")
         return At(self, step)
+
+    @property
+    def held(self) -> tuple[str, ...]:
+        """The rules the lane holds without applying: no landing, or held at every one."""
+        names = set()
+        for node in self.lane.program.rules.values():
+            verdicts = {
+                verdict
+                for landing in node.landings
+                for verdict in self.lane.verdicts(node.id, landing.at).mass
+            }
+            if verdicts <= {Verdict.HELD}:
+                names.add(node.name)
+        return tuple(sorted(names))
 
 
 @dataclass(frozen=True)
