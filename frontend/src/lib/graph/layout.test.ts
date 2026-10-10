@@ -8,13 +8,14 @@ import {
 	expected,
 	fitted,
 	foldable,
+	landed,
 	layout,
 	moved,
 	startsFolded,
 	type Box
 } from './layout';
 import type { Point } from './layout';
-import type { Block, Distribution, Program, Reading, Roll } from './types';
+import type { Block, Distribution, Judged, Program, Reading, Roll } from './types';
 
 const program: Program = {
 	program: 'p',
@@ -338,28 +339,8 @@ describe('layout', () => {
 		expect(out.readings[0].label).toBe('y');
 	});
 
-	it('lands every rule line on a drawn node, expanded or collapsed', () => {
-		for (const drawn of [expanded, collapsed]) {
-			expect(drawn.landings.length).toBe(1);
-			const boxes = [...drawn.steps.map((s) => s.box), ...drawn.blocks.map((b) => b.box)];
-			for (const landing of drawn.landings) {
-				expect(boxes.some((box) => onBoundary(landing.end, box))).toBe(true);
-				expect(drawn.rail.some((placed) => onBoundary(landing.start, placed.box))).toBe(true);
-			}
-		}
-		expect(expanded.landings[0].at).toBe('p/g/b');
-		expect(collapsed.landings[0].at).toBe(GROUP);
-	});
-
 	it('sets aside as not modelled every rule that reaches no landing', () => {
 		expect(expanded.unmodelled.map((rule) => rule.id)).toEqual(['two/q/r2', 'two/q/r4']);
-	});
-
-	it('hangs a granting rule under the card of the rule it grants', () => {
-		const card = (id: string) => expanded.rail.find((placed) => placed.rule.id === id)!.box;
-		expect(expanded.rail.map((placed) => placed.rule.id)).toEqual(['one/p/r1', 'one/p/r3']);
-		expect(card('one/p/r3').x).toBe(card('one/p/r1').x);
-		expect(card('one/p/r3').y).toBeGreaterThan(card('one/p/r1').y + card('one/p/r1').height);
 	});
 
 	it('squeezes the flow to fit, and keeps it full size when even the floor overflows', () => {
@@ -442,8 +423,7 @@ describe('moving what was laid out', () => {
 		const shifted = moved(expanded, { 'p/g/c': { x: -400, y: -400 } });
 		const boxes = [
 			...shifted.steps.map((each) => each.box),
-			...shifted.blocks.map((each) => each.box),
-			...shifted.rail.map((each) => each.box)
+			...shifted.blocks.map((each) => each.box)
 		];
 		for (const box of boxes) {
 			expect(box.x).toBeGreaterThanOrEqual(0);
@@ -463,18 +443,41 @@ describe('moving what was laid out', () => {
 		);
 		expect(still.y).toBeGreaterThan(was.y);
 	});
+});
 
-	it('keeps every landing line pinned to its rule card and its step after moves', () => {
-		const shifted = moved(expanded, {
-			'p/g/b': { x: 30, y: 0 },
-			'one/p/r1': { x: 0, y: 20 }
+describe('the rules a step lists', () => {
+	it('lists every rule that lands on the step, ticked only where it applied', () => {
+		const judged = (verdicts: Judged[]) => ({
+			...program,
+			rules: [
+				...program.rules,
+				{
+					...program.rules[1],
+					id: 'two/q/r5',
+					landings: [{ at: 'p/g/b', triggers: [], verdicts }]
+				}
+			]
 		});
-		const card = shifted.rail.find((placed) => placed.rule.id === 'one/p/r1')!.box;
-		expect(card.y).toBe(expanded.rail[0].box.y + 20);
-		const landing = shifted.landings.find((each) => each.rule === 'one/p/r1')!;
-		expect(landing.start).toEqual({ x: card.x + card.width / 2, y: card.y });
-		const target = shifted.steps.find((each) => each.path === landing.at)!.box;
-		expect(landing.end).toEqual({ x: target.x + target.width / 2, y: target.y + target.height });
+		const listed = (verdicts: Judged[]) =>
+			landed(judged(verdicts), 'p/g/b').map((each) => [each.rule.id, each.applied]);
+		expect(listed([{ verdict: 'honoured', p: 1 }])).toEqual([
+			['one/p/r1', true],
+			['two/q/r5', false]
+		]);
+		expect(
+			listed([
+				{ verdict: 'applied', p: 0.25 },
+				{ verdict: 'held', p: 0.75 }
+			])
+		).toEqual([
+			['one/p/r1', true],
+			['two/q/r5', true]
+		]);
+		expect(listed([])).toEqual([
+			['one/p/r1', true],
+			['two/q/r5', false]
+		]);
+		expect(landed(program, 'p/d')).toEqual([]);
 	});
 });
 
