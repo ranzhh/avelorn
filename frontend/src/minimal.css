@@ -261,6 +261,9 @@ svg {
 	touch-action: none;
 	user-select: none;
 }
+.surface svg.inbound {
+	outline: 2px dashed var(--accent);
+}
 .surface svg * {
 	vector-effect: non-scaling-stroke;
 }
@@ -366,6 +369,15 @@ svg {
 .surface .edge:hover .grip {
 	fill: var(--accent);
 	fill-opacity: 0.6;
+}
+.carried {
+	position: absolute;
+	top: -100px;
+	display: grid;
+	place-items: center;
+	background: rgb(57 117 184 / 0.2);
+	border: 1px solid var(--series-1);
+	font-size: var(--text-xs);
 }
 
 .pane {
