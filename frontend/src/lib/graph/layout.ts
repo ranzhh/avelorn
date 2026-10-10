@@ -34,10 +34,11 @@ export interface PlacedStep {
 	box: Box;
 }
 
-/** What one side's steps in a block read, one glimpse after another. */
+/** What one side's steps in a block end on, and every reading they took on the way. */
 export interface Summary {
 	side: string;
 	text: string;
+	every: string;
 }
 
 export interface PlacedBlock {
@@ -214,28 +215,32 @@ export function startsFolded(block: Block): boolean {
 	return block.kind !== 'body' && block.collapsed;
 }
 
-function glimpse(reading: Reading): string {
-	if (!('outcomes' in reading)) return `${reading.label} ${reading.value}`;
-	const values = reading.outcomes.map((outcome) => outcome.value);
-	if (!values.length) return '';
-	const first = values[0];
-	const last = values[values.length - 1];
-	return `${reading.label} ${first === last ? first : `${first}–${last}`}`;
+/** One caption for what parts side by side end on: under one label, their expected values add up. */
+function added(readings: Reading[]): string {
+	const { label } = readings[0];
+	const means = readings.map((each) => ('outcomes' in each ? expected(each) : null));
+	const numbers = means.filter((mean) => mean !== null);
+	if (numbers.length < readings.length || readings.some((each) => each.label !== label)) {
+		return readings.map((each) => caption([each])).join(' + ');
+	}
+	return `${label} · ${total(numbers).toFixed(1)}`;
 }
 
-function summaryOf(paths: string[], program: Program): Summary[] {
-	const held = new Set(paths);
-	const steps = program.nodes.filter((node) => held.has(node.path));
-	return program.sides
-		.map((side) => ({
-			side,
-			text: steps
+/** For each side, what a group's last stage ends on, summed over its parts, and every reading taken. */
+function summaryOf(group: Group, sides: string[]): Summary[] {
+	return sides.flatMap((side) => {
+		const read = (item: Item) =>
+			stepsIn(item)
 				.filter((step) => step.side === side)
-				.flatMap((step) => step.edge.readings.map(glimpse))
-				.filter(Boolean)
-				.join(' · ')
-		}))
-		.filter((summary) => summary.text);
+				.flatMap((step) => step.edge.readings);
+		const every = group.items.flatMap(read);
+		if (!every.length) return [];
+		const last = stages(group.items, sides).findLast((run) =>
+			run.some((item) => read(item).length)
+		);
+		const ends = last!.map((item) => read(item).at(-1)).filter((each) => each !== undefined);
+		return [{ side, text: added(ends), every: every.map((each) => caption([each])).join(', ') }];
+	});
 }
 
 function multiplierOf(block: Block, program: Program): Reading[] {
@@ -243,8 +248,8 @@ function multiplierOf(block: Block, program: Program): Reading[] {
 	return program.nodes.find((node) => node.path === block.times)?.edge.readings ?? [];
 }
 
-function stepPaths(item: Item): string[] {
-	return item.kind === 'step' ? [item.node.path] : item.items.flatMap(stepPaths);
+function stepsIn(item: Item): Node[] {
+	return item.kind === 'step' ? [item.node] : item.items.flatMap(stepsIn);
 }
 
 function pathsIn(item: Item): string[] {
@@ -553,15 +558,14 @@ export function layout(program: Program, collapsed: string[], metrics = METRICS)
 			steps.push({ path, node: cell.item.node, box });
 			continue;
 		}
-		const held = stepPaths(cell.item);
 		placed.push({
 			path,
 			block: cell.item.block,
 			box,
 			collapsed: !open(cell.item),
 			multiplier: multiplierOf(cell.item.block, program),
-			summary: summaryOf(held, program),
-			steps: held
+			summary: summaryOf(cell.item, program.sides),
+			steps: stepsIn(cell.item).map((step) => step.path)
 		});
 	}
 

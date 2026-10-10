@@ -181,7 +181,9 @@
 								<h3 title={printed(last(each.path))}>{printed(last(each.path))}</h3>
 							</header>
 							{#each each.summary as line (line.side)}
-								<span class="line {tint(line.side)}" title={line.text}>{line.text}</span>
+								<span class="line {tint(line.side)}" title="{line.side} {line.text}"
+									><span>{line.side}</span><b>{line.text}</b></span
+								>
 							{/each}
 						</div>
 					{:else}
@@ -326,7 +328,7 @@
 			{#if block.summary.length}
 				<h2>readings</h2>
 				{#each block.summary as line (line.side)}
-					<p class="line {tint(line.side)}">{line.text}</p>
+					<p class="line {tint(line.side)}">{line.side}: {line.every}</p>
 				{/each}
 			{/if}
 			{#if block.block.kind === 'repeat'}
@@ -529,14 +531,30 @@
 	}
 	.line {
 		display: block;
-		padding-left: 0.3rem;
+		padding-left: 0.25rem;
 		overflow: hidden;
 		color: var(--dim);
 		white-space: nowrap;
 		text-overflow: ellipsis;
 		font:
-			0.7rem ui-monospace,
+			0.66rem ui-monospace,
 			monospace;
+	}
+	.line b {
+		color: var(--ink);
+	}
+	.card .line {
+		display: flex;
+		gap: 0.4em;
+	}
+	.card .line > * {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.card .line b {
+		flex-shrink: 0;
+		max-width: 100%;
 	}
 	.line.side-0 {
 		border-left: 2px solid #3677b8;

@@ -279,8 +279,8 @@ describe('layout', () => {
 		expect(node.collapsed).toBe(true);
 		expect(node.box.width).toBe(expanded.steps[0].box.width);
 		expect(node.summary).toEqual([
-			{ side: 'one', text: 'x 0–2' },
-			{ side: 'two', text: 'y 0–2' }
+			{ side: 'one', text: 'x · 1.0', every: 'x · 1.0' },
+			{ side: 'two', text: 'y · 1.0', every: 'y · 1.0' }
 		]);
 		expect(collapsed.width).toBeLessThan(expanded.width);
 	});
@@ -293,31 +293,23 @@ describe('layout', () => {
 		const drawn = layout(semantic, [GROUP]);
 		expect(drawn.steps.map((step) => step.path)).not.toContain('p/g/b');
 		expect(drawn.blocks.find((block) => block.path === GROUP)?.summary).toEqual([
-			{ side: 'one', text: 'x 0–2' },
-			{ side: 'two', text: 'y 0–2' }
+			{ side: 'one', text: 'x · 1.0', every: 'x · 1.0' },
+			{ side: 'two', text: 'y · 1.0', every: 'y · 1.0' }
 		]);
 	});
 
-	it('sums up a folded group one side to a line, keeping every reading', () => {
-		const relabelled = (side: string) => ({
+	it('sums up a folded group by the reading each side ends on, keeping every reading', () => {
+		const onSide = (side: string) => ({
 			...program,
-			nodes: program.nodes.map((node) =>
-				node.path === 'p/g/c'
-					? {
-							...node,
-							side,
-							edge: { readings: node.edge.readings.map((each) => ({ ...each, label: 'x' })) }
-						}
-					: node
-			)
+			nodes: program.nodes.map((node) => (node.path === 'p/g/c' ? { ...node, side } : node))
 		});
 		const summed = (side: string) =>
-			layout(relabelled(side), [GROUP]).blocks.find((block) => block.path === GROUP)!.summary;
-		expect(summed('two')).toEqual([
-			{ side: 'one', text: 'x 0–2' },
-			{ side: 'two', text: 'x 0–2' }
+			layout(onSide(side), [GROUP]).blocks.find((block) => block.path === GROUP)!.summary;
+		expect(summed('two').map((line) => [line.side, line.text])).toEqual([
+			['one', 'x · 1.0'],
+			['two', 'y · 1.0']
 		]);
-		expect(summed('one')).toEqual([{ side: 'one', text: 'x 0–2 · x 0–2' }]);
+		expect(summed('one')).toEqual([{ side: 'one', text: 'y · 1.0', every: 'x · 1.0, y · 1.0' }]);
 	});
 
 	it('starts a slot folded and a sequence or repeat as its program prints it', () => {
@@ -423,6 +415,28 @@ describe('columns', () => {
 		].map((path) => box(path).x);
 		xs.slice(1).forEach((x, index) => expect(x).toBeGreaterThan(xs[index] + METRICS.node.width));
 		expect(new Set(drawn.steps.map((step) => step.box.x))).toEqual(new Set(xs));
+	});
+
+	it('adds up what the parts of a folded group end on side by side', () => {
+		const wounds = (mean: number): Reading => ({
+			label: 'wounds',
+			outcomes: [
+				{ value: 0, p: 1 - mean / 2 },
+				{ value: 2, p: mean / 2 }
+			]
+		});
+		const rolled = {
+			...fought,
+			nodes: fought.nodes.map((node) =>
+				node.step === 'wound'
+					? { ...node, edge: { readings: [wounds(node.path.includes('champion') ? 0.5 : 1.5)] } }
+					: node
+			)
+		};
+		const card = layout(rolled, ['r/one/attack']).blocks.find(
+			(block) => block.path === 'r/one/attack'
+		)!;
+		expect(card.summary.map((line) => [line.side, line.text])).toEqual([['one', 'wounds · 2.0']]);
 	});
 
 	it('carries a read past columns on a lane clear of their cards, and ends no output on one', () => {
