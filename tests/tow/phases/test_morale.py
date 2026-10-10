@@ -4,26 +4,14 @@ from fractions import Fraction
 
 import pytest
 
-from avelorn.tow.contingent import Charge, ChargeArc, Contingent, Loadout
+from avelorn.tow.contingent import Contingent, Loadout
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.phases.combat import (
-    CombatResult,
-    SideBreak,
-    break_test,
-    combat_result,
-    fight,
-)
 from avelorn.tow.phases.shooting import ShootingResult, make_panic_tests
 from avelorn.tow.schema.psychology import PanicCause
-from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import RerollEffect, Rule
 from avelorn.tow.schema.stage import Stage
 
 REPO = TOWRepository()
-
-# A fielded body for the Break test, which now reads Leadership and rules off a
-# contingent; Elven Spearmen carry no fixed-outcome rule, so the roll stands.
-SPEARMEN = Contingent.field(REPO.units["elven-spearmen"], 1, data=REPO)
 
 # Elven Spearmen carry Ld 8: a Leadership test passes 26/36.
 P_PASS = float(Fraction(26, 36))
@@ -165,119 +153,3 @@ def test_no_granting_rule_means_no_reroll() -> None:
     panic = make_panic_tests(result, _spearmen())
     assert panic.reroll_from is None
     assert panic.p_holds == pytest.approx(P_PASS)
-
-
-# --- Break test: 2D6 + margin vs Leadership, three outcomes ---
-
-
-def _combat(margin: dict[int, float]) -> CombatResult:
-    # Only the signed margin distribution matters to the break test; the
-    # win/draw/loss summaries are inert scaffolding here.
-    return CombatResult(p_a_wins=0.0, p_draw=0.0, p_b_wins=0.0, margin=margin)
-
-
-def test_break_test_three_outcomes_at_a_fixed_margin() -> None:
-    """B loses by 3 against Ld 8: 2D6 splits Break / Fall Back / Give Ground.
-
-    Break (natural > 8): 9,10,11,12 = 10/36. Fall Back (natural <= 8,
-    natural+3 > 8, i.e. 6,7,8) = 16/36. Give Ground (the rest, incl. the
-    double 1) = 10/36. A is the winner, so it takes no test at all.
-    """
-    result = break_test(_combat({3: 1.0}), SPEARMEN, SPEARMEN)
-    assert result.b.p_breaks == pytest.approx(10 / 36)
-    assert result.b.p_falls_back == pytest.approx(16 / 36)
-    assert result.b.p_gives_ground == pytest.approx(10 / 36)
-    assert result.a == SideBreak(0.0, 0.0, 0.0)  # winner never tests
-    assert result.p_draw == pytest.approx(0.0)
-
-
-def test_break_test_double_one_always_gives_ground() -> None:
-    """Even under a crushing margin, a natural double 1 Gives Ground.
-
-    Margin 100 vs Ld 8: every non-double-1 roll within Leadership would Fall
-    Back, so Give Ground is exactly the 1/36 double 1 — proof the override
-    fires.
-    """
-    result = break_test(_combat({100: 1.0}), SPEARMEN, SPEARMEN)
-    assert result.b.p_gives_ground == pytest.approx(1 / 36)
-    assert result.b.p_breaks == pytest.approx(10 / 36)
-    assert result.b.p_falls_back == pytest.approx(25 / 36)
-
-
-def test_break_test_draw_takes_no_test() -> None:
-    """A drawn combat: neither side tests."""
-    result = break_test(_combat({0: 1.0}), SPEARMEN, SPEARMEN)
-    assert result.p_draw == pytest.approx(1.0)
-    assert result.a == SideBreak(0.0, 0.0, 0.0)
-    assert result.b == SideBreak(0.0, 0.0, 0.0)
-
-
-def test_non_stubborn_unit_rolls_the_ordinary_break_test() -> None:
-    """Without a fixed-outcome rule the split is the rolled one, and no note.
-
-    Guards that the fixed-outcome path is gated on the rule: plain Spearmen
-    losing by 3 (Ld 8) get the same 10/16/10 split as before and no notes.
-    """
-    result = break_test(_combat({-3: 1.0}), SPEARMEN, SPEARMEN)
-    assert result.a.p_breaks == pytest.approx(10 / 36)
-    assert result.a.p_falls_back == pytest.approx(16 / 36)
-    assert result.a.p_gives_ground == pytest.approx(10 / 36)
-    assert result.notes == ()
-
-
-def test_break_test_scores_whichever_side_lost() -> None:
-    """Either side can be the loser; the split is symmetric here.
-
-    A wins by 2 half the time, B wins by 2 the other half (Ld 8 both), so
-    each side's loser-outcomes are identical and each side loses half the
-    time. The six outcome masses and the (zero) draw sum to 1.
-    """
-    result = break_test(_combat({2: 0.5, -2: 0.5}), SPEARMEN, SPEARMEN)
-    assert result.a == result.b
-    a_lost = result.a.p_gives_ground + result.a.p_falls_back + result.a.p_breaks
-    b_lost = result.b.p_gives_ground + result.b.p_falls_back + result.b.p_breaks
-    assert a_lost == pytest.approx(0.5)  # A is the loser half the time
-    assert a_lost + b_lost + result.p_draw == pytest.approx(1.0)
-
-
-def test_shieldwall_gives_ground_where_it_would_fall_back_on_the_turn_it_was_charged() -> None:
-    """The real entry: a charged, shielded wall Gives Ground instead of Falling Back.
-
-    Ironbreakers print Stubborn and Shieldwall both: charged, Stubborn's
-    whole forced Fall Back in Good Order becomes Give Ground, and nothing
-    Breaks. Stripped of Shieldwall — or not charged at all, the wall never
-    forming — Stubborn's Fall Back stands. Both rules' authored caveats are
-    relayed in the notes.
-    """
-    lions = Contingent.deploy("white-lions-of-chrace", 20, data=REPO).wielding(
-        "Chracian Great Blade"
-    )
-    charger = lions.charging(Charge(6, ChargeArc.FRONT))
-    breakers = Contingent.deploy("ironbreakers", 15, data=REPO).wielding("Hand Weapon")
-
-    charged = break_test(
-        combat_result(fight(charger, breakers, first_round=True)), charger, breakers
-    )
-    assert charged.b.p_falls_back == 0
-    assert charged.b.p_breaks == 0
-    assert float(charged.b.p_gives_ground) > 0.5
-    assert any("Shieldwall" in note for note in charged.notes)
-
-    no_wall_unit = REPO.units["ironbreakers"].model_copy(
-        update={
-            "special_rules": [
-                r
-                for r in REPO.units["ironbreakers"].special_rules
-                if r != RuleRef(rule="shieldwall")
-            ]
-        }
-    )
-    no_wall = Contingent.field(no_wall_unit, 15, data=REPO).wielding("Hand Weapon")
-    stripped = break_test(
-        combat_result(fight(charger, no_wall, first_round=True)), charger, no_wall
-    )
-    assert stripped.b.p_gives_ground == 0
-    assert stripped.b.p_falls_back == charged.b.p_gives_ground  # the same mass, unconverted
-
-    standing = break_test(combat_result(fight(lions, breakers)), lions, breakers)
-    assert standing.b.p_gives_ground == 0  # not charged: the wall never forms

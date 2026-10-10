@@ -14,10 +14,8 @@ from avelorn.core.distribution import Distribution, Probability
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.kernels import melee_hit_target, shooting_hit_target, wound_target
-from avelorn.tow.phases.combat import StrikeResult, strike, strike_unit
 from avelorn.tow.phases.shooting import shoot, shoot_unit
-from avelorn.tow.schema.reference import RuleRef
-from avelorn.tow.schema.unit import Characteristic, Unit
+from avelorn.tow.schema.unit import Unit
 
 from .procedure import (
     NO_ARMOUR,
@@ -34,33 +32,14 @@ from .procedure import (
 )
 
 REPO = TOWRepository()
-SHOOTING, COMBAT = Phase.SHOOTING, Phase.COMBAT
-ONES, SUCCESSES = frozenset({ReRoll.ONES}), frozenset({ReRoll.SUCCESSFUL})
+SHOOTING = Phase.SHOOTING
+ONES = frozenset({ReRoll.ONES})
 
 
 def _fielded(unit: str | Unit, models: int, weapon: str | None = None) -> Contingent:
     unit = REPO.units[unit] if isinstance(unit, str) else unit
     contingent = Contingent.field(unit, models, data=REPO)
     return contingent.wielding(weapon) if weapon else contingent
-
-
-def _with(slug: str, *, rule: str | None = None, equipment: str | None = None) -> Unit:
-    unit = REPO.units[slug]
-    return unit.model_copy(
-        update={
-            "special_rules": [*unit.special_rules, *([RuleRef(rule=rule)] if rule else [])],
-            "equipment": [*unit.equipment, *([equipment] if equipment else [])],
-        }
-    )
-
-
-def _ogres() -> Unit:
-    spearmen = REPO.units["elven-spearmen"]
-    ogres = spearmen.model_copy(
-        update={"id": "ogres", "name": "Ogres", "troop_type": "Monstrous Infantry"}, deep=True
-    )
-    ogres.profiles[0].characteristics[Characteristic.WOUNDS] = 3
-    return ogres.with_troop_type(REPO.troop_types)
 
 
 def test_the_charts_match_the_printed_tables() -> None:
@@ -100,46 +79,17 @@ def _legacy_volley(attack: Attack) -> Probability:
     ).p_unsaved
 
 
-def _legacy_strike(attack: Attack) -> Probability:
-    assert attack.foe_weapon_skill is not None
-    armour = None if attack.armour_value == NO_ARMOUR else attack.armour_value
-    return strike(
-        1,
-        attack.skill,
-        attack.foe_weapon_skill,
-        attack.strength,
-        attack.toughness,
-        armour_value=armour,
-        armour_piercing=attack.armour_piercing,
-        ward_target=attack.ward,
-        hit_modifier=attack.hit_modifier,
-    ).p_unsaved
-
-
 @pytest.mark.parametrize(
     "attack",
     [
         pytest.param(Attack(SHOOTING, 4, 3, 3, armour_value=5), id="shoot-golden-chain"),
         pytest.param(Attack(SHOOTING, 4, 3, 3, ward=4), id="shoot-ward-save"),
         pytest.param(Attack(SHOOTING, 5, 1, 7), id="shoot-impossible-wound"),
-        pytest.param(Attack(COMBAT, 4, 4, 4, foe_weapon_skill=4), id="strike-golden-no-save"),
-        pytest.param(
-            Attack(COMBAT, 6, 5, 3, foe_weapon_skill=3, armour_value=5),
-            id="strike-golden-with-armour",
-        ),
-        pytest.param(
-            Attack(COMBAT, 4, 10, 1, foe_weapon_skill=4, hit_modifier=-3),
-            id="strike-hit-penalty-past-the-chart",
-        ),
-        pytest.param(
-            Attack(COMBAT, 6, 6, 2, foe_weapon_skill=2), id="strike-caps-casualties-at-target-size"
-        ),
     ],
 )
 def test_plain_dice_scenarios_match(attack: Attack) -> None:
-    """The legacy tests' shoot() and strike() scenarios, attack by attack."""
-    legacy = _legacy_volley(attack) if attack.phase is SHOOTING else _legacy_strike(attack)
-    assert legacy == one_attack(attack).unsaved
+    """The legacy tests' shoot() scenarios, attack by attack."""
+    assert _legacy_volley(attack) == one_attack(attack).unsaved
 
 
 def test_every_plain_dice_combination_matches() -> None:
@@ -150,11 +100,7 @@ def test_every_plain_dice_combination_matches() -> None:
             range(1, 6), range(-5, 2), [(3, 3), (2, 7), (6, 3)], range(2, 8), [0, -2], [None, 5]
         )
     ]
-    strikes = [
-        Attack(COMBAT, ws, 4, 4, foe_weapon_skill=fws, hit_modifier=hm, armour_value=av)
-        for ws, fws, hm, av in itertools.product(range(1, 11), range(1, 11), [-3, 0, 2], [4, 7])
-    ]
-    pairs = [(a, _legacy_volley(a)) for a in volleys] + [(a, _legacy_strike(a)) for a in strikes]
+    pairs = [(a, _legacy_volley(a)) for a in volleys]
     disputes = [(a, legacy, one_attack(a).unsaved) for a, legacy in pairs]
     assert [dispute for dispute in disputes if dispute[1] != dispute[2]] == []
 
@@ -236,103 +182,6 @@ FIELDED: list[tuple[str, Callable[[], Probability], Attack]] = [
         ),
         Attack(SHOOTING, 4, 3, 3, hit_modifier=-1, armour_value=6, armour_bane=1),
     ),
-    (
-        "spearmen-v-spearmen",
-        lambda: (
-            strike_unit(
-                _fielded("elven-spearmen", 5, "Thrusting Spear"), _fielded("elven-spearmen", 10)
-            ).p_unsaved
-        ),
-        Attack(COMBAT, 4, 3, 3, foe_weapon_skill=4, armour_value=5),
-    ),
-    (
-        "spearmen-v-parrying-spearmen",
-        lambda: (
-            strike_unit(
-                _fielded("elven-spearmen", 5, "Hand Weapon"),
-                _fielded("elven-spearmen", 10, "Hand Weapon"),
-            ).p_unsaved
-        ),
-        Attack(COMBAT, 4, 3, 3, foe_weapon_skill=4, armour_value=4),
-    ),
-    (
-        "sisters-ithilmar-weapons-v-spearmen",
-        lambda: (
-            strike_unit(
-                _fielded("sisters-of-avelorn", 5, "Hand Weapon"), _fielded("elven-spearmen", 10)
-            ).p_unsaved
-        ),
-        Attack(COMBAT, 5, 3, 3, foe_weapon_skill=4, armour_value=5, hit_re_rolls=ONES),
-    ),
-    (
-        "spearmen-v-ironbreakers-gromril-save-re-roll",
-        lambda: (
-            strike_unit(
-                _fielded("elven-spearmen", 5, "Thrusting Spear"),
-                _fielded("ironbreakers", 10, "Hand Weapon"),
-            ).p_unsaved
-        ),
-        Attack(COMBAT, 4, 3, 4, foe_weapon_skill=5, armour_value=3, ward=6, save_re_rolls=ONES),
-    ),
-    (
-        "ironbreakers-v-spearmen",
-        lambda: (
-            strike_unit(
-                _fielded("ironbreakers", 5, "Hand Weapon"),
-                _fielded("elven-spearmen", 10, "Thrusting Spear"),
-            ).p_unsaved
-        ),
-        Attack(COMBAT, 5, 4, 3, foe_weapon_skill=4, armour_value=5, armour_piercing=-1),
-    ),
-    (
-        "daiths-reaper-v-dwarf-warriors",
-        lambda: (
-            strike_unit(
-                _fielded(_with("elven-spearmen", equipment="Daith's Reaper"), 5, "Daith's Reaper"),
-                _fielded("dwarf-warriors", 10, "Hand Weapon"),
-            ).p_unsaved
-        ),
-        Attack(
-            COMBAT,
-            4,
-            4,
-            4,
-            foe_weapon_skill=4,
-            armour_value=5,
-            armour_piercing=-1,
-            save_re_rolls=SUCCESSES,
-        ),
-    ),
-    (
-        "killing-blow-v-spearmen",
-        lambda: (
-            strike_unit(
-                _fielded(_with("elven-spearmen", rule="killing-blow"), 10, "Hand Weapon"),
-                _fielded("elven-spearmen", 10, "Thrusting Spear"),
-            ).p_unsaved
-        ),
-        Attack(COMBAT, 4, 3, 3, foe_weapon_skill=4, armour_value=5, killing_blow=True),
-    ),
-    (
-        "cleaving-blow-v-spearmen",
-        lambda: (
-            strike_unit(
-                _fielded(_with("elven-spearmen", rule="cleaving-blow"), 10, "Hand Weapon"),
-                _fielded("elven-spearmen", 10, "Thrusting Spear"),
-            ).p_unsaved
-        ),
-        Attack(COMBAT, 4, 3, 3, foe_weapon_skill=4, armour_value=5, cleaving_blow=True),
-    ),
-    (
-        "cleaving-blow-v-ogres",
-        lambda: (
-            strike_unit(
-                _fielded(_with("elven-spearmen", rule="cleaving-blow"), 10, "Hand Weapon"),
-                _fielded(_ogres(), 3, "Hand Weapon"),
-            ).p_unsaved
-        ),
-        Attack(COMBAT, 4, 3, 3, foe_weapon_skill=4, armour_value=5),
-    ),
 ]
 
 
@@ -341,51 +190,13 @@ FIELDED: list[tuple[str, Callable[[], Probability], Attack]] = [
     [pytest.param(legacy, attack, id=name) for name, legacy, attack in FIELDED],
 )
 def test_fielded_scenarios_match(legacy: Callable[[], Probability], attack: Attack) -> None:
-    """The legacy tests' data-driven volleys and strikes, attack by attack.
+    """The legacy tests' data-driven volleys, attack by attack.
 
-    BS4 archers' longbow is S3 Armour Bane (1); spearmen are T3 WS4 with light armour
-    and shield, 5+; Ironbreakers are T4 WS5 with full plate and shield, 3+, Gromril
+    BS4 archers' longbow is S3 Armour Bane (1); spearmen are T3 with light armour
+    and shield, 5+; Ironbreakers are T4 with full plate and shield, 3+, Gromril
     Armour and Runes of Protection's 6+ ward against a mundane attack.
     """
     assert legacy() == one_attack(attack).unsaved
-
-
-OGRE_BLOW = Attack(COMBAT, 4, 3, 3, foe_weapon_skill=4, armour_value=5, killing_blow=True)
-
-OGRE_TOLERANCE = 0.007
-
-
-def _killing_blows_into_ogres() -> StrikeResult:
-    killers = _fielded(_with("elven-spearmen", rule="killing-blow"), 10, "Hand Weapon")
-    return strike_unit(killers, _fielded(_ogres(), 3, "Hand Weapon"))
-
-
-def _ogre_casualties(attacks: int, order: Order) -> list[float]:
-    oracle = remove_casualties(
-        attacks,
-        one_attack(OGRE_BLOW),
-        models=3,
-        wounds=3,
-        order=order,
-        trials=trials_for(OGRE_TOLERANCE),
-        seed=1,
-    )
-    return [oracle[k] for k in range(4)]
-
-
-def test_killing_blow_casualties_match_with_kills_applied_first() -> None:
-    """Legacy's implicit damage order is kills-first; the combat program must offer it."""
-    legacy = _killing_blows_into_ogres()
-    assert _ogre_casualties(legacy.attacks, Order.KILLS_FIRST) == pytest.approx(
-        [float(p) for p in legacy.casualties], abs=OGRE_TOLERANCE
-    )
-
-
-def test_the_damage_order_moves_killing_blow_casualties() -> None:
-    """Applied as rolled, a Killing Blow can waste a wounded Ogre's lost Wounds."""
-    legacy = _killing_blows_into_ogres()
-    as_rolled = _ogre_casualties(legacy.attacks, Order.AS_ROLLED)
-    assert abs(as_rolled[1] - float(legacy.casualties[1])) > OGRE_TOLERANCE
 
 
 D3 = {wounds: Fraction(1, 3) for wounds in (1, 2, 3)}

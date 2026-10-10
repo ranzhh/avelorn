@@ -17,7 +17,7 @@ from avelorn.tow.data import TOWRepository
 from avelorn.tow.muster import Complement
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import ModifierEffect
-from avelorn.tow.schema.unit import Characteristic, TroopType, Unit
+from avelorn.tow.schema.unit import TroopType, Unit
 
 REPO = TOWRepository()
 
@@ -461,72 +461,3 @@ def test_frontage_must_be_a_positive_width(spearmen_unit: Unit) -> None:
     """A frontage below one model wide is a programming error, not a zero."""
     with pytest.raises(ValueError, match="at least 1 model wide"):
         _fielded(spearmen_unit, 10, frontage=0)
-
-
-# --- the rank bonus a formation claims ---
-
-
-def test_rank_bonus_counts_ranks_behind_the_first(spearmen_unit: Unit) -> None:
-    """Regular Infantry (5 wide): +1 for each full rank behind the first."""
-    assert _fielded(spearmen_unit, 5).rank_bonus == 0  # one rank
-    assert _fielded(spearmen_unit, 10).rank_bonus == 1  # two ranks
-    assert _fielded(spearmen_unit, 15).rank_bonus == 2  # three ranks
-
-
-def test_rank_bonus_is_capped_by_troop_type(spearmen_unit: Unit) -> None:
-    """Regular Infantry cap the bonus at +2, however deep the unit ranks."""
-    assert _fielded(spearmen_unit, 25).rank_bonus == 2  # five ranks, capped
-
-
-def test_melee_attacks_are_the_fighting_ranks_attacks(spearmen_unit: Unit) -> None:
-    """melee_attacks is the fighting rank times Attacks; depth adds no more.
-
-    Stationary Regular Infantry (A1) fight two ranks: five throw five, ten
-    throw ten, fifteen throw ten as well (the third rank stays out), and a
-    fifteen-wide single rank throws all fifteen.
-    """
-    assert _fielded(spearmen_unit, 5).melee_attacks() == 5  # one rank of five
-    assert _fielded(spearmen_unit, 10).melee_attacks() == 10  # two ranks of five
-    assert _fielded(spearmen_unit, 15).melee_attacks() == 10  # third rank stays out
-    assert _fielded(spearmen_unit, 15, frontage=15).melee_attacks() == 15  # all in one rank
-
-
-def test_melee_attacks_scale_with_the_attacks_characteristic(spearmen_unit: Unit) -> None:
-    """Each fighting model throws its full Attacks: a rank of five at A2 is ten."""
-    two_attacks = spearmen_unit.model_copy(deep=True)
-    two_attacks.profiles[0].characteristics[Characteristic.ATTACKS] = 2
-    assert _fielded(two_attacks, 5).melee_attacks() == 10  # a single rank of five, A2
-
-
-def test_a_rear_rank_counts_only_when_wide_enough(spearmen_unit: Unit) -> None:
-    """Ranked six wide, an incomplete rear rank counts only with five in it."""
-    assert _fielded(spearmen_unit, 10, frontage=6).rank_bonus == 0  # 6 + rear of 4
-    assert _fielded(spearmen_unit, 11, frontage=6).rank_bonus == 1  # 6 + rear of 5
-
-
-def test_a_wider_frontage_trades_ranks_for_width(spearmen_unit: Unit) -> None:
-    """Ranking wider claims fewer ranks: ten models ten wide is a single rank."""
-    assert _fielded(spearmen_unit, 10, frontage=10).rank_bonus == 0
-
-
-def test_a_troop_type_that_does_not_rank_up_claims_no_bonus(spearmen_unit: Unit) -> None:
-    """A single-model troop type claims no bonus, however many models."""
-    monster = spearmen_unit.model_copy(
-        update={"troop_type_profile": REPO.troop_types["monstrous-creature"]}
-    )
-    assert _fielded(monster, 6).rank_bonus == 0
-
-
-def test_unit_strength_sums_one_per_model_for_infantry(spearmen_unit: Unit) -> None:
-    """A Regular Infantry body's Unit Strength is one per model, thinned by losses."""
-    assert _fielded(spearmen_unit, 10).unit_strength() == 10  # US 1 x 10 models
-    assert _fielded(spearmen_unit, 10).remove_casualties(3).unit_strength() == 7
-
-
-def test_unit_strength_of_a_monster_scales_with_its_wounds(spearmen_unit: Unit) -> None:
-    """An "As Starting Wounds" body's Unit Strength is its Wounds times its models."""
-    monster = spearmen_unit.model_copy(
-        deep=True, update={"troop_type_profile": REPO.troop_types["monstrous-creature"]}
-    )
-    monster.profiles[0].characteristics[Characteristic.WOUNDS] = 4
-    assert _fielded(monster, 3).unit_strength() == 12  # 3 models x 4 Wounds each

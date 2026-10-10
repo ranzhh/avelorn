@@ -7,7 +7,6 @@ import pytest
 from avelorn.tow.contingent import Charge, ChargeArc, Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.game import TOWGame
-from avelorn.tow.phases.combat import fight
 from avelorn.tow.phases.movement import StandAndShoot
 from avelorn.tow.phases.shooting import shoot_unit
 from avelorn.tow.schema.phase import Phase
@@ -97,7 +96,7 @@ def test_a_volley_runs_on_the_program_with_the_corpus_rules() -> None:
 
 
 def test_a_round_runs_on_the_program_with_the_corpus_rules() -> None:
-    """Spearmen fight Spearmen at once, as the old engine has them do.
+    """Spearmen fight Spearmen at once.
 
     Neither charged, so it is no first round, and both strike at Initiative 4.
     """
@@ -106,11 +105,9 @@ def test_a_round_runs_on_the_program_with_the_corpus_rules() -> None:
     b = _fielded(spearmen, 5).wielding("Thrusting Spear")
 
     fought = GAME.combat.fight(a, b)
-    legacy = fight(a, b)
 
     assert fought.first_striker is None
-    lost = fought.casualties(Side.TARGET).mass
-    assert [lost.get(count, 0) for count in range(b.models + 1)] == legacy.b_casualties
+    assert (fought.initiative(Side.ATTACKER), fought.initiative(Side.TARGET)) == (4, 4)
 
 
 def test_a_charge_reaction_runs_on_the_program_with_the_corpus_rules() -> None:
@@ -138,8 +135,5 @@ def test_each_phase_declares_the_dice_the_engine_rolls() -> None:
     from avelorn.tow.engine.attack import AttackProfile, AttackRoll
 
     shot = AttackProfile.shooting(hit_target=4, wound_target=4, save_target=4, ward_target=4)
-    blow = AttackProfile.melee(hit_target=4, wound_target=4, save_target=4, ward_target=4)
     attack_steps = tuple(s for s in GAME.shooting.steps if issubclass(s, AttackRoll))
     assert tuple(type(roll) for roll in shot.rolls) == attack_steps
-    attack_steps = tuple(s for s in GAME.combat.steps if issubclass(s, AttackRoll))
-    assert tuple(type(roll) for roll in blow.rolls) == attack_steps

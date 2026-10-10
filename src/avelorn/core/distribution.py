@@ -25,9 +25,7 @@ Naming that gap here rather than guessing at an operator for it.
 Formally this is the discrete probability monad: :meth:`pure` is a point mass,
 :meth:`bind` is the mix, and the two obey the monad laws (checked in the tests).
 Everything the engine passes around as a bare ``list[float]`` count-pmf is
-:meth:`from_counts` of this type; the named count-pmf in
-:mod:`avelorn.tow.query` is a special case (integer outcomes plus predicate
-queries) that this subsumes.
+:meth:`from_counts` of this type.
 """
 
 import operator

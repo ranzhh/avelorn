@@ -12,8 +12,8 @@ from avelorn.core.graph import Decision, Verdict
 from avelorn.tow.changes import Added, Uses
 from avelorn.tow.contingent import ChargeArc, Contingent
 from avelorn.tow.data import TOWRepository
-from avelorn.tow.fielding import SHIELD, Fielding, Held
-from avelorn.tow.kernels import Standing, Standings
+from avelorn.tow.fielding import SHIELD, Fielding, Held, Initiatives
+from avelorn.tow.kernels import Standing, Standings, success
 from avelorn.tow.programs import (
     ROUND,
     STAND_AND_SHOOT,
@@ -23,15 +23,19 @@ from avelorn.tow.programs import (
     load_program,
 )
 from avelorn.tow.schema.effect import Effect, Role
+from avelorn.tow.schema.quantity import Quantity
 from avelorn.tow.schema.rule import Clause, RuleGraph
 from avelorn.tow.schema.stage import Side
 from avelorn.tow.schema.unit import Characteristic
 from avelorn.tow.steps import (
     NO_ROLL,
+    SUPPORTING_ATTACK,
     WEAPON_CHOICE,
     BreakTest,
     Fought,
+    how_many_attacks,
     loser_falls_back_in_good_order,
+    roll_to_hit_in_combat,
     who_is_the_winner,
     who_strikes_first,
 )
@@ -219,6 +223,29 @@ def test_a_fighting_rank_model_that_falls_takes_its_attacks() -> None:
     assert attacks.mass == {2: 1}
 
 
+def test_a_supporting_attack_is_one_whatever_the_model_s_attacks() -> None:
+    """Fifteen Spearmen five wide at Attacks 2: two fighting ranks make 20, a supporting rank 5."""
+    spearmen = _fielded("elven-spearmen", "Thrusting Spear", 15, frontage=5).side
+    (part,) = spearmen.parts
+    standing = spearmen.standing(15)
+    ranks = frozenset({"rank-1", "rank-2", SUPPORTING_ATTACK})
+    doubled = (Added(Characteristic.ATTACKS, 1, of=Side.ATTACKER),)
+
+    (attacks,) = how_many_attacks(
+        spearmen, 4, ranks, Initiatives(((part.id, 4),)), standing, standing, doubled
+    ).mass
+
+    assert attacks.of(part.id) == 25
+
+
+def test_a_combat_hit_pushed_past_6_still_lands_on_a_natural_6() -> None:
+    """Weapon Skill 4 against 4 hits on 4+; at -3 To Hit it needs 7+ and hits on a 6 alone."""
+    spearman = _fielded("elven-spearmen", "Thrusting Spear", 1).side.hit
+    penalised = (Added(Quantity.TO_HIT, -3),)
+
+    assert success(roll_to_hit_in_combat(spearman, spearman, penalised)) == Fraction(1, 6)
+
+
 def test_an_entry_acting_for_the_target_swaps_the_sides() -> None:
     """The target's attack group holds its part as the attacker, and its rules land on its steps.
 
@@ -390,6 +417,18 @@ def test_a_charge_never_takes_initiative_past_10() -> None:
     assert {initiatives.of(part.id) for part in swordmaster.parts} == {10}
 
 
+def test_a_steed_takes_the_charge_bonus_on_its_own_initiative() -> None:
+    """Silver Helms that charged 2" strike at I5 plus 2, and their steeds at I4 plus 2."""
+    helms = _fielded("silver-helms", "Lance", 5, frontage=5).side
+
+    (initiatives,) = who_strikes_first(helms, 2, ChargeArc.FRONT, ()).mass
+
+    assert {part.id: initiatives.of(part.id) for part in helms.fighters} == {
+        "silver-helm": 7,
+        "silver-helm-barded-elven-steed": 6,
+    }
+
+
 @pytest.mark.parametrize(
     ("arc", "points"),
     [
@@ -545,6 +584,40 @@ def test_a_steed_strikes_beside_its_rider_with_its_own_profile() -> None:
     assert fought.lane.verdicts("attacker/silver-helms/armour-bane", saves).mass == {
         Verdict.HONOURED: 1
     }
+
+
+def test_a_steed_strikes_only_for_its_rider_still_standing() -> None:
+    """Ten Silver Helms five wide that lost two this round strike with three riders, three steeds.
+
+    A casualty comes off the fighting rank first, and its steed's blows go with it.
+    """
+    helms = _fielded("silver-helms", "Lance", 10, frontage=5)
+    dwarfs = _fielded("dwarf-warriors", "Hand Weapon", 10, frontage=5)
+
+    fought = _fought(helms, dwarfs, attacker_standing=8, attacker_at_start=10)
+
+    attacks = [
+        fought.at(f"round/initiative-{slot}/attacker/how-many-attacks").read("attacks").mass
+        for slot in (5, 4)
+    ]
+    assert attacks == [{3: 1}, {3: 1}]
+
+
+def test_wounds_on_a_model_carry_from_one_initiative_to_the_next() -> None:
+    """Two Silver Helms fell a lone three-Wound Maneater only with Wounds carried across slots.
+
+    Each rider's lance lands a Wound on 1/3 at I5 (4+, 3+, no save), and each
+    steed on 5/36 at I4 (4+, 5+, beating the 6+ save). Neither slot lands three
+    alone, so the Maneater falls on two then one or more, or one then two:
+    1/9 * 335/1296 + 4/9 * 25/1296 = 145/3888.
+    """
+    helms = _fielded("silver-helms", "Lance", 2, frontage=2)
+    maneater = _fielded("maneaters", "Hand Weapon", 1)
+
+    fought = _fought(helms, maneater, attacker_standing=2)
+
+    standing = fought.at("round/stomp-attacks/target/remove-casualties").read("models")
+    assert standing.mass == {0: Fraction(145, 3888), 1: Fraction(3743, 3888)}
 
 
 def test_a_rule_printed_not_to_reach_mounts_leaves_the_steeds_as_they_are() -> None:
@@ -788,6 +861,22 @@ def test_the_combat_result_scores_only_the_wounds_of_this_round() -> None:
     fought = _fought(spearmen, dwarf, attacker_standing=12, attacker_at_start=12)
 
     assert set(fought.at("round/target/calculate-combat-result").read("score").mass) == {0, 1}
+
+
+def test_the_combat_result_scores_the_wounds_a_standing_model_lost() -> None:
+    """An Elven Spearman scores the Wound it lands on a lone three-Wound Maneater that stands.
+
+    It hits on 4+, wounds Toughness 4 on 5+ and beats light armour's 6+ save on
+    5/6: it scores 1 on 5/36, though no Maneater falls.
+    """
+    spearman = _fielded("elven-spearmen", "Thrusting Spear", 1)
+    maneater = _fielded("maneaters", "Hand Weapon", 1)
+
+    fought = _fought(spearman, maneater)
+
+    standing = fought.at("round/stomp-attacks/target/remove-casualties").read("models")
+    assert standing.mass == {1: 1}
+    assert fought.at(SCORE).read("score").mass == {0: Fraction(31, 36), 1: Fraction(5, 36)}
 
 
 def test_a_side_standing_more_models_than_at_the_start_of_the_round_is_refused() -> None:

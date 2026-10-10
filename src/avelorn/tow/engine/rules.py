@@ -260,10 +260,9 @@ class CompiledRules:
       or honoured them by not applying (a gate answered False).
     - ``inapplicable``: every effect belongs to the *other seat* of this
       walk, so this compile is not the one that owns it. The same rule
-      compiles from its proper seat, so a caller resolving both seats
-      (:func:`~avelorn.tow.phases.combat.fight`) claims it — the other
-      seat's compile has it — while a one-sided caller keeps reporting it,
-      because no seat there consumed it.
+      compiles from its proper seat, so a caller resolving both seats claims
+      it (the other seat's compile has it), while a one-sided caller keeps
+      reporting it, because no seat there consumed it.
     - ``unfactored``: nothing here the walk can honour — the rule is
       unmodelled, effect-less, needs a fact the conditions leave unknown, or
       speaks to another *seam* entirely (a characteristic, a rank depth, a

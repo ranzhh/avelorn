@@ -244,20 +244,6 @@ def hit_probability(target: int) -> Fraction:
     return p
 
 
-def melee_hit_probability(target: int) -> Fraction:
-    """Probability that one close-combat attack hits, given its To Hit target.
-
-    A natural 1 always fails and a natural 6 always hits, with no 7+
-    confirmation (the-combat-phase/roll-to-hit-combat).
-
-    Returns:
-        The hit probability, in [1/6, 5/6], exact.
-    """
-    p = success(d6(target, confirm=Confirm.ALWAYS))
-    logger.debug("melee hit %s -> p=%.3f", _fmt_target(target), p)
-    return p
-
-
 def wound_probability(target: int | None) -> Fraction:
     """Probability that one wound roll succeeds; a natural 1 always fails.
 

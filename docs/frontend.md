@@ -126,7 +126,7 @@ Left to do:
 1. **Army list dock**, absorbing the `/list` route.
 2. **Derivation past the To Hit roll.** #203 does one target of four in one
    phase of two. A melee round reports no ledger; giving it one means threading
-   the same shape through `phases/combat.py`.
+   the same shape through the round program (`round.py`).
 3. **Named situational modifiers.** #205's stepper is deliberately unnamed:
    cover has no entry in the corpus and Large Target has one with no effects,
    so a label would assert a rulebook value nothing here can check. Model those
