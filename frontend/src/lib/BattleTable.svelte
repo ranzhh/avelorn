@@ -125,9 +125,14 @@
 		const out = flight;
 		return moving && out ? ({ ...moving, x: out.x, y: out.y } as Placed) : null;
 	});
+	/** How far the ghost has been carried; a press that has not left the block is a click. */
+	const travelled = $derived(
+		ghost && moving ? Math.hypot(ghost.x - moving.x, ghost.y - moving.y) : 0
+	);
+	const carrying = $derived(travelled > 3 * px);
 	/** The block the ghost is over, if any. */
 	const over = $derived(
-		ghost
+		ghost && carrying
 			? (placed.find((each) => each.id !== ghost.id && separation(ghost, each) === 0) ?? null)
 			: null
 	);
@@ -135,7 +140,7 @@
 	const reading = $derived.by(() => {
 		if (!moving || !ghost) return null;
 		if (over) return `${Math.round(separation(moving, over))}in · ${arc(moving, over)}`;
-		return `${Math.round(Math.hypot(ghost.x - moving.x, ghost.y - moving.y))}in`;
+		return `${Math.round(travelled)}in`;
 	});
 
 	function at(event: PointerEvent) {
@@ -216,8 +221,8 @@
 			// On another block the drop is an action, so the mover stays where it
 			// stands and the menu measures from there. Anywhere else it is a move.
 			if (over) ondrop(moving.id, over.id);
-			else onmove(moving.id, flight.x, flight.y);
-			trace = mark;
+			else if (carrying) onmove(moving.id, flight.x, flight.y);
+			if (carrying) trace = mark;
 		}
 		const wide = widening;
 		if (wide) {
@@ -287,18 +292,16 @@
 		{#if print}
 			{@const size = span(print)}
 			{@const box = bounds(block)}
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<g
 				class="block"
 				class:picked={block.id === picked}
-				class:origin={flight?.id === block.id}
+				class:origin={flight?.id === block.id && carrying}
 				class:under={over?.id === block.id}
+				onpointerdown={(event) => grab(event, block)}
+				ondblclick={() => onedit(block.id)}
 			>
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<g
-					transform="rotate({block.facing} {block.x} {block.y})"
-					onpointerdown={(event) => grab(event, block)}
-					ondblclick={() => onedit(block.id)}
-				>
+				<g transform="rotate({block.facing} {block.x} {block.y})">
 					<rect
 						x={block.x - size.width / 2}
 						y={block.y - size.depth / 2}
@@ -413,7 +416,7 @@
 		</g>
 	{/if}
 
-	{#if ghost && moving}
+	{#if ghost && moving && carrying}
 		{@const print = ghost.block.footprint}
 		{#if print}
 			{@const size = span(print)}

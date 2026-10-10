@@ -258,6 +258,8 @@ svg {
 	display: block;
 	width: 100%;
 	border: 1px solid var(--line);
+	touch-action: none;
+	user-select: none;
 }
 .surface svg * {
 	vector-effect: non-scaling-stroke;
@@ -267,6 +269,9 @@ svg {
 }
 .surface .foot {
 	stroke: #ccc;
+}
+.surface .block {
+	cursor: grab;
 }
 .surface .block rect {
 	fill: #fff;
