@@ -41,6 +41,13 @@
 		};
 	});
 
+	const linked = $derived(
+		battle.asking ??
+			(battle.resolved
+				? { mover: battle.resolved.between[0], target: battle.resolved.between[1] }
+				: null)
+	);
+
 	// Footprints for the panel's drag image, costed once on hover so dragstart
 	// has one to hand: it is synchronous and cannot wait for a round trip.
 	const shapes: Record<string, MusteredUnit> = {};
@@ -269,6 +276,7 @@
 			<BattleTable
 				placed={battle.placed}
 				{picked}
+				{linked}
 				onpick={(id) => (picked = id)}
 				onmove={(id, x, y) => battle.amend(id, { x, y })}
 				onturn={(id, facing) => battle.amend(id, { facing })}
