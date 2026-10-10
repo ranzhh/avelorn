@@ -97,7 +97,7 @@ def read_unit(slug: str, data: Corpus) -> UnitDetail:
 
 
 class Muster(BaseModel):
-    """What a caller asks to field: a datasheet, a model count, and options by name."""
+    """What a caller asks to field: a datasheet, a model count, and options by id."""
 
     model_config = ConfigDict(extra="forbid")
 

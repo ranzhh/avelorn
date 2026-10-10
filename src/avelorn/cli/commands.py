@@ -96,7 +96,7 @@ def show_unit(data: TOWRepository, slug: str) -> list[str]:
     lines.extend(_listing("Special rules", [_named(rule, data) for rule in detail.special_rules]))
     if any(_unapplied(ref, data) for ref in (*detail.equipment, *detail.special_rules)):
         lines.append(_UNAPPLIED)
-    lines.extend(_listing("Options", [_option(option) for option in unit.options]))
+    lines.extend(_listing("Options", _columns([_option(option) for option in unit.options])))
     return lines
 
 
@@ -438,17 +438,17 @@ def _stat(value: int | None) -> str:
     return "-" if value is None else str(value)
 
 
-def _option(option: UnitOption) -> str:
+def _option(option: UnitOption) -> list[str]:
     """One purchasable option, with the cost shape it carries.
 
     Returns:
-        The option's name and price.
+        The option's id, its name and its price.
     """
     if option.points is None:
-        return f"{option.name} (up to {option.points_budget} points of magic items)"
+        return [option.id, option.name, f"up to {option.points_budget} points of magic items"]
     per = "/model" if option.per_model else ""
     plural = "" if option.points == 1 else "s"
-    return f"{option.name} ({option.points} point{plural}{per})"
+    return [option.id, option.name, f"{option.points} point{plural}{per}"]
 
 
 def _listing(heading: str, entries: list[str]) -> list[str]:

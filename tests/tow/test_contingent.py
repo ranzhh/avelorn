@@ -43,7 +43,7 @@ def _fielded(unit: Unit, models: int, frontage: int | None = None) -> Contingent
 
 def test_field_a_complement_carries_size_and_loadout(spearmen_unit: Unit) -> None:
     """Contingent.field carries a complement's size and chosen loadout."""
-    mustered = Complement(unit=spearmen_unit, size=18, options=["Shieldwall"])
+    mustered = Complement(unit=spearmen_unit, size=18, options=["shieldwall"])
 
     contingent = Contingent.field(mustered, data=REPO)
 
@@ -176,7 +176,7 @@ def test_field_resolves_equipment_into_the_loadout(spearmen_unit: Unit) -> None:
 def test_field_resolves_option_granted_equipment() -> None:
     """Equipment added by a chosen option reaches the resolved loadout."""
     archers = REPO.units["elven-archers"]
-    mustered = Complement(unit=archers, size=10, options=["Light Armour"])
+    mustered = Complement(unit=archers, size=10, options=["light-armour"])
     contingent = Contingent.field(mustered, data=REPO)
     assert contingent.loadout is not None
     assert REPO.armoury["light-armour"] in contingent.loadout.armour
@@ -243,7 +243,7 @@ def test_deploy_by_slug_matches_fielding_the_datasheet(spearmen_unit: Unit) -> N
 
 def test_deploy_folds_options_through_the_complement() -> None:
     """Options thread through the Complement: Shieldwall resolves into the loadout."""
-    contingent = Contingent.deploy("elven-spearmen", 10, ["Shieldwall"], data=REPO)
+    contingent = Contingent.deploy("elven-spearmen", 10, ["shieldwall"], data=REPO)
     assert "shieldwall" in [rule.id for rule in contingent.loadout.rules]
 
 
@@ -273,7 +273,7 @@ def test_field_binds_option_granted_rules_beside_the_conferred(spearmen_unit: Un
     """A rule a chosen option adds is the unit's own; the troop type's stay apart."""
     bare = spearmen_unit.model_copy(update={"special_rules": []})
     contingent = Contingent.field(
-        Complement(unit=bare, size=10, options=["Shieldwall"]), data=REPO
+        Complement(unit=bare, size=10, options=["shieldwall"]), data=REPO
     )
     assert [rule.id for rule in contingent.loadout.own] == ["shieldwall"]
     assert [rule.id for rule in contingent.loadout.conferred] == [

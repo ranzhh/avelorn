@@ -56,7 +56,7 @@ class Complement(BaseModel):
     *how many* and *made up of what* — the two things a bare datasheet
     leaves open.
 
-    ``options`` names entries from ``unit.options``; a chosen option's
+    ``options`` picks entries from ``unit.options`` by id; a chosen option's
     ``adds``/``removes`` fold into :attr:`equipment` and :attr:`special_rules`.
     Command and heterogeneous profiles (a champion, an embedded character —
     each its own profile) affect only ``points`` today: the fielded body is
@@ -84,8 +84,8 @@ class Complement(BaseModel):
             raise ValueError(f"size {self.size} exceeds the unit's maximum {allowed.max}")
         if len(set(self.options)) != len(self.options):
             raise ValueError(f"options contains duplicates: {self.options}")
-        available = {option.name for option in self.unit.options}
-        unknown = [name for name in self.options if name not in available]
+        available = {option.id for option in self.unit.options}
+        unknown = [chosen for chosen in self.options if chosen not in available]
         if unknown:
             raise ValueError(f"options not offered by {self.unit.name}: {unknown}")
         # A datasheet may print an option bought for one model ("An Ironbeard
@@ -93,7 +93,7 @@ class Complement(BaseModel):
         # folding it would arm every model instead of the one that bought it:
         # refuse the muster rather than field a loadout that is quietly wrong
         # (#120).
-        scoped = [option.name for option in self._chosen if option.applies_to is not None]
+        scoped = [option.id for option in self._chosen if option.applies_to is not None]
         if scoped:
             raise ValueError(
                 f"options attach to a single model, which is not modelled yet: {scoped}"
@@ -105,7 +105,7 @@ class Complement(BaseModel):
         # The chosen options in the datasheet's own order, so points and the
         # loadout folds are deterministic however `options` happened to be written.
         picked = set(self.options)
-        return [option for option in self.unit.options if option.name in picked]
+        return [option for option in self.unit.options if option.id in picked]
 
     @property
     def points(self) -> int:

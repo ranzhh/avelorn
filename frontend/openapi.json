@@ -897,6 +897,26 @@
         "title": "ChargedBy",
         "description": "A charge into the round: who made it, how far it carried, which arc it struck."
       },
+      "ChosenOption": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "ChosenOption",
+        "description": "An option a block bought: the id a request picks it by, and its printed name."
+      },
       "Comparison": {
         "properties": {
           "is": {
@@ -1906,7 +1926,7 @@
           "size"
         ],
         "title": "Muster",
-        "description": "What a caller asks to field: a datasheet, a model count, and options by name."
+        "description": "What a caller asks to field: a datasheet, a model count, and options by id."
       },
       "MusteredUnit": {
         "properties": {
@@ -1924,7 +1944,7 @@
           },
           "options": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/ChosenOption"
             },
             "type": "array",
             "title": "Options"
@@ -1979,7 +1999,7 @@
           "footprint"
         ],
         "title": "MusteredUnit",
-        "description": "A block of an army list: a datasheet sized and equipped, and what it costs.\n\nThe view over :class:`~avelorn.tow.muster.Complement`. It carries the\ndatasheet by slug rather than whole, because a list is read as a list --\na caller wanting the profiles follows ``unit`` to the datasheet route.\n``equipment`` and ``special_rules`` are the effective ones, the chosen\noptions' adds and removes already folded in, so a block says what the\nmodels actually carry rather than what the datasheet offered. ``weapons``\nnarrows the equipment to the weapons among it, each saying whether it can\nbe used in close combat -- what a caller naming a weapon chooses from.\n``footprint`` is the table space the block takes, at the frontage asked for\nor the datasheet's default, which a caller drawing it needs and cannot\nderive from a slug."
+        "description": "A block of an army list: a datasheet sized and equipped, and what it costs.\n\nThe view over :class:`~avelorn.tow.muster.Complement`. It carries the\ndatasheet by slug rather than whole, because a list is read as a list --\na caller wanting the profiles follows ``unit`` to the datasheet route.\n``equipment`` and ``special_rules`` are the effective ones, the chosen\noptions' adds and removes already folded in, so a block says what the\nmodels actually carry rather than what the datasheet offered. ``weapons``\nnarrows the equipment to the weapons among it, each saying whether it can\nbe used in close combat -- what a caller naming a weapon chooses from.\n``options`` are the ones bought, in the datasheet's order. ``footprint`` is\nthe table space the block takes, at the frontage asked for or the\ndatasheet's default, which a caller drawing it needs and cannot derive\nfrom a slug."
       },
       "Operation": {
         "type": "string",
@@ -2007,6 +2027,10 @@
           "name": {
             "type": "string",
             "title": "Name"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id"
           },
           "kind": {
             "$ref": "#/components/schemas/OptionKind",
@@ -2110,12 +2134,13 @@
         "type": "object",
         "required": [
           "name",
+          "id",
           "scope",
           "adds_rules",
           "removes_rules"
         ],
         "title": "OptionDetail",
-        "description": "One option, the rules it adds and removes resolved."
+        "description": "One option, carrying its id and the rules it adds and removes resolved."
       },
       "OptionKind": {
         "type": "string",

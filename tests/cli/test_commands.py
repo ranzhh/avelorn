@@ -1,5 +1,6 @@
 """The CLI's commands: what each one reads out of the real corpus under data/."""
 
+import re
 import shutil
 from pathlib import Path
 
@@ -28,12 +29,13 @@ def test_show_prints_every_profile_row() -> None:
 
 
 def test_show_prints_what_the_datasheet_offers() -> None:
-    """Equipment, rules, and the options with the cost shape each carries."""
+    """Equipment, rules, and the options by id, with the cost shape each carries."""
     printed = "\n".join(commands.show_unit(REPO, "white-lions-of-chrace"))
     assert "Chracian Great Blade" in printed
     assert "Lion Cloak" in printed
-    assert "Veteran (1 point/model)" in printed
-    assert "Magic standard (up to 50 points of magic items)" in printed
+    rows = [re.split(r"\s{2,}", line.strip()) for line in printed.splitlines()]
+    assert ["veteran", "Veteran", "1 point/model"] in rows
+    assert ["magic-standard", "Magic standard", "up to 50 points of magic items"] in rows
 
 
 def test_show_marks_the_rules_the_engine_does_not_apply() -> None:

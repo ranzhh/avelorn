@@ -13,7 +13,7 @@ from collections.abc import Iterable
 import yaml
 
 from avelorn.tow.schema.armour import Armour
-from avelorn.tow.schema.reference import RuleRef
+from avelorn.tow.schema.reference import RuleRef, slugified
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.unit import Characteristic, Profile, Unit, UnitOption
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile
@@ -175,7 +175,10 @@ def _option_row(option: UnitOption) -> dict:
     # Written key by key to keep the printed reading order rather than the
     # model's; a drift guard in the tests fails if a field is added to
     # UnitOption and not written here.
-    row: dict = {"name": option.name, "kind": option.kind.value, "scope": option.scope.value}
+    row: dict = {"name": option.name}
+    if option.id != slugified(option.name):
+        row["id"] = option.id
+    row |= {"kind": option.kind.value, "scope": option.scope.value}
     if option.profile is not None:
         row["profile"] = option.profile
     if option.applies_to is not None:

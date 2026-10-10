@@ -69,7 +69,7 @@ def _evaluated(
 
 
 def test_a_side_carries_the_rules_of_the_profile_it_shoots_with() -> None:
-    maneaters = Contingent.deploy("maneaters", 2, ["Brace of Ogre Pistols"], data=REPO)
+    maneaters = Contingent.deploy("maneaters", 2, ["brace-of-ogre-pistols"], data=REPO)
     fielded = Fielding.of(maneaters, "Brace of Ogre Pistols")
     ranged = Source(Carrier.WEAPON, "brace-of-ogre-pistols", "Ranged")
 

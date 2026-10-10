@@ -31,19 +31,23 @@ def test_a_block_costs_its_models(client: TestClient) -> None:
 
 
 def test_a_block_costs_the_options_it_buys(client: TestClient) -> None:
-    """A flat option once, a per-model option once per model."""
+    """A flat option once, a per-model option once per model, each named as printed."""
     body = client.post(
         "/muster",
-        json={"unit": "elven-spearmen", "size": 10, "options": ["Shieldwall", "Veteran"]},
+        json={"unit": "elven-spearmen", "size": 10, "options": ["veteran", "shieldwall"]},
     ).json()
     assert body["points"] == 80 + 10 + 10
+    assert body["options"] == [
+        {"id": "shieldwall", "name": "Shieldwall"},
+        {"id": "veteran", "name": "Veteran"},
+    ]
 
 
 def test_a_block_carries_the_loadout_its_options_fold_in(client: TestClient) -> None:
     """Ellyrian Reavers swap the spear for the shortbow, and the block says so."""
     body = client.post(
         "/muster",
-        json={"unit": "ellyrian-reavers", "size": 5, "options": ["Shortbows"]},
+        json={"unit": "ellyrian-reavers", "size": 5, "options": ["shortbows"]},
     ).json()
     assert "Shortbow" in body["equipment"]
     assert "Cavalry Spear" not in body["equipment"]
@@ -142,12 +146,12 @@ def test_a_size_the_datasheet_forbids_is_refused_with_the_reason(client: TestCli
 
 
 def test_an_option_the_datasheet_does_not_offer_is_refused(client: TestClient) -> None:
-    """A name no option carries is refused rather than silently dropped."""
+    """An id no option carries is refused rather than silently dropped."""
     response = client.post(
-        "/muster", json={"unit": "elven-spearmen", "size": 5, "options": ["Great Weapon"]}
+        "/muster", json={"unit": "elven-spearmen", "size": 5, "options": ["great-weapon"]}
     )
     assert response.status_code == 422
-    assert "Great Weapon" in response.json()["detail"]
+    assert "great-weapon" in response.json()["detail"]
 
 
 def test_an_unknown_datasheet_is_a_404(client: TestClient) -> None:

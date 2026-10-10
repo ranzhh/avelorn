@@ -3,6 +3,7 @@
 
 	import Muster from '$lib/Muster.svelte';
 	import { entry } from '$lib/corpus';
+	import { readBack, type Saved } from '$lib/saved';
 	import { api, type MusteredUnit } from '$lib/api/client';
 
 	const STORAGE_KEY = 'avelorn:list';
@@ -10,10 +11,12 @@
 	let { data } = $props();
 
 	let blocks = $state<MusteredUnit[]>([]);
+	let dropped = $state('');
 	let adding = $state('');
 	let addingSize = $state(1);
 	let editing = $state<number | null>(null);
 	let refusal = $state('');
+	let loaded = $state(false);
 
 	const total = $derived(blocks.reduce((sum, block) => sum + block.points, 0));
 	const models = $derived(blocks.reduce((sum, block) => sum + block.size, 0));
@@ -23,12 +26,23 @@
 	// API yet, so a reload would otherwise lose it.
 	$effect(() => {
 		const saved = localStorage.getItem(STORAGE_KEY);
-		if (saved) blocks = JSON.parse(saved);
+		readBack(saved ? JSON.parse(saved) : []).then((read) => {
+			blocks = read.blocks;
+			dropped = read.unread.map(described).join('; ');
+			loaded = true;
+		});
 	});
 
 	$effect(() => {
-		localStorage.setItem(STORAGE_KEY, JSON.stringify(blocks));
+		if (loaded) localStorage.setItem(STORAGE_KEY, JSON.stringify(blocks));
 	});
+
+	function described(block: Saved): string {
+		const names = block.options.map((option) =>
+			typeof option === 'string' ? option : option.name
+		);
+		return `${block.name} ×${block.size}${names.length ? ` (${names.join(', ')})` : ''}`;
+	}
 
 	async function muster(unit: string, size: number, options: string[]) {
 		const { data: block, error: refused } = await client().POST('/muster', {
@@ -98,6 +112,12 @@
 	modelled yet.
 </p>
 
+{#if dropped}
+	<p class="refuse">
+		Dropped from the saved list, as no datasheet could be read for them: {dropped}.
+	</p>
+{/if}
+
 <fieldset>
 	<legend>Add a block</legend>
 	<label>
@@ -141,7 +161,7 @@
 				<tr class:editing={editing === at}>
 					<td>{block.name}</td>
 					<td>{block.size}</td>
-					<td class="meta">{block.options.join(', ') || '—'}</td>
+					<td class="meta">{block.options.map((option) => option.name).join(', ') || '—'}</td>
 					<td>{block.points}</td>
 					<td class="row-actions">
 						<button class="link" onclick={() => edit(at)}>
@@ -158,7 +178,7 @@
 								<Muster
 									unit={block.unit}
 									size={block.size}
-									options={block.options}
+									options={block.options.map((option) => option.id)}
 									submitLabel="Save"
 									{refusal}
 									onsubmit={(size, options) => save(at, size, options)}

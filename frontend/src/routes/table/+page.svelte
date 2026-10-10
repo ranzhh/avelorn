@@ -103,7 +103,7 @@
 		return {
 			unit: block.block.unit,
 			size: block.block.size,
-			options: block.block.options,
+			options: block.block.options.map((option) => option.id),
 			weapon: weapon || null,
 			frontage: block.block.footprint?.files ?? null
 		};
@@ -233,7 +233,7 @@
 				body: {
 					unit: block.block.unit,
 					size: block.block.size,
-					options: block.block.options,
+					options: block.block.options.map((option) => option.id),
 					frontage
 				}
 			}
@@ -434,7 +434,7 @@
 				live
 				unit={standing.block.unit}
 				size={standing.block.size}
-				options={standing.block.options}
+				options={standing.block.options.map((option) => option.id)}
 				onsubmit={(size, chosen) => recost(id, size, chosen)}
 			/>
 		{/if}

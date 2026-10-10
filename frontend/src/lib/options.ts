@@ -1,4 +1,4 @@
-import type { UnitOption } from './api/client';
+import type { ChosenOption, UnitOption } from './api/client';
 
 /** What an option costs, as a datasheet prints it. */
 export function cost(option: UnitOption): string {
@@ -8,11 +8,13 @@ export function cost(option: UnitOption): string {
 }
 
 /**
- * Whether a datasheet prints this option's name more than once.
+ * The options a block saved by printed name bought.
  *
- * Dwarf Warriors offer a Veteran champion and a Veteran special rule, and a
- * complement picks options by name, so ticking either buys both.
+ * A block picked by name bought every option printing that name, so a name
+ * Dwarf Warriors print twice reads back as both.
  */
-export function repeated(offered: UnitOption[], name: string): boolean {
-	return offered.filter((option) => option.name === name).length > 1;
+export function byName(offered: UnitOption[], names: string[]): ChosenOption[] {
+	return offered
+		.filter((option) => names.includes(option.name))
+		.map(({ id, name }) => ({ id, name }));
 }
