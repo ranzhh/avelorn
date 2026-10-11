@@ -1,45 +1,29 @@
-import type { FightLanes, LaneUnit, Needed, Strike } from '$lib/api/client';
+import type { FightLanes } from '$lib/api/client';
 import { percent } from '$lib/charts/scale';
+import {
+	LANES,
+	breakFace,
+	chargeFace,
+	mean,
+	pillFace,
+	resultFace,
+	strikeFace,
+	unitFace,
+	volleyFace,
+	type Box,
+	type Face,
+	type Lane,
+	type Measure,
+	type Point
+} from './faces';
 
-/** A lane of the drawing: the charger's above, its target's below. */
-export type Lane = 'attacker' | 'target';
-export const LANES: Lane[] = ['attacker', 'target'];
+export { LANES, type Lane };
 export const other = (lane: Lane): Lane => (lane === 'attacker' ? 'target' : 'attacker');
 
-export type Font = 'title' | 'text' | 'small' | 'mono' | 'chip';
-/** How wide a run of text is drawn in one of the drawing's fonts, in pixels. */
-export type Measure = (text: string, font: Font) => number;
-
-export interface Point {
-	x: number;
-	y: number;
-}
-
-export interface Box extends Point {
-	width: number;
-	height: number;
-}
-
-/** Where text and controls sit inside a card, from its top left corner. */
-export const INSET = 14;
-export const UNIT = {
-	least: 184,
-	chips: 34,
-	chip: 20,
-	gap: 4,
-	glyph: 14,
-	pitch: 17,
-	packed: 15,
-	bottom: 14
-};
-export const STRIKE = { least: 150, inset: 12, header: 26, rule: 92, row: 20 };
 const BATTLEFIELD = { width: 160, height: 140 };
-const CHARGE = { width: 170, height: 76 };
 const REACTION = { width: 170, height: 80 };
 const SHORT = { width: 120, height: 36 };
-const RESULT = { least: 150, height: 128 };
-const BREAK = { width: 190, height: 56 };
-const PILL = { least: 50, height: 26 };
+const BREAK = { width: 190 };
 export const OUTCOME = { width: 200, height: 26, step: 34, inset: 30 };
 const GAP = 40;
 const WIDE = 54;
@@ -88,69 +72,19 @@ export function columns(lanes: Pick<FightLanes, 'volley' | 'strikes' | 'standing
 	return start.attacker || start.target ? [start, ...events] : events;
 }
 
-/** An option the unit bought, or a piece it holds, highlighted. */
-export interface Chip extends Box {
-	text: string;
-	held: boolean;
-}
-
-/** The letter drawn in the square of a command model of each kind. */
-export const MARK: Record<LaneUnit['command'][number]['kind'], string> = {
-	champion: 'C',
-	standard_bearer: 'S',
-	musician: 'M'
-};
-
-export interface Model<T> {
-	file: number;
-	rank: number;
-	command: T | null;
-}
-
-/**
- * A unit's models rank by rank from the front, its command group in the middle
- * of the front rank, and in the middle of the ranks behind where the front is
- * narrower than the group.
- */
-export function formation<T>(size: number, frontage: number, command: T[]): Model<T>[] {
-	return Array.from({ length: size }, (_, index) => {
-		const rank = Math.floor(index / frontage);
-		const file = index % frontage;
-		const group = command.slice(rank * frontage, (rank + 1) * frontage);
-		const first = Math.floor((Math.min(frontage, size - rank * frontage) - group.length) / 2);
-		return { file, rank, command: group[file - first] ?? null };
-	});
-}
-
+/** A node of the drawing; a card drawn from its face wears its lane's colour, the result neither. */
 export type Placed =
 	| {
-			kind: 'unit';
+			kind: 'unit' | 'charge' | 'volley' | 'strike' | 'pill' | 'break';
 			id: string;
 			lane: Lane;
 			box: Box;
-			unit: LaneUnit;
-			chips: Chip[];
-			/** How far below the card's top its formation starts, and the step between two models. */
-			glyph: number;
-			pitch: number;
+			face: Face;
 	  }
+	| { kind: 'result'; id: string; lane: null; box: Box; face: Face }
 	| { kind: 'battlefield'; id: string; box: Box }
-	| { kind: 'charge'; id: string; box: Box }
 	| { kind: 'reaction'; id: string; box: Box }
 	| { kind: 'short'; id: string; box: Box }
-	| { kind: 'volley'; id: string; lane: Lane; box: Box }
-	| {
-			kind: 'strike';
-			id: string;
-			lane: Lane;
-			box: Box;
-			strike: Strike;
-			title: string;
-			rows: [string, string][];
-	  }
-	| { kind: 'pill'; id: string; lane: Lane; box: Box; text: string }
-	| { kind: 'result'; id: string; box: Box }
-	| { kind: 'break'; id: string; lane: Lane; box: Box }
 	| { kind: 'outcome'; id: string; lane: Lane; box: Box; name: string; p: number };
 
 export interface Edge {
@@ -174,83 +108,6 @@ export interface Drawing {
 	nodes: Placed[];
 	edges: Edge[];
 	labels: Label[];
-}
-
-/** A count that is usually whole: whole when it is, else to two places. */
-export function count(value: number): string {
-	const rounded = Math.round(value * 100) / 100;
-	return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
-}
-
-export const mean = (value: number): string => value.toFixed(2);
-
-/** The scores the rolls need, on two lines: To Hit and To Wound, then the saves. */
-export function needs(needed: Needed): [string, string] {
-	const rolls = [
-		needed.hit !== null && `hit ${needed.hit}`,
-		needed.wound && `wound ${needed.wound}`
-	];
-	const saves = [
-		needed.save === '-' ? 'no save' : needed.save && `save ${needed.save}`,
-		needed.ward && needed.ward !== '-' && `ward ${needed.ward}`
-	];
-	const line = (parts: (string | false | null)[]) => parts.filter(Boolean).join('  ');
-	return [line(rolls), line(saves)];
-}
-
-export function partRow(part: Strike['parts'][number]): [string, string] {
-	const many = count(part.models.mean) !== '1' ? ` ×${count(part.models.mean)}` : '';
-	return [`${part.name}${many}`, `${count(part.attacks.mean)} att → ${mean(part.unsaved.mean)}`];
-}
-
-/** Who strikes: a lone part by name, else the unit, with a row for each part. */
-export function striker(strike: Strike, unit: string): { title: string; rows: [string, string][] } {
-	const rows = strike.parts.map(partRow);
-	return rows.length === 1 ? { title: rows[0][0], rows: [] } : { title: unit, rows };
-}
-
-function unitCard(unit: LaneUnit, measure: Measure) {
-	const dims = measure(`${unit.frontage} × ${unit.ranks}`, 'mono');
-	const chipped = [
-		...unit.options.map((option) => ({ text: option.name, held: false })),
-		...unit.held.map((text) => ({ text, held: true }))
-	];
-	const chipWidths = chipped.map(({ text }) => measure(text, 'chip') + 18);
-	const width = Math.max(
-		UNIT.least,
-		2 * INSET + measure(unit.name, 'title') + 12 + measure(`×${unit.size}`, 'mono'),
-		2 * INSET + Math.max(...chipWidths),
-		2 * INSET + unit.frontage * UNIT.packed + 12 + dims
-	);
-	const chips: Chip[] = [];
-	let x = INSET;
-	let y = UNIT.chips;
-	chipped.forEach(({ text, held }, index) => {
-		if (x > INSET && x + chipWidths[index] > width - INSET) {
-			x = INSET;
-			y += UNIT.chip + UNIT.gap;
-		}
-		chips.push({ text, held, x, y, width: chipWidths[index], height: UNIT.chip });
-		x += chipWidths[index] + UNIT.gap;
-	});
-	const pitch = Math.min(UNIT.pitch, Math.floor((width - 2 * INSET - dims - 12) / unit.frontage));
-	const glyph = y + UNIT.chip + UNIT.glyph;
-	const height = glyph + Math.ceil(unit.size / unit.frontage) * pitch + UNIT.bottom;
-	return { width, height, chips, pitch, glyph };
-}
-
-function strikeCard(title: string, lines: string[], rows: [string, string][], measure: Measure) {
-	const pad = 2 * STRIKE.inset;
-	const width = Math.max(
-		STRIKE.least,
-		pad + measure(title, 'title'),
-		...lines.map((line) => pad + measure(line, 'mono')),
-		...rows.map(
-			([name, figures]) => pad + measure(name, 'text') + STRIKE.inset + measure(figures, 'mono')
-		)
-	);
-	const height = rows.length ? STRIKE.rule + rows.length * STRIKE.row + 12 : STRIKE.rule;
-	return { width, height };
 }
 
 function path(points: Point[]): string {
@@ -278,41 +135,30 @@ const centred = (x: number, width: number, y: number, height: number): Box => ({
  * charge that never reaches meets its reaction, and no round is fought.
  */
 export function draw(lanes: FightLanes, measure: Measure): Drawing {
-	const units = {
-		attacker: unitCard(lanes.units.attacker, measure),
-		target: unitCard(lanes.units.target, measure)
-	};
 	const reaches = lanes.charge?.reaches ?? null;
 	const fought = reaches !== 0;
 	const events = columns(fought ? lanes : { ...lanes, strikes: [] });
-	const strikers = lanes.strikes.map((strike) =>
-		striker(strike, lanes.units[strike.side as Lane].name)
-	);
-	const strikeCards = lanes.strikes.map((strike, index) =>
-		strikeCard(strikers[index].title, needs(strike.needed), strikers[index].rows, measure)
-	);
-	const volleyCard =
-		lanes.volley && strikeCard(lanes.units.target.name, needs(lanes.volley.needed), [], measure);
-	const pillWidth = (lane: Lane, standing: number) =>
-		Math.max(PILL.least, measure(pillText(lanes, lane, standing), 'mono') + 24);
-	const eventWidth = (lane: Lane, event: Event | null) => {
-		if (!event) return 0;
-		if (event.kind === 'volley') return volleyCard!.width;
-		if (event.kind === 'strike') return strikeCards[event.strike].width;
-		return pillWidth(lane, event.standing);
+	const unitWidth = Math.max(...LANES.map((lane) => unitFace(lanes.units[lane], measure).width));
+	const units = {
+		attacker: unitFace(lanes.units.attacker, measure, unitWidth),
+		target: unitFace(lanes.units.target, measure, unitWidth)
 	};
-	const { result: scored } = lanes;
-	const shares = [scored.attacker_wins, scored.draw, scored.target_wins];
-	const resultWidth = Math.max(
-		RESULT.least,
-		...LANES.map(
-			(lane) =>
-				3 * STRIKE.inset +
-				measure(lanes.units[lane].name, 'text') +
-				measure(mean(scored.scores[lane].score.mean), 'mono')
-		),
-		2 * STRIKE.inset + 3 * (18 + Math.max(...shares.map((p) => measure(percent(p), 'mono'))))
+	const volleyCard = lanes.volley && volleyFace(lanes.volley, lanes.units.target.name, measure);
+	const strikeCards = lanes.strikes.map((strike) =>
+		strikeFace(strike, lanes.units[strike.side as Lane].name, measure)
 	);
+	const eventFace = (lane: Lane, event: Event): Face => {
+		if (event.kind === 'volley') return volleyCard!;
+		if (event.kind === 'strike') return strikeCards[event.strike];
+		return pillFace(
+			lanes.standing[lane][event.standing].models.mean,
+			event.standing === 0,
+			measure
+		);
+	};
+	const eventWidth = (lane: Lane, event: Event | null) =>
+		event ? eventFace(lane, event).width : 0;
+	const resultCard = resultFace(lanes, measure);
 	const breakWidth = Math.max(BREAK.width, OUTCOME.inset + OUTCOME.width);
 
 	const tall = (lane: Lane) =>
@@ -320,9 +166,7 @@ export function draw(lanes: FightLanes, measure: Measure): Drawing {
 			units[lane].height,
 			...events.map((column) => {
 				const event = column[lane];
-				if (event?.kind === 'strike') return strikeCards[event.strike].height;
-				if (event?.kind === 'volley') return volleyCard!.height;
-				return 0;
+				return event && event.kind !== 'pill' ? eventFace(lane, event).height : 0;
 			})
 		);
 	const room = fought ? 3 * OUTCOME.step : 0;
@@ -362,22 +206,12 @@ export function draw(lanes: FightLanes, measure: Measure): Drawing {
 		return x;
 	};
 
-	const unitWidth = Math.max(units.attacker.width, units.target.width);
 	const unitX = column(unitWidth, 'units');
 	const stations: Record<Lane, Box[]> = { attacker: [], target: [] };
 	for (const lane of LANES) {
-		const card = units[lane];
-		const box = centred(unitX + unitWidth / 2, unitWidth, track(lane), card.height);
-		nodes.push({
-			kind: 'unit',
-			id: `unit:${lane}`,
-			lane,
-			box,
-			unit: lanes.units[lane],
-			chips: card.chips,
-			glyph: card.glyph,
-			pitch: card.pitch
-		});
+		const face = units[lane];
+		const box = centred(unitX + unitWidth / 2, unitWidth, track(lane), face.height);
+		nodes.push({ kind: 'unit', id: `unit:${lane}`, lane, box, face });
 		stations[lane].push(box);
 	}
 
@@ -390,11 +224,12 @@ export function draw(lanes: FightLanes, measure: Measure): Drawing {
 			BATTLEFIELD.height
 		);
 		nodes.push({ kind: 'battlefield', id: 'battlefield', box: field });
-		const chargeX = column(CHARGE.width, 'charge', WIDE) + CHARGE.width / 2;
-		charge = centred(chargeX, CHARGE.width, track('attacker'), CHARGE.height);
+		const face = chargeFace(lanes.charge);
+		const chargeX = column(face.width, 'charge', WIDE) + face.width / 2;
+		charge = centred(chargeX, face.width, track('attacker'), face.height);
 		const reaction = centred(chargeX, REACTION.width, track('target'), REACTION.height);
 		nodes.push(
-			{ kind: 'charge', id: 'charge', box: charge },
+			{ kind: 'charge', id: 'charge', lane: 'attacker', box: charge, face },
 			{ kind: 'reaction', id: 'reaction', box: reaction }
 		);
 		const [a, b] = [stations.attacker[0], stations.target[0]];
@@ -430,35 +265,17 @@ export function draw(lanes: FightLanes, measure: Measure): Drawing {
 		for (const lane of LANES) {
 			const event = each[lane];
 			if (!event) continue;
-			const y = track(lane);
-			if (event.kind === 'pill') {
-				const box = centred(centre, pillWidth(lane, event.standing), y, PILL.height);
-				nodes.push({
-					kind: 'pill',
-					id: `pill:${lane}:${event.standing}`,
-					lane,
-					box,
-					text: pillText(lanes, lane, event.standing)
-				});
-				placed[lane] = box;
-			} else if (event.kind === 'volley') {
-				const box = centred(centre, volleyCard!.width, y, volleyCard!.height);
-				nodes.push({ kind: 'volley', id: 'volley', lane, box });
-				placed[lane] = box;
-			} else {
-				const card = strikeCards[event.strike];
-				const box = centred(centre, card.width, y, card.height);
-				nodes.push({
-					kind: 'strike',
-					id: `strike:${event.strike}`,
-					lane,
-					box,
-					strike: lanes.strikes[event.strike],
-					...strikers[event.strike]
-				});
-				placed[lane] = box;
-			}
-			stations[lane].push(placed[lane]!);
+			const face = eventFace(lane, event);
+			const box = centred(centre, face.width, track(lane), face.height);
+			const id =
+				event.kind === 'pill'
+					? `pill:${lane}:${event.standing}`
+					: event.kind === 'strike'
+						? `strike:${event.strike}`
+						: 'volley';
+			nodes.push({ kind: event.kind, id, lane, box, face });
+			placed[lane] = box;
+			stations[lane].push(box);
 		}
 		for (const lane of LANES) {
 			const event = each[lane];
@@ -500,12 +317,12 @@ export function draw(lanes: FightLanes, measure: Measure): Drawing {
 
 	if (fought) {
 		const result = centred(
-			column(resultWidth, 'combat result', WIDE) + resultWidth / 2,
-			resultWidth,
+			column(resultCard.width, 'combat result', WIDE) + resultCard.width / 2,
+			resultCard.width,
 			between,
-			RESULT.height
+			resultCard.height
 		);
-		nodes.push({ kind: 'result', id: 'result', box: result });
+		nodes.push({ kind: 'result', id: 'result', lane: null, box: result, face: resultCard });
 		const breakX = column(breakWidth, 'break tests');
 		const entry = {
 			attacker: result.y + result.height * 0.3,
@@ -516,13 +333,14 @@ export function draw(lanes: FightLanes, measure: Measure): Drawing {
 			edges.push({
 				d: elbow(right(run.at(-1)!, track(lane)), left(result, entry[lane]), result.x - 20)
 			});
+			const face = breakFace(lanes.breaks[lane]);
 			const test = {
 				x: breakX,
-				y: track(lane) - BREAK.height / 2,
-				width: BREAK.width,
-				height: BREAK.height
+				y: track(lane) - face.height / 2,
+				width: face.width,
+				height: face.height
 			};
-			nodes.push({ kind: 'break', id: `break:${lane}`, lane, box: test });
+			nodes.push({ kind: 'break', id: `break:${lane}`, lane, box: test, face });
 			edges.push({ d: elbow(right(result, entry[lane]), left(test), test.x - 34) });
 			labels.push({
 				x: test.x - 17,
@@ -610,16 +428,6 @@ export function draw(lanes: FightLanes, measure: Measure): Drawing {
 		edges,
 		labels
 	};
-}
-
-/** A lane's models standing: the count it fielded at the start, the mean after. */
-export function pillText(
-	lanes: Pick<FightLanes, 'standing'>,
-	lane: Lane,
-	standing: number
-): string {
-	const models = lanes.standing[lane][standing].models.mean;
-	return standing === 0 ? String(models) : mean(models);
 }
 
 /** One head over each run of columns printed alike: both sides striking at one Initiative. */
