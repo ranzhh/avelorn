@@ -1,0 +1,203 @@
+{
+	"units": {
+		"attacker": {
+			"unit": "dragon-princes",
+			"name": "Dragon Princes",
+			"size": 5,
+			"options": [{ "id": "drakemaster", "name": "Drakemaster" }],
+			"weapon": "Lance",
+			"frontage": 4,
+			"ranks": 2,
+			"command": { "champion": true, "standard": false, "musician": false },
+			"rules": [{ "name": "Elven Reflexes", "side": "attacker", "applied": true }]
+		},
+		"target": {
+			"unit": "elven-archers",
+			"name": "Elven Archers",
+			"size": 10,
+			"options": [],
+			"weapon": "Hand Weapon",
+			"frontage": 5,
+			"ranks": 2,
+			"command": { "champion": false, "standard": false, "musician": false },
+			"rules": [
+				{ "name": "Elven Reflexes", "side": "target", "applied": true },
+				{ "name": "Press of Battle", "side": "target", "applied": true }
+			]
+		}
+	},
+	"battlefield": { "distance": 12, "arc": "front" },
+	"charge": { "distance": 12, "arc": "front", "reaches": null, "rules": [] },
+	"reaction": {
+		"chosen": "stand-and-shoot",
+		"offered": { "hold": true, "stand_and_shoot": true, "flee": false }
+	},
+	"volley": {
+		"shots": 5,
+		"needed": { "hit": "4+", "wound": "4+", "save": "2+ or 3+", "ward": "6+" },
+		"unsaved": 0.23148148148148148,
+		"rules": [
+			{ "name": "Armour Bane (1)", "side": "target", "applied": true },
+			{ "name": "Firing at Long Range", "side": "target", "applied": false },
+			{ "name": "Moving and Shooting", "side": "target", "applied": false },
+			{ "name": "Standing and Shooting", "side": "target", "applied": true },
+			{ "name": "Dragon Armour", "side": "attacker", "applied": true }
+		]
+	},
+	"strikes": [
+		{
+			"slot": "initiative-9",
+			"label": "Initiative 9",
+			"side": "attacker",
+			"attacks": 8.95907191290391,
+			"needed": { "hit": "3+", "wound": "2+", "save": "-", "ward": "-" },
+			"parts": [
+				{
+					"name": "Drakemaster",
+					"models": 0.999999787317751,
+					"attacks": 2.9999993619532526,
+					"unsaved": 1.6666663121962515,
+					"needed": { "hit": "3+", "wound": "2+", "save": "-", "ward": "-" }
+				},
+				{
+					"name": "Dragon Prince",
+					"models": 2.9795362754753287,
+					"attacks": 5.9590725509506575,
+					"unsaved": 3.3105958616392543,
+					"needed": { "hit": "3+", "wound": "2+", "save": "-", "ward": "-" }
+				}
+			],
+			"unsaved": 4.977262173835506,
+			"rules": [
+				{ "name": "Armour Bane (1)", "side": "attacker", "applied": true },
+				{ "name": "Ithilmar Weapons", "side": "attacker", "applied": false },
+				{ "name": "Parry", "side": "target", "applied": false }
+			]
+		},
+		{
+			"slot": "initiative-7",
+			"label": "Initiative 7",
+			"side": "attacker",
+			"attacks": 3.97953606279308,
+			"needed": { "hit": "4+", "wound": "4+", "save": "-", "ward": "-" },
+			"parts": [
+				{
+					"name": "Barded Elven Steed",
+					"models": 3.9795360627930796,
+					"attacks": 3.9795360627930796,
+					"unsaved": 0.9948840156982699,
+					"needed": { "hit": "4+", "wound": "4+", "save": "-", "ward": "-" }
+				}
+			],
+			"unsaved": 0.9948840156982699,
+			"rules": [
+				{ "name": "Armour Bane (1)", "side": "attacker", "applied": false },
+				{ "name": "Ithilmar Weapons", "side": "attacker", "applied": false },
+				{ "name": "Parry", "side": "target", "applied": false }
+			]
+		},
+		{
+			"slot": "initiative-5",
+			"label": "Initiative 5",
+			"side": "target",
+			"attacks": 4.031808954893498,
+			"needed": { "hit": "4+", "wound": "4+", "save": "2+", "ward": "6+" },
+			"parts": [
+				{
+					"name": "Elven Archer",
+					"models": 4.031808954893498,
+					"attacks": 4.031808954893498,
+					"unsaved": 0.1399933664893576,
+					"needed": { "hit": "4+", "wound": "4+", "save": "2+", "ward": "6+" }
+				}
+			],
+			"unsaved": 0.1399933664893576,
+			"rules": [{ "name": "Dragon Armour", "side": "attacker", "applied": true }]
+		}
+	],
+	"standing": {
+		"attacker": [
+			{ "after": null, "models": 5.0, "distribution": [0.0, 0.0, 0.0, 0.0, 0.0, 1.0] },
+			{
+				"after": "volley",
+				"models": 4.768518518518518,
+				"distribution": [
+					2.1268224907304786e-7, 2.190627165452393e-5, 0.0009025383921663859, 0.01859229087862755,
+					0.19150059604986377, 0.7889824557254387
+				]
+			},
+			{
+				"after": "initiative-5",
+				"models": 4.6285276109517905,
+				"distribution": [
+					3.950848605599593e-5, 0.0005029485833176883, 0.005424040811291537, 0.045093493994974795,
+					0.26280394186083456, 0.6861360662635254
+				]
+			}
+		],
+		"target": [
+			{
+				"after": null,
+				"models": 10.0,
+				"distribution": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+			},
+			{
+				"after": "initiative-9",
+				"models": 5.022737826164494,
+				"distribution": [
+					0.0, 0.004942965111219602, 0.035589348800781136, 0.11418960258089222, 0.21428768744633114,
+					0.25923376193882625, 0.20971667946731723, 0.1135076623256383, 0.039661456282640305,
+					0.008125927578452392, 0.0007449084679014454
+				]
+			},
+			{
+				"after": "initiative-7",
+				"models": 4.031808954893498,
+				"distribution": [
+					0.019311812357051424, 0.051631849915415036, 0.11733516028434186, 0.19102962273629776,
+					0.22648532869080823, 0.19633251388158438, 0.12338983029443652, 0.05486066102380535,
+					0.016405805982670035, 0.002970173101159257, 0.00024724173243014555
+				]
+			}
+		]
+	},
+	"result": {
+		"scores": { "attacker": 5.968191045106502, "target": 0.38482985888405813 },
+		"attacker_wins": 0.9880784875599805,
+		"draw": 0.006543817394581051,
+		"target_wins": 0.005377695045438389,
+		"rules": [{ "name": "Massed Infantry", "side": "target", "applied": true }]
+	},
+	"breaks": {
+		"attacker": {
+			"taken": 0.005338186559382394,
+			"leadership": "9",
+			"margin": 5.583361186222444,
+			"give_ground": 0.003590057095462766,
+			"fall_back_in_good_order": 0.0006930089734097632,
+			"break": 0.0010551204905098644,
+			"rules": []
+		},
+		"target": {
+			"taken": 0.9687666752029291,
+			"leadership": "8",
+			"margin": -5.583361186222444,
+			"give_ground": 0.09505775965648623,
+			"fall_back_in_good_order": 0.25037918737049236,
+			"break": 0.6233297281759506,
+			"rules": []
+		}
+	},
+	"not_modelled": [
+		"Close Order",
+		"Counter Charge",
+		"Detachment",
+		"Drilled",
+		"First Charge",
+		"Impetuous",
+		"Ithilmar Barding",
+		"Sons of Caledor",
+		"Swiftstride",
+		"Valour of Ages"
+	]
+}

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import type { FightLanes, Strike } from '$lib/api/client';
-import { columns, formation } from './layout';
+import princes from './fixtures/princes-charge-archers.json';
+import { columns, draw, formation, type Drawing, type Measure } from './layout';
 
 const strike = (slot: string, side: 'attacker' | 'target') =>
 	({ slot, label: slot, side }) as Strike;
@@ -90,5 +91,48 @@ describe('a formation', () => {
 			['musician', null],
 			[null]
 		]);
+	});
+});
+
+describe('a charge drawn by the chance it reaches', () => {
+	const measure: Measure = (text) => text.length * 7;
+	const drawn = (reaches: number) =>
+		draw({ ...princes, charge: { ...princes.charge, reaches } } as FightLanes, measure);
+	const kinds = (drawing: Drawing) => drawing.nodes.map((node) => node.kind).sort();
+	const texts = (drawing: Drawing) => drawing.labels.map((label) => label.text);
+
+	it('leaves out the Falls short branch of a charge sure to reach', () => {
+		const sure = drawn(1);
+		const likely = drawn(0.75);
+
+		expect(kinds(sure)).toEqual(kinds(likely).filter((kind) => kind !== 'short'));
+		expect(sure.edges).toHaveLength(likely.edges.length - 1);
+		expect(texts(sure)).toContain('reaches 100%');
+		expect(texts(sure).filter((text) => text.startsWith('falls short'))).toEqual([]);
+	});
+
+	it('ends a charge that never reaches on its Stand & Shoot', () => {
+		const never = drawn(0);
+
+		expect(kinds(never)).toEqual(
+			[
+				'unit',
+				'unit',
+				'battlefield',
+				'charge',
+				'reaction',
+				'short',
+				'volley',
+				'pill',
+				'pill'
+			].sort()
+		);
+		expect(never.heads.map((head) => head.text)).toEqual([
+			'units',
+			'battlefield',
+			'charge',
+			'Stand & Shoot'
+		]);
+		expect(texts(never).sort()).toEqual(['falls short 100%', '−0.23']);
 	});
 });
