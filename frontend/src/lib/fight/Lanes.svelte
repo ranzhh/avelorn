@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
 	import { percent } from '$lib/charts/scale';
 	import type { ChargeArc, FightBody, FightLanes } from '$lib/api/client';
 	import Card from './Card.svelte';
@@ -11,15 +12,18 @@
 		lanes: FightLanes;
 		/** The charge as last asked for, which the battlefield's inputs show while a redraw is on its way. */
 		charge: NonNullable<FightBody['charge']> | null;
-		selected: string | null;
-		/** A node picked, and the side of the drawing away from it, where a panel would not cover it. */
-		onselect: (id: string | null, away?: 'left' | 'right') => void;
-		/** A unit double-clicked: open its editor. */
-		onopen: (lane: Lane) => void;
+		/** The node showing its whole face, if any. */
+		open: string | null;
+		/** The unit edited in place, if any, and the controls that edit it. */
+		editing: Lane | null;
+		editor: Snippet<[Lane]>;
+		ontoggle: (id: string) => void;
+		/** A unit double-clicked: edit it. */
+		onedit: (lane: Lane) => void;
 		oncharge: (change: { full_inches?: number; arc?: ChargeArc; reaction?: Reacting }) => void;
 	}
 
-	let { lanes, charge, selected, onselect, onopen, oncharge }: Props = $props();
+	let { lanes, charge, open, editing, editor, ontoggle, onedit, oncharge }: Props = $props();
 
 	const FONTS: Record<Font, string> = {
 		title: '600 13px system-ui, sans-serif',
@@ -34,10 +38,13 @@
 		return Math.ceil(context.measureText(text).width);
 	};
 
-	const drawing = $derived(draw(lanes, measure));
+	let editorHeight = $state(160);
+	const drawing = $derived(
+		draw(lanes, measure, open, editing && { lane: editing, height: editorHeight })
+	);
 
 	$effect(() => {
-		if (selected && !drawing.nodes.some((node) => node.id === selected)) onselect(null);
+		if (open && !drawing.nodes.some((node) => node.id === open)) ontoggle(open);
 	});
 	const ARCS: ChargeArc[] = ['front', 'flank', 'rear'];
 	const REACTIONS = [
@@ -46,15 +53,16 @@
 		{ offered: 'flee', value: null, text: 'Flee', name: 'Flee' }
 	] as const;
 
-	function pick(node: Placed) {
-		const centre = node.box.x + node.box.width / 2;
-		onselect(node.id, centre > drawing.width / 2 ? 'left' : 'right');
+	function click(event: MouseEvent, node: Placed) {
+		if (event.detail > 1 || (event.target as Element).closest('foreignObject')) return;
+		ontoggle(node.id);
 	}
 
 	function key(event: KeyboardEvent, node: Placed) {
+		if (event.target !== event.currentTarget) return;
 		if (event.key !== 'Enter' && event.key !== ' ') return;
 		event.preventDefault();
-		pick(node);
+		ontoggle(node.id);
 	}
 
 	function inches(event: Event & { currentTarget: HTMLInputElement }) {
@@ -113,15 +121,22 @@
 		{@const { x, y, width, height } = node.box}
 		<g
 			class="node {node.kind} {'lane' in node ? node.lane : ''}"
-			class:on={selected === node.id}
+			class:on={open === node.id}
 			role="button"
 			tabindex="0"
-			onclick={(event) => !(event.target as Element).closest('foreignObject') && pick(node)}
-			ondblclick={() => node.kind === 'unit' && onopen(node.lane)}
+			aria-expanded={open === node.id}
+			onclick={(event) => click(event, node)}
+			ondblclick={() => node.kind === 'unit' && onedit(node.lane)}
 			onkeydown={(event) => key(event, node)}
 		>
 			{#if 'face' in node}
-				<Card face={node.face} box={node.box} tone={node.lane} open={selected === node.id} />
+				<Card face={node.face} box={node.box} tone={node.lane} open={open === node.id} />
+				{#if node.kind === 'unit' && node.face.slot}
+					{@const slot = node.face.slot}
+					<foreignObject x={x + slot.x} y={y + slot.y} width={slot.width} height={slot.height}>
+						<div class="editor" bind:offsetHeight={editorHeight}>{@render editor(node.lane)}</div>
+					</foreignObject>
+				{/if}
 			{:else if node.kind === 'battlefield' && charge}
 				<rect class="card" {x} {y} {width} {height} rx="8" />
 				<text class="title" x={x + 12} y={y + 23}>Battlefield</text>
@@ -310,6 +325,11 @@
 	}
 	.inches input {
 		width: 5rem;
+	}
+	.editor {
+		display: grid;
+		gap: var(--space-2);
+		cursor: auto;
 	}
 	.segments {
 		display: flex;

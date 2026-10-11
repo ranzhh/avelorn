@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { FightLanes, Strike } from '$lib/api/client';
 import princes from './fixtures/princes-charge-archers.json';
-import { formation, type Measure } from './faces';
+import { formation, type Box, type Measure } from './faces';
 import { columns, draw, type Drawing } from './layout';
 
 const strike = (slot: string, side: 'attacker' | 'target') =>
@@ -183,5 +183,48 @@ describe('a charge drawn by the chance it reaches', () => {
 			'Stand & Shoot'
 		]);
 		expect(texts(never).sort()).toEqual(['falls short 100%', '−0.23']);
+	});
+});
+
+describe('a fight drawn with one node open', () => {
+	const measure: Measure = (text) => text.length * 7;
+	const lanes = { ...princes, charge: { ...princes.charge, reaches: 0.75 } } as FightLanes;
+	const ids = [...new Set(draw(lanes, measure).nodes.map((node) => node.id))];
+	const overlap = (one: Box, two: Box) =>
+		one.x < two.x + two.width &&
+		two.x < one.x + one.width &&
+		one.y < two.y + two.height &&
+		two.y < one.y + one.height;
+
+	it.each(ids)('makes room for %s, every card and label clear of the others', (id) => {
+		const drawing = draw(lanes, measure, id);
+		const boxes = drawing.nodes.map((node) => node.box);
+		const labels = drawing.labels.map((label): Box => {
+			const width = measure(label.text, 'mono');
+			const shift = { start: 0, middle: width / 2, end: width }[label.anchor];
+			return { x: label.x - shift, y: label.y - 9, width, height: 12 };
+		});
+		const clashes = boxes.flatMap((one, index) =>
+			[...boxes.slice(index + 1), ...labels]
+				.filter((two) => overlap(one, two))
+				.map((two) => [one, two])
+		);
+
+		expect(clashes).toEqual([]);
+		expect(Math.min(...boxes.map((box) => box.y))).toBeGreaterThan(46);
+		expect(Math.max(...boxes.map((box) => box.y + box.height))).toBeLessThan(drawing.height);
+	});
+
+	it('makes room inside a unit edited in place for its editor, clear of every other card', () => {
+		const drawing = draw(lanes, measure, 'unit:target', { lane: 'target', height: 300 });
+		const edited = drawing.nodes.find((node) => node.id === 'unit:target');
+		if (edited?.kind !== 'unit' || !edited.face.slot) throw new Error('the target has no room');
+		const { slot } = edited.face;
+
+		expect(slot.height).toBe(300);
+		expect(slot.y + slot.height).toBeLessThan(edited.box.height);
+		expect(
+			drawing.nodes.filter((node) => node !== edited && overlap(node.box, edited.box))
+		).toEqual([]);
 	});
 });
