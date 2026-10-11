@@ -92,6 +92,51 @@ describe('a formation', () => {
 			[null]
 		]);
 	});
+
+	it('keeps room for a letter in each square of a ten-wide formation', () => {
+		const target = { ...princes.units.target, size: 30, frontage: 10, ranks: 3 };
+		const lanes = {
+			...princes,
+			charge: { ...princes.charge, reaches: 1 },
+			units: { ...princes.units, target }
+		} as FightLanes;
+		const card = draw(lanes, (text) => text.length * 7).nodes.find(
+			(node) => node.kind === 'unit' && node.lane === 'target'
+		);
+		if (card?.kind !== 'unit') throw new Error('the target has no card');
+
+		expect(card.pitch - 3).toBe(12);
+	});
+});
+
+describe('the chips on a unit card', () => {
+	const measure: Measure = (text) => text.length * 7;
+	const chips = (options: string[], held: string[]) => {
+		const target = {
+			...princes.units.target,
+			options: options.map((name) => ({ id: name, name })),
+			held
+		};
+		const lanes = {
+			...princes,
+			charge: { ...princes.charge, reaches: 1 },
+			units: { ...princes.units, target }
+		} as FightLanes;
+		const card = draw(lanes, measure).nodes.find(
+			(node) => node.kind === 'unit' && node.lane === 'target'
+		);
+		if (card?.kind !== 'unit') throw new Error('the target has no card');
+		return card.chips.map(({ text, held }) => [text, held]);
+	};
+
+	it('greys every option and highlights each piece held, one an option among them', () => {
+		expect(chips(['Great Weapon', 'Shield', 'Veteran'], ['Great Weapon'])).toEqual([
+			['Great Weapon', false],
+			['Shield', false],
+			['Veteran', false],
+			['Great Weapon', true]
+		]);
+	});
 });
 
 describe('a charge drawn by the chance it reaches', () => {

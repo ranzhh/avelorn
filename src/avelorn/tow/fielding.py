@@ -20,13 +20,18 @@ SHIELD = "shield"
 class Held(frozenset[str]):
     """What a model fights with in hand, by slug: a weapon, and the shield when it uses one."""
 
+    @property
+    def slugs(self) -> tuple[str, ...]:
+        """The slugs, the weapon first and the shield last."""
+        return tuple(sorted(self, key=lambda slug: (slug == SHIELD, slug)))
+
     def __str__(self) -> str:
         """The slugs joined by ``+``, the weapon first.
 
         Returns:
             The slugs, sorted with the shield last.
         """
-        return "+".join(sorted(self, key=lambda slug: (slug == SHIELD, slug)))
+        return "+".join(self.slugs)
 
 
 @dataclass(frozen=True, eq=False)

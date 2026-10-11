@@ -982,28 +982,28 @@
       },
       "Command": {
         "properties": {
-          "champion": {
-            "type": "boolean",
-            "title": "Champion"
+          "kind": {
+            "type": "string",
+            "enum": [
+              "champion",
+              "standard_bearer",
+              "musician"
+            ],
+            "title": "Kind"
           },
-          "standard": {
-            "type": "boolean",
-            "title": "Standard"
-          },
-          "musician": {
-            "type": "boolean",
-            "title": "Musician"
+          "name": {
+            "type": "string",
+            "title": "Name"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "champion",
-          "standard",
-          "musician"
+          "kind",
+          "name"
         ],
         "title": "Command",
-        "description": "The command models a unit bought."
+        "description": "A command model a unit bought, by its kind and its printed name."
       },
       "Comparison": {
         "properties": {
@@ -2212,9 +2212,12 @@
             "type": "array",
             "title": "Options"
           },
-          "weapon": {
-            "type": "string",
-            "title": "Weapon"
+          "held": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Held"
           },
           "frontage": {
             "type": "integer",
@@ -2225,7 +2228,11 @@
             "title": "Ranks"
           },
           "command": {
-            "$ref": "#/components/schemas/Command"
+            "items": {
+              "$ref": "#/components/schemas/Command"
+            },
+            "type": "array",
+            "title": "Command"
           },
           "rules": {
             "items": {
@@ -2242,14 +2249,14 @@
           "name",
           "size",
           "options",
-          "weapon",
+          "held",
           "frontage",
           "ranks",
           "command",
           "rules"
         ],
         "title": "LaneUnit",
-        "description": "A unit as it is fielded: ``frontage`` files wide and ``ranks`` deep.\n\n``options`` are the ones it bought, and ``command`` the command models among\nthem, which stand in its front rank. ``rules`` land on the steps it takes\nbefore anyone strikes: its weapon choice, Who Can Fight, Who Strikes First."
+        "description": "A unit as it is fielded: ``frontage`` files wide and ``ranks`` deep.\n\n``options`` are the ones it bought besides its command models, which\n``command`` gives and which stand in its front rank. ``held`` names what it\ntook up at its weapon choice: the weapon in hand, and the shield when it\nuses one. ``rules`` land on the steps it takes before anyone strikes: its\nweapon choice, Who Can Fight, Who Strikes First."
       },
       "LaneVolley": {
         "properties": {

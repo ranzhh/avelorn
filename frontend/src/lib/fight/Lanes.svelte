@@ -3,9 +3,9 @@
 	import type { ChargeArc, FightBody, FightLanes } from '$lib/api/client';
 	import {
 		INSET,
+		MARK,
 		OUTCOME,
 		STRIKE,
-		commanded,
 		count,
 		draw,
 		formation,
@@ -144,27 +144,38 @@
 				{#each node.chips as chip}
 					<rect
 						class="chip"
+						class:held={chip.held}
 						x={x + chip.x}
 						y={y + chip.y}
 						width={chip.width}
 						height={chip.height}
 						rx="10"
 					/>
-					<text class="chip-text" x={x + chip.x + chip.width / 2} y={y + chip.y + 14}
-						>{chip.text}</text
+					<text
+						class="chip-text"
+						class:held={chip.held}
+						x={x + chip.x + chip.width / 2}
+						y={y + chip.y + 14}>{chip.text}</text
 					>
 				{/each}
-				{#each formation(unit.size, unit.frontage, commanded(unit)) as model}
+				{#each formation(unit.size, unit.frontage, unit.command) as model}
+					{@const left = x + INSET + model.file * node.pitch}
+					{@const square = top + model.rank * node.pitch}
 					<rect
 						class="model"
 						class:command={model.command}
-						x={x + INSET + model.file * node.pitch}
-						y={top + model.rank * node.pitch}
+						x={left}
+						y={square}
 						width={node.pitch - 3}
 						height={node.pitch - 3}
 					>
-						{#if model.command}<title>{model.command}</title>{/if}
+						{#if model.command}<title>{model.command.name}</title>{/if}
 					</rect>
+					{#if model.command}
+						<text class="mark" x={left + (node.pitch - 3) / 2} y={square + (node.pitch - 3) / 2}
+							>{MARK[model.command.kind]}</text
+						>
+					{/if}
 				{/each}
 				<text class="mono" x={x + width - INSET} y={top + ranks * node.pitch - 5} text-anchor="end"
 					>{unit.frontage} × {unit.ranks}</text
@@ -435,12 +446,12 @@
 		fill: var(--neutral);
 	}
 	.attacker .header,
-	.attacker .chip,
+	.attacker .chip.held,
 	.attacker .fill {
 		fill: var(--attacker-tint);
 	}
 	.target .header,
-	.target .chip,
+	.target .chip.held,
 	.target .fill {
 		fill: var(--target-tint);
 	}
@@ -451,14 +462,33 @@
 		fill: color-mix(in srgb, var(--series-1) 32%, var(--plane));
 	}
 	.chip {
-		stroke: #c9c9c9;
+		fill: var(--sunken);
+		stroke: #d4d4d4;
+	}
+	.attacker .chip.held {
+		stroke: var(--attacker);
+	}
+	.target .chip.held {
+		stroke: var(--target);
 	}
 	.chip-text {
 		font-size: 11px;
 		text-anchor: middle;
+		fill: var(--dim);
+	}
+	.chip-text.held {
+		fill: var(--ink);
 	}
 	.model {
 		stroke-width: 1;
+	}
+	.mark {
+		fill: var(--on-accent);
+		font-size: 10px;
+		font-weight: 600;
+		text-anchor: middle;
+		dominant-baseline: central;
+		pointer-events: none;
 	}
 	.attacker .model {
 		fill: var(--attacker-tint);

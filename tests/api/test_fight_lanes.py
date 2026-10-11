@@ -16,6 +16,28 @@ PRINCES_CHARGE_DWARFS = {
     "b": {"unit": "dwarf-warriors", "size": 10, "options": ["veteran"]},
     "charge": {"side": "a", "full_inches": 7, "arc": "front"},
 }
+PRINCES_CHARGE_ARMED_DWARFS = {
+    "a": {
+        "unit": "dragon-princes",
+        "size": 6,
+        "frontage": 6,
+        "options": ["drakemaster", "standard-bearer", "musician"],
+    },
+    "b": {
+        "unit": "dwarf-warriors",
+        "size": 20,
+        "frontage": 5,
+        "options": [
+            "great-weapon",
+            "shield",
+            "veteran",
+            "standard-bearer",
+            "musician",
+            "veteran-rule",
+        ],
+    },
+    "charge": {"side": "a", "full_inches": 10, "arc": "front"},
+}
 SPEARMEN_CHARGE_ARCHERS = {
     "a": {"unit": "elven-archers", "size": 10, "frontage": 5},
     "b": {"unit": "elven-spearmen", "size": 20, "frontage": 5},
@@ -141,6 +163,76 @@ def test_a_strike_lists_the_parts_that_make_it(client: TestClient) -> None:
     assert [(strike["label"], strike["side"]) for strike in dwarfs] == [("Initiative 2", "target")]
     assert [part["name"] for part in dwarfs[0]["parts"]] == ["Veteran", "Dwarf Warrior"]
     assert dwarfs[0]["needed"] == {"hit": "4+", "wound": "4+", "save": "2+", "ward": "6+"}
+
+
+def test_the_command_models_are_no_options_of_the_lane(client: TestClient) -> None:
+    """Twenty Dwarf Warriors buy gear, a full command group and the Veteran rule.
+
+    The champion, the standard bearer and the musician stand in the front rank
+    instead; the options left are the gear and the rule, which prints the
+    champion's name.
+    """
+    dwarfs = served(client, "/graph/fight", PRINCES_CHARGE_ARMED_DWARFS)["units"]["target"]
+
+    assert [option["name"] for option in dwarfs["options"]] == [
+        "Great Weapon",
+        "Shield",
+        "Veteran",
+    ]
+    assert [model["kind"] for model in dwarfs["command"]] == [
+        "champion",
+        "standard_bearer",
+        "musician",
+    ]
+
+
+def test_each_champion_a_unit_buys_stands_in_its_command(client: TestClient) -> None:
+    """A Ship's Company buys both its champions, the Midshipman and the Bosun.
+
+    Each stands in the front rank by name, beside the standard bearer and the
+    musician.
+    """
+    body = {
+        **PRINCES_CHARGE_DWARFS,
+        "b": {
+            "unit": "ships-company",
+            "size": 20,
+            "frontage": 5,
+            "options": ["bosun", "midshipman", "musician", "standard-bearer"],
+        },
+    }
+    company = served(client, "/graph/fight", body)["units"]["target"]
+
+    assert [(model["kind"], model["name"]) for model in company["command"]] == [
+        ("champion", "Midshipman"),
+        ("champion", "Bosun"),
+        ("standard_bearer", "Standard Bearer"),
+        ("musician", "Musician"),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("options", "held"),
+    [
+        pytest.param(["great-weapon", "shield"], ["Great Weapon"], id="two-hands"),
+        pytest.param(["shield"], ["Hand Weapon", "Shield"], id="hand-weapon-and-shield"),
+    ],
+)
+def test_a_unit_holds_what_its_weapon_choice_took_up(
+    client: TestClient, options: list[str], held: list[str]
+) -> None:
+    """Dwarf Warriors who buy a great weapon swing it, and its Requires Two Hands bars the shield.
+
+    Without one they fight with the datasheet's Hand Weapon and their shield.
+    The Dragon Princes charging them hold their Lance and Shield.
+    """
+    body = {
+        **PRINCES_CHARGE_DWARFS,
+        "b": {"unit": "dwarf-warriors", "size": 10, "options": options},
+    }
+    units = served(client, "/graph/fight", body)["units"]
+
+    assert [units["attacker"]["held"], units["target"]["held"]] == [["Lance", "Shield"], held]
 
 
 def test_a_stand_and_shoot_thins_the_charger(client: TestClient) -> None:
