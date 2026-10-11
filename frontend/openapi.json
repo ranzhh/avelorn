@@ -1208,6 +1208,9 @@
                       "$ref": "#/components/schemas/FactRef"
                     },
                     {
+                      "type": "string"
+                    },
+                    {
                       "$ref": "#/components/schemas/Bounded"
                     }
                   ]
@@ -1463,7 +1466,7 @@
         "additionalProperties": false,
         "type": "object",
         "title": "Effect",
-        "description": "One printed effect.\n\n``of`` names whose characteristic an add or set changes, since a step reads\nthe characteristics of both models at once."
+        "description": "One printed effect.\n\n``of`` names whose characteristic an add or set changes, since a step reads\nthe characteristics of both models at once. An add may add a dice roll,\nkept as its printed text as a dice X is, where the step rolls one."
       },
       "Entry": {
         "type": "string",
@@ -2904,7 +2907,9 @@
           "fighting-ranks",
           "combat-result",
           "armour-value",
-          "ward-save"
+          "ward-save",
+          "charge-roll",
+          "maximum-charge-range"
         ],
         "title": "Quantity",
         "description": "A quantity an effect can change, in the rulebook's own modifier vocabulary.\n\nA closed, append-only enum: a member joins when an imported rule needs it.\nA profile :class:`~avelorn.tow.schema.unit.Characteristic` is the one\nquantity kept apart, a stat vocabulary used far beyond modifiers, so an\noperation's key is a Quantity or a Characteristic."

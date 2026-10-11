@@ -8,3 +8,13 @@ flavour: Mounted warriors, warbeasts and chariots, amongst others, are swift and
 paragraphs:
   - A unit which consists entirely of models with this special rule increases its maximum possible charge range by 3" and,
     before making a Charge, Flee or Pursuit roll, may choose to apply a +D6 modifier to the result.
+# Every fielded part carries its unit's rules, a mount its rider's, so the unit always consists
+# entirely of models with it. Declining the +D6 declines the +3 too, which no roll then reaches.
+may: true
+needs: [characters, flee-and-pursuit-rolls]
+effects:
+  - add: {charge-roll: D6, maximum-charge-range: 3}
+    at: {step: determine-charge-range, by: this-model}
+notes: >-
+  The charge reports the lane in which the +D6 is taken. Flee and Pursuit rolls are not modelled,
+  so the +D6 reaches only the Charge roll.

@@ -12,7 +12,7 @@ from avelorn.tow.changes import Uses
 from avelorn.tow.contingent import Charge, ChargeArc, Contingent, Movement
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.fielding import SHIELD, Fielding, Held
-from avelorn.tow.programs import ROUND, STAND_AND_SHOOT, VOLLEY, Evaluated, load_program
+from avelorn.tow.programs import CHARGE, ROUND, STAND_AND_SHOOT, VOLLEY, Evaluated, load_program
 from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import Rule
@@ -37,6 +37,7 @@ class Kind(StrEnum):
     STRIKE = "strike"
     FIGHT = "fight"
     STAND_AND_SHOOT = "charge-with-stand-and-shoot"
+    CHARGE = "charge"
     PANIC = "panic"
     BREAK = "break"
 
@@ -161,7 +162,8 @@ class Outcome:
     """What a scenario resolved to.
 
     ``margin`` is the attacker's lead in combat result, ``breaks`` each side's
-    Break test as rolled, and ``results`` what each side then does.
+    Break test as rolled, ``results`` what each side then does, and ``reaches``
+    the chance the attacker's Charge roll reaches the defender ``distance`` away.
     """
 
     attacks: int | None = None
@@ -173,6 +175,7 @@ class Outcome:
     breaks: Mapping[Role, Break] = field(default_factory=dict)
     results: Mapping[Role, Break] = field(default_factory=dict)
     panic: Panic | None = None
+    reaches: Probability | None = None
 
 
 def resolve(scenario: Scenario) -> Outcome:
@@ -225,6 +228,21 @@ def resolve(scenario: Scenario) -> Outcome:
                 raise ValueError("a Stand & Shoot answers a charge; the attacker must charge")
             stood = _stood(defender, attacker, scenario)
             return _shot(stood, attacker.models, STAND_AND_SHOOT)
+        case Kind.CHARGE:
+            return Outcome(reaches=_reaches(attacker, defender, scenario))
+
+
+def _reaches(charger: Contingent, target: Contingent, scenario: Scenario) -> Probability:
+    fielded = {
+        AttackSide.ATTACKER: Fielding.of(charger, combat=True),
+        AttackSide.TARGET: Fielding.of(target, combat=True),
+    }
+    rolled = _taken(
+        load_program(CHARGE, _rules(scenario))
+        .built(fielded)
+        .evaluate({"distance": scenario.distance})
+    )
+    return rolled.at("charge/determine-charge-range").read("reaches").mass.get(True, 0)
 
 
 def _stood(shooter: Contingent, charger: Contingent, scenario: Scenario) -> Evaluated:

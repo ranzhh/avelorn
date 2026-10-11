@@ -144,9 +144,6 @@
   subject: steady-in-the-ranks
   reason: Resists Disruption from flank and rear charges; Disruption is not modelled.
 - kind: rule-without-effects
-  subject: swiftstride
-  reason: The +D6 to a Charge roll is a dice amount, which an add cannot take; Flee and Pursuit rolls are not modelled.
-- kind: rule-without-effects
   subject: vanguard
   reason: A move after deployment; deployment is not modelled.
 - kind: rule-without-effects
@@ -281,10 +278,13 @@
   reason: Challenges are not modelled, so Multiple Wounds never counts for Overkill.
 - kind: missing-mechanic
   subject: characters
-  reason: Characters joining units are not modelled, so the clauses of Stubborn and Terror about a joined character have nothing to read.
+  reason: Characters joining units are not modelled, so the clauses of Stubborn and Terror about a joined character have nothing to read, and a Swiftstride unit is never joined by a model without it.
 - kind: missing-mechanic
   subject: facings
   reason: Flank and rear facings are not modelled, so Martial Prowess's supporting attacks to the flank and rear have no combat to land in.
+- kind: missing-mechanic
+  subject: flee-and-pursuit-rolls
+  reason: Flee and Pursuit rolls are not modelled, so Swiftstride's +D6 reaches only the Charge roll.
 - kind: missing-mechanic
   subject: formations
   reason: Formations are not modelled; Shieldwall's Close Order and Press of Battle's Combat Order are not read, and a Skirmish formation keeps its Rank Bonus.

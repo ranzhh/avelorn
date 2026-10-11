@@ -22,6 +22,8 @@ class Quantity(StrEnum):
     COMBAT_RESULT = "combat-result"
     ARMOUR_VALUE = "armour-value"
     WARD_SAVE = "ward-save"
+    CHARGE_ROLL = "charge-roll"
+    MAXIMUM_CHARGE_RANGE = "maximum-charge-range"
 
 
 _DICE_QUANTITY = re.compile(r"^D(?P<sides>[36])(?:\+(?P<plus>\d+))?$")

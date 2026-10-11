@@ -15,6 +15,7 @@ from itertools import combinations
 from typing import Annotated, Literal, Self
 
 from pydantic import (
+    AfterValidator,
     BaseModel,
     ConfigDict,
     Field,
@@ -25,7 +26,7 @@ from pydantic import (
 )
 
 from avelorn.core.graph import Carrier
-from avelorn.tow.schema.quantity import Quantity
+from avelorn.tow.schema.quantity import DiceQuantity, Quantity
 from avelorn.tow.schema.reference import RuleRef, Slug
 from avelorn.tow.schema.step import BLOCKS, Step, StepKind, StepSequence
 from avelorn.tow.schema.unit import Characteristic, TroopType
@@ -69,7 +70,14 @@ def _owned(fact: str, of: Role | None) -> None:
         raise ValueError(f"{fact} is a step's output, so of names whose step it is")
 
 
+def _dice(printed: str) -> str:
+    if DiceQuantity.parse(printed) is None:
+        raise ValueError(f"{printed!r} is no dice roll, as D6, D3 or D3+1 print one")
+    return printed
+
+
 Amount = StrictInt | Literal["X"] | FactRef
+Addend = Amount | Annotated[StrictStr, AfterValidator(_dice)]
 Value = StrictBool | StrictInt | StrictStr | FactRef
 
 
@@ -401,14 +409,15 @@ class Effect(BaseModel):
     """One printed effect.
 
     ``of`` names whose characteristic an add or set changes, since a step reads
-    the characteristics of both models at once.
+    the characteristics of both models at once. An add may add a dice roll,
+    kept as its printed text as a dice X is, where the step rolls one.
     """
 
     model_config = _STRICT
 
     when: When | None = None
     unless: Unless | None = None
-    add: Annotated[dict[Key, Amount | Bounded], Field(min_length=1)] | None = None
+    add: Annotated[dict[Key, Addend | Bounded], Field(min_length=1)] | None = None
     set_: Annotated[dict[Key, Amount], Field(min_length=1)] | None = Field(
         default=None, alias="set"
     )
@@ -444,7 +453,7 @@ class Effect(BaseModel):
         return frozenset({*(self.add or {}), *(self.set_ or {})})
 
     @property
-    def amounts(self) -> tuple[Amount, ...]:
+    def amounts(self) -> tuple[Addend, ...]:
         """Every amount the operation reads."""
         written = [
             *(self.add or {}).values(),
@@ -456,6 +465,15 @@ class Effect(BaseModel):
             amount.amount if isinstance(amount, Bounded) else amount
             for amount in written
             if amount is not None
+        )
+
+    @property
+    def rolled(self) -> frozenset[Key]:
+        """The quantities an add adds a dice roll to."""
+        return frozenset(
+            key
+            for key, amount in (self.add or {}).items()
+            if isinstance(amount, str) and amount != "X"
         )
 
     @property
