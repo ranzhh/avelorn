@@ -8,6 +8,7 @@ swings with three. Receiving wins the combat more often than delivering it.
 
 from avelorn.tow.contingent import Charge, ChargeArc
 from avelorn.tow.game import TOWGame
+from avelorn.tow.schema.side import Side
 from avelorn.tow.steps import Fought
 
 
@@ -20,7 +21,7 @@ def main() -> None:
     receivers = game.field(spearmen, 20).wielding("Thrusting Spear")
     engagement = game.movement.charge(chargers, receivers, Charge(8, ChargeArc.FRONT))
     engagement.react()  # Hold — Spearmen carry no missile weapon to Stand & Shoot with
-    fought = game.combat.fight(engagement).fought.mass
+    fought = game.combat.fight(engagement).fought(Side.ATTACKER).mass
     won, drawn, lost = (fought.get(each, 0) for each in (Fought.WON, Fought.DRAWN, Fought.LOST))
 
     total = won + drawn + lost

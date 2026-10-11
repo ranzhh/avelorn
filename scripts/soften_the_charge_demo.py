@@ -14,6 +14,7 @@ from avelorn.core.distribution import Distribution, Probability
 from avelorn.tow.contingent import Charge, ChargeArc
 from avelorn.tow.game import TOWGame
 from avelorn.tow.phases.movement import StandAndShoot
+from avelorn.tow.schema.side import Side as Seat
 from avelorn.tow.schema.unit import Characteristic, Unit
 from avelorn.tow.steps import Fought
 
@@ -48,7 +49,7 @@ def win(game: TOWGame, defender: Unit, charging: int) -> Distribution[Side]:
         engagement = movement.charge(lions, unit, Charge(10, ChargeArc.FRONT))
         engagement.react(StandAndShoot())
     with turn.combat() as combat:
-        return combat.fight(engagement).fought.map(_WINNER.__getitem__)
+        return combat.fight(engagement).fought(Seat.ATTACKER).map(_WINNER.__getitem__)
 
 
 def win_if_shot(game: TOWGame, defender: Unit):
