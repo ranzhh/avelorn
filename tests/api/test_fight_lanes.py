@@ -2,6 +2,7 @@
 
 from collections.abc import Iterator
 from fractions import Fraction
+from itertools import product
 from math import comb, sqrt
 
 import pytest
@@ -120,6 +121,30 @@ def test_the_charge_reaches_on_the_higher_of_two_dice(
     lanes = served(client, "/graph/fight", body)
 
     assert [report["p_charge_reaches"], lanes["charge"]["reaches"]] == [float(reaches)] * 2
+
+
+def test_swiftstride_rolls_a_third_die_up_to_its_longer_maximum(client: TestClient) -> None:
+    """Five Dragon Princes on steeds of Movement 8 charge Dwarf Warriors from 12in.
+
+    The range is the Movement plus the higher of two D6 and Swiftstride's D6,
+    up to the maximum possible charge range: Movement 8, 6, and Swiftstride's
+    3, 17in, which the dice reach.
+    """
+    charge = served(client, "/graph/fight", PRINCES_CHARGE_DWARFS_FROM_AFAR)["charge"]
+
+    rolled: dict[int, Fraction] = {}
+    for first, second, swift in product(range(1, 7), repeat=3):
+        inches = 8 + min(max(first, second) + swift, 6 + 3)
+        rolled[inches] = rolled.get(inches, Fraction(0)) + Fraction(1, 6**3)
+    assert charge["range"]["distribution"] == pytest.approx(
+        [float(rolled.get(inches, 0)) for inches in range(18)]
+    )
+    assert [(term["name"], term["inches"]) for term in charge["maximum"]] == [
+        ("Movement", 8),
+        (None, 6),
+        ("Swiftstride", 3),
+    ]
+    assert charge["furthest"] == 17
 
 
 @pytest.mark.parametrize("body", [PRINCES_CHARGE_DWARFS, SPEARMEN_CHARGE_ARCHERS])

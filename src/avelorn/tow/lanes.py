@@ -121,12 +121,27 @@ class Battlefield(_Drawn):
     arc: ChargeArc
 
 
+class Term(_Drawn):
+    """One term of a sum of inches, and its name: a characteristic's, a rule's, or none."""
+
+    name: str | None
+    inches: int
+
+
 class LaneCharge(_Drawn):
-    """The charge, and the chance its Charge roll reaches the target ``distance`` away."""
+    """The charge, the range its Charge roll gives, and the chance it reaches the target.
+
+    The target stands ``distance`` away. ``maximum`` is the maximum possible
+    charge range term by term, and ``furthest`` the furthest the dice reach
+    within it.
+    """
 
     distance: int
     arc: ChargeArc
     reaches: float
+    range: Spread
+    maximum: list[Term]
+    furthest: int
     rules: list[LandedRule]
 
 
@@ -338,6 +353,11 @@ def _rows(fighters: Iterable[Part], made: Distribution[Any]) -> dict[str, list[s
     return rows
 
 
+def _named(evaluated: Evaluated, side: Side) -> dict[str, str]:
+    nodes = evaluated.lane.program.rules.values()
+    return {node.rule: node.name for node in nodes if node.holder.side == side}
+
+
 def _landed(evaluated: Evaluated, steps: Iterable[Step[Any]]) -> list[LandedRule]:
     lane = evaluated.lane
     on = set(steps)
@@ -384,10 +404,21 @@ def _holding(fight: Fight, contingent: Contingent, side: Side) -> list[str]:
 
 def _charge(fight: Fight, rolled: ChargeRoll) -> LaneCharge:
     roll = rolled.evaluated
+    determined = _at(roll, "determine-charge-range")
+    ranged = determined.read("range")
+    (maximum,) = determined.read("maximum").mass
+    named = _named(roll, Side.ATTACKER)
     return LaneCharge(
         distance=rolled.move.full_inches,
         arc=rolled.move.arc,
         reaches=float(rolled.reaches),
+        range=Spread.of(ranged),
+        maximum=[
+            Term(name="Movement", inches=maximum.movement),
+            Term(name=None, inches=maximum.printed),
+            *(Term(name=named[rule], inches=inches) for rule, inches in maximum.added),
+        ],
+        furthest=max(inches for inches, p in ranged.mass.items() if p),
         rules=[
             *_landed(roll, roll.lane.program.steps),
             *_rules(fight, "attacker/the-charge-move"),

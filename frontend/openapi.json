@@ -2149,6 +2149,20 @@
             "type": "number",
             "title": "Reaches"
           },
+          "range": {
+            "$ref": "#/components/schemas/Spread"
+          },
+          "maximum": {
+            "items": {
+              "$ref": "#/components/schemas/Term"
+            },
+            "type": "array",
+            "title": "Maximum"
+          },
+          "furthest": {
+            "type": "integer",
+            "title": "Furthest"
+          },
           "rules": {
             "items": {
               "$ref": "#/components/schemas/LandedRule"
@@ -2163,10 +2177,13 @@
           "distance",
           "arc",
           "reaches",
+          "range",
+          "maximum",
+          "furthest",
           "rules"
         ],
         "title": "LaneCharge",
-        "description": "The charge, and the chance its Charge roll reaches the target ``distance`` away."
+        "description": "The charge, the range its Charge roll gives, and the chance it reaches the target.\n\nThe target stands ``distance`` away. ``maximum`` is the maximum possible\ncharge range term by term, and ``furthest`` the furthest the dice reach\nwithin it."
       },
       "LaneReaction": {
         "properties": {
@@ -3510,6 +3527,33 @@
         ],
         "title": "StrikePart",
         "description": "The models of one profile row striking: how many, their attacks and unsaved wounds."
+      },
+      "Term": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "inches": {
+            "type": "integer",
+            "title": "Inches"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "inches"
+        ],
+        "title": "Term",
+        "description": "One term of a sum of inches, and its name: a characteristic's, a rule's, or none."
       },
       "TroopType": {
         "type": "string",

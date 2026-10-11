@@ -34,13 +34,14 @@ _ORDERS = {
 
 @dataclass(frozen=True)
 class Added:
-    """An amount added to a quantity, a number or a dice roll, within its printed bounds.
+    """An amount ``rule`` adds to a quantity, a number or a dice roll, within its printed bounds.
 
-    ``of`` names the side whose model's characteristic it moves, as the step's
-    spec names the sides; a quantity has none. It never moves a part of a role
-    ``not_on`` names.
+    ``rule`` is the slug of the rule that adds it. ``of`` names the side whose
+    model's characteristic it moves, as the step's spec names the sides; a
+    quantity has none. It never moves a part of a role ``not_on`` names.
     """
 
+    rule: str
     key: Changeable
     amount: int | DiceQuantity
     maximum: int | None = None
@@ -136,15 +137,26 @@ class Payloads:
 
         Returns:
             The sum, 0 when nothing is added.
+        """
+        return sum(amount for _, amount in self.by_rule(key, of, role))
+
+    def by_rule(
+        self, key: Changeable, of: Side | None = None, role: ProfileRole | None = None
+    ) -> tuple[tuple[str, int], ...]:
+        """Read each number added to ``key`` with the rule adding it, as :meth:`added` reads them.
+
+        Returns:
+            Each rule's slug and its number, in the order written.
 
         Raises:
             TypeError: a dice roll is added, which only :meth:`amounts` reads.
         """
-        amounts = self.amounts(key, of, role)
-        numbers = [amount for amount in amounts if isinstance(amount, int)]
-        if len(numbers) < len(amounts):
-            raise TypeError(f"a dice roll is added to {key}, which the step sums as numbers")
-        return sum(numbers)
+        numbers = []
+        for each in self._adds(key, of, role):
+            if not isinstance(each.amount, int):
+                raise TypeError(f"a dice roll is added to {key}, which the step sums as numbers")
+            numbers.append((each.rule, each.amount))
+        return tuple(numbers)
 
     def amounts(
         self, key: Changeable, of: Side | None = None, role: ProfileRole | None = None
@@ -636,10 +648,20 @@ class Operated:
                 if isinstance(written, Bounded):
                     amount = self.amount(written.amount, sources)
                     return Added(
-                        self.key, amount, written.maximum, written.minimum, self.of, self.not_on
+                        self.rule,
+                        self.key,
+                        amount,
+                        written.maximum,
+                        written.minimum,
+                        self.of,
+                        self.not_on,
                     )
                 return Added(
-                    self.key, self.quantity(written, sources), of=self.of, not_on=self.not_on
+                    self.rule,
+                    self.key,
+                    self.quantity(written, sources),
+                    of=self.of,
+                    not_on=self.not_on,
                 )
             case Operation.SET if effect.set_ is not None and self.key is not None:
                 value = self.amount(effect.set_[self.key], sources)
@@ -719,7 +741,7 @@ class Operated:
             The text.
         """
         match payload:
-            case Added(key, amount, maximum, minimum, _, _):
+            case Added(_, key, amount, maximum, minimum, _, _):
                 bounds = "".join(
                     f", {name} {bound}"
                     for name, bound in (("at most", maximum), ("at least", minimum))

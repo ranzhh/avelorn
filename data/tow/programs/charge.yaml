@@ -4,4 +4,4 @@ fielded: [attacker, target]
 inputs:
   - {known: distance, type: int}
 items:
-  - {step: determine-charge-range, readings: [reaches]}
+  - {step: determine-charge-range, readings: [reaches, range, maximum]}

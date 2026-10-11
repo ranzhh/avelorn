@@ -122,6 +122,32 @@ class Retreat(StrEnum):
     DESTROYED = "destroyed"
 
 
+@dataclass(frozen=True)
+class MaximumChargeRange:
+    """A charger's maximum possible charge range: its Movement, 6, and what each rule adds.
+
+    ``added`` gives each rule's slug and the inches it adds.
+    """
+
+    movement: int
+    added: tuple[tuple[str, int], ...]
+    printed: ClassVar[int] = 6
+
+    @property
+    def roll(self) -> int:
+        """The highest charge roll that counts toward it."""
+        return self.printed + sum(inches for _, inches in self.added)
+
+    def __str__(self) -> str:
+        """Each term, as text.
+
+        Returns:
+            The terms joined by "+".
+        """
+        added = (f"{rule} {inches}" for rule, inches in self.added)
+        return " + ".join((str(self.movement), str(self.printed), *added))
+
+
 class Kind(StrEnum):
     """Step kind."""
 
@@ -970,17 +996,19 @@ def determine_charge_range(charger: Fielding, changed: tuple[Hashable, ...]) -> 
     roll = die.combine(die, max)
     for amount in payloads.amounts(Quantity.CHARGE_ROLL):
         roll += _rolled(amount)
-    movement, highest = _movement(charger), _highest_charge_roll(payloads)
-    return roll.map(lambda result: movement + min(result, highest))
+    maximum = _maximum_charge_range(charger, payloads)
+    return roll.map(lambda result: maximum.movement + min(result, maximum.roll))
 
 
-def _highest_charge_roll(payloads: Payloads) -> int:
-    return 6 + payloads.added(Quantity.MAXIMUM_CHARGE_RANGE)
+def _maximum_charge_range(charger: Fielding, payloads: Payloads) -> MaximumChargeRange:
+    added = payloads.by_rule(Quantity.MAXIMUM_CHARGE_RANGE)
+    return MaximumChargeRange(_movement(charger), added)
 
 
 def _charge_needed(charger: Fielding, distance: int, payloads: Payloads) -> str:
-    needed = distance - _movement(charger)
-    return _shown(None if needed > _highest_charge_roll(payloads) else max(needed, 1))
+    maximum = _maximum_charge_range(charger, payloads)
+    needed = distance - maximum.movement
+    return _shown(None if needed > maximum.roll else max(needed, 1))
 
 
 def _reaches(charge_range: int, distance: int) -> bool:
@@ -1575,7 +1603,13 @@ _SPECS = (
         readings={
             "reaches": Offered(
                 (Output("determine-charge-range"), Fact("distance")), _reaches, _UNITED
-            )
+            ),
+            "range": _offer("determine-charge-range", _itself, _COUNT),
+            "maximum": Offered(
+                (_ATTACKER, CHANGED),
+                lambda charger, changed: _maximum_charge_range(charger, Payloads.of(changed)),
+                _UNITED,
+            ),
         },
     ),
     Spec(
