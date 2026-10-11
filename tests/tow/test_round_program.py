@@ -228,7 +228,7 @@ def test_a_supporting_attack_is_one_whatever_the_model_s_attacks() -> None:
     (part,) = spearmen.parts
     standing = spearmen.standing(15)
     ranks = frozenset({"rank-1", "rank-2", SUPPORTING_ATTACK})
-    doubled = (Added(Characteristic.ATTACKS, 1, of=Side.ATTACKER),)
+    doubled = (Added("doubled", Characteristic.ATTACKS, 1, of=Side.ATTACKER),)
 
     (attacks,) = how_many_attacks(
         spearmen, 4, ranks, Initiatives(((part.id, 4),)), standing, standing, doubled
@@ -240,7 +240,7 @@ def test_a_supporting_attack_is_one_whatever_the_model_s_attacks() -> None:
 def test_a_combat_hit_pushed_past_6_still_lands_on_a_natural_6() -> None:
     """Weapon Skill 4 against 4 hits on 4+; at -3 To Hit it needs 7+ and hits on a 6 alone."""
     spearman = _fielded("elven-spearmen", "Thrusting Spear", 1).side.hit
-    penalised = (Added(Quantity.TO_HIT, -3),)
+    penalised = (Added("penalised", Quantity.TO_HIT, -3),)
 
     hit = roll_to_hit_in_combat(spearman, spearman, penalised)
 
@@ -407,7 +407,7 @@ def test_a_charge_adds_an_initiative_point_for_each_full_inch_up_to_its_arc_s_ca
 def test_a_charge_never_takes_initiative_past_10() -> None:
     """A Swordmaster at Initiative 6, +1 by a rule, charging 6" into the rear strikes at 10."""
     swordmaster = _fielded("swordmasters-of-hoeth", "Sword of Hoeth", 1).side
-    quickened = (Added(Characteristic.INITIATIVE, 1, of=Side.ATTACKER),)
+    quickened = (Added("quickened", Characteristic.INITIATIVE, 1, of=Side.ATTACKER),)
 
     (initiatives,) = who_strikes_first(swordmaster, 6, ChargeArc.REAR, quickened).mass
 

@@ -2,6 +2,7 @@
 
 from collections.abc import Iterator
 from fractions import Fraction
+from itertools import product
 from math import comb, sqrt
 
 import pytest
@@ -43,6 +44,11 @@ PRINCES_CHARGE_DWARFS_FROM_AFAR = {
     "a": {"unit": "dragon-princes", "size": 5, "options": ["drakemaster"], "weapon": "Lance"},
     "b": {"unit": "dwarf-warriors", "size": 10, "frontage": 5, "options": ["veteran"]},
     "charge": {"side": "a", "full_inches": 12, "arc": "front"},
+}
+LIONS_CHARGE_SWORDMASTERS = {
+    "a": {"unit": "war-lions", "size": 2},
+    "b": {"unit": "swordmasters-of-hoeth", "size": 10, "frontage": 5},
+    "charge": {"side": "a", "full_inches": 8, "arc": "front"},
 }
 SPEARMEN_CHARGE_ARCHERS = {
     "a": {"unit": "elven-archers", "size": 10, "frontage": 5},
@@ -120,6 +126,30 @@ def test_the_charge_reaches_on_the_higher_of_two_dice(
     lanes = served(client, "/graph/fight", body)
 
     assert [report["p_charge_reaches"], lanes["charge"]["reaches"]] == [float(reaches)] * 2
+
+
+def test_swiftstride_rolls_a_third_die_up_to_its_longer_maximum(client: TestClient) -> None:
+    """Five Dragon Princes on steeds of Movement 8 charge Dwarf Warriors from 12in.
+
+    The range is the Movement plus the higher of two D6 and Swiftstride's D6,
+    up to the maximum possible charge range: Movement 8, 6, and Swiftstride's
+    3, 17in, which the dice reach.
+    """
+    charge = served(client, "/graph/fight", PRINCES_CHARGE_DWARFS_FROM_AFAR)["charge"]
+
+    rolled: dict[int, Fraction] = {}
+    for first, second, swift in product(range(1, 7), repeat=3):
+        inches = 8 + min(max(first, second) + swift, 6 + 3)
+        rolled[inches] = rolled.get(inches, Fraction(0)) + Fraction(1, 6**3)
+    assert charge["range"]["distribution"] == pytest.approx(
+        [float(rolled.get(inches, 0)) for inches in range(18)]
+    )
+    assert [(term["name"], term["inches"]) for term in charge["maximum"]] == [
+        ("Movement", 8),
+        (None, 6),
+        ("Swiftstride", 3),
+    ]
+    assert charge["furthest"] == 17
 
 
 @pytest.mark.parametrize("body", [PRINCES_CHARGE_DWARFS, SPEARMEN_CHARGE_ARCHERS])
@@ -217,6 +247,19 @@ def test_the_command_models_are_no_options_of_the_lane(client: TestClient) -> No
         "champion",
         "standard_bearer",
         "musician",
+    ]
+
+
+def test_a_unit_stands_on_its_datasheet_s_bases_at_its_unit_strength(client: TestClient) -> None:
+    """Six Dragon Princes on 30x60mm bases charge twenty Dwarf Warriors on 25x25mm bases.
+
+    Heavy Cavalry count 2 each toward Unit Strength, Heavy Infantry 1.
+    """
+    units = served(client, "/graph/fight", PRINCES_CHARGE_ARMED_DWARFS)["units"]
+
+    assert [(unit["base"], unit["unit_strength"]) for unit in units.values()] == [
+        ({"width_mm": 30, "depth_mm": 60}, 12),
+        ({"width_mm": 25, "depth_mm": 25}, 20),
     ]
 
 
@@ -332,6 +375,51 @@ def test_a_strike_spreads_its_unsaved_wounds_as_its_dice_fall(client: TestClient
     assert [(spread["mean"], spread["sd"]) for spread in spreads] == [
         pytest.approx(moments(spread)) for spread in spreads
     ]
+
+
+def test_a_combat_result_is_scored_in_its_parts(client: TestClient) -> None:
+    """Five Dragon Princes charge ten Dwarf Warriors five wide from 12in, into the front.
+
+    Four wide, the Princes claim no Rank Bonus, no flank or rear point and no
+    rule's points, so their score is the Wounds they inflict, outcome by
+    outcome. The Dwarfs, Heavy Infantry, claim a Rank Bonus of 1 while nine or
+    more stand behind a full front rank, and Massed Infantry's point while they
+    outnumber the Princes in Unit Strength; their score is those parts and
+    their Wounds together.
+    """
+    lanes = served(client, "/graph/fight", PRINCES_CHARGE_DWARFS_FROM_AFAR)
+
+    princes, dwarfs = (lanes["result"]["scores"][seat] for seat in ("attacker", "target"))
+    assert princes["score"]["distribution"] == pytest.approx(princes["wounds"]["distribution"])
+    assert [princes["rank_bonus"]["distribution"], princes["flank_or_rear"]["distribution"]] == [
+        [1],
+        [1],
+    ]
+    assert princes["rules"] == []
+    ranked = sum(lanes["standing"]["target"][-1]["models"]["distribution"][9:])
+    assert dwarfs["rank_bonus"]["distribution"] == pytest.approx([1 - ranked, ranked])
+    assert [rule["name"] for rule in dwarfs["rules"]] == ["Massed Infantry"]
+    parts = [dwarfs[part] for part in ("wounds", "rank_bonus", "flank_or_rear")]
+    added = [rule["points"] for rule in dwarfs["rules"]]
+    assert dwarfs["score"]["mean"] == pytest.approx(sum(part["mean"] for part in parts + added))
+
+
+def test_a_margin_splits_by_who_wins_the_round(client: TestClient) -> None:
+    """Two War Lions charge ten Swordmasters of Hoeth five wide from 8in, into the front.
+
+    A side wiped out loses whatever it scored, so where the Swordmasters cut
+    down both Lions they win at an even margin too. Split by how the round
+    goes, the margin's chances add up to the chance of each way.
+    """
+    result = served(client, "/graph/fight", LIONS_CHARGE_SWORDMASTERS)["result"]
+
+    winners = result["winners"]
+    ways = ("attacker_wins", "draw", "target_wins")
+    assert [sum(winners[way]) for way in ways] == pytest.approx([result[way] for way in ways])
+    split = [sum(chances) for chances in zip(*(winners[way] for way in ways), strict=True)]
+    assert split == pytest.approx(result["margin"]["distribution"])
+    even = -result["margin"]["least"]
+    assert winners["target_wins"][even] > 0
 
 
 def test_each_part_of_a_stand_and_shoot_shoots_at_its_own_skill(client: TestClient) -> None:

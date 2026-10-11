@@ -184,9 +184,6 @@ export function count(value: number): string {
 
 export const mean = (value: number): string => value.toFixed(2);
 
-export const signed = (value: number): string =>
-	`${value < 0 ? '−' : value > 0 ? '+' : ''}${Math.abs(value).toFixed(2)}`;
-
 /** The scores the rolls need, on two lines: To Hit and To Wound, then the saves. */
 export function needs(needed: Needed): [string, string] {
 	const rolls = [
@@ -312,7 +309,7 @@ export function draw(lanes: FightLanes, measure: Measure): Drawing {
 			(lane) =>
 				3 * STRIKE.inset +
 				measure(lanes.units[lane].name, 'text') +
-				measure(mean(scored.scores[lane]), 'mono')
+				measure(mean(scored.scores[lane].score.mean), 'mono')
 		),
 		2 * STRIKE.inset + 3 * (18 + Math.max(...shares.map((p) => measure(percent(p), 'mono'))))
 	);

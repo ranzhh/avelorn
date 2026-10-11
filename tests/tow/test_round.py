@@ -196,3 +196,29 @@ def test_the_casualties_step_tallies_each_part_s_unsaved_wounds_apart() -> None:
     for part in ("veteran", "dwarf-warrior"):
         own = fought.at(f"round/initiative-2/target/attack/{part}/ward-saves").read("unsaved")
         assert _mass(tallied.map(lambda unsaved, part=part: unsaved.of(part))) == _mass(own)
+
+
+def test_a_combat_result_is_its_parts_together_in_every_outcome() -> None:
+    """Five Dragon Princes charge ten Dwarf Warriors, a Veteran among them, from 12in.
+
+    However the round goes, each side's score is the Wounds it inflicted, its
+    Rank Bonus, its flank or rear points and each rule's points together.
+    """
+    princes = Contingent.deploy("dragon-princes", 5, ("drakemaster",), data=REPO)
+    dwarfs = Contingent.deploy("dwarf-warriors", 10, ("veteran",), data=REPO, frontage=5)
+    charging = princes.wielding("Lance").charging(Charge(12, ChargeArc.FRONT))
+    fought = fight_round(
+        ROUND_PROGRAM, charging, dwarfs.wielding("Hand Weapon"), first_round=True
+    ).evaluated
+
+    for side in Side:
+        calculated = fought.at(f"round/{side}/calculate-combat-result")
+        summed = calculated.read("parts").map(
+            lambda scored: (
+                scored.wounds
+                + scored.rank_bonus
+                + scored.flank_or_rear
+                + sum(points for _, points in scored.rules)
+            )
+        )
+        assert _mass(summed) == _mass(calculated.read("score"))

@@ -946,7 +946,13 @@
       "CombatResult": {
         "properties": {
           "scores": {
-            "$ref": "#/components/schemas/PerSide_float_"
+            "$ref": "#/components/schemas/PerSide_Scoring_"
+          },
+          "margin": {
+            "$ref": "#/components/schemas/Spread"
+          },
+          "winners": {
+            "$ref": "#/components/schemas/Winners"
           },
           "attacker_wins": {
             "type": "number",
@@ -972,13 +978,15 @@
         "type": "object",
         "required": [
           "scores",
+          "margin",
+          "winners",
           "attacker_wins",
           "draw",
           "target_wins",
           "rules"
         ],
         "title": "CombatResult",
-        "description": "Each side's mean combat result, and the chance of each way the round goes."
+        "description": "Each side's combat result, the attacker's margin over the target, and how the round goes.\n\n``winners`` splits each of the margin's chances by how the round goes."
       },
       "Command": {
         "properties": {
@@ -2098,10 +2106,6 @@
             ],
             "title": "Leadership"
           },
-          "margin": {
-            "type": "number",
-            "title": "Margin"
-          },
           "give_ground": {
             "type": "number",
             "title": "Give Ground"
@@ -2127,14 +2131,13 @@
         "required": [
           "taken",
           "leadership",
-          "margin",
           "give_ground",
           "fall_back_in_good_order",
           "break",
           "rules"
         ],
         "title": "LaneBreakTest",
-        "description": "A side's Break test: the chance it is taken, and of each outcome over the whole round.\n\n``margin`` is the side's mean combat result less its enemy's."
+        "description": "A side's Break test: the chance it is taken, and of each outcome over the whole round."
       },
       "LaneCharge": {
         "properties": {
@@ -2148,6 +2151,20 @@
           "reaches": {
             "type": "number",
             "title": "Reaches"
+          },
+          "range": {
+            "$ref": "#/components/schemas/Spread"
+          },
+          "maximum": {
+            "items": {
+              "$ref": "#/components/schemas/Term"
+            },
+            "type": "array",
+            "title": "Maximum"
+          },
+          "furthest": {
+            "type": "integer",
+            "title": "Furthest"
           },
           "rules": {
             "items": {
@@ -2163,10 +2180,13 @@
           "distance",
           "arc",
           "reaches",
+          "range",
+          "maximum",
+          "furthest",
           "rules"
         ],
         "title": "LaneCharge",
-        "description": "The charge, and the chance its Charge roll reaches the target ``distance`` away."
+        "description": "The charge, the range its Charge roll gives, and the chance it reaches the target.\n\nThe target stands ``distance`` away. ``maximum`` is the maximum possible\ncharge range term by term, and ``furthest`` the furthest the dice reach\nwithin it."
       },
       "LaneReaction": {
         "properties": {
@@ -2234,6 +2254,20 @@
             "type": "array",
             "title": "Command"
           },
+          "base": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BaseSize"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unit_strength": {
+            "type": "integer",
+            "title": "Unit Strength"
+          },
           "rules": {
             "items": {
               "$ref": "#/components/schemas/LandedRule"
@@ -2253,10 +2287,12 @@
           "frontage",
           "ranks",
           "command",
+          "base",
+          "unit_strength",
           "rules"
         ],
         "title": "LaneUnit",
-        "description": "A unit as it is fielded: ``frontage`` files wide and ``ranks`` deep.\n\n``options`` are the ones it bought besides its command models, which\n``command`` gives and which stand in its front rank. ``held`` names what it\ntook up at its weapon choice: the weapon in hand, and the shield when it\nuses one. ``rules`` land on the steps it takes before anyone strikes: its\nweapon choice, Who Can Fight, Who Strikes First."
+        "description": "A unit as it is fielded: ``frontage`` files wide and ``ranks`` deep.\n\n``options`` are the ones it bought besides its command models, which\n``command`` gives and which stand in its front rank. ``held`` names what it\ntook up at its weapon choice: the weapon in hand, and the shield when it\nuses one. ``base`` is each model's base, None where the datasheet prints\nnone, and ``unit_strength`` the Unit Strength it is fielded at. ``rules``\nland on the steps it takes before anyone strikes: its weapon choice, Who\nCan Fight, Who Strikes First."
       },
       "LaneVolley": {
         "properties": {
@@ -2733,15 +2769,13 @@
         ],
         "title": "PerSide[LaneUnit]"
       },
-      "PerSide_float_": {
+      "PerSide_Scoring_": {
         "properties": {
           "attacker": {
-            "type": "number",
-            "title": "Attacker"
+            "$ref": "#/components/schemas/Scoring"
           },
           "target": {
-            "type": "number",
-            "title": "Target"
+            "$ref": "#/components/schemas/Scoring"
           }
         },
         "additionalProperties": false,
@@ -2750,7 +2784,7 @@
           "attacker",
           "target"
         ],
-        "title": "PerSide[float]"
+        "title": "PerSide[Scoring]"
       },
       "PerSide_list_StandingAt__": {
         "properties": {
@@ -3147,6 +3181,25 @@
         "title": "Rule",
         "description": "A rules-page entry (special rule or core rule), text verbatim, with its effects.\n\n``may`` marks a rule its player may decline. ``not_on`` names the profile\nrows the rule stops at, as \"but not its mount\" does. ``needs`` names the\nmechanics a printed clause needs that the engine lacks, each a ledger subject.\n``notes`` are the author's words on the scope modelled and what is left out."
       },
+      "RulePoints": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "points": {
+            "$ref": "#/components/schemas/Spread"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "points"
+        ],
+        "title": "RulePoints",
+        "description": "The points one rule adds to a side's combat result."
+      },
       "RuleRef": {
         "anyOf": [
           {
@@ -3208,6 +3261,40 @@
         ],
         "title": "RuleSummary",
         "description": "A rule entry as a listing shows it: what it is, and whether it reaches the maths.\n\n``factors`` says whether the entry carries effects; a text-only entry does\nnot. ``references`` counts the places referencing it -- units, options, troop\ntypes, weapons, and other rules' grants, whatever their X -- so a listing\nsorts by what would matter most to model next."
+      },
+      "Scoring": {
+        "properties": {
+          "score": {
+            "$ref": "#/components/schemas/Spread"
+          },
+          "wounds": {
+            "$ref": "#/components/schemas/Spread"
+          },
+          "rank_bonus": {
+            "$ref": "#/components/schemas/Spread"
+          },
+          "flank_or_rear": {
+            "$ref": "#/components/schemas/Spread"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/RulePoints"
+            },
+            "type": "array",
+            "title": "Rules"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "score",
+          "wounds",
+          "rank_bonus",
+          "flank_or_rear",
+          "rules"
+        ],
+        "title": "Scoring",
+        "description": "A side's combat result, and its parts.\n\n``wounds`` are the Wounds the side inflicted, ``flank_or_rear`` the points\nfor the arc it fights its enemy in, and ``rules`` the points each rule adds."
       },
       "SelectorParameter": {
         "properties": {
@@ -3510,6 +3597,33 @@
         ],
         "title": "StrikePart",
         "description": "The models of one profile row striking: how many, their attacks and unsaved wounds."
+      },
+      "Term": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "inches": {
+            "type": "integer",
+            "title": "Inches"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "inches"
+        ],
+        "title": "Term",
+        "description": "One term of a sum of inches, and its name: a characteristic's, a rule's, or none."
       },
       "TroopType": {
         "type": "string",
@@ -4375,6 +4489,40 @@
         ],
         "title": "Wieldable",
         "description": "A weapon a block carries, and which phases can put it in hand.\n\nA bow has no Combat profile and a hand weapon no missile one, so a caller\nresolving a melee or a volley must not offer the wrong half. The facts\nbelong here rather than in the caller because they are read off the weapon\nentry, and a caller guessing from the name would be guessing."
+      },
+      "Winners": {
+        "properties": {
+          "attacker_wins": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Attacker Wins"
+          },
+          "draw": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Draw"
+          },
+          "target_wins": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Target Wins"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "attacker_wins",
+          "draw",
+          "target_wins"
+        ],
+        "title": "Winners",
+        "description": "The chance of each margin split by how the round goes.\n\n``attacker_wins[k]`` is the chance the margin is ``least + k``, ``least``\nbeing the margin's, and the attacker wins; ``draw`` and ``target_wins``\nlikewise. A side wiped out loses whatever the margin."
       }
     }
   }
