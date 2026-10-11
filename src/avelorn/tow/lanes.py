@@ -18,7 +18,7 @@ from avelorn.core.distribution import Distribution
 from avelorn.core.graph import Slot, Step, Verdict
 from avelorn.tow.charge import ChargeRoll
 from avelorn.tow.contingent import ChargeArc, Contingent
-from avelorn.tow.programs import At, Evaluated
+from avelorn.tow.programs import At, Evaluated, held_throughout
 from avelorn.tow.round import Fight
 from avelorn.tow.schema.side import Side
 from avelorn.tow.schema.unit import OptionKind
@@ -258,7 +258,7 @@ class FightLanes(_Drawn):
             breaks=PerSide(
                 attacker=_break(fight, Side.ATTACKER), target=_break(fight, Side.TARGET)
             ),
-            not_modelled=_not_modelled(
+            not_modelled=held_throughout(
                 fight.evaluated,
                 *(() if rolled is None else (rolled.evaluated,)),
                 *(() if stood is None else (stood.evaluated,)),
@@ -465,13 +465,3 @@ def _break(fight: Fight, side: Side) -> LaneBreakTest:
 def _leadership(needed: Distribution[Hashable]) -> str | None:
     shown = sorted({str(value) for value, p in needed.mass.items() if p and value != NO_ROLL})
     return " or ".join(shown) or None
-
-
-def _not_modelled(*evaluated: Evaluated) -> list[str]:
-    held = set[str]().union(*(each.held for each in evaluated))
-    return sorted(name for name in held if all(_held(each, name) for each in evaluated))
-
-
-def _held(evaluated: Evaluated, name: str) -> bool:
-    attached = {node.name for node in evaluated.lane.program.rules.values()}
-    return name in evaluated.held or name not in attached

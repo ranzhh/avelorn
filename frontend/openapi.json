@@ -1812,7 +1812,7 @@
           "not_modelled"
         ],
         "title": "FightReport",
-        "description": "One round of close combat, resolved exactly.\n\nThe engine works in rationals; these are floats, because JSON has no\nother number and a caller plotting a distribution wants one. The exact\nvalues stay reachable from Python.\n\n``first_striker`` names the side Initiative put first, or is ``None`` when\nequal Initiative made the blows simultaneous -- a Great Weapon's Strike\nLast is why a higher-Initiative unit can still swing second.\n``p_charge_reaches`` is the chance the charge's Charge roll reaches its\ntarget, or ``None`` for a fight with no charge; the round is fought only\nwhen it reaches, so every other figure is conditional on it reaching.\n``not_modelled`` names the rules the round held without applying, so a\nfigure is never quietly wrong."
+        "description": "One round of close combat, resolved exactly.\n\nThe engine works in rationals; these are floats, because JSON has no\nother number and a caller plotting a distribution wants one. The exact\nvalues stay reachable from Python.\n\n``first_striker`` names the side Initiative put first, or is ``None`` when\nequal Initiative made the blows simultaneous -- a Great Weapon's Strike\nLast is why a higher-Initiative unit can still swing second.\n``p_charge_reaches`` is the chance the charge's Charge roll reaches its\ntarget, or ``None`` for a fight with no charge; the round is fought only\nwhen it reaches, so every other figure is conditional on it reaching.\n``not_modelled`` names the rules the round and the Charge roll held\nwithout applying, so a figure is never quietly wrong."
       },
       "FightSide": {
         "properties": {

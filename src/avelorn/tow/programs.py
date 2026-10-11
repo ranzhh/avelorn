@@ -319,6 +319,23 @@ class Evaluated:
         return tuple(sorted(names))
 
 
+def held_throughout(*evaluated: Evaluated) -> list[str]:
+    """The rules held without applying in every lane of ``evaluated`` that attaches them.
+
+    A rule one lane holds and another applies is modelled.
+
+    Returns:
+        The rules' names, sorted.
+    """
+    held = set[str]().union(*(each.held for each in evaluated))
+    return sorted(name for name in held if all(_held(each, name) for each in evaluated))
+
+
+def _held(evaluated: Evaluated, name: str) -> bool:
+    attached = {node.name for node in evaluated.lane.program.rules.values()}
+    return name in evaluated.held or name not in attached
+
+
 @dataclass(frozen=True)
 class At:
     """A step instance in one lane."""

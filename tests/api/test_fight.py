@@ -166,6 +166,17 @@ def test_what_the_engine_did_not_apply_is_reported(client: TestClient) -> None:
     assert all(isinstance(note, str) for note in report["not_modelled"])
 
 
+def test_a_rule_applied_to_the_charge_roll_is_modelled(client: TestClient) -> None:
+    """Charging Dragon Princes add Swiftstride's D6 to the Charge roll, which no round makes."""
+    report = fight(
+        client,
+        a={"unit": "dragon-princes", "size": 5},
+        b={"unit": "dwarf-warriors", "size": 10},
+        charge={"side": "a", "full_inches": 14, "arc": "front"},
+    )
+    assert "Swiftstride" not in report["not_modelled"]
+
+
 def test_an_unknown_datasheet_is_a_404(client: TestClient) -> None:
     """A missed slug is not found, and says which slug was missed."""
     response = client.post(
