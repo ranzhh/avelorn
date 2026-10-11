@@ -21,4 +21,4 @@ items:
       - {step: roll-to-wound, readings: [wounds]}
       - {step: make-armour-saves, readings: [saves]}
       - {step: ward-saves, readings: [saves, unsaved]}
-  - {step: remove-casualties, tallies: [attack], readings: [unsaved, models, standing]}
+  - {step: remove-casualties, tallies: [attack], readings: [unsaved, parts, models, standing]}

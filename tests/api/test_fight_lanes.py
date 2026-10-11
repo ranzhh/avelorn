@@ -2,6 +2,7 @@
 
 from collections.abc import Iterator
 from fractions import Fraction
+from math import comb, sqrt
 
 import pytest
 from fastapi.testclient import TestClient
@@ -38,6 +39,11 @@ PRINCES_CHARGE_ARMED_DWARFS = {
     },
     "charge": {"side": "a", "full_inches": 10, "arc": "front"},
 }
+PRINCES_CHARGE_DWARFS_FROM_AFAR = {
+    "a": {"unit": "dragon-princes", "size": 5, "options": ["drakemaster"], "weapon": "Lance"},
+    "b": {"unit": "dwarf-warriors", "size": 10, "frontage": 5, "options": ["veteran"]},
+    "charge": {"side": "a", "full_inches": 12, "arc": "front"},
+}
 SPEARMEN_CHARGE_ARCHERS = {
     "a": {"unit": "elven-archers", "size": 10, "frontage": 5},
     "b": {"unit": "elven-spearmen", "size": 20, "frontage": 5},
@@ -55,6 +61,29 @@ def client() -> Iterator[TestClient]:
     app.dependency_overrides[corpus] = lambda: REPO
     yield TestClient(app)
     app.dependency_overrides.clear()
+
+
+def binomial(trials: int, p: Fraction) -> list[float]:
+    """The chance of each count of successes in ``trials`` at ``p`` each.
+
+    Returns:
+        The chances, from none to every trial.
+    """
+    return [float(comb(trials, k) * p**k * (1 - p) ** (trials - k)) for k in range(trials + 1)]
+
+
+def moments(spread: dict) -> tuple[float, float]:
+    """The mean and the standard deviation a spread's chances give.
+
+    Returns:
+        The mean, then the standard deviation.
+    """
+    counts = range(spread["least"], spread["least"] + len(spread["distribution"]))
+    mean = sum(count * p for count, p in zip(counts, spread["distribution"], strict=True))
+    variance = sum(
+        (count - mean) ** 2 * p for count, p in zip(counts, spread["distribution"], strict=True)
+    )
+    return mean, sqrt(variance)
 
 
 def served(client: TestClient, route: str, body: dict) -> dict:
@@ -104,7 +133,7 @@ def test_the_lanes_are_the_round_the_fight_reports(client: TestClient, body: dic
     for seat, side in seats.items():
         size = report[side]["size"]
         assert lanes["units"][seat]["unit"] == report[side]["unit"]
-        standing = lanes["standing"][seat][-1]["distribution"]
+        standing = lanes["standing"][seat][-1]["models"]["distribution"]
         lost = report[side]["casualties"]
         assert {left: p for left, p in enumerate(standing) if p} == pytest.approx(
             {size - count: p for count, p in enumerate(lost) if p}
@@ -142,7 +171,12 @@ def test_a_strike_lists_the_parts_that_make_it(client: TestClient) -> None:
             strike["label"],
             strike["side"],
             [
-                (part["name"], part["models"], part["attacks"], part["unsaved"])
+                (
+                    part["name"],
+                    part["models"]["mean"],
+                    part["attacks"]["mean"],
+                    part["unsaved"]["mean"],
+                )
                 for part in strike["parts"]
             ],
         )
@@ -257,9 +291,64 @@ def test_a_stand_and_shoot_thins_the_charger(client: TestClient) -> None:
         5,
         {"hit": "4+", "wound": "4+", "save": "5+ or 6+", "ward": "-"},
     )
-    assert [(each["after"], each["models"]) for each in lanes["standing"]["attacker"][:2]] == [
+    assert [
+        (each["after"], each["models"]["mean"]) for each in lanes["standing"]["attacker"][:2]
+    ] == [
         (None, 20),
         ("volley", pytest.approx(20 - 5 * 13 / 72)),
     ]
     shooting = {rule["name"]: rule["side"] for rule in volley["rules"] if rule["applied"]}
     assert shooting == {"Armour Bane (1)": "target", "Standing and Shooting": "target"}
+
+
+def test_a_strike_spreads_its_unsaved_wounds_as_its_dice_fall(client: TestClient) -> None:
+    """Five Dragon Princes, a Drakemaster among them, charge ten Dwarf Warriors from 12in.
+
+    The Drakemaster's three attacks and the three Princes' six hit on 3+ and,
+    with the Lance, wound on 3+ past any save: each goes unsaved on 4/9 alone,
+    so the riders' unsaved wounds fall as nine trials at 4/9, and each part's
+    as its own. The four steeds, one under the Drakemaster and three under the
+    Princes, are one part of four attacks at 1/9. Every mean and standard
+    deviation is the one its chances give, the Dwarfs' too.
+    """
+    strikes = served(client, "/graph/fight", PRINCES_CHARGE_DWARFS_FROM_AFAR)["strikes"]
+
+    riders, steeds = strikes[:2]
+    assert [
+        riders["unsaved"]["distribution"],
+        *(part["unsaved"]["distribution"] for part in riders["parts"]),
+        *(part["unsaved"]["distribution"] for part in steeds["parts"]),
+    ] == [
+        pytest.approx(binomial(9, Fraction(4, 9))),
+        pytest.approx(binomial(3, Fraction(4, 9))),
+        pytest.approx(binomial(6, Fraction(4, 9))),
+        pytest.approx(binomial(4, Fraction(1, 9))),
+    ]
+    spreads = [
+        spread
+        for strike in strikes
+        for spread in (strike["unsaved"], *(part["unsaved"] for part in strike["parts"]))
+    ]
+    assert [(spread["mean"], spread["sd"]) for spread in spreads] == [
+        pytest.approx(moments(spread)) for spread in spreads
+    ]
+
+
+def test_each_part_of_a_stand_and_shoot_shoots_at_its_own_skill(client: TestClient) -> None:
+    """Ten Archers five wide, a Sentinel among them, stand and shoot at charging Spearmen.
+
+    The Sentinel's one shot hits on 3+ at BS5 and the four Archers' on 4+,
+    then each wounds and goes unsaved on 13/36 (as above): 13/54 for the
+    Sentinel's, 13/72 for each Archer's. A Spearman has one Wound, so the
+    casualties are every unsaved wound.
+    """
+    archers = {**SPEARMEN_CHARGE_ARCHERS["a"], "options": ["sentinel"]}
+    volley = served(client, "/graph/fight", {**SPEARMEN_CHARGE_ARCHERS, "a": archers})["volley"]
+
+    assert [
+        (part["name"], part["shots"], part["unsaved"]["distribution"]) for part in volley["parts"]
+    ] == [
+        ("Sentinel", 1, pytest.approx(binomial(1, Fraction(13, 54)))),
+        ("Elven Archer", 4, pytest.approx(binomial(4, Fraction(13, 72)))),
+    ]
+    assert volley["casualties"]["mean"] == pytest.approx(13 / 54 + 4 * 13 / 72)

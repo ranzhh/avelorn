@@ -35,7 +35,7 @@ from avelorn.tow.attach import Attachment, Wielder, attach_rules
 from avelorn.tow.changes import Uses
 from avelorn.tow.contingent import ChargeArc
 from avelorn.tow.data import DATA_DIR
-from avelorn.tow.fielding import Fielding, Part
+from avelorn.tow.fielding import Fielding, Part, Unsaved
 from avelorn.tow.kernels import Standings
 from avelorn.tow.schema.program import (
     FactInput,
@@ -55,6 +55,7 @@ from avelorn.tow.schema.unit import Characteristic
 from avelorn.tow.steps import (
     AUTOMATIC_HITS,
     CHANGED,
+    POOLED,
     SLOTTED,
     STEPS,
     Changed,
@@ -627,26 +628,32 @@ class _Builder:
         visible.add(decision, acts)
         return decision
 
-    def tally(self, spec: Spec, entry: StepEntry, here: str, groups: _Groups) -> Tally[int] | None:
+    def tally(
+        self, spec: Spec, entry: StepEntry, here: str, groups: _Groups
+    ) -> Tally[Unsaved] | None:
         if spec.counts is None:
             if entry.tallies:
                 raise self.error(here, f"{spec.name} sums no group")
             return None
         if not entry.tallies:
             raise self.error(here, f"{spec.name} needs the groups it tallies")
-        counts: dict[Repeat, Projection[int]] = {}
+        counts: dict[Repeat, Projection[Unsaved]] = {}
         enemy = self.role(spec.side).other
         for name in entry.tallies:
             tallied = groups.get((name, enemy))
             if tallied is None:
                 raise self.error(here, f"{spec.name} tallies {name}, no group before it here")
             for group, own in tallied:
-                counts[group] = self.counted(spec.counts, spec, here, _Scope(group=own))
+                counts[group] = self.counted(
+                    spec.counts, group.name, spec, here, _Scope(group=own)
+                )
         return Tally(spec.counts.label, counts)
 
-    def counted(self, counts: Counted, spec: Spec, here: str, own: _Scope) -> Projection[int]:
+    def counted(
+        self, counts: Counted, part: str, spec: Spec, here: str, own: _Scope
+    ) -> Projection[Unsaved]:
         reads = tuple(self.output(read, spec, here, own) for read in counts.reads)
-        return Projection(counts.label, reads, counts.project, _ZERO)
+        return Projection(counts.label, reads, partial(counts.caused, part), POOLED)
 
     def projection(
         self,
@@ -655,7 +662,7 @@ class _Builder:
         spec: Spec,
         here: str,
         visible: _Scope,
-        tally: Tally[int] | None,
+        tally: Tally[Unsaved] | None,
         changed: Mark[tuple[Hashable, ...]] | None,
     ) -> Projection[Any]:
         bound = self.held(offered.reads, spec, here)
@@ -706,7 +713,7 @@ class _Builder:
         spec: Spec,
         here: str,
         visible: _Scope,
-        tally: Tally[int] | None,
+        tally: Tally[Unsaved] | None,
         changed: Mark[tuple[Hashable, ...]] | None,
     ) -> Key:
         match read:

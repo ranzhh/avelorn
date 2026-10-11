@@ -7,7 +7,7 @@ import { columns, draw, formation, type Drawing, type Measure } from './layout';
 const strike = (slot: string, side: 'attacker' | 'target') =>
 	({ slot, label: slot, side }) as Strike;
 const standing = (...after: (string | null)[]) =>
-	after.map((each) => ({ after: each, models: 0, distribution: [] }));
+	after.map((each) => ({ after: each, models: { mean: 0, sd: 0, least: 0, distribution: [] } }));
 
 describe('the columns of a fight', () => {
 	it('drops each strike as a pill into the other lane, the lane hit first opening on its models', () => {

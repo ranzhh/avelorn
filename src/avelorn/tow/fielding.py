@@ -160,6 +160,18 @@ class Fighting(PerPart):
     """The models of each part placed to fight: in the fighting ranks, or the front rank."""
 
 
+class Unsaved(PerPart):
+    """The unsaved wounds each part's attacks caused, listing only the parts that caused some."""
+
+    def of(self, part: str) -> int:
+        """One part's unsaved wounds.
+
+        Returns:
+            Its unsaved wounds, 0 for a part that caused none.
+        """
+        return dict(self.parts).get(part, 0)
+
+
 @dataclass(frozen=True, eq=False)
 class Fielding:
     """A side on the table, of one troop type: its parts in placement order, front to back."""

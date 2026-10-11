@@ -8,8 +8,19 @@
 			"held": ["Lance", "Shield"],
 			"frontage": 4,
 			"ranks": 2,
-			"command": [{ "kind": "champion", "name": "Drakemaster" }],
-			"rules": [{ "name": "Elven Reflexes", "side": "attacker", "applied": true }]
+			"command": [
+				{
+					"kind": "champion",
+					"name": "Drakemaster"
+				}
+			],
+			"rules": [
+				{
+					"name": "Elven Reflexes",
+					"side": "attacker",
+					"applied": true
+				}
+			]
 		},
 		"target": {
 			"unit": "elven-archers",
@@ -21,27 +32,101 @@
 			"ranks": 2,
 			"command": [],
 			"rules": [
-				{ "name": "Elven Reflexes", "side": "target", "applied": true },
-				{ "name": "Press of Battle", "side": "target", "applied": true }
+				{
+					"name": "Elven Reflexes",
+					"side": "target",
+					"applied": true
+				},
+				{
+					"name": "Press of Battle",
+					"side": "target",
+					"applied": true
+				}
 			]
 		}
 	},
-	"battlefield": { "distance": 12, "arc": "front" },
-	"charge": { "distance": 12, "arc": "front", "reaches": null, "rules": [] },
+	"battlefield": {
+		"distance": 12,
+		"arc": "front"
+	},
+	"charge": {
+		"distance": 12,
+		"arc": "front",
+		"reaches": 0.9768518518518519,
+		"rules": [
+			{
+				"name": "Swiftstride",
+				"side": "attacker",
+				"applied": true
+			}
+		]
+	},
 	"reaction": {
 		"chosen": "stand-and-shoot",
-		"offered": { "hold": true, "stand_and_shoot": true, "flee": false }
+		"offered": {
+			"hold": true,
+			"stand_and_shoot": true,
+			"flee": false
+		}
 	},
 	"volley": {
 		"shots": 5,
-		"needed": { "hit": "4+", "wound": "4+", "save": "2+ or 3+", "ward": "6+" },
-		"unsaved": 0.23148148148148148,
+		"needed": {
+			"hit": "4+",
+			"wound": "4+",
+			"save": "2+ or 3+",
+			"ward": "6+"
+		},
+		"casualties": {
+			"mean": 0.23148148148148148,
+			"sd": 0.46985609097649167,
+			"least": 0,
+			"distribution": [
+				0.7889824557254387, 0.19150059604986377, 0.01859229087862755, 0.0009025383921663859,
+				2.190627165452393e-5, 2.1268224907304786e-7
+			]
+		},
+		"parts": [
+			{
+				"name": "Elven Archer",
+				"shots": 5,
+				"unsaved": {
+					"mean": 0.23148148148148148,
+					"sd": 0.46985609097649167,
+					"least": 0,
+					"distribution": [
+						0.7889824557254387, 0.19150059604986377, 0.01859229087862755, 0.0009025383921663859,
+						2.190627165452393e-5, 2.1268224907304786e-7
+					]
+				}
+			}
+		],
 		"rules": [
-			{ "name": "Armour Bane (1)", "side": "target", "applied": true },
-			{ "name": "Firing at Long Range", "side": "target", "applied": false },
-			{ "name": "Moving and Shooting", "side": "target", "applied": false },
-			{ "name": "Standing and Shooting", "side": "target", "applied": true },
-			{ "name": "Dragon Armour", "side": "attacker", "applied": true }
+			{
+				"name": "Armour Bane (1)",
+				"side": "target",
+				"applied": true
+			},
+			{
+				"name": "Firing at Long Range",
+				"side": "target",
+				"applied": false
+			},
+			{
+				"name": "Moving and Shooting",
+				"side": "target",
+				"applied": false
+			},
+			{
+				"name": "Standing and Shooting",
+				"side": "target",
+				"applied": true
+			},
+			{
+				"name": "Dragon Armour",
+				"side": "attacker",
+				"applied": true
+			}
 		]
 	},
 	"strikes": [
@@ -49,124 +134,369 @@
 			"slot": "initiative-9",
 			"label": "Initiative 9",
 			"side": "attacker",
-			"attacks": 8.95907191290391,
-			"needed": { "hit": "3+", "wound": "2+", "save": "-", "ward": "-" },
+			"attacks": {
+				"mean": 8.95907191290391,
+				"sd": 0.29654767326277415,
+				"least": 0,
+				"distribution": [
+					2.1268224907304786e-7, 0.0, 0.0, 2.190627165452393e-5, 0.0, 0.0009025383921663859, 0.0,
+					0.01859229087862755, 0.0, 0.9804830517753025
+				]
+			},
+			"needed": {
+				"hit": "3+",
+				"wound": "2+",
+				"save": "-",
+				"ward": "-"
+			},
 			"parts": [
 				{
 					"name": "Drakemaster",
-					"models": 0.999999787317751,
-					"attacks": 2.9999993619532526,
-					"unsaved": 1.6666663121962515,
-					"needed": { "hit": "3+", "wound": "2+", "save": "-", "ward": "-" }
+					"models": {
+						"mean": 0.999999787317751,
+						"sd": 0.0004611748083311889,
+						"least": 0,
+						"distribution": [2.1268224907304786e-7, 0.999999787317751]
+					},
+					"attacks": {
+						"mean": 2.9999993619532526,
+						"sd": 0.0013835244249935665,
+						"least": 0,
+						"distribution": [2.1268224907304786e-7, 0.0, 0.0, 0.999999787317751]
+					},
+					"unsaved": {
+						"mean": 1.6666663121962515,
+						"sd": 0.8606632175143967,
+						"least": 0,
+						"distribution": [
+							0.08779168920945903, 0.32921803697703733, 0.4115225462212967, 0.17146772759220694
+						]
+					},
+					"needed": {
+						"hit": "3+",
+						"wound": "2+",
+						"save": "-",
+						"ward": "-"
+					}
 				},
 				{
 					"name": "Dragon Prince",
-					"models": 2.9795362754753287,
-					"attacks": 5.9590725509506575,
-					"unsaved": 3.3105958616392543,
-					"needed": { "hit": "3+", "wound": "2+", "save": "-", "ward": "-" }
+					"models": {
+						"mean": 2.9795362754753287,
+						"sd": 0.1482658120100647,
+						"least": 0,
+						"distribution": [
+							2.211895390359698e-5, 0.0009025383921663859, 0.01859229087862755, 0.9804830517753025
+						]
+					},
+					"attacks": {
+						"mean": 5.9590725509506575,
+						"sd": 0.2965316240201294,
+						"least": 0,
+						"distribution": [
+							2.211895390359698e-5, 0.0, 0.0009025383921663859, 0.0, 0.01859229087862755, 0.0,
+							0.9804830517753025
+						]
+					},
+					"unsaved": {
+						"mean": 3.3105958616392543,
+						"sd": 1.224138528633648,
+						"least": 0,
+						"distribution": [
+							0.008482763115695627, 0.0607498296978847, 0.18419495894560134, 0.3008598121078089,
+							0.2785138754669397, 0.13837138813743705, 0.028827372528632718
+						]
+					},
+					"needed": {
+						"hit": "3+",
+						"wound": "2+",
+						"save": "-",
+						"ward": "-"
+					}
 				}
 			],
-			"unsaved": 4.977262173835506,
+			"unsaved": {
+				"mean": 4.977262173835506,
+				"sd": 1.4964152693300627,
+				"least": 0,
+				"distribution": [
+					0.0007449084679014454, 0.008125927578452392, 0.039661456282640305, 0.1135076623256383,
+					0.20971667946731723, 0.25923376193882625, 0.21428768744633114, 0.11418960258089222,
+					0.035589348800781136, 0.004942965111219602
+				]
+			},
 			"rules": [
-				{ "name": "Armour Bane (1)", "side": "attacker", "applied": true },
-				{ "name": "Ithilmar Weapons", "side": "attacker", "applied": false },
-				{ "name": "Parry", "side": "target", "applied": false }
+				{
+					"name": "Armour Bane (1)",
+					"side": "attacker",
+					"applied": true
+				},
+				{
+					"name": "Ithilmar Weapons",
+					"side": "attacker",
+					"applied": false
+				},
+				{
+					"name": "Parry",
+					"side": "target",
+					"applied": false
+				}
 			]
 		},
 		{
 			"slot": "initiative-7",
 			"label": "Initiative 7",
 			"side": "attacker",
-			"attacks": 3.97953606279308,
-			"needed": { "hit": "4+", "wound": "4+", "save": "-", "ward": "-" },
+			"attacks": {
+				"mean": 3.97953606279308,
+				"sd": 0.14827080320197975,
+				"least": 0,
+				"distribution": [
+					2.1268224907304786e-7, 2.190627165452393e-5, 0.0009025383921663859, 0.01859229087862755,
+					0.9804830517753025
+				]
+			},
+			"needed": {
+				"hit": "4+",
+				"wound": "4+",
+				"save": "-",
+				"ward": "-"
+			},
 			"parts": [
 				{
 					"name": "Barded Elven Steed",
-					"models": 3.9795360627930796,
-					"attacks": 3.9795360627930796,
-					"unsaved": 0.9948840156982699,
-					"needed": { "hit": "4+", "wound": "4+", "save": "-", "ward": "-" }
+					"models": {
+						"mean": 3.97953606279308,
+						"sd": 0.14827080320197975,
+						"least": 0,
+						"distribution": [
+							2.1268224907304786e-7, 2.190627165452393e-5, 0.0009025383921663859,
+							0.01859229087862755, 0.9804830517753025
+						]
+					},
+					"attacks": {
+						"mean": 3.97953606279308,
+						"sd": 0.14827080320197975,
+						"least": 0,
+						"distribution": [
+							2.1268224907304786e-7, 2.190627165452393e-5, 0.0009025383921663859,
+							0.01859229087862755, 0.9804830517753025
+						]
+					},
+					"unsaved": {
+						"mean": 0.99488401569827,
+						"sd": 0.8646022358381555,
+						"least": 0,
+						"distribution": [
+							0.31859890854678385, 0.42182883864710274, 0.20949159328817027, 0.04625064759694586,
+							0.0038300119209972753
+						]
+					},
+					"needed": {
+						"hit": "4+",
+						"wound": "4+",
+						"save": "-",
+						"ward": "-"
+					}
 				}
 			],
-			"unsaved": 0.9948840156982699,
+			"unsaved": {
+				"mean": 0.99488401569827,
+				"sd": 0.8646022358381555,
+				"least": 0,
+				"distribution": [
+					0.31859890854678385, 0.42182883864710274, 0.20949159328817027, 0.04625064759694586,
+					0.0038300119209972753
+				]
+			},
 			"rules": [
-				{ "name": "Armour Bane (1)", "side": "attacker", "applied": false },
-				{ "name": "Ithilmar Weapons", "side": "attacker", "applied": false },
-				{ "name": "Parry", "side": "target", "applied": false }
+				{
+					"name": "Armour Bane (1)",
+					"side": "attacker",
+					"applied": false
+				},
+				{
+					"name": "Ithilmar Weapons",
+					"side": "attacker",
+					"applied": false
+				},
+				{
+					"name": "Parry",
+					"side": "target",
+					"applied": false
+				}
 			]
 		},
 		{
 			"slot": "initiative-5",
 			"label": "Initiative 5",
 			"side": "target",
-			"attacks": 4.031808954893498,
-			"needed": { "hit": "4+", "wound": "4+", "save": "2+", "ward": "6+" },
-			"parts": [
-				{
-					"name": "Elven Archer",
-					"models": 4.031808954893498,
-					"attacks": 4.031808954893498,
-					"unsaved": 0.1399933664893576,
-					"needed": { "hit": "4+", "wound": "4+", "save": "2+", "ward": "6+" }
-				}
-			],
-			"unsaved": 0.1399933664893576,
-			"rules": [{ "name": "Dragon Armour", "side": "attacker", "applied": true }]
-		}
-	],
-	"standing": {
-		"attacker": [
-			{ "after": null, "models": 5.0, "distribution": [0.0, 0.0, 0.0, 0.0, 0.0, 1.0] },
-			{
-				"after": "volley",
-				"models": 4.768518518518518,
-				"distribution": [
-					2.1268224907304786e-7, 2.190627165452393e-5, 0.0009025383921663859, 0.01859229087862755,
-					0.19150059604986377, 0.7889824557254387
-				]
-			},
-			{
-				"after": "initiative-5",
-				"models": 4.6285276109517905,
-				"distribution": [
-					3.950848605599593e-5, 0.0005029485833176883, 0.005424040811291537, 0.045093493994974795,
-					0.26280394186083456, 0.6861360662635254
-				]
-			}
-		],
-		"target": [
-			{
-				"after": null,
-				"models": 10.0,
-				"distribution": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
-			},
-			{
-				"after": "initiative-9",
-				"models": 5.022737826164494,
-				"distribution": [
-					0.0, 0.004942965111219602, 0.035589348800781136, 0.11418960258089222, 0.21428768744633114,
-					0.25923376193882625, 0.20971667946731723, 0.1135076623256383, 0.039661456282640305,
-					0.008125927578452392, 0.0007449084679014454
-				]
-			},
-			{
-				"after": "initiative-7",
-				"models": 4.031808954893498,
+			"attacks": {
+				"mean": 4.031808954893498,
+				"sd": 1.7211391027765806,
+				"least": 0,
 				"distribution": [
 					0.019311812357051424, 0.051631849915415036, 0.11733516028434186, 0.19102962273629776,
 					0.22648532869080823, 0.19633251388158438, 0.12338983029443652, 0.05486066102380535,
 					0.016405805982670035, 0.002970173101159257, 0.00024724173243014555
 				]
+			},
+			"needed": {
+				"hit": "4+",
+				"wound": "4+",
+				"save": "2+",
+				"ward": "6+"
+			},
+			"parts": [
+				{
+					"name": "Elven Archer",
+					"models": {
+						"mean": 4.031808954893498,
+						"sd": 1.7211391027765806,
+						"least": 0,
+						"distribution": [
+							0.019311812357051424, 0.051631849915415036, 0.11733516028434186, 0.19102962273629776,
+							0.22648532869080823, 0.19633251388158438, 0.12338983029443652, 0.05486066102380535,
+							0.016405805982670035, 0.002970173101159257, 0.00024724173243014555
+						]
+					},
+					"attacks": {
+						"mean": 4.031808954893498,
+						"sd": 1.7211391027765806,
+						"least": 0,
+						"distribution": [
+							0.019311812357051424, 0.051631849915415036, 0.11733516028434186, 0.19102962273629776,
+							0.22648532869080823, 0.19633251388158438, 0.12338983029443652, 0.05486066102380535,
+							0.016405805982670035, 0.002970173101159257, 0.00024724173243014555
+						]
+					},
+					"unsaved": {
+						"mean": 0.1399933664893576,
+						"sd": 0.3724297992751767,
+						"least": 0,
+						"distribution": [
+							0.8688084084233031, 0.12273322247039, 0.008123981090238635, 0.00032553535135515136,
+							8.689665106970178e-6, 1.6089259652604878e-7, 2.0881649679054227e-9,
+							1.873319206214463e-11, 1.1108268487891243e-13, 3.929781362673123e-16,
+							6.297916531080864e-19
+						]
+					},
+					"needed": {
+						"hit": "4+",
+						"wound": "4+",
+						"save": "2+",
+						"ward": "6+"
+					}
+				}
+			],
+			"unsaved": {
+				"mean": 0.1399933664893576,
+				"sd": 0.3724297992751767,
+				"least": 0,
+				"distribution": [
+					0.8688084084233031, 0.12273322247039, 0.008123981090238635, 0.00032553535135515136,
+					8.689665106970178e-6, 1.6089259652604878e-7, 2.0881649679054227e-9, 1.873319206214463e-11,
+					1.1108268487891243e-13, 3.929781362673123e-16, 6.297916531080864e-19
+				]
+			},
+			"rules": [
+				{
+					"name": "Dragon Armour",
+					"side": "attacker",
+					"applied": true
+				}
+			]
+		}
+	],
+	"standing": {
+		"attacker": [
+			{
+				"after": null,
+				"models": {
+					"mean": 5.0,
+					"sd": 0.0,
+					"least": 0,
+					"distribution": [0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+				}
+			},
+			{
+				"after": "volley",
+				"models": {
+					"mean": 4.768518518518518,
+					"sd": 0.46985609097649167,
+					"least": 0,
+					"distribution": [
+						2.1268224907304786e-7, 2.190627165452393e-5, 0.0009025383921663859, 0.01859229087862755,
+						0.19150059604986377, 0.7889824557254387
+					]
+				}
+			},
+			{
+				"after": "initiative-5",
+				"models": {
+					"mean": 4.6285276109517905,
+					"sd": 0.6025258822670244,
+					"least": 0,
+					"distribution": [
+						3.950848605599593e-5, 0.0005029485833176883, 0.005424040811291537, 0.045093493994974795,
+						0.26280394186083456, 0.6861360662635254
+					]
+				}
+			}
+		],
+		"target": [
+			{
+				"after": null,
+				"models": {
+					"mean": 10.0,
+					"sd": 0.0,
+					"least": 0,
+					"distribution": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+				}
+			},
+			{
+				"after": "initiative-9",
+				"models": {
+					"mean": 5.022737826164494,
+					"sd": 1.4964152693300627,
+					"least": 0,
+					"distribution": [
+						0.0, 0.004942965111219602, 0.035589348800781136, 0.11418960258089222,
+						0.21428768744633114, 0.25923376193882625, 0.20971667946731723, 0.1135076623256383,
+						0.039661456282640305, 0.008125927578452392, 0.0007449084679014454
+					]
+				}
+			},
+			{
+				"after": "initiative-7",
+				"models": {
+					"mean": 4.031808954893498,
+					"sd": 1.7211391027765806,
+					"least": 0,
+					"distribution": [
+						0.019311812357051424, 0.051631849915415036, 0.11733516028434186, 0.19102962273629776,
+						0.22648532869080823, 0.19633251388158438, 0.12338983029443652, 0.05486066102380535,
+						0.016405805982670035, 0.002970173101159257, 0.00024724173243014555
+					]
+				}
 			}
 		]
 	},
 	"result": {
-		"scores": { "attacker": 5.968191045106502, "target": 0.38482985888405813 },
+		"scores": {
+			"attacker": 5.968191045106502,
+			"target": 0.38482985888405813
+		},
 		"attacker_wins": 0.9880784875599805,
 		"draw": 0.006543817394581051,
 		"target_wins": 0.005377695045438389,
-		"rules": [{ "name": "Massed Infantry", "side": "target", "applied": true }]
+		"rules": [
+			{
+				"name": "Massed Infantry",
+				"side": "target",
+				"applied": true
+			}
+		]
 	},
 	"breaks": {
 		"attacker": {
@@ -197,7 +527,6 @@
 		"Impetuous",
 		"Ithilmar Barding",
 		"Sons of Caledor",
-		"Swiftstride",
 		"Valour of Ages"
 	]
 }
