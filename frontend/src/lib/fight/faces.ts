@@ -181,7 +181,7 @@ export function unitFace(
 	editor: number | null = null
 ): Face {
 	const rules = open ? unit.rules : [];
-	const dims = `${unit.frontage} × ${unit.ranks}`;
+	const strength = String(unit.unit_strength);
 	const chipped = [
 		...unit.options.map((option) => ({ text: option.name, held: false })),
 		...unit.held.map((held) => ({ text: held, held: true }))
@@ -199,7 +199,7 @@ export function unitFace(
 		2 * INSET + measure(unit.name, 'title') + 12 + measure(`×${unit.size}`, 'mono'),
 		2 * INSET + Math.max(...chipWidths),
 		2 * INSET + unit.frontage * (base?.width ?? 0),
-		2 * INSET + measure(dims, 'mono')
+		2 * INSET + measure('Unit Strength', 'small') + 12 + measure(strength, 'mono')
 	);
 	const marks: Mark[] = [
 		text(INSET, 23, unit.name, 'title'),
@@ -230,7 +230,10 @@ export function unitFace(
 		}
 		bottom = top + Math.ceil(unit.size / unit.frontage) * base.depth;
 	}
-	marks.push(text(width - INSET, bottom + 20, dims, 'mono', 'end'));
+	marks.push(
+		text(INSET, bottom + 20, 'Unit Strength', 'small'),
+		text(width - INSET, bottom + 20, strength, 'mono', 'end')
+	);
 	const face: Face = { chrome: 'spine', width, height: bottom + 20 + UNIT.bottom, marks };
 	return editable(ruled(face, rules, INSET), editor);
 }
