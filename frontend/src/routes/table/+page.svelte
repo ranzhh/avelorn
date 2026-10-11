@@ -404,13 +404,9 @@
 					<button class="btn btn-sm" onclick={() => turn(block.id, 0)}>face up</button>
 					<button class="btn btn-sm" onclick={() => remove(block.id)}>remove</button>
 				</div>
-				<p class="meta hint">drag it onto another block to charge or shoot</p>
 			{:else}
 				<div class="field"><span>blocks</span><span class="num">{battle.placed.length}</span></div>
 				<div class="field"><span>points</span><span class="num">{points}</span></div>
-				<p class="meta hint">
-					click a unit to deploy it, then drag one block onto another to charge or shoot
-				</p>
 			{/if}
 		</Dock>
 
