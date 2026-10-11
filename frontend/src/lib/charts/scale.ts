@@ -57,6 +57,30 @@ export function percent(p: number): string {
 	return `${(p * 100).toFixed(p < 0.1 ? 1 : 0)}%`;
 }
 
+/**
+ * Chances printed so they add up to their sum as printed: all at the
+ * precision `percent` gives the smallest of them, each rounded down and the
+ * units left over going to the largest remainders.
+ */
+export function percents(chances: number[]): string[] {
+	const places = chances.some((p) => p > 0 && p < 0.1) ? 1 : 0;
+	const whole = 10 ** (places + 2);
+	const scaled = chances.map((p) => p * whole);
+	const units = scaled.map(Math.floor);
+	const sum = (values: number[]) => values.reduce((total, value) => total + value, 0);
+	const over = Math.round(sum(scaled)) - sum(units);
+	const remainder = (index: number) => scaled[index] - units[index];
+	const order = scaled.map((_, index) => index).sort((a, b) => remainder(b) - remainder(a));
+	for (const index of order.slice(0, over)) units[index] += 1;
+	return units.map((unit, index) => {
+		const p = chances[index];
+		if (p === 0) return '0%';
+		if (unit === 0) return '<0.1%';
+		if (unit === whole && p < 1) return places ? '>99.9%' : '>99%';
+		return `${(unit / 10 ** places).toFixed(places)}%`;
+	});
+}
+
 /** A probability to two places: for columns that must line up. */
 export function exact(p: number): string {
 	return `${(p * 100).toFixed(2)}%`;

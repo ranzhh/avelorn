@@ -1,6 +1,5 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { percent } from '$lib/charts/scale';
 	import type { ChargeArc, FightBody, FightLanes } from '$lib/api/client';
 	import type { Placed as Block } from '$lib/table';
 	import Battlefield from './Battlefield.svelte';
@@ -174,7 +173,7 @@
 					rx="3"
 				/>
 				<text x={x + 10} y={y + 17}>{node.name}</text>
-				<text class="mono" x={x + width - 8} y={y + 17} text-anchor="end">{percent(node.p)}</text>
+				<text class="mono" x={x + width - 8} y={y + 17} text-anchor="end">{node.text}</text>
 			{/if}
 		</g>
 	{/each}

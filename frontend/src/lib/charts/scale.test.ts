@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { band, labelEvery, percent, ticks } from './scale';
+import { band, labelEvery, percent, percents, ticks } from './scale';
 
 describe('band', () => {
 	it('drops the negligible tail', () => {
@@ -51,6 +51,29 @@ describe('percent', () => {
 		expect(percent(0.999)).toBe('>99%');
 		expect(percent(0)).toBe('0%');
 		expect(percent(1)).toBe('100%');
+	});
+});
+
+describe('percents', () => {
+	it('prints chances making up a whole so they add up to 100%', () => {
+		const taken = 0.81522;
+		const given = [0.23291, 0.35586, 0.22645].map((p) => p / taken);
+
+		expect(given.map(percent)).toEqual(['29%', '44%', '28%']);
+		expect(percents(given)).toEqual(['28%', '44%', '28%']);
+	});
+
+	it('prints them all to a place when one is small', () => {
+		expect(percents([0.702, 0.0613, 0.0978, 0.1389])).toEqual(['70.2%', '6.1%', '9.8%', '13.9%']);
+	});
+
+	it('adds them up to their own sum when they make up part of a whole', () => {
+		expect(percents([0.126, 0.126, 0.126])).toEqual(['13%', '13%', '12%']);
+	});
+
+	it('does not round a real chance to nothing, or a partial one to all', () => {
+		expect(percents([0.6, 0.4, 0])).toEqual(['60%', '40%', '0%']);
+		expect(percents([0.9996, 0.0002, 0.0002])).toEqual(['>99.9%', '<0.1%', '<0.1%']);
 	});
 });
 

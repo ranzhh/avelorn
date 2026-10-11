@@ -1,5 +1,5 @@
 import type { FightLanes } from '$lib/api/client';
-import { percent } from '$lib/charts/scale';
+import { percent, percents } from '$lib/charts/scale';
 import {
 	LANES,
 	breakFace,
@@ -16,6 +16,7 @@ import {
 	type Point
 } from './faces';
 import { battlefieldSize } from './field';
+import { odds } from './odds';
 
 export { LANES, type Lane };
 export const other = (lane: Lane): Lane => (lane === 'attacker' ? 'target' : 'attacker');
@@ -83,7 +84,7 @@ export type Placed =
 	| { kind: 'battlefield'; id: string; box: Box }
 	| { kind: 'reaction'; id: string; box: Box }
 	| { kind: 'short'; id: string; box: Box }
-	| { kind: 'outcome'; id: string; lane: Lane; box: Box; name: string; p: number };
+	| { kind: 'outcome'; id: string; lane: Lane; box: Box; name: string; p: number; text: string };
 
 export interface Edge {
 	d: string;
@@ -148,6 +149,7 @@ export function draw(
 	editor: Editor | null = null,
 	mapped = false
 ): Drawing {
+	const chances = odds(lanes);
 	const reaches = lanes.charge?.reaches ?? null;
 	const fought = reaches !== 0;
 	const events = columns(fought ? lanes : { ...lanes, strikes: [] });
@@ -179,7 +181,7 @@ export function draw(
 	};
 	const eventWidth = (lane: Lane, event: Event | null) =>
 		event ? eventFace(lane, event).width : 0;
-	const resultCard = resultFace(lanes, measure, open === 'result');
+	const resultCard = resultFace(lanes, chances.shares, measure, open === 'result');
 	const breakCards = {
 		attacker: breakFace(lanes.breaks.attacker, measure, open === 'break:attacker'),
 		target: breakFace(lanes.breaks.target, measure, open === 'break:target')
@@ -373,15 +375,11 @@ export function draw(
 			labels.push({
 				x: test.x - 17,
 				y: track(lane) - 6,
-				text: percent(lanes.breaks[lane].taken),
+				text: percent(chances.taken[lane]),
 				anchor: 'middle'
 			});
 			const spine = test.x + 16;
-			const outcomes = [
-				['Give Ground', lanes.breaks[lane].give_ground],
-				['Fall Back in Good Order', lanes.breaks[lane].fall_back_in_good_order],
-				['Break', lanes.breaks[lane].break]
-			] as const;
+			const outcomes = chances.outcomes[lane];
 			const tops = outcomes.map((_, index) =>
 				lane === 'attacker'
 					? bandTop.attacker - 12 - (3 - index) * OUTCOME.step
@@ -396,6 +394,7 @@ export function draw(
 				]),
 				bare: true
 			});
+			const texts = percents(outcomes.map(([, p]) => p));
 			outcomes.forEach(([name, p], index) => {
 				const box = {
 					x: test.x + OUTCOME.inset,
@@ -403,7 +402,8 @@ export function draw(
 					width: OUTCOME.width,
 					height: OUTCOME.height
 				};
-				nodes.push({ kind: 'outcome', id: `break:${lane}`, lane, box, name, p });
+				const text = texts[index];
+				nodes.push({ kind: 'outcome', id: `break:${lane}`, lane, box, name, p, text });
 				edges.push({ d: path([{ x: spine, y: box.y + box.height / 2 }, left(box)]) });
 			});
 		}

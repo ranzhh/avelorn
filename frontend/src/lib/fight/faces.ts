@@ -513,15 +513,15 @@ function scoring(lanes: FightLanes, lane: Lane): [string, string][] {
 	];
 }
 
-/** The combat result: shut, each side's score and how the round goes; open, the scores in parts. */
-export function resultFace(lanes: FightLanes, measure: Measure, open: boolean): Face {
+/** The combat result: shut, each side's score and its `shares`; open, the scores in parts. */
+export function resultFace(
+	lanes: FightLanes,
+	shares: Share[],
+	measure: Measure,
+	open: boolean
+): Face {
 	const { result } = lanes;
 	const rules = open ? result.rules : [];
-	const shares: Share[] = [
-		['attacker', result.attacker_wins],
-		['draw', result.draw],
-		['target', result.target_wins]
-	];
 	const pad = 2 * STRIKE.inset;
 	const parts = { attacker: scoring(lanes, 'attacker'), target: scoring(lanes, 'target') };
 	const row = ([name, value]: [string, string], index: number) =>
