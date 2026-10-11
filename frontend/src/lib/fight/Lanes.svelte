@@ -2,6 +2,7 @@
 	import type { Snippet } from 'svelte';
 	import { percent } from '$lib/charts/scale';
 	import type { ChargeArc, FightBody, FightLanes } from '$lib/api/client';
+	import type { Placed as Block } from '$lib/table';
 	import Battlefield from './Battlefield.svelte';
 	import Card from './Card.svelte';
 	import type { Field } from './field';
@@ -25,9 +26,12 @@
 		/** A unit double-clicked: edit it. */
 		onedit: (lane: Lane) => void;
 		oncharge: (change: { full_inches?: number; arc?: ChargeArc; reaction?: Reacting }) => void;
+		/** A block dragged across the battlefield's crop. */
+		onmove: (lane: Lane, block: Block) => void;
 	}
 
-	let { lanes, charge, field, open, editing, editor, ontoggle, onedit, oncharge }: Props = $props();
+	let { lanes, charge, field, open, editing, editor, ontoggle, onedit, oncharge, onmove }: Props =
+		$props();
 
 	const FONTS: Record<Font, string> = {
 		title: '600 13px system-ui, sans-serif',
@@ -57,7 +61,7 @@
 	] as const;
 
 	function click(event: MouseEvent, node: Placed) {
-		if (event.detail > 1 || (event.target as Element).closest('foreignObject')) return;
+		if (event.detail > 1 || (event.target as Element).closest('foreignObject, .crop')) return;
 		ontoggle(node.id);
 	}
 
@@ -134,7 +138,7 @@
 					</foreignObject>
 				{/if}
 			{:else if node.kind === 'battlefield' && charge}
-				<Battlefield box={node.box} {charge} {field} open={open === node.id} {oncharge} />
+				<Battlefield box={node.box} {charge} {field} open={open === node.id} {oncharge} {onmove} />
 			{:else if node.kind === 'reaction' && lanes.reaction}
 				{@const reaction = lanes.reaction}
 				<rect class="card" {x} {y} {width} {height} rx="8" />

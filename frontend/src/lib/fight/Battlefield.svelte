@@ -1,8 +1,9 @@
 <script lang="ts">
 	import type { ChargeArc, FightBody } from '$lib/api/client';
 	import { TABLE, corners, type Placed as Block, type Point } from '$lib/table';
-	import { LANES, type Box } from './faces';
-	import { BESIDE, CROP, measured, type Field } from './field';
+	import { LANES, type Box, type Lane } from './faces';
+	import { BESIDE, CROP, measured, standable, type Field } from './field';
+	import { other } from './layout';
 
 	interface Props {
 		box: Box;
@@ -12,9 +13,11 @@
 		field: Field | null;
 		open: boolean;
 		oncharge: (change: { full_inches?: number; arc?: ChargeArc }) => void;
+		/** A block dragged across the crop to stand somewhere new. */
+		onmove: (lane: Lane, block: Block) => void;
 	}
 
-	let { box, charge, field, open, oncharge }: Props = $props();
+	let { box, charge, field, open, oncharge, onmove }: Props = $props();
 
 	const ARCS: ChargeArc[] = ['front', 'flank', 'rear'];
 	const feet = (edge: number) => Array.from({ length: edge / 12 - 1 }, (_, n) => (n + 1) * 12);
@@ -40,6 +43,29 @@
 		const value = event.currentTarget.valueAsNumber;
 		if (Number.isInteger(value) && value >= 0) oncharge({ full_inches: value });
 	}
+
+	let frame = $state<SVGSVGElement | null>(null);
+	/** The block being dragged, and where on it the pointer took hold, in inches from its centre. */
+	let held = $state<{ lane: Lane; x: number; y: number } | null>(null);
+
+	function at(event: PointerEvent): Point {
+		const point = new DOMPoint(event.clientX, event.clientY);
+		return point.matrixTransform(frame!.getScreenCTM()!.inverse());
+	}
+
+	function grab(event: PointerEvent, lane: Lane, block: Block) {
+		(event.currentTarget as Element).setPointerCapture(event.pointerId);
+		const point = at(event);
+		held = { lane, x: point.x - block.x, y: point.y - block.y };
+	}
+
+	function drag(event: PointerEvent) {
+		const grip = held;
+		if (!grip || !field) return;
+		const point = at(event);
+		const moved = { ...field.blocks[grip.lane], x: point.x - grip.x, y: point.y - grip.y };
+		if (standable(moved, field.blocks[other(grip.lane)], field.crop)) onmove(grip.lane, moved);
+	}
 </script>
 
 <g class="field" class:open transform="translate({box.x},{box.y})">
@@ -57,6 +83,7 @@
 		{#if open}
 			{@const { crop, blocks } = field}
 			<svg
+				bind:this={frame}
 				class="crop"
 				x={CROP.x}
 				y={CROP.y}
@@ -80,7 +107,15 @@
 				/>
 				{#each LANES as lane}
 					{@const points = corners(blocks[lane])}
-					<g class="block {lane}">
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<g
+						class="block {lane}"
+						class:held={held?.lane === lane}
+						onpointerdown={(event) => grab(event, lane, blocks[lane])}
+						onpointermove={drag}
+						onpointerup={() => (held = null)}
+						onpointercancel={() => (held = null)}
+					>
 						<polygon points={outline(points)} />
 						<line
 							class="front"
@@ -164,6 +199,12 @@
 		stroke: var(--attacker);
 		stroke-width: 1.5;
 		stroke-dasharray: 4 3;
+	}
+	.block {
+		cursor: grab;
+	}
+	.block.held {
+		cursor: grabbing;
 	}
 	.block.attacker polygon {
 		fill: var(--attacker-tint);

@@ -26,24 +26,26 @@
 	let body = $derived<FightBody | null>(
 		last?.action === 'fight' ? $state.snapshot(last.body) : null
 	);
-	const blocks = $derived(
+	const seed = $derived(
 		last?.action === 'fight'
 			? seated(last.body, last.between, $state.snapshot(battle.placed))
 			: null
 	);
+	let blocks = $derived(seed);
 	let lanes = $state<FightLanes | null>(null);
 	let refusal = $state('');
 	let pending = $state(false);
 	let asked = 0;
 
 	const field = $derived(
-		blocks &&
+		seed &&
+			blocks &&
 			lanes && {
 				blocks: {
 					attacker: formed(blocks.attacker, lanes.units.attacker),
 					target: formed(blocks.target, lanes.units.target)
 				},
-				crop: cropped(blocks)
+				crop: cropped(seed)
 			}
 	);
 
@@ -83,7 +85,14 @@
 {#if last?.action === 'fight' && body}
 	{#if refusal}<p class="refuse">{refusal}</p>{/if}
 	{#if lanes}
-		<Fight {lanes} {body} stale={pending || !!refusal} {field} onedit={(next) => (body = next)} />
+		<Fight
+			{lanes}
+			{body}
+			stale={pending || !!refusal}
+			{field}
+			onedit={(next) => (body = next)}
+			onmove={(lane, block) => blocks && (blocks = { ...blocks, [lane]: block })}
+		/>
 	{/if}
 {:else if last?.action === 'volley' && program}
 	<p class="meta">

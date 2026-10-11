@@ -1,5 +1,14 @@
 import type { ChargeArc, FightBody, LaneUnit } from '$lib/api/client';
-import { TABLE, arc, bounds, refit, separation, type Placed as Block } from '$lib/table';
+import {
+	TABLE,
+	arc,
+	bounds,
+	corners,
+	refit,
+	separation,
+	within,
+	type Placed as Block
+} from '$lib/table';
 import { seat } from './body';
 import { LANES, type Box, type Lane } from './faces';
 
@@ -77,4 +86,13 @@ export function cropped(blocks: Blocks): Box {
 		width,
 		height
 	};
+}
+
+/** Whether a block dragged in the crop may stand there: on the table, inside the crop, clear of the other. */
+export function standable(block: Block, other: Block, crop: Box): boolean {
+	const shown = corners(block).every(
+		({ x, y }) =>
+			x >= crop.x && y >= crop.y && x <= crop.x + crop.width && y <= crop.y + crop.height
+	);
+	return shown && within(block) && separation(block, other) > 0;
 }

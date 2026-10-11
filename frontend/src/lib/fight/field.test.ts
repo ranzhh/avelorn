@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { LaneUnit } from '$lib/api/client';
 import { TABLE, bounds, type Placed } from '$lib/table';
 import princes from './fixtures/princes-charge-archers.json';
-import { CROP, cropped, formed, measured } from './field';
+import { CROP, cropped, formed, measured, standable } from './field';
 import { LANES, type Box, type Lane } from './faces';
 
 const INCH = 25.4;
@@ -93,5 +93,15 @@ describe('the crop of the table', () => {
 		expect(crop.x).toBe(0);
 		expect(crop.y + crop.height).toBeCloseTo(TABLE.depth);
 		expect(LANES.filter((lane) => !holds(crop, blocks[lane]))).toEqual([]);
+	});
+});
+
+describe('a block dragged across the crop', () => {
+	it('stands only on the table, inside the crop and clear of the other block', () => {
+		const target = standing(archers, 36, 31, 0);
+		const crop = { x: -4, y: 6, width: 60, height: 32 };
+		const at = (x: number, y: number) => standable(standing(dragons, x, y, 180), target, crop);
+
+		expect([at(36, 15), at(36, 29), at(36, 7), at(1, 15)]).toEqual([true, false, false, false]);
 	});
 });
