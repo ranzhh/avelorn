@@ -26,7 +26,7 @@
 		charge: NonNullable<FightBody['charge']> | null;
 		selected: string | null;
 		/** A node picked, and the side of the drawing away from it, where a panel would not cover it. */
-		onselect: (id: string, away: 'left' | 'right') => void;
+		onselect: (id: string | null, away?: 'left' | 'right') => void;
 		/** A unit double-clicked: open its editor. */
 		onopen: (lane: Lane) => void;
 		oncharge: (change: { full_inches?: number; arc?: ChargeArc; reaction?: Reacting }) => void;
@@ -48,6 +48,10 @@
 	};
 
 	const drawing = $derived(draw(lanes, measure));
+
+	$effect(() => {
+		if (selected && !drawing.nodes.some((node) => node.id === selected)) onselect(null);
+	});
 	const ARCS: ChargeArc[] = ['front', 'flank', 'rear'];
 	const REACTIONS = [
 		{ offered: 'hold', value: 'hold', text: 'Hold', name: 'Hold' },
