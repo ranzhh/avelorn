@@ -148,6 +148,38 @@ class MaximumChargeRange:
         return " + ".join((str(self.movement), str(self.printed), *added))
 
 
+@dataclass(frozen=True)
+class Scored:
+    """A side's combat result in its parts.
+
+    ``wounds`` are the Wounds it inflicted, ``flank_or_rear`` the points for
+    the arc it fights its enemy in, and ``rules`` each rule's slug with the
+    points it adds.
+    """
+
+    wounds: int
+    rank_bonus: int
+    flank_or_rear: int
+    rules: tuple[tuple[str, int], ...]
+
+    @property
+    def score(self) -> int:
+        """The combat result: every part together."""
+        added = sum(points for _, points in self.rules)
+        return self.wounds + self.rank_bonus + self.flank_or_rear + added
+
+    def __str__(self) -> str:
+        """Each part, as text.
+
+        Returns:
+            The parts joined by "+".
+        """
+        added = (f"{rule} {points}" for rule, points in self.rules)
+        return " + ".join(
+            (str(self.wounds), str(self.rank_bonus), str(self.flank_or_rear), *added)
+        )
+
+
 class Kind(StrEnum):
     """Step kind."""
 
@@ -1193,6 +1225,24 @@ def _listed(ranks: frozenset[str]) -> str:
     return ", ".join(sorted(ranks))
 
 
+def _scored(
+    attacker: Fielding,
+    target: Fielding,
+    standing: Standings,
+    enemy_at_start_of_turn: Standings,
+    enemy: Standings,
+    arc: ChargeArc,
+    changed: tuple[Hashable, ...],
+) -> Scored:
+    _since(target, enemy_at_start_of_turn, enemy)
+    return Scored(
+        wounds=target.wounds_left(enemy_at_start_of_turn) - target.wounds_left(enemy),
+        rank_bonus=attacker.rank_bonus(standing),
+        flank_or_rear=arc.combat_result_bonus,
+        rules=Payloads.of(changed).by_rule(Quantity.COMBAT_RESULT),
+    )
+
+
 def calculate_combat_result(
     attacker: Fielding,
     target: Fielding,
@@ -1215,11 +1265,8 @@ def calculate_combat_result(
     Returns:
         The side's combat result.
     """
-    _since(target, enemy_at_start_of_turn, enemy)
-    inflicted = target.wounds_left(enemy_at_start_of_turn) - target.wounds_left(enemy)
-    added = Payloads.of(changed).added(Quantity.COMBAT_RESULT)
-    bonus = attacker.rank_bonus(standing) + arc.combat_result_bonus
-    return Distribution.pure(inflicted + bonus + added)
+    scored = _scored(attacker, target, standing, enemy_at_start_of_turn, enemy, arc, changed)
+    return Distribution.pure(scored.score)
 
 
 def who_is_the_winner(
@@ -1248,6 +1295,10 @@ def who_is_the_winner(
 
 def _lead(score: int, enemy_score: int) -> int:
     return score - enemy_score
+
+
+def _decided(score: int, enemy_score: int, fought: Fought) -> tuple[int, Fought]:
+    return score - enemy_score, fought
 
 
 def _leadership_in_force(
@@ -1341,6 +1392,15 @@ _TARGET_STANDING = Fact("standing", Side.TARGET)
 _HELD = Output(WEAPON_CHOICE)
 _STRIKING = Output(WEAPON_CHOICE, Side.ATTACKER)
 _SCORES = (Output("calculate-combat-result"), Output("calculate-combat-result", Side.TARGET))
+_SCORING = (
+    _ATTACKER,
+    _TARGET,
+    Fact("standing", Side.ATTACKER),
+    Fact("standing-at-start-of-turn", Side.TARGET),
+    _TARGET_STANDING,
+    Fact("enemy-arc", Side.ATTACKER),
+    CHANGED,
+)
 _UNITED = Monoid[Hashable](_UNSHOWN, _united)
 _COUNT = Monoid(0)
 _UNSAVED = (Output("roll-to-wound"), Output("make-armour-saves"), Output("ward-saves"))
@@ -1769,18 +1829,13 @@ _SPECS = (
         name="calculate-combat-result",
         kind=Kind.CONSEQUENCE,
         side=Side.ATTACKER,
-        reads=(
-            _ATTACKER,
-            _TARGET,
-            Fact("standing", Side.ATTACKER),
-            Fact("standing-at-start-of-turn", Side.TARGET),
-            _TARGET_STANDING,
-            Fact("enemy-arc", Side.ATTACKER),
-            CHANGED,
-        ),
+        reads=_SCORING,
         kernel=calculate_combat_result,
         runs={Operation.ADD: frozenset({Quantity.COMBAT_RESULT})},
-        readings={"score": _offer("calculate-combat-result", _itself, _COUNT)},
+        readings={
+            "score": _offer("calculate-combat-result", _itself, _COUNT),
+            "parts": Offered(_SCORING, _scored, _UNITED),
+        },
     ),
     Spec(
         sequence=StepSequence.COMBAT_RESULT,
@@ -1792,6 +1847,7 @@ _SPECS = (
         readings={
             "result": _offer("who-is-the-winner"),
             "margin": Offered(_SCORES, _lead, _COUNT),
+            "decided": Offered((*_SCORES, Output("who-is-the-winner")), _decided, _UNITED),
         },
         outcomes=frozenset(Fought),
     ),

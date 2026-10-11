@@ -45,6 +45,11 @@ PRINCES_CHARGE_DWARFS_FROM_AFAR = {
     "b": {"unit": "dwarf-warriors", "size": 10, "frontage": 5, "options": ["veteran"]},
     "charge": {"side": "a", "full_inches": 12, "arc": "front"},
 }
+LIONS_CHARGE_SWORDMASTERS = {
+    "a": {"unit": "war-lions", "size": 2},
+    "b": {"unit": "swordmasters-of-hoeth", "size": 10, "frontage": 5},
+    "charge": {"side": "a", "full_inches": 8, "arc": "front"},
+}
 SPEARMEN_CHARGE_ARCHERS = {
     "a": {"unit": "elven-archers", "size": 10, "frontage": 5},
     "b": {"unit": "elven-spearmen", "size": 20, "frontage": 5},
@@ -357,6 +362,51 @@ def test_a_strike_spreads_its_unsaved_wounds_as_its_dice_fall(client: TestClient
     assert [(spread["mean"], spread["sd"]) for spread in spreads] == [
         pytest.approx(moments(spread)) for spread in spreads
     ]
+
+
+def test_a_combat_result_is_scored_in_its_parts(client: TestClient) -> None:
+    """Five Dragon Princes charge ten Dwarf Warriors five wide from 12in, into the front.
+
+    Four wide, the Princes claim no Rank Bonus, no flank or rear point and no
+    rule's points, so their score is the Wounds they inflict, outcome by
+    outcome. The Dwarfs, Heavy Infantry, claim a Rank Bonus of 1 while nine or
+    more stand behind a full front rank, and Massed Infantry's point while they
+    outnumber the Princes in Unit Strength; their score is those parts and
+    their Wounds together.
+    """
+    lanes = served(client, "/graph/fight", PRINCES_CHARGE_DWARFS_FROM_AFAR)
+
+    princes, dwarfs = (lanes["result"]["scores"][seat] for seat in ("attacker", "target"))
+    assert princes["score"]["distribution"] == pytest.approx(princes["wounds"]["distribution"])
+    assert [princes["rank_bonus"]["distribution"], princes["flank_or_rear"]["distribution"]] == [
+        [1],
+        [1],
+    ]
+    assert princes["rules"] == []
+    ranked = sum(lanes["standing"]["target"][-1]["models"]["distribution"][9:])
+    assert dwarfs["rank_bonus"]["distribution"] == pytest.approx([1 - ranked, ranked])
+    assert [rule["name"] for rule in dwarfs["rules"]] == ["Massed Infantry"]
+    parts = [dwarfs[part] for part in ("wounds", "rank_bonus", "flank_or_rear")]
+    added = [rule["points"] for rule in dwarfs["rules"]]
+    assert dwarfs["score"]["mean"] == pytest.approx(sum(part["mean"] for part in parts + added))
+
+
+def test_a_margin_splits_by_who_wins_the_round(client: TestClient) -> None:
+    """Two War Lions charge ten Swordmasters of Hoeth five wide from 8in, into the front.
+
+    A side wiped out loses whatever it scored, so where the Swordmasters cut
+    down both Lions they win at an even margin too. Split by how the round
+    goes, the margin's chances add up to the chance of each way.
+    """
+    result = served(client, "/graph/fight", LIONS_CHARGE_SWORDMASTERS)["result"]
+
+    winners = result["winners"]
+    ways = ("attacker_wins", "draw", "target_wins")
+    assert [sum(winners[way]) for way in ways] == pytest.approx([result[way] for way in ways])
+    split = [sum(chances) for chances in zip(*(winners[way] for way in ways), strict=True)]
+    assert split == pytest.approx(result["margin"]["distribution"])
+    even = -result["margin"]["least"]
+    assert winners["target_wins"][even] > 0
 
 
 def test_each_part_of_a_stand_and_shoot_shoots_at_its_own_skill(client: TestClient) -> None:

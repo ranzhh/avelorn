@@ -69,11 +69,11 @@ items:
   - step: calculate-combat-result
     sequence: combat-result
     of: [attacker, target]
-    readings: [score]
+    readings: [score, parts]
   - step: who-is-the-winner
     sequence: combat-result
     of: [attacker, target]
-    readings: [result, margin]
+    readings: [result, margin, decided]
   - step: break-test
     sequence: break
     of: [attacker, target]

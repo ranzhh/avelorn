@@ -10,6 +10,7 @@ is drawn as its spread over every outcome.
 
 from collections.abc import Hashable, Iterable, Mapping
 from fractions import Fraction
+from functools import partial
 from math import sqrt
 from typing import Any, Literal
 
@@ -24,7 +25,15 @@ from avelorn.tow.programs import At, Evaluated, held_throughout
 from avelorn.tow.round import Fight
 from avelorn.tow.schema.side import Side
 from avelorn.tow.schema.unit import OptionKind
-from avelorn.tow.steps import AUTOMATIC_HITS, NO_ROLL, WEAPON_CHOICE, BreakTest, Fought, scores
+from avelorn.tow.steps import (
+    AUTOMATIC_HITS,
+    NO_ROLL,
+    WEAPON_CHOICE,
+    BreakTest,
+    Fought,
+    Scored,
+    scores,
+)
 from avelorn.tow.views import ChosenOption, Reacting
 from avelorn.tow.volley import Volley
 
@@ -232,10 +241,49 @@ class StandingAt(_Drawn):
     models: Spread
 
 
-class CombatResult(_Drawn):
-    """Each side's mean combat result, and the chance of each way the round goes."""
+class RulePoints(_Drawn):
+    """The points one rule adds to a side's combat result."""
 
-    scores: PerSide[float]
+    name: str
+    points: Spread
+
+
+class Scoring(_Drawn):
+    """A side's combat result, and its parts.
+
+    ``wounds`` are the Wounds the side inflicted, ``flank_or_rear`` the points
+    for the arc it fights its enemy in, and ``rules`` the points each rule adds.
+    """
+
+    score: Spread
+    wounds: Spread
+    rank_bonus: Spread
+    flank_or_rear: Spread
+    rules: list[RulePoints]
+
+
+class Winners(_Drawn):
+    """The chance of each margin split by how the round goes.
+
+    ``attacker_wins[k]`` is the chance the margin is ``least + k``, ``least``
+    being the margin's, and the attacker wins; ``draw`` and ``target_wins``
+    likewise. A side wiped out loses whatever the margin.
+    """
+
+    attacker_wins: list[float]
+    draw: list[float]
+    target_wins: list[float]
+
+
+class CombatResult(_Drawn):
+    """Each side's combat result, the attacker's margin over the target, and how the round goes.
+
+    ``winners`` splits each of the margin's chances by how the round goes.
+    """
+
+    scores: PerSide[Scoring]
+    margin: Spread
+    winners: Winners
     attacker_wins: float
     draw: float
     target_wins: float
@@ -243,14 +291,10 @@ class CombatResult(_Drawn):
 
 
 class LaneBreakTest(_Drawn):
-    """A side's Break test: the chance it is taken, and of each outcome over the whole round.
-
-    ``margin`` is the side's mean combat result less its enemy's.
-    """
+    """A side's Break test: the chance it is taken, and of each outcome over the whole round."""
 
     taken: float
     leadership: str | None
-    margin: float
     give_ground: float
     fall_back_in_good_order: float
     break_: float = Field(serialization_alias="break")
@@ -331,10 +375,6 @@ def _at(evaluated: Evaluated, path: str) -> At:
 
 def _rules(fight: Fight, *paths: str) -> list[LandedRule]:
     return _landed(fight.evaluated, [_at(fight.evaluated, path).step for path in paths])
-
-
-def _mean(distribution: Distribution[Any]) -> float:
-    return float(distribution.expect(Fraction))
 
 
 def _each(reading: Distribution[Any], fighter: str) -> Distribution[int]:
@@ -545,16 +585,53 @@ def _stand(after: str | None, models: Distribution[int]) -> StandingAt:
 
 def _result(fight: Fight) -> CombatResult:
     fought = fight.fought(Side.ATTACKER).mass
+    margin = Spread.of(fight.margin(Side.ATTACKER))
     return CombatResult(
         scores=PerSide(
-            attacker=_mean(_at(fight.evaluated, "attacker/calculate-combat-result").read("score")),
-            target=_mean(_at(fight.evaluated, "target/calculate-combat-result").read("score")),
+            attacker=_scoring(fight, Side.ATTACKER), target=_scoring(fight, Side.TARGET)
         ),
+        margin=margin,
+        winners=_winners(fight, margin),
         attacker_wins=float(fought.get(Fought.WON, 0)),
         draw=float(fought.get(Fought.DRAWN, 0)),
         target_wins=float(fought.get(Fought.LOST, 0)),
         rules=_rules(fight, *(f"{side}/{step}" for side in Side for step in _SCORING)),
     )
+
+
+def _winners(fight: Fight, margin: Spread) -> Winners:
+    decided = _at(fight.evaluated, "attacker/who-is-the-winner").read("decided").mass
+    margins = range(margin.least, margin.least + len(margin.distribution))
+
+    def going(way: Fought) -> list[float]:
+        return [float(decided.get((lead, way), 0)) for lead in margins]
+
+    return Winners(
+        attacker_wins=going(Fought.WON), draw=going(Fought.DRAWN), target_wins=going(Fought.LOST)
+    )
+
+
+def _scoring(fight: Fight, side: Side) -> Scoring:
+    calculated = _at(fight.evaluated, f"{side}/calculate-combat-result")
+    parts: Distribution[Scored] = calculated.read("parts")
+    named = _named(fight.evaluated, side)
+    rules = sorted(
+        {rule for scored in parts.mass for rule, _ in scored.rules}, key=named.__getitem__
+    )
+    return Scoring(
+        score=Spread.of(calculated.read("score")),
+        wounds=Spread.of(parts.map(lambda scored: scored.wounds)),
+        rank_bonus=Spread.of(parts.map(lambda scored: scored.rank_bonus)),
+        flank_or_rear=Spread.of(parts.map(lambda scored: scored.flank_or_rear)),
+        rules=[
+            RulePoints(name=named[rule], points=Spread.of(parts.map(partial(_points, rule))))
+            for rule in rules
+        ],
+    )
+
+
+def _points(rule: str, scored: Scored) -> int:
+    return sum(points for each, points in scored.rules if each == rule)
 
 
 def _break(fight: Fight, side: Side) -> LaneBreakTest:
@@ -563,7 +640,6 @@ def _break(fight: Fight, side: Side) -> LaneBreakTest:
     return LaneBreakTest(
         taken=float(test.read("test").prob(lambda result: result is not BreakTest.NOT_TAKEN)),
         leadership=_leadership(test.read("needed")),
-        margin=_mean(fight.margin(side)),
         give_ground=float(settled.get(BreakTest.GIVES_GROUND, 0)),
         fall_back_in_good_order=float(settled.get(BreakTest.FALLS_BACK_IN_GOOD_ORDER, 0)),
         break_=float(settled.get(BreakTest.BREAKS, 0)),

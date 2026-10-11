@@ -11,7 +11,6 @@
 		formation,
 		mean,
 		needs,
-		signed,
 		type Font,
 		type Lane,
 		type Measure,
@@ -293,7 +292,7 @@
 				{#each [lanes.units.attacker.name, lanes.units.target.name] as name, index}
 					<text x={x + 12} y={y + 45 + index * 19}>{name}</text>
 					<text class="mono" x={x + width - 12} y={y + 45 + index * 19} text-anchor="end"
-						>{mean(index ? result.scores.target : result.scores.attacker)}</text
+						>{mean((index ? result.scores.target : result.scores.attacker).score.mean)}</text
 					>
 				{/each}
 				{#each shares as [tone, p], index}
@@ -320,9 +319,6 @@
 				<rect class="spine" {x} {y} width="4" {height} />
 				<text class="title" x={x + INSET} y={y + 22}>Break test</text>
 				<text class="mono" x={x + INSET} y={y + 43}>Ld {test.leadership ?? '–'}</text>
-				<text class="mono" x={x + width - 14} y={y + 43} text-anchor="end"
-					>{signed(test.margin)}</text
-				>
 			{:else if node.kind === 'outcome'}
 				<rect class="terminal" {x} {y} {width} {height} rx="6" />
 				<rect
