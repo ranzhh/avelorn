@@ -144,14 +144,18 @@
 				{#each node.chips as chip}
 					<rect
 						class="chip"
+						class:held={chip.held}
 						x={x + chip.x}
 						y={y + chip.y}
 						width={chip.width}
 						height={chip.height}
 						rx="10"
 					/>
-					<text class="chip-text" x={x + chip.x + chip.width / 2} y={y + chip.y + 14}
-						>{chip.text}</text
+					<text
+						class="chip-text"
+						class:held={chip.held}
+						x={x + chip.x + chip.width / 2}
+						y={y + chip.y + 14}>{chip.text}</text
 					>
 				{/each}
 				{#each formation(unit.size, unit.frontage, unit.command) as model}
@@ -442,12 +446,12 @@
 		fill: var(--neutral);
 	}
 	.attacker .header,
-	.attacker .chip,
+	.attacker .chip.held,
 	.attacker .fill {
 		fill: var(--attacker-tint);
 	}
 	.target .header,
-	.target .chip,
+	.target .chip.held,
 	.target .fill {
 		fill: var(--target-tint);
 	}
@@ -458,11 +462,22 @@
 		fill: color-mix(in srgb, var(--series-1) 32%, var(--plane));
 	}
 	.chip {
-		stroke: #c9c9c9;
+		fill: var(--sunken);
+		stroke: #d4d4d4;
+	}
+	.attacker .chip.held {
+		stroke: var(--attacker);
+	}
+	.target .chip.held {
+		stroke: var(--target);
 	}
 	.chip-text {
 		font-size: 11px;
 		text-anchor: middle;
+		fill: var(--dim);
+	}
+	.chip-text.held {
+		fill: var(--ink);
 	}
 	.model {
 		stroke-width: 1;

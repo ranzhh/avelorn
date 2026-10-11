@@ -211,6 +211,30 @@ def test_each_champion_a_unit_buys_stands_in_its_command(client: TestClient) -> 
     ]
 
 
+@pytest.mark.parametrize(
+    ("options", "held"),
+    [
+        pytest.param(["great-weapon", "shield"], ["Great Weapon"], id="two-hands"),
+        pytest.param(["shield"], ["Hand Weapon", "Shield"], id="hand-weapon-and-shield"),
+    ],
+)
+def test_a_unit_holds_what_its_weapon_choice_took_up(
+    client: TestClient, options: list[str], held: list[str]
+) -> None:
+    """Dwarf Warriors who buy a great weapon swing it, and its Requires Two Hands bars the shield.
+
+    Without one they fight with the datasheet's Hand Weapon and their shield.
+    The Dragon Princes charging them hold their Lance and Shield.
+    """
+    body = {
+        **PRINCES_CHARGE_DWARFS,
+        "b": {"unit": "dwarf-warriors", "size": 10, "options": options},
+    }
+    units = served(client, "/graph/fight", body)["units"]
+
+    assert [units["attacker"]["held"], units["target"]["held"]] == [["Lance", "Shield"], held]
+
+
 def test_a_stand_and_shoot_thins_the_charger(client: TestClient) -> None:
     """Ten Archers five wide stand and shoot at twenty Spearmen charging them.
 

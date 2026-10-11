@@ -88,8 +88,10 @@ export function columns(lanes: Pick<FightLanes, 'volley' | 'strikes' | 'standing
 	return start.attacker || start.target ? [start, ...events] : events;
 }
 
+/** An option the unit bought, or a piece it holds, highlighted. */
 export interface Chip extends Box {
 	text: string;
+	held: boolean;
 }
 
 /** The letter drawn in the square of a command model of each kind. */
@@ -212,8 +214,11 @@ export function striker(strike: Strike, unit: string): { title: string; rows: [s
 
 function unitCard(unit: LaneUnit, measure: Measure) {
 	const dims = measure(`${unit.frontage} × ${unit.ranks}`, 'mono');
-	const texts = [...unit.options.map((option) => option.name), unit.weapon];
-	const chipWidths = texts.map((text) => measure(text, 'chip') + 18);
+	const chipped = [
+		...unit.options.map((option) => ({ text: option.name, held: false })),
+		...unit.held.map((text) => ({ text, held: true }))
+	];
+	const chipWidths = chipped.map(({ text }) => measure(text, 'chip') + 18);
 	const width = Math.max(
 		UNIT.least,
 		2 * INSET + measure(unit.name, 'title') + 12 + measure(`×${unit.size}`, 'mono'),
@@ -223,12 +228,12 @@ function unitCard(unit: LaneUnit, measure: Measure) {
 	const chips: Chip[] = [];
 	let x = INSET;
 	let y = UNIT.chips;
-	texts.forEach((text, index) => {
+	chipped.forEach(({ text, held }, index) => {
 		if (x > INSET && x + chipWidths[index] > width - INSET) {
 			x = INSET;
 			y += UNIT.chip + UNIT.gap;
 		}
-		chips.push({ text, x, y, width: chipWidths[index], height: UNIT.chip });
+		chips.push({ text, held, x, y, width: chipWidths[index], height: UNIT.chip });
 		x += chipWidths[index] + UNIT.gap;
 	});
 	const pitch = Math.min(UNIT.pitch, Math.floor((width - 2 * INSET - dims - 12) / unit.frontage));

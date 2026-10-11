@@ -62,16 +62,17 @@ class LaneUnit(_Drawn):
     """A unit as it is fielded: ``frontage`` files wide and ``ranks`` deep.
 
     ``options`` are the ones it bought besides its command models, which
-    ``command`` gives and which stand in its front rank. ``rules`` land on the
-    steps it takes before anyone strikes: its weapon choice, Who Can Fight, Who
-    Strikes First.
+    ``command`` gives and which stand in its front rank. ``held`` names what it
+    took up at its weapon choice: the weapon in hand, and the shield when it
+    uses one. ``rules`` land on the steps it takes before anyone strikes: its
+    weapon choice, Who Can Fight, Who Strikes First.
     """
 
     unit: str
     name: str
     size: int
     options: list[ChosenOption]
-    weapon: str
+    held: list[str]
     frontage: int
     ranks: int
     command: list[Command]
@@ -307,7 +308,7 @@ def _unit(fight: Fight, contingent: Contingent, side: Side) -> LaneUnit:
             for option in chosen
             if option.kind not in _COMMAND
         ],
-        weapon=contingent.in_hand().name,
+        held=_holding(fight, contingent, side),
         frontage=contingent.formation.files,
         ranks=contingent.formation.ranks,
         command=[
@@ -318,6 +319,13 @@ def _unit(fight: Fight, contingent: Contingent, side: Side) -> LaneUnit:
         ],
         rules=_rules(fight, *(f"{side}/{step}" for step in _READYING)),
     )
+
+
+def _holding(fight: Fight, contingent: Contingent, side: Side) -> list[str]:
+    (taken,) = _at(fight, f"{side}/{WEAPON_CHOICE}").read("taken").mass
+    loadout = contingent.loadout
+    names = {piece.id: piece.name for piece in (*loadout.weapons, *loadout.armour)}
+    return [names[slug] for slug in taken.option.slugs]
 
 
 def _charge(fight: Fight, rolled: ChargeRoll) -> LaneCharge:

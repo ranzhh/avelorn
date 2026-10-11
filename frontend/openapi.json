@@ -2212,9 +2212,12 @@
             "type": "array",
             "title": "Options"
           },
-          "weapon": {
-            "type": "string",
-            "title": "Weapon"
+          "held": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Held"
           },
           "frontage": {
             "type": "integer",
@@ -2246,14 +2249,14 @@
           "name",
           "size",
           "options",
-          "weapon",
+          "held",
           "frontage",
           "ranks",
           "command",
           "rules"
         ],
         "title": "LaneUnit",
-        "description": "A unit as it is fielded: ``frontage`` files wide and ``ranks`` deep.\n\n``options`` are the ones it bought besides its command models, which\n``command`` gives and which stand in its front rank. ``rules`` land on the\nsteps it takes before anyone strikes: its weapon choice, Who Can Fight, Who\nStrikes First."
+        "description": "A unit as it is fielded: ``frontage`` files wide and ``ranks`` deep.\n\n``options`` are the ones it bought besides its command models, which\n``command`` gives and which stand in its front rank. ``held`` names what it\ntook up at its weapon choice: the weapon in hand, and the shield when it\nuses one. ``rules`` land on the steps it takes before anyone strikes: its\nweapon choice, Who Can Fight, Who Strikes First."
       },
       "LaneVolley": {
         "properties": {
