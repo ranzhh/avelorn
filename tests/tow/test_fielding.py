@@ -98,6 +98,23 @@ def test_the_rank_bonus_counts_the_ranks_behind_the_first(
     assert side.rank_bonus(side.standing(models)) == bonus
 
 
+@pytest.mark.parametrize(
+    ("models", "standard_bearers"),
+    [
+        pytest.param(2, 1, id="the-last-warrior-holds-it"),
+        pytest.param(1, 0, id="falls-before-the-veteran"),
+    ],
+)
+def test_a_standard_bearer_falls_after_the_other_warriors_before_the_champion(
+    models: int, standard_bearers: int
+) -> None:
+    """Dwarf Warriors keep their standard while one warrior stands beside the Veteran."""
+    fielded = Contingent.field(REPO.units["dwarf-warriors"], 10, data=REPO, frontage=5)
+    side = Fielding.of(replace(fielded, options=("veteran", "standard-bearer")), combat=True)
+
+    assert side.standard_bearers(side.standing(models)) == standard_bearers
+
+
 def test_a_side_counts_its_unit_strength_and_the_wounds_it_has_left() -> None:
     """Four Wounds on three Maneaters and a Captain fell one Maneater and hurt the next.
 

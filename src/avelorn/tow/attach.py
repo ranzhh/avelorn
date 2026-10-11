@@ -597,6 +597,8 @@ class _Fielding:
                 return Measured(standing, fielding.rank_bonus)
             case DerivedFact.UNIT_STRENGTH:
                 return Measured(standing, fielding.unit_strength)
+            case DerivedFact.STANDARD_BEARERS:
+                return Measured(standing, fielding.standard_bearers)
 
     def equals(self, rule: Rule, step: Step[Any], value: Hashable) -> Equals:
         spec = self.specs[step]

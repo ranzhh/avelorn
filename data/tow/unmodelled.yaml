@@ -211,10 +211,6 @@
   subject: musician
   reason: The +1 combat result on a drawn combat is not scored; its +1 Leadership to march and to rally needs movement and rallying, neither modelled.
 - kind: inert-option
-  subject: standard_bearer
-  reason: The +1 combat result for a standard is not scored.
-  issue: 28
-- kind: inert-option
   subject: ironbreakers/Brace of Drakefire Pistols
   reason: Bought for the Ironbeard alone; mustering refuses an option for one model until a unit has parts.
   issue: 120
@@ -278,7 +274,7 @@
   reason: Challenges are not modelled, so Multiple Wounds never counts for Overkill.
 - kind: missing-mechanic
   subject: characters
-  reason: Characters joining units are not modelled, so the clauses of Stubborn and Terror about a joined character have nothing to read, and a Swiftstride unit is never joined by a model without it.
+  reason: Characters joining units are not modelled, so the clauses of Stubborn and Terror about a joined character have nothing to read, a Swiftstride unit is never joined by a model without it, and no unit includes a Battle Standard for Standards to score.
 - kind: missing-mechanic
   subject: facings
   reason: Flank and rear facings are not modelled, so Martial Prowess's supporting attacks to the flank and rear have no combat to land in.

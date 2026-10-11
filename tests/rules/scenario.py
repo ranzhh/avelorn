@@ -74,7 +74,7 @@ class Side:
 
     In combat it fights with ``weapon``, and with its shield when it wears one
     unless ``shield`` is False. It has used each rule ``used`` names once this
-    game.
+    game. It buys the command models ``command`` names by option id.
     """
 
     unit: str
@@ -89,6 +89,7 @@ class Side:
     dropped: frozenset[str] = frozenset()
     shield: bool = True
     used: tuple[str, ...] = ()
+    command: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -526,5 +527,5 @@ def _field(side: Side) -> Contingent:
         [_weapon(weapon, side) for weapon in REPO.weapons.values()], kind="weapon"
     )
     fielded = Contingent.field(unit, side.models, data=data, frontage=side.frontage)
-    moved = fielded.after(_movement(side))
+    moved = replace(fielded, options=side.command).after(_movement(side))
     return moved.wielding(side.weapon) if side.weapon is not None else moved

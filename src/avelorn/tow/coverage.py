@@ -8,15 +8,17 @@ one report.
 
 The scan reads the corpus, not the rule registry, since a rule nothing
 references is no gap. The core rules of the phases are the exception: every side
-has them, so a program effect of theirs that nothing reaches is one.
+has them, so they are scanned as if every side printed them.
 """
 
 from collections import defaultdict
 from collections.abc import Iterator
 from enum import StrEnum
+from functools import cache
 
 from pydantic import BaseModel, ConfigDict
 
+from avelorn.core.loading import load_yaml
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.fielding import Fielding
@@ -24,6 +26,7 @@ from avelorn.tow.programs import CHARGE, ROUND, STAND_AND_SHOOT, VOLLEY, load_pr
 from avelorn.tow.schema.effect import Effect
 from avelorn.tow.schema.ledger import Acknowledgement, GapKind
 from avelorn.tow.schema.phase import Phase
+from avelorn.tow.schema.program import ProgramFile
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.side import Side
@@ -83,7 +86,11 @@ class Coverage(BaseModel):
         return not self.stale and all(gap.reason is not None for gap in self.gaps)
 
 
-_INERT_COMMAND = {OptionKind.STANDARD_BEARER, OptionKind.MUSICIAN}
+_INERT_COMMAND = {OptionKind.MUSICIAN}
+
+_PROGRAMS = (VOLLEY, STAND_AND_SHOOT, CHARGE, ROUND)
+
+_COMMAND = {OptionKind.STANDARD_BEARER}
 
 
 def coverage(data: TOWRepository) -> Coverage:
@@ -158,7 +165,8 @@ def unattached(effect: Effect) -> Iterator[tuple[StepSequence, Step]]:
 
     The landing is needed in each sequence it can land in. A trigger, the
     block it is narrowed to, or a step read as a fact is needed in at least
-    one sequence that prints it.
+    one sequence that prints it. A block a program runs whole, as Stand &
+    Shoot is, is registered by that program.
 
     Yields:
         The sequence and the step.
@@ -167,9 +175,14 @@ def unattached(effect: Effect) -> Iterator[tuple[StepSequence, Step]]:
         for sequence in effect.at.sequences:
             if (sequence, effect.at.step) not in STEPS:
                 yield sequence, effect.at.step
-    for step in sorted(_read_steps(effect)):
+    for step in sorted(_read_steps(effect) - _programs()):
         if not any((sequence, step) in STEPS for sequence in step.sequences):
             yield from ((sequence, step) for sequence in step.sequences)
+
+
+@cache
+def _programs() -> frozenset[str]:
+    return frozenset(load_yaml(path, ProgramFile).program for path in _PROGRAMS)
 
 
 def _read_steps(effect: Effect) -> set[Step]:
@@ -210,7 +223,11 @@ def _scan(data: TOWRepository) -> Iterator[tuple[GapKind, str, Site]]:
         referenced.add(reference.rule)
         if (kind := rule_gap(data.rules[reference.rule])) is not None:
             yield kind, reference.rule, site
-    for slug in sorted(referenced):
+    core = _core(data)
+    for slug in sorted(core):
+        if (kind := rule_gap(data.rules[slug])) is not None:
+            yield kind, slug, Site(entry=Entry.RULE, id=slug)
+    for slug in sorted(referenced | core):
         yield from _graph_gaps(slug, data.rules[slug])
     yield from _program_gaps(data, referenced)
     yield from _unread_rows(data)
@@ -228,6 +245,10 @@ def _scan(data: TOWRepository) -> Iterator[tuple[GapKind, str, Site]]:
     for slug, armour in sorted(data.armoury.items()):
         if armour.notes is not None:
             yield GapKind.PRINTED_NOTES, slug, Site(entry=Entry.ARMOUR, id=slug)
+
+
+def _core(data: TOWRepository) -> set[str]:
+    return {slug for slug, rule in data.rules.items() if rule.category in set(Phase)}
 
 
 type Facing = tuple[Fielding, Fielding, frozenset[str]]
@@ -248,7 +269,7 @@ def _program_gaps(
     Yields:
         The gap's kind, ``<rule>/<sequence>/<step>``, and the rule as its site.
     """
-    core = {slug for slug, rule in data.rules.items() if rule.category in set(Phase)}
+    core = _core(data)
     expected: set[Effected] = set()
     reached: set[Effected] = set()
     held: set[Effected] = set()
@@ -343,12 +364,13 @@ def _inert(option: UnitOption) -> bool:
     """Whether buying the option changes nothing the engine reads but its cost.
 
     An option for one named model never reaches the engine: the muster
-    refuses it (#120). A champion is fielded as a part of its own. A points
-    budget buys magic items, unmodelled (#31) and left out here.
+    refuses it (#120). A champion is fielded as a part of its own, and a
+    standard bearer among the rank and file. A points budget buys magic
+    items, unmodelled (#31) and left out here.
 
     Returns:
-        True for an option that is no budget, fields no champion, and folds no
-        rule or equipment into the whole unit.
+        True for an option that is no budget, fields no command model, and
+        folds no rule or equipment into the whole unit.
     """
     folds = (
         option.adds_rules,
@@ -356,6 +378,7 @@ def _inert(option: UnitOption) -> bool:
         option.adds_equipment,
         option.removes_equipment,
     )
-    if option.points_budget is not None or option.profile is not None:
+    fielded = option.profile is not None or option.kind in _COMMAND
+    if option.points_budget is not None or fielded:
         return False
     return option.applies_to is not None or not any(folds)
