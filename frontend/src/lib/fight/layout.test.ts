@@ -12,6 +12,7 @@ import {
 	type Face,
 	type Measure
 } from './faces';
+import { BESIDE, CROP } from './field';
 import { columns, draw, type Drawing } from './layout';
 
 const strike = (slot: string, side: 'attacker' | 'target') =>
@@ -226,8 +227,10 @@ describe('a fight drawn with one node open, five rules on its result and Break t
 		one.y < two.y + two.height &&
 		two.y < one.y + one.height;
 
-	it.each(ids)('makes room for %s in its lane, clear of every other card and label', (id) => {
-		const drawing = draw(lanes, measure, id);
+	const cases = [...ids.map((id) => ({ id, mapped: false })), { id: 'battlefield', mapped: true }];
+
+	it.each(cases)('makes room for $id, mapped $mapped, clear of every card and label', (open) => {
+		const drawing = draw(lanes, measure, open.id, null, open.mapped);
 		const boxes = drawing.nodes.map((node) => node.box);
 		const labels = drawing.labels.map((label): Box => {
 			const width = measure(label.text, 'mono');
@@ -266,6 +269,22 @@ describe('a fight drawn with one node open, five rules on its result and Break t
 		expect(
 			drawing.nodes.filter((node) => node !== edited && overlap(node.box, edited.box))
 		).toEqual([]);
+	});
+});
+
+describe('the battlefield opened on the table', () => {
+	it('stands its crop of the table in its card, the read-outs beside it', () => {
+		const drawing = draw(
+			princes as FightLanes,
+			(text) => text.length * 7,
+			'battlefield',
+			null,
+			true
+		);
+		const field = drawing.nodes.find((node) => node.kind === 'battlefield')!;
+
+		expect(field.box.width).toBeGreaterThan(BESIDE.x + BESIDE.width);
+		expect(field.box.height).toBeGreaterThan(CROP.y + CROP.height);
 	});
 });
 

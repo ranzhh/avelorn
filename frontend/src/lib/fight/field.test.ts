@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import type { LaneUnit } from '$lib/api/client';
-import { bounds, type Placed } from '$lib/table';
+import { TABLE, bounds, type Placed } from '$lib/table';
 import princes from './fixtures/princes-charge-archers.json';
-import { formed, measured } from './field';
-import type { Lane } from './faces';
+import { CROP, cropped, formed, measured } from './field';
+import { LANES, type Box, type Lane } from './faces';
 
 const INCH = 25.4;
 const { attacker: dragons, target: archers } = princes.units as Record<Lane, LaneUnit>;
@@ -61,5 +61,37 @@ describe('the battlefield read off the blocks', () => {
 		expect(box.top).toBeCloseTo(front);
 		expect(box.width).toBeCloseTo((2 * 25) / INCH);
 		expect(box.height).toBeCloseTo((5 * 25) / INCH);
+	});
+});
+
+describe('the crop of the table', () => {
+	const holds = (crop: Box, block: Placed) => {
+		const box = bounds(block);
+		return (
+			box.left >= crop.x &&
+			box.right <= crop.x + crop.width &&
+			box.top >= crop.y &&
+			box.bottom <= crop.y + crop.height
+		);
+	};
+
+	it("shows both blocks with room round them, in the crop's proportions", () => {
+		const crop = cropped({
+			attacker: standing(dragons, 36, 15, 180),
+			target: standing(archers, 36, 31, 0)
+		});
+
+		expect(crop.width / crop.height).toBeCloseTo(CROP.width / CROP.height);
+		expect(crop.y).toBeCloseTo(15 - DRAGONS.half - CROP.margin);
+		expect(crop.y + crop.height).toBeCloseTo(31 + ARCHERS.halfDepth + CROP.margin);
+	});
+
+	it('stays on the table in a corner, still showing both blocks', () => {
+		const blocks = { attacker: standing(dragons, 8, 30, 180), target: standing(archers, 4, 46, 0) };
+		const crop = cropped(blocks);
+
+		expect(crop.x).toBe(0);
+		expect(crop.y + crop.height).toBeCloseTo(TABLE.depth);
+		expect(LANES.filter((lane) => !holds(crop, blocks[lane]))).toEqual([]);
 	});
 });

@@ -1,21 +1,40 @@
 <script lang="ts">
 	import type { ChargeArc, FightBody } from '$lib/api/client';
-	import type { Box } from './faces';
-	import { measured, type Blocks } from './field';
+	import { TABLE, corners, type Placed as Block, type Point } from '$lib/table';
+	import { LANES, type Box } from './faces';
+	import { BESIDE, CROP, measured, type Field } from './field';
 
 	interface Props {
 		box: Box;
 		/** The charge as last asked for, which the inputs show while a redraw is on its way. */
 		charge: NonNullable<FightBody['charge']>;
 		/** The blocks as they stand, where the table placed them: the numbers are read off them. */
-		blocks: Blocks | null;
+		field: Field | null;
 		open: boolean;
 		oncharge: (change: { full_inches?: number; arc?: ChargeArc }) => void;
 	}
 
-	let { box, charge, blocks, open, oncharge }: Props = $props();
+	let { box, charge, field, open, oncharge }: Props = $props();
 
 	const ARCS: ChargeArc[] = ['front', 'flank', 'rear'];
+	const feet = (edge: number) => Array.from({ length: edge / 12 - 1 }, (_, n) => (n + 1) * 12);
+
+	const outline = (points: Point[]) => points.map(({ x, y }) => `${x},${y}`).join(' ');
+
+	/** The block's diagonals run out past the crop: the lines between its front, flanks and rear. */
+	function diagonals(block: Block): [Point, Point][] {
+		return corners(block)
+			.slice(0, 2)
+			.map((corner) => {
+				const dx = corner.x - block.x;
+				const dy = corner.y - block.y;
+				const out = TABLE.width / Math.hypot(dx, dy);
+				return [
+					{ x: block.x - dx * out, y: block.y - dy * out },
+					{ x: block.x + dx * out, y: block.y + dy * out }
+				];
+			});
+	}
 
 	function inches(event: Event & { currentTarget: HTMLInputElement }) {
 		const value = event.currentTarget.valueAsNumber;
@@ -26,12 +45,55 @@
 <g class="field" class:open transform="translate({box.x},{box.y})">
 	<rect class="card" width={box.width} height={box.height} rx="8" />
 	<text class="title" x="12" y="23">Battlefield</text>
-	{#if blocks}
-		{@const reading = measured(blocks)}
-		<text class="small" x="12" y="47">distance</text>
-		<text class="mono" x={box.width - 12} y="47" text-anchor="end">{reading.full_inches}in</text>
-		<text class="small" x="12" y="66">arc struck</text>
-		<text class="mono" x={box.width - 12} y="66" text-anchor="end">{reading.arc}</text>
+	{#if field}
+		{@const reading = measured(field.blocks)}
+		{@const rows = open
+			? { left: BESIDE.x, right: BESIDE.x + BESIDE.width, top: CROP.y + 12 }
+			: { left: 12, right: box.width - 12, top: 47 }}
+		<text class="small" x={rows.left} y={rows.top}>distance</text>
+		<text class="mono" x={rows.right} y={rows.top} text-anchor="end">{reading.full_inches}in</text>
+		<text class="small" x={rows.left} y={rows.top + 19}>arc struck</text>
+		<text class="mono" x={rows.right} y={rows.top + 19} text-anchor="end">{reading.arc}</text>
+		{#if open}
+			{@const { crop, blocks } = field}
+			<svg
+				class="crop"
+				x={CROP.x}
+				y={CROP.y}
+				width={CROP.width}
+				height={CROP.height}
+				viewBox="{crop.x} {crop.y} {crop.width} {crop.height}"
+			>
+				<rect class="off" x={crop.x} y={crop.y} width={crop.width} height={crop.height} />
+				<rect class="cloth" width={TABLE.width} height={TABLE.depth} />
+				{#each feet(TABLE.width) as x}<line class="foot" x1={x} x2={x} y2={TABLE.depth} />{/each}
+				{#each feet(TABLE.depth) as y}<line class="foot" y1={y} x2={TABLE.width} y2={y} />{/each}
+				{#each diagonals(blocks.target) as [from, to]}
+					<line class="diagonal" x1={from.x} y1={from.y} x2={to.x} y2={to.y} />
+				{/each}
+				<line
+					class="trace"
+					x1={blocks.attacker.x}
+					y1={blocks.attacker.y}
+					x2={blocks.target.x}
+					y2={blocks.target.y}
+				/>
+				{#each LANES as lane}
+					{@const points = corners(blocks[lane])}
+					<g class="block {lane}">
+						<polygon points={outline(points)} />
+						<line
+							class="front"
+							x1={points[3].x}
+							y1={points[3].y}
+							x2={points[0].x}
+							y2={points[0].y}
+						/>
+					</g>
+				{/each}
+			</svg>
+			<rect class="frame" x={CROP.x} y={CROP.y} width={CROP.width} height={CROP.height} />
+		{/if}
 	{:else}
 		<text class="small" x="12" y="45">distance</text>
 		<foreignObject x="12" y="51" width={box.width - 24} height="26">
@@ -81,6 +143,48 @@
 	.open .card {
 		stroke: var(--ink);
 		stroke-width: 2;
+	}
+	.crop * {
+		vector-effect: non-scaling-stroke;
+	}
+	.off {
+		fill: var(--sunken);
+	}
+	.cloth {
+		fill: #fff;
+	}
+	.foot {
+		stroke: #e3e3e3;
+	}
+	.diagonal {
+		stroke: #c4c4c4;
+		stroke-dasharray: 3 3;
+	}
+	.trace {
+		stroke: var(--attacker);
+		stroke-width: 1.5;
+		stroke-dasharray: 4 3;
+	}
+	.block.attacker polygon {
+		fill: var(--attacker-tint);
+		stroke: var(--attacker);
+	}
+	.block.target polygon {
+		fill: var(--target-tint);
+		stroke: var(--target);
+	}
+	.block .front {
+		stroke-width: 3;
+	}
+	.attacker .front {
+		stroke: var(--attacker);
+	}
+	.target .front {
+		stroke: var(--target);
+	}
+	.frame {
+		fill: none;
+		stroke: #d4d4d4;
 	}
 	.inches {
 		display: flex;
