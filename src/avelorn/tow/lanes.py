@@ -109,8 +109,9 @@ class LaneUnit(_Drawn):
     ``command`` gives and which stand in its front rank. ``held`` names what it
     took up at its weapon choice: the weapon in hand, and the shield when it
     uses one. ``base`` is each model's base, None where the datasheet prints
-    none. ``rules`` land on the steps it takes before anyone strikes: its
-    weapon choice, Who Can Fight, Who Strikes First.
+    none, and ``unit_strength`` the Unit Strength it is fielded at. ``rules``
+    land on the steps it takes before anyone strikes: its weapon choice, Who
+    Can Fight, Who Strikes First.
     """
 
     unit: str
@@ -122,6 +123,7 @@ class LaneUnit(_Drawn):
     ranks: int
     command: list[Command]
     base: BaseSize | None
+    unit_strength: int
     rules: list[LandedRule]
 
 
@@ -434,6 +436,7 @@ def _unit(fight: Fight, contingent: Contingent, side: Side) -> LaneUnit:
             if option.kind is kind
         ],
         base=unit.base_size,
+        unit_strength=fight.unit_strength(side),
         rules=_rules(fight, *(f"{side}/{step}" for step in _READYING)),
     )
 

@@ -18,6 +18,7 @@
 				"width_mm": 30,
 				"depth_mm": 60
 			},
+			"unit_strength": 10,
 			"rules": [
 				{
 					"name": "Elven Reflexes",
@@ -39,6 +40,7 @@
 				"width_mm": 25,
 				"depth_mm": 25
 			},
+			"unit_strength": 10,
 			"rules": [
 				{
 					"name": "Elven Reflexes",

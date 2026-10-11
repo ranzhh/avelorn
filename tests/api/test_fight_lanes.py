@@ -250,13 +250,16 @@ def test_the_command_models_are_no_options_of_the_lane(client: TestClient) -> No
     ]
 
 
-def test_a_unit_stands_on_its_datasheet_s_bases(client: TestClient) -> None:
-    """Six Dragon Princes on 30x60mm bases charge twenty Dwarf Warriors on 25x25mm bases."""
+def test_a_unit_stands_on_its_datasheet_s_bases_at_its_unit_strength(client: TestClient) -> None:
+    """Six Dragon Princes on 30x60mm bases charge twenty Dwarf Warriors on 25x25mm bases.
+
+    Heavy Cavalry count 2 each toward Unit Strength, Heavy Infantry 1.
+    """
     units = served(client, "/graph/fight", PRINCES_CHARGE_ARMED_DWARFS)["units"]
 
-    assert [unit["base"] for unit in units.values()] == [
-        {"width_mm": 30, "depth_mm": 60},
-        {"width_mm": 25, "depth_mm": 25},
+    assert [(unit["base"], unit["unit_strength"]) for unit in units.values()] == [
+        ({"width_mm": 30, "depth_mm": 60}, 12),
+        ({"width_mm": 25, "depth_mm": 25}, 20),
     ]
 
 
