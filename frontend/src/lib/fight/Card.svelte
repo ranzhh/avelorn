@@ -45,7 +45,12 @@
 				{#if mark.command}<title>{mark.command.name}</title>{/if}
 			</rect>
 			{#if mark.command}
-				<text class="letter" x={x + width / 2} y={y + height / 2}>{MARK[mark.command.kind]}</text>
+				<text
+					class="letter"
+					x={x + width / 2}
+					y={y + height / 2}
+					font-size={Math.min(10, width - 3)}>{MARK[mark.command.kind]}</text
+				>
 			{/if}
 		{:else if mark.kind === 'divider'}
 			<line class="divider" x1="12" y1={mark.y} x2={box.width - 12} y2={mark.y} />
@@ -163,7 +168,6 @@
 	}
 	.letter {
 		fill: var(--on-accent);
-		font-size: 10px;
 		font-weight: 600;
 		text-anchor: middle;
 		dominant-baseline: central;
