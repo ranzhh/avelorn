@@ -392,11 +392,6 @@ describe('columns', () => {
 	const frame = (path: string) => drawn.blocks.find((block) => block.path === path)!.box;
 	const above = (upper: Box, lower: Box) => upper.y + upper.height < lower.y;
 
-	it('stacks the step each side makes in one column, in side order', () => {
-		expect(box('r/two/ready').x).toBe(box('r/one/ready').x);
-		expect(above(box('r/one/ready'), box('r/two/ready'))).toBe(true);
-	});
-
 	it('stacks the group each part attacks in, step by step', () => {
 		for (const step of ['hit', 'wound']) {
 			expect(box(`r/one/attack/ranks/${step}`).x).toBe(box(`r/one/attack/champion/${step}`).x);
@@ -406,6 +401,7 @@ describe('columns', () => {
 
 	it('moves one column right for each step that follows another', () => {
 		const xs = [
+			'r/two/ready',
 			'r/one/ready',
 			'r/one/count',
 			'r/one/attack/champion/hit',

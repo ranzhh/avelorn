@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { percent } from '$lib/charts/scale';
-	import type { FightLanes } from '$lib/api/client';
+	import type { ChargeArc, FightBody, FightLanes } from '$lib/api/client';
 	import {
 		INSET,
 		OUTCOME,
@@ -13,18 +13,26 @@
 		needs,
 		signed,
 		type Font,
+		type Lane,
 		type Measure,
 		type Placed
 	} from './layout';
 
+	type Reacting = NonNullable<FightBody['charge']>['reaction'];
+
 	interface Props {
 		lanes: FightLanes;
+		/** The charge as last asked for, which the battlefield's inputs show while a redraw is on its way. */
+		charge: NonNullable<FightBody['charge']> | null;
 		selected: string | null;
 		/** A node picked, and the side of the drawing away from it, where a panel would not cover it. */
-		onselect: (id: string, away: 'left' | 'right') => void;
+		onselect: (id: string | null, away?: 'left' | 'right') => void;
+		/** A unit double-clicked: open its editor. */
+		onopen: (lane: Lane) => void;
+		oncharge: (change: { full_inches?: number; arc?: ChargeArc; reaction?: Reacting }) => void;
 	}
 
-	let { lanes, selected, onselect }: Props = $props();
+	let { lanes, charge, selected, onselect, onopen, oncharge }: Props = $props();
 
 	const FONTS: Record<Font, string> = {
 		title: '600 13px system-ui, sans-serif',
@@ -40,10 +48,15 @@
 	};
 
 	const drawing = $derived(draw(lanes, measure));
+
+	$effect(() => {
+		if (selected && !drawing.nodes.some((node) => node.id === selected)) onselect(null);
+	});
+	const ARCS: ChargeArc[] = ['front', 'flank', 'rear'];
 	const REACTIONS = [
-		{ offered: 'hold', value: 'hold', text: 'Hold', width: 44 },
-		{ offered: 'stand_and_shoot', value: 'stand-and-shoot', text: 'S&S', width: 52 },
-		{ offered: 'flee', value: null, text: 'Flee', width: 44 }
+		{ offered: 'hold', value: 'hold', text: 'Hold', name: 'Hold' },
+		{ offered: 'stand_and_shoot', value: 'stand-and-shoot', text: 'S&S', name: 'Stand & Shoot' },
+		{ offered: 'flee', value: null, text: 'Flee', name: 'Flee' }
 	] as const;
 
 	function pick(node: Placed) {
@@ -55,6 +68,11 @@
 		if (event.key !== 'Enter' && event.key !== ' ') return;
 		event.preventDefault();
 		pick(node);
+	}
+
+	function inches(event: Event & { currentTarget: HTMLInputElement }) {
+		const value = event.currentTarget.valueAsNumber;
+		if (Number.isInteger(value) && value >= 0) oncharge({ full_inches: value });
 	}
 </script>
 
@@ -111,7 +129,8 @@
 			class:on={selected === node.id}
 			role="button"
 			tabindex="0"
-			onclick={() => pick(node)}
+			onclick={(event) => !(event.target as Element).closest('foreignObject') && pick(node)}
+			ondblclick={() => node.kind === 'unit' && onopen(node.lane)}
 			onkeydown={(event) => key(event, node)}
 		>
 			{#if node.kind === 'unit'}
@@ -150,15 +169,33 @@
 				<text class="mono" x={x + width - INSET} y={top + ranks * node.pitch - 5} text-anchor="end"
 					>{unit.frontage} × {unit.ranks}</text
 				>
-			{:else if node.kind === 'battlefield' && lanes.battlefield}
+			{:else if node.kind === 'battlefield' && charge}
 				<rect class="card" {x} {y} {width} {height} rx="8" />
 				<text class="title" x={x + 12} y={y + 23}>Battlefield</text>
 				<text class="small" x={x + 12} y={y + 45}>distance</text>
-				<rect class="field" x={x + 12} y={y + 51} width={width - 24} height="24" rx="4" />
-				<text class="mono" x={x + 22} y={y + 68}>{lanes.battlefield.distance}in</text>
+				<foreignObject x={x + 12} y={y + 51} width={width - 24} height="26">
+					<label class="inches">
+						<input
+							class="input"
+							type="number"
+							min="0"
+							value={charge.full_inches}
+							oninput={inches}
+							aria-label="distance"
+						/><span>in</span>
+					</label>
+				</foreignObject>
 				<text class="small" x={x + 12} y={y + 93}>arc struck</text>
-				<rect class="field" x={x + 12} y={y + 99} width={width - 24} height="24" rx="4" />
-				<text class="mono" x={x + 22} y={y + 116}>{lanes.battlefield.arc}</text>
+				<foreignObject x={x + 12} y={y + 99} width={width - 24} height="26">
+					<select
+						class="select"
+						value={charge.arc}
+						onchange={(event) => oncharge({ arc: event.currentTarget.value as ChargeArc })}
+						aria-label="arc struck"
+					>
+						{#each ARCS as arc}<option value={arc}>{arc}</option>{/each}
+					</select>
+				</foreignObject>
 			{:else if node.kind === 'charge' && lanes.charge}
 				<rect class="card" {x} {y} {width} {height} rx="8" />
 				<rect class="spine" {x} {y} width="4" {height} />
@@ -172,18 +209,21 @@
 				<rect class="card" {x} {y} {width} {height} rx="8" />
 				<rect class="spine" {x} {y} width="4" {height} />
 				<text class="title" x={x + INSET} y={y + 23}>Reaction</text>
-				{#each REACTIONS as choice, index}
-					{@const left =
-						x + INSET + REACTIONS.slice(0, index).reduce((sum, each) => sum + each.width + 2, 0)}
-					<g
-						class="segment"
-						class:on={reaction.chosen === choice.value}
-						class:off={!reaction.offered[choice.offered]}
-					>
-						<rect x={left} y={y + 36} width={choice.width} height="26" rx="4" />
-						<text x={left + choice.width / 2} y={y + 53}>{choice.text}</text>
-					</g>
-				{/each}
+				<foreignObject x={x + INSET} y={y + 36} width={width - INSET - 8} height="28">
+					<div class="segments" role="radiogroup" aria-label="reaction">
+						{#each REACTIONS as choice}
+							<button
+								role="radio"
+								aria-checked={reaction.chosen === choice.value}
+								title={choice.name}
+								class:on={reaction.chosen === choice.value}
+								disabled={!reaction.offered[choice.offered] || choice.value === null}
+								onclick={() => choice.value && oncharge({ reaction: choice.value })}
+								>{choice.text}</button
+							>
+						{/each}
+					</div>
+				</foreignObject>
 			{:else if node.kind === 'short'}
 				<rect class="card short" {x} {y} {width} {height} rx="8" />
 				<text class="title" x={x + 12} y={y + 23}>Falls short</text>
@@ -440,30 +480,42 @@
 	.target .pill {
 		stroke: var(--target);
 	}
-	.field {
-		fill: #fafafa;
-		stroke: #9a9a9a;
+	.inches {
+		display: flex;
+		align-items: center;
+		gap: 0.3rem;
+		font: 12px var(--font-mono);
 	}
-	.segment rect {
-		fill: var(--panel);
-		stroke: var(--line);
+	.inches input,
+	foreignObject select {
+		width: 100%;
+		height: 24px;
+		padding: 0 0.4rem;
+		font: 12px var(--font-mono);
+		background: #fafafa;
 	}
-	.segment text {
+	.inches input {
+		width: 5rem;
+	}
+	.segments {
+		display: flex;
+		gap: 2px;
+	}
+	.segments button {
+		height: 26px;
+		padding: 0 0.6rem;
 		font-size: 12px;
-		text-anchor: middle;
+		cursor: pointer;
 	}
-	.segment.on rect {
-		fill: var(--target);
-		stroke: var(--target);
+	.segments button.on {
+		color: var(--on-accent);
+		background: var(--target);
+		border-color: var(--target);
 	}
-	.segment.on text {
-		fill: var(--on-accent);
-	}
-	.segment.off rect {
-		fill: #f4f4f4;
-		stroke: #d6d6d6;
-	}
-	.segment.off text {
-		fill: #b0b0b0;
+	.segments button:disabled {
+		color: #b0b0b0;
+		background: #f4f4f4;
+		border-color: #d6d6d6;
+		cursor: default;
 	}
 </style>
