@@ -25,7 +25,7 @@ export const UNIT = { least: 184, editor: 248, chips: 34, chip: 20, gap: 4, bott
 /** Pixels to the millimetre: a formation stands on its bases at this scale. */
 const SCALE = 0.6;
 export const STRIKE = { least: 150, inset: 12, header: 26, row: 18 };
-const CHARGE = { width: 170, height: 76 };
+const CHARGE = { width: 170, height: 55 };
 const RESULT = { least: 150, height: 128 };
 const BREAK = { width: 190, height: 56 };
 const PILL = { least: 50, height: 26 };
@@ -63,7 +63,10 @@ export type Mark =
 			box: Box;
 			spread: Spread;
 			tone: Lane;
-	  };
+			/** An outcome a rule is drawn before, the bars short of it greyed. */
+			rule: number | null;
+	  }
+	| { kind: 'meter'; box: Box; p: number };
 
 /**
  * What a card shows, and how big it is.
@@ -251,23 +254,59 @@ export function unitFace(
 	return editable(ruled(face, rules, INSET), editor);
 }
 
+/** The maximum possible charge range term by term, and its sum. */
+function maximum(terms: NonNullable<FightLanes['charge']>['maximum']): string {
+	const named = terms.map(({ name, inches }) => (name ? `${name} ${inches}` : String(inches)));
+	return `${named.join(' + ')} = ${terms.reduce((sum, { inches }) => sum + inches, 0)}in`;
+}
+
+/** The charge: shut, the chance it reaches; open, the range its roll can give and its chances. */
 export function chargeFace(
 	charge: NonNullable<FightLanes['charge']>,
 	measure: Measure,
 	open: boolean
 ): Face {
 	const rules = open ? charge.rules : [];
-	const face: Face = {
-		chrome: 'spine',
-		width: Math.max(CHARGE.width, ruleWidth(rules, INSET, measure)),
-		height: CHARGE.height,
-		marks: [
-			text(INSET, 23, 'Charge', 'title'),
-			text(INSET, 43, `${charge.distance}in · ${charge.arc}`, 'mono'),
-			text(INSET, 61, `roll ≥ ${charge.distance}in`, 'mono')
-		]
-	};
-	return ruled(face, rules, INSET);
+	const reaches = percent(charge.reaches);
+	const sum = maximum(charge.maximum);
+	const furthest = `${charge.furthest}in`;
+	const width = Math.max(
+		CHARGE.width,
+		ruleWidth(rules, INSET, measure),
+		2 * INSET + measure('Charge', 'title') + 12 + measure(reaches, 'mono'),
+		open ? CHART.least : 0,
+		open ? 2 * INSET + measure('maximum', 'small') + 12 + measure(sum, 'mono') : 0
+	);
+	const marks: Mark[] = [
+		text(INSET, 23, 'Charge', 'title'),
+		text(width - INSET, 23, reaches, 'mono', 'end'),
+		{
+			kind: 'meter',
+			box: { x: INSET, y: 33, width: width - 2 * INSET, height: 8 },
+			p: charge.reaches
+		}
+	];
+	let height = CHARGE.height;
+	if (open) {
+		const box = { x: INSET, y: 114, width: width - 2 * INSET, height: CHART.height };
+		marks.push(
+			text(INSET, 64, 'maximum', 'small'),
+			text(width - INSET, 64, sum, 'mono', 'end'),
+			text(INSET, 83, 'furthest', 'small'),
+			text(width - INSET, 83, furthest, 'mono', 'end'),
+			text(INSET, 103, 'range', 'small'),
+			{
+				kind: 'chart',
+				name: 'range',
+				box,
+				spread: charge.range,
+				tone: 'attacker',
+				rule: charge.distance
+			}
+		);
+		height = box.y + box.height + 12;
+	}
+	return ruled({ chrome: 'spine', width, height, marks }, rules, INSET);
 }
 
 /** Figures in columns under their heads, each row named. */
@@ -350,7 +389,7 @@ function headed(
 		for (const [name, counted] of opened.charts) {
 			marks.push(text(STRIKE.inset, y + 15, name, 'small'));
 			const box = { x: STRIKE.inset, y: y + 26, width: width - pad, height: CHART.height };
-			marks.push({ kind: 'chart', name, box, spread: counted, tone });
+			marks.push({ kind: 'chart', name, box, spread: counted, tone, rule: null });
 			y = box.y + box.height;
 		}
 		y += 12;
@@ -436,7 +475,7 @@ export function pillFace(models: Spread, lane: Lane, measure: Measure, open: boo
 		marks: [
 			text(STRIKE.inset, 20, 'models', 'small'),
 			text(width - STRIKE.inset, 20, shown, 'mono', 'end'),
-			{ kind: 'chart', name: 'models', box, spread: models, tone: lane }
+			{ kind: 'chart', name: 'models', box, spread: models, tone: lane, rule: null }
 		]
 	};
 }

@@ -228,7 +228,6 @@ export function draw(
 		trailing = gap;
 		return at;
 	};
-	const reached = reaches === null ? 'reaches' : `reaches ${percent(reaches)}`;
 	const clear = { attacker: 0, target: 0 };
 	const opening = (each: Column) => {
 		const edge = x - trailing + OPENING;
@@ -285,7 +284,6 @@ export function draw(
 		);
 		stations.attacker = [charge];
 		stations.target = [reaction];
-		if (fought) clear.attacker = charge.x + charge.width + 4 + measure(reached, 'mono') + 8;
 	}
 
 	const casualties: { from: Box; to: Box; lane: Lane }[] = [];
@@ -409,14 +407,6 @@ export function draw(
 		}
 	}
 
-	if (charge && fought) {
-		labels.push({
-			x: charge.x + charge.width + 4,
-			y: track('attacker') - 7,
-			text: reached,
-			anchor: 'start'
-		});
-	}
 	if (charge && reaches !== 1) {
 		const next = stations.attacker[1];
 		const short = {

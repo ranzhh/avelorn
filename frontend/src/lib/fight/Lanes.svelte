@@ -211,6 +211,7 @@
 		--target-band: color-mix(in srgb, var(--series-2) 7%, var(--plane));
 		--attacker-tint: color-mix(in srgb, var(--series-1) 16%, var(--plane));
 		--target-tint: color-mix(in srgb, var(--series-2) 16%, var(--plane));
+		--short: #cbcbcb;
 		display: block;
 		max-width: none;
 		font: 13px var(--font-sans);

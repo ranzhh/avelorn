@@ -84,13 +84,19 @@
 				width="8"
 				height="8"
 			/>
+		{:else if mark.kind === 'meter'}
+			{@const { x, y, width, height } = mark.box}
+			<rect class="track" {x} {y} {width} {height} rx="2" />
+			<rect class="met" {x} {y} width={mark.p * width} {height} rx="2" />
 		{:else if mark.kind === 'chart'}
 			<Bars
 				{...mark.box}
 				least={mark.spread.least}
 				chances={mark.spread.distribution}
 				mean={mark.spread.mean}
-				fill={() => `var(--${mark.tone})`}
+				rule={mark.rule}
+				fill={(outcome) =>
+					mark.rule !== null && outcome < mark.rule ? 'var(--short)' : `var(--${mark.tone})`}
 				label={mark.name}
 			/>
 		{/if}
@@ -135,6 +141,13 @@
 	.share.target,
 	.who.target {
 		fill: var(--target);
+	}
+	.track {
+		fill: var(--sunken);
+		stroke: #d4d4d4;
+	}
+	.attacker .met {
+		fill: var(--attacker);
 	}
 	.share.draw {
 		fill: var(--neutral);
