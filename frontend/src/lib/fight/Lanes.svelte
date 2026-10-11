@@ -2,7 +2,9 @@
 	import type { Snippet } from 'svelte';
 	import { percent } from '$lib/charts/scale';
 	import type { ChargeArc, FightBody, FightLanes } from '$lib/api/client';
+	import Battlefield from './Battlefield.svelte';
 	import Card from './Card.svelte';
+	import type { Blocks } from './field';
 	import { INSET, type Font, type Measure } from './faces';
 	import { OUTCOME, draw, type Lane, type Placed } from './layout';
 
@@ -12,6 +14,8 @@
 		lanes: FightLanes;
 		/** The charge as last asked for, which the battlefield's inputs show while a redraw is on its way. */
 		charge: NonNullable<FightBody['charge']> | null;
+		/** The blocks the battlefield measures, where the table placed them. */
+		blocks: Blocks | null;
 		/** The node showing its whole face, if any. */
 		open: string | null;
 		/** The unit edited in place, if any, and the controls that edit it. */
@@ -23,7 +27,8 @@
 		oncharge: (change: { full_inches?: number; arc?: ChargeArc; reaction?: Reacting }) => void;
 	}
 
-	let { lanes, charge, open, editing, editor, ontoggle, onedit, oncharge }: Props = $props();
+	let { lanes, charge, blocks, open, editing, editor, ontoggle, onedit, oncharge }: Props =
+		$props();
 
 	const FONTS: Record<Font, string> = {
 		title: '600 13px system-ui, sans-serif',
@@ -40,13 +45,12 @@
 
 	let editorHeight = $state(160);
 	const drawing = $derived(
-		draw(lanes, measure, open, editing && { lane: editing, height: editorHeight })
+		draw(lanes, measure, open, editing && { lane: editing, height: editorHeight }, !!blocks)
 	);
 
 	$effect(() => {
 		if (open && !drawing.nodes.some((node) => node.id === open)) ontoggle(open);
 	});
-	const ARCS: ChargeArc[] = ['front', 'flank', 'rear'];
 	const REACTIONS = [
 		{ offered: 'hold', value: 'hold', text: 'Hold', name: 'Hold' },
 		{ offered: 'stand_and_shoot', value: 'stand-and-shoot', text: 'S&S', name: 'Stand & Shoot' },
@@ -63,11 +67,6 @@
 		if (event.key !== 'Enter' && event.key !== ' ') return;
 		event.preventDefault();
 		ontoggle(node.id);
-	}
-
-	function inches(event: Event & { currentTarget: HTMLInputElement }) {
-		const value = event.currentTarget.valueAsNumber;
-		if (Number.isInteger(value) && value >= 0) oncharge({ full_inches: value });
 	}
 </script>
 
@@ -136,32 +135,7 @@
 					</foreignObject>
 				{/if}
 			{:else if node.kind === 'battlefield' && charge}
-				<rect class="card" {x} {y} {width} {height} rx="8" />
-				<text class="title" x={x + 12} y={y + 23}>Battlefield</text>
-				<text class="small" x={x + 12} y={y + 45}>distance</text>
-				<foreignObject x={x + 12} y={y + 51} width={width - 24} height="26">
-					<label class="inches">
-						<input
-							class="input"
-							type="number"
-							min="0"
-							value={charge.full_inches}
-							oninput={inches}
-							aria-label="distance"
-						/><span>in</span>
-					</label>
-				</foreignObject>
-				<text class="small" x={x + 12} y={y + 93}>arc struck</text>
-				<foreignObject x={x + 12} y={y + 99} width={width - 24} height="26">
-					<select
-						class="select"
-						value={charge.arc}
-						onchange={(event) => oncharge({ arc: event.currentTarget.value as ChargeArc })}
-						aria-label="arc struck"
-					>
-						{#each ARCS as arc}<option value={arc}>{arc}</option>{/each}
-					</select>
-				</foreignObject>
+				<Battlefield box={node.box} {charge} {blocks} open={open === node.id} {oncharge} />
 			{:else if node.kind === 'reaction' && lanes.reaction}
 				{@const reaction = lanes.reaction}
 				<rect class="card" {x} {y} {width} {height} rx="8" />
@@ -301,23 +275,6 @@
 	}
 	.attacker .fill.worst {
 		fill: color-mix(in srgb, var(--series-1) 32%, var(--plane));
-	}
-	.inches {
-		display: flex;
-		align-items: center;
-		gap: 0.3rem;
-		font: 12px var(--font-mono);
-	}
-	.inches input,
-	foreignObject select {
-		width: 100%;
-		height: 24px;
-		padding: 0 0.4rem;
-		font: 12px var(--font-mono);
-		background: #fafafa;
-	}
-	.inches input {
-		width: 5rem;
 	}
 	.editor {
 		display: grid;

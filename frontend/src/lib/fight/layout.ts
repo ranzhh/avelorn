@@ -15,11 +15,11 @@ import {
 	type Measure,
 	type Point
 } from './faces';
+import { battlefieldSize } from './field';
 
 export { LANES, type Lane };
 export const other = (lane: Lane): Lane => (lane === 'attacker' ? 'target' : 'attacker');
 
-const BATTLEFIELD = { width: 160, height: 140 };
 const REACTION = { width: 170, height: 80 };
 const SHORT = { width: 120, height: 36 };
 export const OUTCOME = { width: 200, height: 26, step: 34, inset: 30 };
@@ -138,13 +138,15 @@ export interface Editor {
  * charge that never reaches meets its reaction, and no round is fought.
  *
  * The node `open` shows its whole face, a unit edited in place makes room
- * for its `editor`, and the lanes widen and deepen to hold them.
+ * for its `editor`, and the lanes widen and deepen to hold them. A `mapped`
+ * battlefield reads its numbers off the table's blocks.
  */
 export function draw(
 	lanes: FightLanes,
 	measure: Measure,
 	open: string | null = null,
-	editor: Editor | null = null
+	editor: Editor | null = null,
+	mapped = false
 ): Drawing {
 	const reaches = lanes.charge?.reaches ?? null;
 	const fought = reaches !== 0;
@@ -187,6 +189,7 @@ export function draw(
 		...LANES.map((lane) => breakCards[lane].width)
 	);
 	const charged = lanes.battlefield && chargeCard && lanes.reaction;
+	const fieldSize = battlefieldSize(mapped);
 
 	const tall = (lane: Lane) =>
 		Math.max(
@@ -198,7 +201,7 @@ export function draw(
 				return event ? eventFace(lane, event).height : 0;
 			})
 		);
-	const across = Math.max(charged ? BATTLEFIELD.height : 0, fought ? resultCard.height : 0);
+	const across = Math.max(charged ? fieldSize.height : 0, fought ? resultCard.height : 0);
 	const room = fought ? 3 * OUTCOME.step : 0;
 	const bandTop = { attacker: HEAD + (fought ? room + 26 : SHORT.height + 24), target: 0 };
 	const bandHeight = {
@@ -253,10 +256,10 @@ export function draw(
 	let charge: Box | null = null;
 	if (charged) {
 		const field = centred(
-			column(BATTLEFIELD.width, 'battlefield') + BATTLEFIELD.width / 2,
-			BATTLEFIELD.width,
+			column(fieldSize.width, 'battlefield') + fieldSize.width / 2,
+			fieldSize.width,
 			between,
-			BATTLEFIELD.height
+			fieldSize.height
 		);
 		nodes.push({ kind: 'battlefield', id: 'battlefield', box: field });
 		const face = chargeCard;
@@ -268,13 +271,12 @@ export function draw(
 			{ kind: 'reaction', id: 'reaction', box: reaction }
 		);
 		const [a, b] = [stations.attacker[0], stations.target[0]];
+		const [over, under] = [0.3, 0.7].map((share) => field.y + field.height * share);
 		edges.push(
-			{ d: elbow(right(a), left(field, field.y + 45), field.x - 20) },
-			{ d: elbow(right(b), left(field, field.y + field.height - 35), field.x - 20) },
-			{ d: elbow(right(field, field.y + 35), left(charge), charge.x - 20) },
-			{
-				d: elbow(right(field, field.y + field.height - 25), left(reaction), reaction.x - 20)
-			},
+			{ d: elbow(right(a), left(field, over), field.x - 20) },
+			{ d: elbow(right(b), left(field, under), field.x - 20) },
+			{ d: elbow(right(field, over), left(charge), charge.x - 20) },
+			{ d: elbow(right(field, under), left(reaction), reaction.x - 20) },
 			{
 				d: path([
 					{ x: chargeX, y: charge.y + charge.height },
