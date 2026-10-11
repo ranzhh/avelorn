@@ -6,18 +6,16 @@
 		y: number;
 		width: number;
 		height: number;
-		/** Chance by outcome, `chances[k]` being the chance of `least + k`. */
 		least: number;
-		chances: number[];
+		/** The bars in layers from the bottom up, each a colour and its chance of `least + k` at `k`. */
+		layers: [string, number[]][];
 		mean: number;
 		/** An outcome drawn even where it has no chance, with a rule before it. */
 		rule?: number | null;
-		/** The colour of each outcome's bar. */
-		fill: (outcome: number) => string;
 		label: string;
 	}
 
-	let { x, y, width, height, least, chances, mean, rule = null, fill, label }: Props = $props();
+	let { x, y, width, height, least, layers, mean, rule = null, label }: Props = $props();
 
 	const GUTTER = 24;
 	const AXIS = 13;
@@ -26,6 +24,11 @@
 
 	let hovered = $state<number | null>(null);
 
+	const chances = $derived(
+		Array.from({ length: Math.max(...layers.map(([, each]) => each.length)) }, (_, k) =>
+			layers.reduce((sum, [, each]) => sum + (each[k] ?? 0), 0)
+		)
+	);
 	const drawn = $derived.by(() => {
 		const trimmed = band(chances);
 		let from = least + trimmed.from;
@@ -48,14 +51,23 @@
 	const top = (mass: number) => plot - (mass / ceiling) * plot;
 	const centre = (index: number) => GUTTER + slot * (index + 0.5);
 
-	function bar(index: number, mass: number): string {
-		const rise = plot - top(mass);
-		if (rise <= 0) return '';
+	/** An outcome's bar in its layers' colours from the bottom up, the top one capped. */
+	function stacked(index: number): { fill: string; d: string }[] {
 		const left = centre(index) - barWidth / 2;
 		const right = left + barWidth;
-		const cap = Math.min(3, barWidth / 2, rise);
-		const peak = top(mass);
-		return `M${left},${plot} L${left},${peak + cap} Q${left},${peak} ${left + cap},${peak} L${right - cap},${peak} Q${right},${peak} ${right},${peak + cap} L${right},${plot} Z`;
+		let below = 0;
+		const spans = layers.flatMap(([fill, each]) => {
+			const from = below;
+			below += each[drawn.from + index - least] ?? 0;
+			return top(from) > top(below) ? [{ fill, bottom: top(from), peak: top(below) }] : [];
+		});
+		return spans.map(({ fill, bottom, peak }, at) => {
+			const cap = at === spans.length - 1 ? Math.min(3, barWidth / 2, bottom - peak) : 0;
+			return {
+				fill,
+				d: `M${left},${bottom} L${left},${peak + cap} Q${left},${peak} ${left + cap},${peak} L${right - cap},${peak} Q${right},${peak} ${right},${peak + cap} L${right},${bottom} Z`
+			};
+		});
 	}
 
 	function track(event: PointerEvent) {
@@ -78,11 +90,11 @@
 		>
 	{/each}
 
-	{#each drawn.masses as mass, index}
+	{#each drawn.masses, index}
 		{@const outcome = drawn.from + index}
-		{#if bar(index, mass)}
-			<path class:lit={hovered === index} d={bar(index, mass)} style:fill={fill(outcome)} />
-		{/if}
+		{#each stacked(index) as { fill, d }}
+			<path class:lit={hovered === index} {d} style:fill />
+		{/each}
 		{#if outcome % every === 0}
 			<text class="tick" x={centre(index)} y={plot + 11} text-anchor="middle">{outcome}</text>
 		{/if}

@@ -5,6 +5,7 @@ import princes from './fixtures/princes-charge-archers.json';
 import {
 	chargeFace,
 	formation,
+	resultFace,
 	spread,
 	strikeFace,
 	type Box,
@@ -192,9 +193,18 @@ describe('a charge drawn by the chance it reaches', () => {
 	});
 });
 
-describe('a fight drawn with one node open', () => {
+describe('a fight drawn with one node open, five rules on its result and Break tests', () => {
 	const measure: Measure = (text) => text.length * 7;
-	const lanes = { ...princes, charge: { ...princes.charge, reaches: 0.75 } } as FightLanes;
+	const rules = princes.volley.rules;
+	const lanes = {
+		...princes,
+		charge: { ...princes.charge, reaches: 0.75 },
+		result: { ...princes.result, rules },
+		breaks: {
+			attacker: { ...princes.breaks.attacker, rules },
+			target: { ...princes.breaks.target, rules }
+		}
+	} as FightLanes;
 	const ids = [...new Set(draw(lanes, measure).nodes.map((node) => node.id))];
 	const overlap = (one: Box, two: Box) =>
 		one.x < two.x + two.width &&
@@ -202,7 +212,7 @@ describe('a fight drawn with one node open', () => {
 		one.y < two.y + two.height &&
 		two.y < one.y + one.height;
 
-	it.each(ids)('makes room for %s, every card and label clear of the others', (id) => {
+	it.each(ids)('makes room for %s in its lane, clear of every other card and label', (id) => {
 		const drawing = draw(lanes, measure, id);
 		const boxes = drawing.nodes.map((node) => node.box);
 		const labels = drawing.labels.map((label): Box => {
@@ -216,7 +226,17 @@ describe('a fight drawn with one node open', () => {
 				.map((two) => [one, two])
 		);
 
+		const { attacker, target } = drawing.bands;
+		const both = { ...attacker, height: target.y + target.height - attacker.y };
+		const strays = drawing.nodes.filter((node) => {
+			if (node.kind === 'outcome' || node.kind === 'short') return false;
+			const lane = node.kind === 'reaction' ? 'target' : 'lane' in node ? node.lane : null;
+			const band = lane ? drawing.bands[lane] : both;
+			return node.box.y < band.y || node.box.y + node.box.height > band.y + band.height;
+		});
+
 		expect(clashes).toEqual([]);
+		expect(strays.map((node) => node.id)).toEqual([]);
 		expect(Math.min(...boxes.map((box) => box.y))).toBeGreaterThan(46);
 		expect(Math.max(...boxes.map((box) => box.y + box.height))).toBeLessThan(drawing.height);
 	});
@@ -296,5 +316,25 @@ describe('a charge opened', () => {
 			expect.arrayContaining(['98%', 'Movement 8 + 6 + Swiftstride 3 = 17in', '17in'])
 		);
 		expect(rules).toEqual([12]);
+	});
+});
+
+describe('a combat result opened', () => {
+	it("breaks each side's score into its parts, and charts the margin by who wins", () => {
+		const face = resultFace(princes as FightLanes, (text) => text.length * 7, true);
+		const texts = face.marks.flatMap((mark) => (mark.kind === 'text' ? [mark.text] : []));
+		const charts = face.marks.flatMap((mark) => (mark.kind === 'chart' ? [mark] : []));
+		const shares = face.marks.flatMap((mark) => (mark.kind === 'shares' ? mark.shares : []));
+		const margin = charts.find((chart) => chart.name === 'margin')!;
+		const total = (chances: number[]) => chances.reduce((sum, p) => sum + p, 0);
+		const [massed] = princes.result.scores.target.rules;
+
+		expect(charts.map((chart) => chart.name)).toEqual(['Wounds', 'Wounds', 'margin']);
+		expect(margin.layers.map(([tone, chances]) => [tone, total(chances)])).toEqual(
+			shares.map(([way, p]) => [way, expect.closeTo(p, 10)])
+		);
+		expect(texts).toEqual(
+			expect.arrayContaining(['Rank Bonus', 'Flank or Rear', massed.name, spread(massed.points)])
+		);
 	});
 });

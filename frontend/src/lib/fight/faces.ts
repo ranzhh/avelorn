@@ -41,6 +41,10 @@ export const MARK: Record<LaneUnit['command'][number]['kind'], string> = {
 };
 
 export type Share = ['attacker' | 'draw' | 'target', number];
+/** A colour a chart's bars take: a side's, a draw's, or grey short of a rule. */
+export type Tone = Lane | 'draw' | 'short';
+/** A colour of a chart's bars and its chance of each outcome, the layers stacked from the bottom. */
+export type Layer = [Tone, number[]];
 
 /** One thing drawn on a card, placed from the card's top left corner. */
 export type Mark =
@@ -62,8 +66,8 @@ export type Mark =
 			name: string;
 			box: Box;
 			spread: Spread;
-			tone: Lane;
-			/** An outcome a rule is drawn before, the bars short of it greyed. */
+			layers: Layer[];
+			/** An outcome a rule is drawn before. */
 			rule: number | null;
 	  }
 	| { kind: 'meter'; box: Box; p: number };
@@ -140,6 +144,24 @@ function part({ name, models }: Strike['parts'][number]): string {
 export function striker(strike: Strike, unit: string): string {
 	return strike.parts.length === 1 ? part(strike.parts[0]) : unit;
 }
+
+/** A count's chances in its side's colour, greyed short of `rule`. */
+function toned({ least, distribution }: Spread, lane: Lane, rule: number | null = null): Layer[] {
+	if (rule === null) return [[lane, distribution]];
+	const short = (k: number) => least + k < rule;
+	return [
+		['short', distribution.map((p, k) => (short(k) ? p : 0))],
+		[lane, distribution.map((p, k) => (short(k) ? 0 : p))]
+	];
+}
+
+const chart = (
+	name: string,
+	box: Box,
+	counted: Spread,
+	layers: Layer[],
+	rule: number | null = null
+): Mark => ({ kind: 'chart', name, box, spread: counted, layers, rule });
 
 const text = (
 	x: number,
@@ -295,14 +317,13 @@ export function chargeFace(
 			text(INSET, 83, 'furthest', 'small'),
 			text(width - INSET, 83, furthest, 'mono', 'end'),
 			text(INSET, 103, 'range', 'small'),
-			{
-				kind: 'chart',
-				name: 'range',
+			chart(
+				'range',
 				box,
-				spread: charge.range,
-				tone: 'attacker',
-				rule: charge.distance
-			}
+				charge.range,
+				toned(charge.range, 'attacker', charge.distance),
+				charge.distance
+			)
 		);
 		height = box.y + box.height + 12;
 	}
@@ -389,7 +410,7 @@ function headed(
 		for (const [name, counted] of opened.charts) {
 			marks.push(text(STRIKE.inset, y + 15, name, 'small'));
 			const box = { x: STRIKE.inset, y: y + 26, width: width - pad, height: CHART.height };
-			marks.push({ kind: 'chart', name, box, spread: counted, tone, rule: null });
+			marks.push(chart(name, box, counted, toned(counted, tone)));
 			y = box.y + box.height;
 		}
 		y += 12;
@@ -475,11 +496,24 @@ export function pillFace(models: Spread, lane: Lane, measure: Measure, open: boo
 		marks: [
 			text(STRIKE.inset, 20, 'models', 'small'),
 			text(width - STRIKE.inset, 20, shown, 'mono', 'end'),
-			{ kind: 'chart', name: 'models', box, spread: models, tone: lane, rule: null }
+			chart('models', box, models, toned(models, lane))
 		]
 	};
 }
 
+/** A side's combat result in its parts: each a name and its count, the Wounds charted. */
+function scoring(lanes: FightLanes, lane: Lane): [string, string][] {
+	const scored = lanes.result.scores[lane];
+	return [
+		[lanes.units[lane].name, spread(scored.score)],
+		['Wounds', spread(scored.wounds)],
+		['Rank Bonus', spread(scored.rank_bonus)],
+		['Flank or Rear', spread(scored.flank_or_rear)],
+		...scored.rules.map((rule): [string, string] => [rule.name, spread(rule.points)])
+	];
+}
+
+/** The combat result: shut, each side's score and how the round goes; open, the scores in parts. */
 export function resultFace(lanes: FightLanes, measure: Measure, open: boolean): Face {
 	const { result } = lanes;
 	const rules = open ? result.rules : [];
@@ -488,28 +522,66 @@ export function resultFace(lanes: FightLanes, measure: Measure, open: boolean): 
 		['draw', result.draw],
 		['target', result.target_wins]
 	];
+	const pad = 2 * STRIKE.inset;
+	const parts = { attacker: scoring(lanes, 'attacker'), target: scoring(lanes, 'target') };
+	const row = ([name, value]: [string, string], index: number) =>
+		measure(name, index ? 'small' : 'text') + 12 + measure(value, 'mono');
+	const column = open
+		? Math.max(CHART.least / 2 + 40, ...LANES.flatMap((lane) => parts[lane].map(row)))
+		: 0;
 	const width = Math.max(
 		RESULT.least,
 		ruleWidth(rules, STRIKE.inset, measure),
-		...LANES.map(
-			(lane) =>
-				3 * STRIKE.inset +
-				measure(lanes.units[lane].name, 'text') +
-				measure(spread(result.scores[lane].score), 'mono')
-		),
-		2 * STRIKE.inset + 3 * (18 + Math.max(...shares.map(([, p]) => measure(percent(p), 'mono'))))
+		open ? pad + 2 * column + 16 : 0,
+		...LANES.map((lane) => pad + STRIKE.inset + row(parts[lane][0], 0)),
+		pad + 3 * (18 + Math.max(...shares.map(([, p]) => measure(percent(p), 'mono'))))
 	);
 	const marks: Mark[] = [text(STRIKE.inset, 23, 'Combat result', 'title')];
-	LANES.forEach((lane, index) => {
-		const y = 45 + index * 19;
+	let y = 78;
+	if (open) {
+		const wide = (width - pad - 16) / 2;
+		let bottom = 0;
+		LANES.forEach((lane, index) => {
+			const x = STRIKE.inset + index * (wide + 16);
+			const [[name, score], [wounds, inflicted], ...rest] = parts[lane];
+			const box = { x, y: 76, width: wide, height: 64 };
+			marks.push(
+				text(x, 45, name, 'text'),
+				text(x + wide, 45, score, 'mono', 'end'),
+				text(x, 64, wounds, 'small'),
+				text(x + wide, 64, inflicted, 'mono', 'end'),
+				chart(wounds, box, result.scores[lane].wounds, toned(result.scores[lane].wounds, lane)),
+				...rest.flatMap(([part, value], at) => [
+					text(x, 158 + at * 19, part, 'small'),
+					text(x + wide, 158 + at * 19, value, 'mono', 'end')
+				])
+			);
+			bottom = Math.max(bottom, 158 + (rest.length - 1) * 19);
+		});
+		const box = { x: STRIKE.inset, y: bottom + 30, width: width - pad, height: CHART.height };
+		const { winners } = result;
 		marks.push(
-			text(STRIKE.inset, y, lanes.units[lane].name, 'text'),
-			text(width - STRIKE.inset, y, spread(result.scores[lane].score), 'mono', 'end')
+			text(STRIKE.inset, bottom + 19, 'margin', 'small'),
+			chart('margin', box, result.margin, [
+				['attacker', winners.attacker_wins],
+				['draw', winners.draw],
+				['target', winners.target_wins]
+			])
 		);
-	});
-	const box = { x: STRIKE.inset, y: 78, width: width - 2 * STRIKE.inset, height: 12 };
+		y = box.y + box.height + 14;
+	} else {
+		LANES.forEach((lane, index) => {
+			const [name, score] = parts[lane][0];
+			marks.push(
+				text(STRIKE.inset, 45 + index * 19, name, 'text'),
+				text(width - STRIKE.inset, 45 + index * 19, score, 'mono', 'end')
+			);
+		});
+	}
+	const box = { x: STRIKE.inset, y, width: width - pad, height: 12 };
 	marks.push({ kind: 'shares', box, shares });
-	return ruled({ chrome: 'card', width, height: RESULT.height, marks }, rules, STRIKE.inset);
+	const face: Face = { chrome: 'card', width, height: y + RESULT.height - 78, marks };
+	return ruled(face, rules, STRIKE.inset);
 }
 
 export function breakFace(

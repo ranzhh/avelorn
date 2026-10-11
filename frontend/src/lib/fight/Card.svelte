@@ -1,7 +1,7 @@
 <script lang="ts">
 	import Bars from '$lib/charts/Bars.svelte';
 	import { percent } from '$lib/charts/scale';
-	import { MARK, STRIKE, type Box, type Face, type Lane } from './faces';
+	import { MARK, STRIKE, type Box, type Face, type Lane, type Tone } from './faces';
 
 	interface Props {
 		face: Face;
@@ -14,6 +14,12 @@
 	let { face, box, tone, open }: Props = $props();
 
 	const classes = { title: 'title', text: '', small: 'small', mono: 'mono', chip: 'small' };
+	const colours: Record<Tone, string> = {
+		attacker: 'var(--attacker)',
+		target: 'var(--target)',
+		draw: 'var(--neutral)',
+		short: 'var(--short)'
+	};
 </script>
 
 <g class="face {tone ?? ''}" class:open transform="translate({box.x},{box.y})">
@@ -92,11 +98,9 @@
 			<Bars
 				{...mark.box}
 				least={mark.spread.least}
-				chances={mark.spread.distribution}
+				layers={mark.layers.map(([tone, chances]): [string, number[]] => [colours[tone], chances])}
 				mean={mark.spread.mean}
 				rule={mark.rule}
-				fill={(outcome) =>
-					mark.rule !== null && outcome < mark.rule ? 'var(--short)' : `var(--${mark.tone})`}
 				label={mark.name}
 			/>
 		{/if}
