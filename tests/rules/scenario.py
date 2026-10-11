@@ -159,9 +159,10 @@ class Panic:
 class Outcome:
     """What a scenario resolved to.
 
-    ``margin`` is the attacker's lead in combat result, ``breaks`` each side's
-    Break test as rolled, ``results`` what each side then does, and ``reaches``
-    the chance the attacker's Charge roll reaches the defender ``distance`` away.
+    ``margin`` is the attacker's lead in combat result, ``scores`` each side's
+    combat result as it claims it, ``breaks`` each side's Break test as rolled,
+    ``results`` what each side then does, and ``reaches`` the chance the
+    attacker's Charge roll reaches the defender ``distance`` away.
     """
 
     attacks: int | None = None
@@ -170,6 +171,7 @@ class Outcome:
     attacker_casualties: Mapping[int, Probability] = field(default_factory=dict)
     initiative: Mapping[Role, int] = field(default_factory=dict)
     margin: Mapping[int, Probability] = field(default_factory=dict)
+    scores: Mapping[Role, Mapping[int, Probability]] = field(default_factory=dict)
     breaks: Mapping[Role, Break] = field(default_factory=dict)
     results: Mapping[Role, Break] = field(default_factory=dict)
     panic: Panic | None = None
@@ -213,6 +215,7 @@ def resolve(scenario: Scenario) -> Outcome:
                 casualties=_lost(fought, AttackSide.TARGET, defender.models, ROUND_END),
                 attacker_casualties=_lost(fought, AttackSide.ATTACKER, attacker.models, ROUND_END),
                 margin=_margin(fought),
+                scores={role: _score(fought, side) for role, side in _SIDES.items()},
             )
             if scenario.kind is Kind.FIGHT:
                 return outcome
@@ -434,6 +437,11 @@ def _panicked(volley: Evaluated) -> Panic:
 def _margin(fought: Evaluated) -> dict[int, Probability]:
     lead = fought.at("round/attacker/who-is-the-winner").read("margin")
     return {by: p for by, p in lead.mass.items() if p}
+
+
+def _score(fought: Evaluated, side: AttackSide) -> dict[int, Probability]:
+    score = fought.at(f"round/{side}/who-is-the-winner").read("score")
+    return {points: p for points, p in score.mass.items() if p}
 
 
 def _broken(fought: Evaluated, side: AttackSide) -> Break:

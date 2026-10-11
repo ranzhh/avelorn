@@ -137,6 +137,61 @@ def test_standards() -> None:
     assert resolve(scenario.without("standards")).margin == _beneath_a_standard(standard=False)
 
 
+def _add(tally: dict[int, Fraction], points: int, p: Fraction) -> None:
+    tally[points] = tally.get(points, Fraction(0)) + p
+
+
+def _drawn_to(
+    tie: int,
+) -> tuple[dict[Role, dict[int, Fraction]], dict[int, Fraction], dict[Role, Break]]:
+    scores: dict[Role, dict[int, Fraction]] = {role: {} for role in Role}
+    margin: dict[int, Fraction] = {}
+    tested = {role: Break(Fraction(0), Fraction(0), Fraction(0)) for role in Role}
+    for (felled, lost), p in EQUAL_RANKS_TRADED.items():
+        lead = felled - lost
+        _add(scores[Role.ATTACKER], felled + int(lead > 0) + int(not lead and tie > 0), p)
+        _add(scores[Role.DEFENDER], lost + int(lead < 0) + int(not lead and tie < 0), p)
+        claimed = lead + _sign(lead) if lead else tie
+        _add(margin, claimed, p)
+        losers = ((Role.ATTACKER, -claimed, lost, 8), (Role.DEFENDER, claimed, felled, 9))
+        for role, by, slain, leadership in losers:
+            if by > 0 and slain < 10:
+                rolled, was = break_test(leadership, by), tested[role]
+                tested[role] = Break(
+                    was.gives_ground + p * rolled.gives_ground,
+                    was.falls_back + p * rolled.falls_back,
+                    was.breaks + p * rolled.breaks,
+                )
+    return scores, margin, tested
+
+
+@pytest.mark.parametrize(
+    ("spearmen", "dwarfs", "tie"),
+    [
+        pytest.param(("musician",), (), 1, id="spearmen-musician"),
+        pytest.param((), ("musician",), -1, id="dwarf-musician"),
+        pytest.param(("musician",), ("musician",), 0, id="both-musicians"),
+    ],
+)
+def test_onwards_to_victory(spearmen: tuple[str, ...], dwarfs: tuple[str, ...], tie: int) -> None:
+    """A drawn round goes by one point to the only side with a musician; two cancel out.
+
+    Ten a side in one rank, each scoring the Wounds it inflicts and Massed Infantry's
+    point when it outnumbers. The side beaten by the musician's point, still standing,
+    takes its Break test with the point added: Spearmen at Leadership 8, Dwarfs at 9.
+    """
+    scenario = Scenario(
+        Kind.BREAK,
+        replace(EQUAL_RANKS.attacker, command=spearmen),
+        replace(EQUAL_RANKS.defender, command=dwarfs),
+        first_round=False,
+    )
+    printed = resolve(scenario)
+    plain = resolve(scenario.without("onwards-to-victory"))
+    assert (printed.scores, printed.margin, printed.breaks) == _drawn_to(tie)
+    assert (plain.scores, plain.margin, plain.breaks) == _drawn_to(0)
+
+
 @pytest.mark.parametrize(
     ("printed", "plain", "leadership", "walled"),
     [

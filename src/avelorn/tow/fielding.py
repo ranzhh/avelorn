@@ -16,7 +16,7 @@ from avelorn.tow.traits import Carries
 
 SHIELD = "shield"
 
-_COMMAND = frozenset({OptionKind.STANDARD_BEARER})
+_COMMAND = frozenset({OptionKind.STANDARD_BEARER, OptionKind.MUSICIAN})
 
 
 class Held(frozenset[str]):
@@ -336,6 +336,25 @@ class Fielding:
         bought = OptionKind.STANDARD_BEARER in self.command
         return int(bought and standings.of(self.hit.id).models > 0)
 
+    def musicians(self, standings: Standings) -> int:
+        """The musicians standing in the front rank.
+
+        A musician falls after the rest of the rank and file, before the standard
+        bearer (command-groups/musicians-as-casualties). A champion takes the
+        front rank first, as it is fielded, an order no rule prints. The standard
+        bearer takes the centre (command-groups/position-within-the-unit), and a
+        musician left without room stands behind (command-groups/not-enough-room).
+
+        Returns:
+            1 or 0.
+        """
+        standard = int(OptionKind.STANDARD_BEARER in self.command)
+        ahead = standard + sum(
+            part.count for part in self.parts if part.row.role is ProfileRole.CHAMPION
+        )
+        standing = standings.of(self.hit.id).models > standard
+        return int(OptionKind.MUSICIAN in self.command and ahead < self.frontage and standing)
+
     def _wounds(self, part: Part) -> int:
         wounds = part.characteristic(Characteristic.WOUNDS)
         if wounds is None:
@@ -366,8 +385,8 @@ class Fielding:
         """Field a contingent as its rank and file, with a champion part for each champion bought.
 
         A champion stands in the front rank, so its part is placed first
-        (command-groups/position-within-the-unit). A standard bearer bought is
-        one of the rank and file. Every part carries the unit's
+        (command-groups/position-within-the-unit). A standard bearer or musician
+        bought is one of the rank and file. Every part carries the unit's
         equipment and rules. The armour value folds from the armour worn. A ward
         comes only from rules, so a part fielded from the corpus has none. A part
         carries the rules of its datasheet, its troop type, and the profile its

@@ -73,7 +73,7 @@ items:
   - step: who-is-the-winner
     sequence: combat-result
     of: [attacker, target]
-    readings: [result, margin, decided]
+    readings: [result, margin, decided, score, claimed]
   - step: break-test
     sequence: break
     of: [attacker, target]

@@ -126,3 +126,27 @@ def test_a_side_counts_its_unit_strength_and_the_wounds_it_has_left() -> None:
     left = back_rank(side.standing(4), 4, side.removal)
 
     assert (side.unit_strength(left), side.wounds_left(left)) == (9, 8)
+
+
+@pytest.mark.parametrize(
+    ("command", "frontage", "models", "musicians"),
+    [
+        pytest.param(("standard-bearer", "musician"), 5, 2, 1, id="the-last-two-warriors"),
+        pytest.param(("standard-bearer", "musician"), 5, 1, 0, id="falls-before-the-standard"),
+        pytest.param(("veteran", "standard-bearer", "musician"), 3, 3, 1, id="room-in-front"),
+        pytest.param(("veteran", "standard-bearer", "musician"), 3, 2, 0, id="falls-before-both"),
+        pytest.param(("veteran", "standard-bearer", "musician"), 2, 10, 0, id="no-room-in-front"),
+    ],
+)
+def test_a_musician_stands_in_the_front_rank_until_the_rest_of_its_command_group_is_left(
+    command: tuple[str, ...], frontage: int, models: int, musicians: int
+) -> None:
+    """Dwarf Warriors' musician falls after the other warriors, before the standard and Veteran.
+
+    The Veteran and the standard bearer take the front rank first, so two wide
+    the musician stands behind them.
+    """
+    fielded = Contingent.field(REPO.units["dwarf-warriors"], 10, data=REPO, frontage=frontage)
+    side = Fielding.of(replace(fielded, options=command), combat=True)
+
+    assert side.musicians(side.standing(models)) == musicians

@@ -255,8 +255,10 @@ class RulePoints(_Drawn):
 class Scoring(_Drawn):
     """A side's combat result, and its parts.
 
-    ``wounds`` are the Wounds the side inflicted, ``flank_or_rear`` the points
-    for the arc it fights its enemy in, and ``rules`` the points each rule adds.
+    ``score`` is the one the round is decided on. ``wounds`` are the Wounds the
+    side inflicted, ``flank_or_rear`` the points for the arc it fights its enemy
+    in, and ``rules`` the points each rule adds, those claimed once both sides'
+    are calculated among them.
     """
 
     score: Spread
@@ -619,25 +621,34 @@ def _winners(fight: Fight, margin: Spread) -> Winners:
 
 def _scoring(fight: Fight, side: Side) -> Scoring:
     calculated = _at(fight.evaluated, f"{side}/calculate-combat-result")
+    decided = _at(fight.evaluated, f"{side}/who-is-the-winner")
     parts: Distribution[Scored] = calculated.read("parts")
     named = _named(fight.evaluated, side)
-    rules = sorted(
-        {rule for scored in parts.mass for rule, _ in scored.rules}, key=named.__getitem__
-    )
+    added = [
+        *_by_rule(parts.map(lambda scored: scored.rules), named),
+        *_by_rule(decided.read("claimed"), named),
+    ]
     return Scoring(
-        score=Spread.of(calculated.read("score")),
+        score=Spread.of(decided.read("score")),
         wounds=Spread.of(parts.map(lambda scored: scored.wounds)),
         rank_bonus=Spread.of(parts.map(lambda scored: scored.rank_bonus)),
         flank_or_rear=Spread.of(parts.map(lambda scored: scored.flank_or_rear)),
-        rules=[
-            RulePoints(name=named[rule], points=Spread.of(parts.map(partial(_points, rule))))
-            for rule in rules
-        ],
+        rules=sorted(added, key=lambda rule: rule.name),
     )
 
 
-def _points(rule: str, scored: Scored) -> int:
-    return sum(points for each, points in scored.rules if each == rule)
+def _by_rule(
+    added: Distribution[tuple[tuple[str, int], ...]], named: Mapping[str, str]
+) -> list[RulePoints]:
+    rules = {rule for each in added.mass for rule, _ in each}
+    return [
+        RulePoints(name=named[rule], points=Spread.of(added.map(partial(_points, rule))))
+        for rule in rules
+    ]
+
+
+def _points(rule: str, added: tuple[tuple[str, int], ...]) -> int:
+    return sum(points for each, points in added if each == rule)
 
 
 def _break(fight: Fight, side: Side) -> LaneBreakTest:

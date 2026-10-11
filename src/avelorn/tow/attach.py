@@ -39,6 +39,7 @@ from avelorn.tow.changes import (
     Measured,
     MoreThan,
     Operated,
+    Same,
     Shows,
     Sources,
     Unspent,
@@ -557,7 +558,7 @@ class _Fielding:
                 return None
             return MoreThan(left, right)
         if isinstance(value, FactRef):
-            return None
+            return self.same(side, at, fact, comparator, value)
         if fact.fact in Printed:
             step = self.nearest(Printed(fact.fact), fact.of, side, at)
             if step is None:
@@ -574,6 +575,17 @@ class _Fielding:
         if comparator == "is":
             return Equals(known, value)
         return _counted(known, comparator, value)
+
+    def same(
+        self, side: Side, at: Step[Any], fact: FactGate, comparator: str, value: FactRef
+    ) -> Same | None:
+        if comparator != "is" or fact.fact not in Printed or value.fact not in Printed:
+            return None
+        left = self.nearest(Printed(fact.fact), fact.of, side, at)
+        right = self.nearest(Printed(value.fact), value.of, side, at)
+        if left is None or right is None:
+            return None
+        return Same(left.key, right.key)
 
     def compared(self, value: object, side: Side) -> Measured | int | None:
         if isinstance(value, int):
@@ -597,6 +609,8 @@ class _Fielding:
                 return Measured(standing, fielding.unit_strength)
             case DerivedFact.STANDARD_BEARERS:
                 return Measured(standing, fielding.standard_bearers)
+            case DerivedFact.MUSICIANS:
+                return Measured(standing, fielding.musicians)
 
     def equals(self, rule: Rule, step: Step[Any], value: Hashable) -> Equals:
         spec = self.specs[step]

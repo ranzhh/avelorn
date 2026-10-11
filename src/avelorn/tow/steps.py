@@ -1269,12 +1269,25 @@ def calculate_combat_result(
     return Distribution.pure(scored.score)
 
 
+def _claimed(score: int, enemy_score: int, changed: tuple[Hashable, ...]) -> tuple[int, int]:
+    payloads = Payloads.of(changed)
+    return (
+        score + payloads.added(Quantity.COMBAT_RESULT, Side.ATTACKER),
+        enemy_score + payloads.added(Quantity.COMBAT_RESULT, Side.TARGET),
+    )
+
+
 def who_is_the_winner(
-    standing: Standings, enemy: Standings, score: int, enemy_score: int
+    standing: Standings,
+    enemy: Standings,
+    score: int,
+    enemy_score: int,
+    changed: tuple[Hashable, ...],
 ) -> Distribution[Fought]:
     """Settle how the round went for a side: the higher combat result wins, equal ones draw.
 
-    A side wiped out loses whatever it scored, and two wiped out draw
+    Each combat result takes the points rules add once both are calculated. A
+    side wiped out loses whatever it scored, and two wiped out draw
     (the-combat-phase/calculate-combat-result); the margin stays the difference
     in combat result either way.
 
@@ -1288,17 +1301,29 @@ def who_is_the_winner(
             return Distribution.pure(Fought.WON)
         case (True, True):
             return Distribution.pure(Fought.DRAWN)
-    if score == enemy_score:
+    mine, theirs = _claimed(score, enemy_score, changed)
+    if mine == theirs:
         return Distribution.pure(Fought.DRAWN)
-    return Distribution.pure(Fought.WON if score > enemy_score else Fought.LOST)
+    return Distribution.pure(Fought.WON if mine > theirs else Fought.LOST)
 
 
-def _lead(score: int, enemy_score: int) -> int:
-    return score - enemy_score
+def _lead(score: int, enemy_score: int, changed: tuple[Hashable, ...]) -> int:
+    mine, theirs = _claimed(score, enemy_score, changed)
+    return mine - theirs
 
 
-def _decided(score: int, enemy_score: int, fought: Fought) -> tuple[int, Fought]:
-    return score - enemy_score, fought
+def _claims(changed: tuple[Hashable, ...]) -> tuple[tuple[str, int], ...]:
+    return Payloads.of(changed).by_rule(Quantity.COMBAT_RESULT, Side.ATTACKER)
+
+
+def _score(score: int, changed: tuple[Hashable, ...]) -> int:
+    return score + sum(points for _, points in _claims(changed))
+
+
+def _decided(
+    score: int, enemy_score: int, changed: tuple[Hashable, ...], fought: Fought
+) -> tuple[int, Fought]:
+    return _lead(score, enemy_score, changed), fought
 
 
 def _leadership_in_force(
@@ -1325,7 +1350,8 @@ def break_test(
     """Take the Break test of a side that lost the round and still stands.
 
     It tests the highest Leadership still standing, moved by the rules in
-    force, with the difference in combat result added to the roll
+    force, with the difference in combat result added to the roll, each
+    taking the points rules add once both are calculated
     (the-combat-phase/break-test). An outcome a rule forces stands in for the
     roll.
 
@@ -1343,7 +1369,8 @@ def break_test(
     leadership = _leadership_in_force(attacker, standing, changed)
     if leadership is None:
         raise ValueError("no model left standing prints a Leadership to test")
-    odds = break_odds(leadership, enemy_score - score)
+    mine, theirs = _claimed(score, enemy_score, changed)
+    odds = break_odds(leadership, theirs - mine)
     return Distribution(
         {
             BreakTest.GIVES_GROUND: odds.gives_ground,
@@ -1400,6 +1427,9 @@ _SCORING = (
     _TARGET_STANDING,
     Fact("enemy-arc", Side.ATTACKER),
     CHANGED,
+)
+_CLAIMED = frozenset(
+    {(Side.ATTACKER, Quantity.COMBAT_RESULT), (Side.TARGET, Quantity.COMBAT_RESULT)}
 )
 _UNITED = Monoid[Hashable](_UNSHOWN, _united)
 _COUNT = Monoid(0)
@@ -1842,12 +1872,17 @@ _SPECS = (
         name="who-is-the-winner",
         kind=Kind.CONSEQUENCE,
         side=Side.ATTACKER,
-        reads=(Fact("standing", Side.ATTACKER), _TARGET_STANDING, *_SCORES),
+        reads=(Fact("standing", Side.ATTACKER), _TARGET_STANDING, *_SCORES, CHANGED),
         kernel=who_is_the_winner,
+        runs={Operation.ADD: _CLAIMED},
         readings={
             "result": _offer("who-is-the-winner"),
-            "margin": Offered(_SCORES, _lead, _COUNT),
-            "decided": Offered((*_SCORES, Output("who-is-the-winner")), _decided, _UNITED),
+            "margin": Offered((*_SCORES, CHANGED), _lead, _COUNT),
+            "decided": Offered(
+                (*_SCORES, CHANGED, Output("who-is-the-winner")), _decided, _UNITED
+            ),
+            "score": Offered((Output("calculate-combat-result"), CHANGED), _score, _COUNT),
+            "claimed": Offered((CHANGED,), _claims, _UNITED),
         },
         outcomes=frozenset(Fought),
     ),
@@ -1865,7 +1900,7 @@ _SPECS = (
         ),
         kernel=break_test,
         runs={
-            Operation.ADD: frozenset({(Side.ATTACKER, Characteristic.LEADERSHIP)}),
+            Operation.ADD: frozenset({(Side.ATTACKER, Characteristic.LEADERSHIP)}) | _CLAIMED,
             Operation.FORCE: frozenset(),
         },
         target=Offered(

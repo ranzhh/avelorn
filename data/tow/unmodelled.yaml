@@ -2,8 +2,7 @@
 # `avelorn coverage` lists the gaps; tests/tow/test_coverage.py fails on a gap
 # missing here and on an entry no gap needs. Subjects: the rule's slug for a
 # rule without effects, <unit>/<row> for profile rows, the weapon or armour slug for
-# printed notes, <unit>/<option> for options, the option kind for a command
-# model (champion, standard_bearer, musician), <rule>/<sequence>/<step> for an
+# printed notes, <unit>/<option> for options, <rule>/<sequence>/<step> for an
 # unattached effect and for an unreached effect, and the mechanic's slug for a
 # missing mechanic.
 
@@ -213,12 +212,8 @@
   reason: The +1 Initiative when charged in the front arc has no gate on the arc; the troop-type limit is equipment legality. Its supporting-attack ban folds through Fight In Extra Rank.
   issue: 17
 
-# inert-option: a command model is one entry per kind, covering every datasheet
-# that sells one.
+# inert-option: buying the option changes nothing the engine reads but its cost.
 
-- kind: inert-option
-  subject: musician
-  reason: The +1 combat result on a drawn combat is not scored.
 - kind: inert-option
   subject: ironbreakers/Brace of Drakefire Pistols
   reason: Bought for the Ironbeard alone; mustering refuses an option for one model until a unit has parts.
@@ -285,6 +280,9 @@
   subject: characters
   reason: Characters joining units are not modelled, so the clauses of Stubborn and Terror about a joined character have nothing to read, a Swiftstride unit is never joined by a model without it, and no unit includes a Battle Standard for Standards to score.
 - kind: missing-mechanic
+  subject: command-group-placement
+  reason: The command group is placed for its player. A champion takes the front rank first, an order no rule prints, then the standard bearer, so a unit whose front rank has no room left for its musician never claims "Onwards to Victory!".
+- kind: missing-mechanic
   subject: facings
   reason: Flank and rear facings are not modelled, so Martial Prowess's supporting attacks to the flank and rear have no combat to land in.
 - kind: missing-mechanic
@@ -303,7 +301,7 @@
   reason: Marching is not modelled, so Veteran never re-rolls the Leadership test a marching unit takes near the enemy.
 - kind: missing-mechanic
   subject: multiple-units-in-combat
-  reason: Only a combat of one unit against one is modelled, so Stomp Attacks are never divided between enemy units, and Massed Infantry compares the Unit Strength of one unit where the printed rule compares each side's.
+  reason: Only a combat of one unit against one is modelled, so Stomp Attacks are never divided between enemy units, Massed Infantry compares the Unit Strength of one unit where the printed rule compares each side's, and "Onwards to Victory!" looks for a musician in one unit where the printed rule looks in each of a side's.
 - kind: missing-mechanic
   subject: own-unit-strength
   reason: No gate reads the Unit Strength of the bearer's own models, so Enemy Fire (Skirmishers) does not check that every model has a Unit Strength of 1; enemies shooting at Ellyrian Reavers in Skirmish formation, light cavalry of Unit Strength 2, take the -1 To Hit the rule withholds from them.

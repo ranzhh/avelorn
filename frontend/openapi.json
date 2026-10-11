@@ -1474,7 +1474,7 @@
         "additionalProperties": false,
         "type": "object",
         "title": "Effect",
-        "description": "One printed effect.\n\n``of`` names whose characteristic an add or set changes, since a step reads\nthe characteristics of both models at once. An add may add a dice roll,\nkept as its printed text as a dice X is, where the step rolls one."
+        "description": "One printed effect.\n\n``of`` names whose characteristic an add or set changes, since a step reads\nthe characteristics of both models at once, or whose combat result, where a\nstep reads both sides'. An add may add a dice roll, kept as its printed text\nas a dice X is, where the step rolls one."
       },
       "Entry": {
         "type": "string",
@@ -3294,7 +3294,7 @@
           "rules"
         ],
         "title": "Scoring",
-        "description": "A side's combat result, and its parts.\n\n``wounds`` are the Wounds the side inflicted, ``flank_or_rear`` the points\nfor the arc it fights its enemy in, and ``rules`` the points each rule adds."
+        "description": "A side's combat result, and its parts.\n\n``score`` is the one the round is decided on. ``wounds`` are the Wounds the\nside inflicted, ``flank_or_rear`` the points for the arc it fights its enemy\nin, and ``rules`` the points each rule adds, those claimed once both sides'\nare calculated among them."
       },
       "SelectorParameter": {
         "properties": {

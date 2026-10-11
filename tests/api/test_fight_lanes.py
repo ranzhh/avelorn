@@ -45,6 +45,11 @@ PRINCES_CHARGE_DWARFS_FROM_AFAR = {
     "b": {"unit": "dwarf-warriors", "size": 10, "frontage": 5, "options": ["veteran"]},
     "charge": {"side": "a", "full_inches": 12, "arc": "front"},
 }
+DWARFS_CHARGE_DWARFS = {
+    "a": {"unit": "dwarf-warriors", "size": 20, "frontage": 5},
+    "b": {"unit": "dwarf-warriors", "size": 20, "frontage": 5},
+    "charge": {"side": "a", "full_inches": 6, "arc": "front"},
+}
 LIONS_CHARGE_SWORDMASTERS = {
     "a": {"unit": "war-lions", "size": 2},
     "b": {"unit": "swordmasters-of-hoeth", "size": 10, "frontage": 5},
@@ -90,6 +95,17 @@ def moments(spread: dict) -> tuple[float, float]:
         (count - mean) ** 2 * p for count, p in zip(counts, spread["distribution"], strict=True)
     )
     return mean, sqrt(variance)
+
+
+def summed(scoring: dict) -> float:
+    """The means of a side's parts of its combat result, added up.
+
+    Returns:
+        The Wounds, the Rank Bonus, the flank or rear points and each rule's points.
+    """
+    parts = [scoring[part] for part in ("wounds", "rank_bonus", "flank_or_rear")]
+    added = [rule["points"] for rule in scoring["rules"]]
+    return sum(part["mean"] for part in parts + added)
 
 
 def served(client: TestClient, route: str, body: dict) -> dict:
@@ -399,9 +415,38 @@ def test_a_combat_result_is_scored_in_its_parts(client: TestClient) -> None:
     ranked = sum(lanes["standing"]["target"][-1]["models"]["distribution"][9:])
     assert dwarfs["rank_bonus"]["distribution"] == pytest.approx([1 - ranked, ranked])
     assert [rule["name"] for rule in dwarfs["rules"]] == ["Massed Infantry"]
-    parts = [dwarfs[part] for part in ("wounds", "rank_bonus", "flank_or_rear")]
-    added = [rule["points"] for rule in dwarfs["rules"]]
-    assert dwarfs["score"]["mean"] == pytest.approx(sum(part["mean"] for part in parts + added))
+    assert dwarfs["score"]["mean"] == pytest.approx(summed(dwarfs))
+
+
+def test_a_musician_claims_the_point_that_settles_a_drawn_combat(client: TestClient) -> None:
+    """Twenty Dwarf Warriors five wide charge twenty more from 6in, into the front.
+
+    Neither unit can be wiped out, so without a musician the round is drawn
+    exactly where the two scores tie. A musician among the chargers claims
+    "Onwards to Victory!"'s point in each of those outcomes: the point is a
+    part of their score by name, their score is higher by its chance, the parts
+    still add up to it, and every round the scores tied goes to them, at the
+    margin the point makes.
+    """
+    plain = served(client, "/graph/fight", DWARFS_CHARGE_DWARFS)["result"]
+    chargers = {**DWARFS_CHARGE_DWARFS["a"], "options": ["musician"]}
+    result = served(client, "/graph/fight", {**DWARFS_CHARGE_DWARFS, "a": chargers})["result"]
+
+    tied = plain["draw"]
+    scored = result["scores"]["attacker"]
+    points = {rule["name"]: rule["points"]["distribution"] for rule in scored["rules"]}
+    assert points['"Onwards to Victory!"'] == pytest.approx([1 - tied, tied])
+    assert scored["score"]["mean"] == pytest.approx(
+        plain["scores"]["attacker"]["score"]["mean"] + tied
+    )
+    assert scored["score"]["mean"] == pytest.approx(summed(scored))
+    assert (result["draw"], result["attacker_wins"]) == (
+        0,
+        pytest.approx(plain["attacker_wins"] + tied),
+    )
+    ways = (result["winners"][way] for way in ("attacker_wins", "draw", "target_wins"))
+    split = [sum(chances) for chances in zip(*ways, strict=True)]
+    assert split == pytest.approx(result["margin"]["distribution"])
 
 
 def test_a_margin_splits_by_who_wins_the_round(client: TestClient) -> None:

@@ -409,8 +409,9 @@ class Effect(BaseModel):
     """One printed effect.
 
     ``of`` names whose characteristic an add or set changes, since a step reads
-    the characteristics of both models at once. An add may add a dice roll,
-    kept as its printed text as a dice X is, where the step rolls one.
+    the characteristics of both models at once, or whose combat result, where a
+    step reads both sides'. An add may add a dice roll, kept as its printed text
+    as a dice X is, where the step rolls one.
     """
 
     model_config = _STRICT
@@ -579,8 +580,9 @@ class Effect(BaseModel):
         changes_one = any(isinstance(key, Characteristic) for key in self.keys)
         if changes_one and self.of is None:
             raise ValueError("of names whose characteristic changes")
-        if self.of is not None and not changes_one:
-            raise ValueError("of belongs to a changed characteristic")
+        owned = changes_one or Quantity.COMBAT_RESULT in self.keys
+        if self.of is not None and not owned:
+            raise ValueError("of belongs to a changed characteristic or combat result")
         return self
 
     @model_validator(mode="after")
