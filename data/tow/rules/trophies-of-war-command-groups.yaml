@@ -1,0 +1,13 @@
+# Source: https://tow.whfb.app/command-groups/trophies-of-war-command-groups
+id: trophies-of-war-command-groups
+name: Trophies of War (Command Groups)
+page: 200
+category: Command Groups
+paragraphs:
+  - The standards of defeated enemies are highly prized as trophies, so an army will collect as many as it can, drawing great
+    satisfaction from their enemy's shame. If a fleeing unit is run down by an enemy unit, or if a unit is destroyed in combat
+    by an enemy unit, its standard is claimed as a trophy.
+  - Standards claimed in this way are worth bonus Victory Points at the end of the battle. Once a standard has been lost in
+    this way, it cannot be reclaimed.
+  - Note that if a unit is destroyed by any means other than being run down whilst fleeing or being destroyed in combat (by
+    enemy shooting, for example), its banner is not claimed by the enemy as a trophy of war.

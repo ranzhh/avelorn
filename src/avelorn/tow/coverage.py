@@ -7,8 +7,8 @@ entry with no gap is stale. The CLI, the API and the gate test all read this
 one report.
 
 The scan reads the corpus, not the rule registry, since a rule nothing
-references is no gap. The core rules of the phases are the exception: every side
-has them, so they are scanned as if every side printed them.
+references is no gap. The core rules are the exception: every side has them,
+so they are scanned as if every side printed them.
 """
 
 from collections import defaultdict
@@ -25,7 +25,6 @@ from avelorn.tow.fielding import Fielding
 from avelorn.tow.programs import CHARGE, ROUND, STAND_AND_SHOOT, VOLLEY, load_program
 from avelorn.tow.schema.effect import Effect
 from avelorn.tow.schema.ledger import Acknowledgement, GapKind
-from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.program import ProgramFile
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import Rule
@@ -248,7 +247,7 @@ def _scan(data: TOWRepository) -> Iterator[tuple[GapKind, str, Site]]:
 
 
 def _core(data: TOWRepository) -> set[str]:
-    return {slug for slug, rule in data.rules.items() if rule.category in set(Phase)}
+    return {slug for slug, rule in data.rules.items() if rule.core}
 
 
 type Facing = tuple[Fielding, Fielding, frozenset[str]]

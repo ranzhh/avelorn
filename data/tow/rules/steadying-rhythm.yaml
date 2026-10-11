@@ -1,0 +1,8 @@
+# Source: https://tow.whfb.app/command-groups/steadying-rhythm
+id: steadying-rhythm
+name: Steadying Rhythm
+page: 201
+category: Command Groups
+paragraphs:
+  - If a fleeing unit contains a musician, it may apply a +1 modifier to its Leadership characteristic whenever it attempts
+    to rally, up to a maximum of Leadership 10.

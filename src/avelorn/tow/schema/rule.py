@@ -16,9 +16,14 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from avelorn.tow.schema.effect import Effect, Operation
+from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.quantity import DiceQuantity
 from avelorn.tow.schema.reference import RuleRef, Slug
 from avelorn.tow.schema.unit import ProfileRole
+
+COMMAND_GROUPS = "Command Groups"
+
+_CORE = frozenset({*Phase, COMMAND_GROUPS})
 
 _TEMPLATE = re.compile(r"^(?P<base>.+) \((?P<before>[^()X]*)X(?P<after>[^()X]*)\)$")
 _BRACKETED = re.compile(r"^(?P<base>.+) \((?P<inner>[^()]+)\)$")
@@ -294,6 +299,11 @@ class Rule(BaseModel):
         if reads and (self.parameter is None or self.parameter.kind != "amount"):
             raise ValueError(f"an effect of {self.name!r} reads an X the rule does not declare")
         return self
+
+    @property
+    def core(self) -> bool:
+        """Whether every side has the rule: one printed for a phase, or for command groups."""
+        return self.category in _CORE
 
     def display(self, x: int | str | None) -> str:
         """The rule's name as a reference with this X prints it.
