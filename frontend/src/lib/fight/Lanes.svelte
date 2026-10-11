@@ -7,11 +7,13 @@
 	import type { Field } from './field';
 	import { INSET, type Font, type Measure } from './faces';
 	import { OUTCOME, draw, type Lane, type Placed } from './layout';
+	import type { View } from './odds';
 
 	type Reacting = NonNullable<FightBody['charge']>['reaction'];
 
 	interface Props {
 		lanes: FightLanes;
+		view: View;
 		/** The charge as last asked for, which the battlefield's inputs show while a redraw is on its way. */
 		charge: NonNullable<FightBody['charge']> | null;
 		/** The blocks the battlefield measures, where the table placed them. */
@@ -29,8 +31,19 @@
 		onmove: (lane: Lane, block: Block) => void;
 	}
 
-	let { lanes, charge, field, open, editing, editor, ontoggle, onedit, oncharge, onmove }: Props =
-		$props();
+	let {
+		lanes,
+		view,
+		charge,
+		field,
+		open,
+		editing,
+		editor,
+		ontoggle,
+		onedit,
+		oncharge,
+		onmove
+	}: Props = $props();
 
 	const FONTS: Record<Font, string> = {
 		title: '600 13px system-ui, sans-serif',
@@ -47,7 +60,7 @@
 
 	let editorHeight = $state(160);
 	const drawing = $derived(
-		draw(lanes, measure, open, editing && { lane: editing, height: editorHeight }, !!field)
+		draw(lanes, measure, open, editing && { lane: editing, height: editorHeight }, !!field, view)
 	);
 
 	$effect(() => {

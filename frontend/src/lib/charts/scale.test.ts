@@ -57,10 +57,10 @@ describe('percent', () => {
 describe('percents', () => {
 	it('prints chances making up a whole so they add up to 100%', () => {
 		const taken = 0.81522;
-		const given = [0.23291, 0.35586, 0.22645].map((p) => p / taken);
+		const conditional = [0.23291, 0.35586, 0.22645].map((p) => p / taken);
 
-		expect(given.map(percent)).toEqual(['29%', '44%', '28%']);
-		expect(percents(given)).toEqual(['28%', '44%', '28%']);
+		expect(conditional.map(percent)).toEqual(['29%', '44%', '28%']);
+		expect(percents(conditional)).toEqual(['28%', '44%', '28%']);
 	});
 
 	it('prints them all to a place when one is small', () => {

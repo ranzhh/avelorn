@@ -16,7 +16,7 @@ import {
 	type Point
 } from './faces';
 import { battlefieldSize } from './field';
-import { odds } from './odds';
+import { odds, type View } from './odds';
 
 export { LANES, type Lane };
 export const other = (lane: Lane): Lane => (lane === 'attacker' ? 'target' : 'attacker');
@@ -140,16 +140,18 @@ export interface Editor {
  *
  * The node `open` shows its whole face, a unit edited in place makes room
  * for its `editor`, and the lanes widen and deepen to hold them. A `mapped`
- * battlefield reads its numbers off the table's blocks.
+ * battlefield reads its numbers off the table's blocks. Its chances read in
+ * `view`.
  */
 export function draw(
 	lanes: FightLanes,
 	measure: Measure,
 	open: string | null = null,
 	editor: Editor | null = null,
-	mapped = false
+	mapped = false,
+	view: View = 'conditional'
 ): Drawing {
-	const chances = odds(lanes);
+	const chances = odds(lanes, view);
 	const reaches = lanes.charge?.reaches ?? null;
 	const fought = reaches !== 0;
 	const events = columns(fought ? lanes : { ...lanes, strikes: [] });

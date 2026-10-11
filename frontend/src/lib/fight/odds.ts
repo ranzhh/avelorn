@@ -1,6 +1,10 @@
 import type { FightLanes } from '$lib/api/client';
 import type { Lane, Share } from './faces';
 
+/** Each chance conditional on reaching the node before it, or marginal over the whole charge. */
+export type View = 'conditional' | 'marginal';
+export const VIEWS: View[] = ['conditional', 'marginal'];
+
 const OUTCOMES = [
 	['Give Ground', 'give_ground'],
 	['Fall Back in Good Order', 'fall_back_in_good_order'],
@@ -15,23 +19,27 @@ export interface Odds {
 }
 
 /**
- * The chances given each node is reached: a Break test's outcomes over taking
- * it, the result over the round fought.
+ * The chances in one view. Conditional, a Break test's outcomes are over taking it
+ * and the result over the round fought; marginal, each is the chance from the
+ * start, and the charge falling short takes its share of the result.
  */
-export function odds(lanes: FightLanes): Odds {
+export function odds(lanes: FightLanes, view: View): Odds {
+	const reach = view === 'marginal' ? (lanes.charge?.reaches ?? 1) : 1;
 	const { breaks, result } = lanes;
 	const outcomes = (lane: Lane): [string, number][] => {
 		const test = breaks[lane];
-		const over = test.taken && 1 / test.taken;
+		const over = view === 'marginal' ? reach : test.taken && 1 / test.taken;
 		return OUTCOMES.map(([name, key]) => [name, over * test[key]]);
 	};
+	const shares: Share[] = [
+		['attacker', reach * result.attacker_wins],
+		['draw', reach * result.draw],
+		['target', reach * result.target_wins]
+	];
+	if (reach < 1) shares.push(['short', 1 - reach]);
 	return {
-		taken: { attacker: breaks.attacker.taken, target: breaks.target.taken },
+		taken: { attacker: reach * breaks.attacker.taken, target: reach * breaks.target.taken },
 		outcomes: { attacker: outcomes('attacker'), target: outcomes('target') },
-		shares: [
-			['attacker', result.attacker_wins],
-			['draw', result.draw],
-			['target', result.target_wins]
-		]
+		shares
 	};
 }
