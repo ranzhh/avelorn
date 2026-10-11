@@ -54,22 +54,6 @@ def listed(casualties: list[float]) -> dict[int, float]:
     return {count: p for count, p in enumerate(casualties) if p}
 
 
-def test_the_fight_graph_is_the_round_the_fight_reports(client: TestClient) -> None:
-    """The charge carries into the program, so its losses are the ones the report gives."""
-    body = {
-        "a": {"unit": "elven-spearmen", "size": 20},
-        "b": {"unit": "dwarf-warriors", "size": 20},
-        "charge": {"side": "a", "full_inches": 6, "arc": "rear"},
-    }
-    report = served(client, "/fight", body)
-    program = served(client, "/graph/fight", body)
-
-    assert program["program"] == "round"
-    for side, seat in (("a", "attacker"), ("b", "target")):
-        path = f"round/stomp-attacks/{seat}/remove-casualties"
-        assert lost(program, path, 20) == listed(report[side]["casualties"])
-
-
 def test_the_volley_graph_is_the_volley_reported(client: TestClient) -> None:
     """A shooter that moved needs a worse roll, in the program as in the report."""
     body = {

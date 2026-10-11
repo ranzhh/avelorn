@@ -26,6 +26,7 @@ from avelorn.tow.contingent import Charge, ChargeArc, Contingent, Movement
 from avelorn.tow.coverage import Coverage, coverage
 from avelorn.tow.data import TOWRepository, default_repository
 from avelorn.tow.game import TOWGame
+from avelorn.tow.lanes import FightLanes
 from avelorn.tow.muster import Complement
 from avelorn.tow.phases.movement import HOLD, ChargeReaction, StandAndShoot
 from avelorn.tow.round import Fight as Round
@@ -213,14 +214,18 @@ def fight(request: Fight, data: Corpus) -> FightReport:
     return FightReport.of(engaged.sides[seat], engaged.sides[seat.other], engaged.fight, seat)
 
 
-@app.post("/graph/fight", summary="Evaluate the round program a fight resolves")
-def graph_fight(request: Fight, data: Corpus) -> dict[str, object]:
-    """Fight the round ``/fight`` fights, and show the program it ran on.
+@app.post("/graph/fight", summary="Draw the round a fight resolves in two lanes")
+def graph_fight(request: Fight, data: Corpus) -> FightLanes:
+    """Fight the round ``/fight`` fights, and draw it in a lane for each side.
+
+    The charger takes the attacker's lane, above its target's; with no charge,
+    side a does.
 
     Returns:
-        The evaluated round program, in the lane ``/fight`` reports on.
+        The lanes, read off the lane ``/fight`` reports on.
     """
-    return _fought(request, data).fight.evaluated.lane.to_view()
+    engaged = _fought(request, data)
+    return FightLanes.of(engaged.sides, engaged.fight, engaged.stood)
 
 
 class _Engaged(NamedTuple):
