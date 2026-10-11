@@ -8,13 +8,15 @@ from avelorn.tow.contingent import Charge, ChargeArc, Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.phases.combat import CombatPhase
 from avelorn.tow.phases.movement import Flee, StandAndShoot, charge
-from avelorn.tow.programs import ROUND, STAND_AND_SHOOT, load_program
+from avelorn.tow.programs import CHARGE, ROUND, STAND_AND_SHOOT, load_program
 from avelorn.tow.schema.side import Side
 from avelorn.tow.schema.unit import Unit
 
 REPO = TOWRepository()
 
 STAND_AND_SHOOT_PROGRAM = load_program(STAND_AND_SHOOT, REPO.rules)
+
+CHARGE_PROGRAM = load_program(CHARGE, REPO.rules)
 
 COMBAT = CombatPhase(program=load_program(ROUND, REPO.rules))
 
@@ -42,7 +44,9 @@ def test_charge_forms_an_engagement_and_its_reaction() -> None:
     charger, target = _fielded(spearmen, 10), _fielded(archers, 10)
     move = Charge(8, ChargeArc.FRONT)
 
-    engagement = charge(charger, target, move, program=STAND_AND_SHOOT_PROGRAM)
+    engagement = charge(
+        charger, target, move, program=STAND_AND_SHOOT_PROGRAM, charging=CHARGE_PROGRAM
+    )
     fired = engagement.react(StandAndShoot("Longbow"))
 
     assert engagement.a.movement.charge == move
@@ -62,10 +66,12 @@ def test_stand_and_shoot_defaults_to_the_sole_missile_weapon() -> None:
     target = _fielded(archers, 10).wielding("Hand Weapon")
     move = Charge(8, ChargeArc.FRONT)
 
-    named = charge(charger, target, move, program=STAND_AND_SHOOT_PROGRAM).react(
-        StandAndShoot("Longbow")
-    )
-    default = charge(charger, target, move, program=STAND_AND_SHOOT_PROGRAM).react(StandAndShoot())
+    named = charge(
+        charger, target, move, program=STAND_AND_SHOOT_PROGRAM, charging=CHARGE_PROGRAM
+    ).react(StandAndShoot("Longbow"))
+    default = charge(
+        charger, target, move, program=STAND_AND_SHOOT_PROGRAM, charging=CHARGE_PROGRAM
+    ).react(StandAndShoot())
     assert named is not None
     assert default is not None
     assert _mass(default.casualties) == _mass(named.casualties)
@@ -82,7 +88,11 @@ def test_the_engagement_is_fought_in_its_first_round_until_the_turn_ends() -> No
     charger = _fielded(spearmen, 10).wielding("Thrusting Spear")
     target = _fielded(archers, 10).wielding("Hand Weapon")
     engagement = charge(
-        charger, target, Charge(8, ChargeArc.FRONT), program=STAND_AND_SHOOT_PROGRAM
+        charger,
+        target,
+        Charge(8, ChargeArc.FRONT),
+        program=STAND_AND_SHOOT_PROGRAM,
+        charging=CHARGE_PROGRAM,
     )
     engagement.react()
 
@@ -100,7 +110,9 @@ def test_a_held_charge_fights_with_no_prior_losses() -> None:
     target = _fielded(archers, 10).wielding("Hand Weapon")
     move = Charge(8, ChargeArc.FRONT)
 
-    engagement = charge(charger, target, move, program=STAND_AND_SHOOT_PROGRAM)
+    engagement = charge(
+        charger, target, move, program=STAND_AND_SHOOT_PROGRAM, charging=CHARGE_PROGRAM
+    )
     engagement.react()
     outcome = COMBAT.fight(engagement)
 
@@ -121,10 +133,12 @@ def test_the_reaction_vocabulary_is_the_printed_three() -> None:
     target = _fielded(REPO.units["elven-archers"], 5)
     move = Charge(3, ChargeArc.FRONT)
 
-    held = charge(charger, target, move, program=STAND_AND_SHOOT_PROGRAM)
+    held = charge(charger, target, move, program=STAND_AND_SHOOT_PROGRAM, charging=CHARGE_PROGRAM)
     assert held.react() is None  # Hold: the default, no volley
     with pytest.raises(UnmodelledRuleError, match="Flee"):
-        charge(charger, target, move, program=STAND_AND_SHOOT_PROGRAM).react(Flee())
+        charge(
+            charger, target, move, program=STAND_AND_SHOOT_PROGRAM, charging=CHARGE_PROGRAM
+        ).react(Flee())
 
 
 def test_end_turn_ages_the_engagement_out_of_its_first_round() -> None:
@@ -136,7 +150,11 @@ def test_end_turn_ages_the_engagement_out_of_its_first_round() -> None:
     charger = _fielded(REPO.units["elven-spearmen"], 5)
     target = _fielded(REPO.units["elven-archers"], 5)
     engagement = charge(
-        charger, target, Charge(3, ChargeArc.FRONT), program=STAND_AND_SHOOT_PROGRAM
+        charger,
+        target,
+        Charge(3, ChargeArc.FRONT),
+        program=STAND_AND_SHOOT_PROGRAM,
+        charging=CHARGE_PROGRAM,
     )
     assert engagement.first_round is True
     engagement.end_turn()

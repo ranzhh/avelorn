@@ -1,0 +1,7 @@
+program: charge
+sequence: charge
+fielded: [attacker, target]
+inputs:
+  - {known: distance, type: int}
+items:
+  - {step: determine-charge-range, readings: [reaches]}

@@ -30,6 +30,7 @@ from pydantic import BaseModel, ConfigDict
 
 from avelorn.core.distribution import Distribution
 from avelorn.core.registry import Registry
+from avelorn.tow.charge import ChargeRoll
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.coverage import Site, rule_references
 from avelorn.tow.data import TOWRepository
@@ -433,6 +434,9 @@ class FightReport(BaseModel):
     ``first_striker`` names the side Initiative put first, or is ``None`` when
     equal Initiative made the blows simultaneous -- a Great Weapon's Strike
     Last is why a higher-Initiative unit can still swing second.
+    ``p_charge_reaches`` is the chance the charge's Charge roll reaches its
+    target, or ``None`` for a fight with no charge; the round is fought only
+    when it reaches, so every other figure is conditional on it reaching.
     ``not_modelled`` names the rules the round held without applying, so a
     figure is never quietly wrong.
     """
@@ -444,13 +448,18 @@ class FightReport(BaseModel):
     p_a_wins: float
     p_draw: float
     p_b_wins: float
+    p_charge_reaches: float | None
     first_striker: str | None
     margin: dict[int, float]
     not_modelled: list[str]
 
     @classmethod
-    def of(cls, a: Contingent, b: Contingent, fight: Fight, seat: Side) -> "FightReport":
+    def of(
+        cls, a: Contingent, b: Contingent, fight: Fight, seat: Side, rolled: ChargeRoll | None
+    ) -> "FightReport":
         """Gather a round into one answer, ``a`` fighting from ``seat`` and ``b`` facing it.
+
+        ``rolled`` is the Charge roll of the charge that opened the round.
 
         Returns:
             The report both surfaces show.
@@ -464,6 +473,7 @@ class FightReport(BaseModel):
             p_a_wins=float(fought.get(Fought.WON, 0)),
             p_draw=float(fought.get(Fought.DRAWN, 0)),
             p_b_wins=float(fought.get(Fought.LOST, 0)),
+            p_charge_reaches=None if rolled is None else float(rolled.reaches),
             first_striker=None if fight.first_striker is None else first[fight.first_striker],
             margin={lead: float(mass) for lead, mass in sorted(margin.items()) if mass},
             not_modelled=list(fight.held),

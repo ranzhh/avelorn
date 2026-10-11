@@ -25,7 +25,7 @@ from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.muster import Complement
 from avelorn.tow.phases import CombatPhase, MovementPhase, ShootingPhase, StrategyPhase
-from avelorn.tow.programs import ROUND, STAND_AND_SHOOT, VOLLEY, load_program
+from avelorn.tow.programs import CHARGE, ROUND, STAND_AND_SHOOT, VOLLEY, load_program
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.rule import Rule
@@ -91,7 +91,10 @@ class TOWGame(Game):
         return cls(
             repository=repository,
             strategy=StrategyPhase(),
-            movement=MovementPhase(program=load_program(STAND_AND_SHOOT, repository.rules)),
+            movement=MovementPhase(
+                program=load_program(STAND_AND_SHOOT, repository.rules),
+                charging=load_program(CHARGE, repository.rules),
+            ),
             shooting=ShootingPhase(program=load_program(VOLLEY, repository.rules)),
             combat=CombatPhase(program=load_program(ROUND, repository.rules)),
         )

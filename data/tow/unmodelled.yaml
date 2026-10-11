@@ -67,7 +67,7 @@
   reason: Makes the charge target Disrupted; Disruption is not modelled.
 - kind: rule-without-effects
   subject: fly
-  reason: Flying movement; movement is not modelled.
+  reason: A flier may charge on its Fly Movement, which the Charge roll does not read; the rest of flying movement is not modelled.
 - kind: rule-without-effects
   subject: from-the-ashes
   reason: Hits or rebirth when the model loses its last Wound; nothing triggers on a model's removal.
@@ -145,7 +145,7 @@
   reason: Resists Disruption from flank and rear charges; Disruption is not modelled.
 - kind: rule-without-effects
   subject: swiftstride
-  reason: Charge range and Charge, Flee and Pursuit rolls; none is modelled.
+  reason: The +D6 to a Charge roll is a dice amount, which an add cannot take; Flee and Pursuit rolls are not modelled.
 - kind: rule-without-effects
   subject: vanguard
   reason: A move after deployment; deployment is not modelled.
