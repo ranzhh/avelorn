@@ -14,105 +14,25 @@ I believe that in order for me to get better at using LLMs, a project such as th
 
 The tooling used so far is Claude Code + Claude Opus 4.8 and Claude Fable 5. If you're going to dive into this project, thanks for sticking it out so far! The fun part begins now.
 
-## What you can do today
+## A charge, all the way down
 
-### Explore the corpus
+![Dragon Princes charge Lothern Sea Guard, who stand and shoot](docs/screenshots/graph.png)
 
-Units, weapons, armour, and special rules live in validated YAML under `data/`. The same models power the Python API, command line, and OpenAPI documentation.
+Five Dragon Princes charge twenty-one Lothern Sea Guard, seven wide. The Sea Guard stand and shoot, the Charge roll decides whether the princes arrive, riders, steeds and spears strike in Initiative order, and two Break tests close the round. Every number on it is an exact distribution.
 
-```sh
-uv run avelorn units list
-uv run avelorn units show white-lions-of-chrace
-uv run avelorn coverage
-```
+## Open any step
 
-### Muster units and resolve battles
+![The combat result, opened](docs/screenshots/result.png)
 
-A datasheet can be fielded with a chosen size and loadout. The graph programs can then calculate:
+A node opens to its distribution, the parts that add up to it and the rules that touched it. Change the distance, the reaction or either unit, and the whole fight follows.
 
-- shooting volleys and the panic they cause;
-- a full round of close combat, including Initiative order, casualties, combat result, and Break tests;
-- charges, including charge reactions and Stand & Shoot;
-- exact probabilities for named outcomes, rather than only averages.
-
-The demo scripts are small, runnable examples of the engine:
-
-```sh
-make demo DEMO=shooting
-make demo DEMO=melee
-make demo DEMO=soften_the_charge
-make demo DEMO=turn
-```
-
-A useful question is not simply “how many casualties should I expect?” It is “does shooting this unit first improve my chance of winning the combat?” Avelorn can fold the entire shooting distribution into the later charge and combat, so every possible number of survivors reaches the appropriate fight with its own probability.
-
-### Use the browser and HTTP API
-
-The API exposes corpus reads plus operations for mustering, volleys, and fights. The frontend provides:
-
-- unit, weapon, armour, and rule browsers;
-- army-list entries with costs and resolved equipment;
-- a battle table where units can be deployed, moved, re-formed, and engaged;
-- result panes showing full outcome distributions;
-- a pane for every printed datasheet, weapon, armour entry, and rule.
-
-Start the native development stack with:
-
-```sh
-make serve       # API at http://127.0.0.1:8000, docs at /docs
-make frontend    # browser at http://localhost:5173
-```
-
-Or run both services in containers:
+## Run it
 
 ```sh
 make up
 ```
 
-The battle table is available at [localhost:5173/table](http://localhost:5173/table).
-
-## The graph compiler
-
-The next layer turns a Warhammer procedure into a static program of named rulebook steps. A program describes the shape of a sequence; evaluation supplies the distributions and player choices.
-
-The graph core can currently:
-
-- represent measurements, decisions, rolls, and consequences as typed steps;
-- validate step scope and kernel arity while building a program;
-- represent repeated groups, fixed slots, and decision lanes;
-- preserve joint outcomes in execution traces, so correlated results are not reconstructed from independent marginals;
-- defer repeated-group aggregation until a projection is read, with an explicit monoid identity for zero repetitions;
-- attach rule nodes to the steps they land on and record whether a landing was applied, honoured, held, or inapplicable;
-- serialize an evaluated program into the shape consumed by the graph frontend.
-
-The graph frontend is available at `/graph`. It lays out steps left to right, draws groups as frames, displays readings on edges, and connects rule nodes to their landings. Every phase of the game runs on these programs: a volley, a Stand & Shoot reaction, and a round of combat are each a program loaded from YAML with the corpus rules attached.
-
-## Project shape
-
-- `src/avelorn/tow/schema` — validated corpus models.
-- `src/avelorn/tow/data.py` — the repository and YAML loader.
-- `src/avelorn/tow/game.py` and `src/avelorn/tow/contingent.py` — loaded games and fielded units.
-- `src/avelorn/tow/programs.py`, `steps.py` and `kernels.py` — the graph programs, their steps, and the exact dice they roll.
-- `src/avelorn/tow/volley.py` and `src/avelorn/tow/round.py` — a volley and a round of combat, resolved on the graph.
-- `src/avelorn/tow/phases` — the turn's phases; their actions run on the graph programs.
-- `src/avelorn/core/distribution.py` — the reusable exact-distribution machinery.
-- `src/avelorn/core/graph.py` — the graph-program execution core.
-- `frontend` — the SvelteKit browser and graph view.
-- `scripts` — end-to-end examples and corpus tooling.
-
-## Development
-
-Requires Python 3.12+, [uv](https://docs.astral.sh/uv/), and Node for the frontend.
-
-```sh
-make install
-make test
-make lint
-make frontend-test
-make frontend-check
-```
-
-The project is being built with substantial assistance from coding agents. That makes the tests, pinned demo output, explicit designs, and rule-source links particularly important: the engine should be explainable, reproducible, and honest about what it does not model yet.
+Then open [localhost:5173/table](http://localhost:5173/table), deploy two units, drag one onto the other and open the graph. Without containers, run `make serve` and `make frontend` side by side; `make install`, `make test` and `make lint` cover development.
 
 ## Data and credits
 
