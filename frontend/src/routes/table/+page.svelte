@@ -122,7 +122,9 @@
 		const body: FightBody = {
 			a: deployment(pair.mover, 'melee'),
 			b: deployment(pair.target, 'melee'),
-			charge: charging ? { side: 'a', full_inches: pair.inches, arc: pair.into } : null
+			charge: charging
+				? { side: 'a', full_inches: pair.inches, arc: pair.into, reaction: 'hold' }
+				: null
 		};
 		const { data: report, error: refused } = await api(window.location.origin, fetch).POST(
 			'/fight',

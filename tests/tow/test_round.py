@@ -101,10 +101,10 @@ def test_a_stand_and_shoot_thins_the_chargers_and_scores_for_the_shooters() -> N
         lambda felled: left[felled].casualties(Side.ATTACKER).map(lambda melee: melee + felled)
     )
     margin = stood.casualties.bind(
-        lambda felled: left[felled].margin.map(lambda lead: lead - felled)
+        lambda felled: left[felled].margin(Side.ATTACKER).map(lambda lead: lead - felled)
     )
     assert _mass(fought.casualties(Side.ATTACKER)) == _mass(lost)
-    assert _mass(fought.margin) == _mass(margin)
+    assert _mass(fought.margin(Side.ATTACKER)) == _mass(margin)
 
 
 def test_a_stand_and_shoot_scores_only_in_the_turn_it_was_made() -> None:
@@ -128,8 +128,8 @@ def test_a_stand_and_shoot_scores_only_in_the_turn_it_was_made() -> None:
         )
         for felled in stood.casualties.mass
     }
-    margin = stood.casualties.bind(lambda felled: left[felled].margin)
-    assert _mass(fought.margin) == _mass(margin)
+    margin = stood.casualties.bind(lambda felled: left[felled].margin(Side.ATTACKER))
+    assert _mass(fought.margin(Side.ATTACKER)) == _mass(margin)
 
 
 def test_a_champion_fights_with_its_own_attacks() -> None:

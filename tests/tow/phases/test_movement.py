@@ -106,7 +106,7 @@ def test_a_held_charge_fights_with_no_prior_losses() -> None:
 
     plain = COMBAT.fight(charger.charging(move), target)
     assert engagement.reaction is None
-    assert _mass(outcome.margin) == _mass(plain.margin)
+    assert _mass(outcome.margin(Side.ATTACKER)) == _mass(plain.margin(Side.ATTACKER))
 
 
 def test_the_reaction_vocabulary_is_the_printed_three() -> None:

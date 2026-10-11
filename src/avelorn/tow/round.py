@@ -62,15 +62,21 @@ class Fight:
             return None
         return Side.ATTACKER if attacker > target else Side.TARGET
 
-    @property
-    def fought(self) -> Distribution[Fought]:
-        """How the round went for the attacker."""
-        return self._read("attacker/who-is-the-winner", "result").map(_fought)
+    def fought(self, side: Side) -> Distribution[Fought]:
+        """How the round went for a side.
 
-    @property
-    def margin(self) -> Distribution[int]:
-        """The attacker's combat result less the target's."""
-        return self._read("attacker/who-is-the-winner", "margin").map(_count)
+        Returns:
+            Won, drawn or lost.
+        """
+        return self._read(f"{side}/who-is-the-winner", "result").map(_fought)
+
+    def margin(self, side: Side) -> Distribution[int]:
+        """A side's combat result less its enemy's.
+
+        Returns:
+            The margin.
+        """
+        return self._read(f"{side}/who-is-the-winner", "margin").map(_count)
 
     def settled(self, side: Side) -> Distribution[BreakTest]:
         """The Break test result a side acts on; one that did not lose takes none.

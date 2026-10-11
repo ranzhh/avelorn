@@ -11,6 +11,7 @@ from avelorn.core.distribution import Distribution
 from avelorn.tow.contingent import Charge, ChargeArc
 from avelorn.tow.game import TOWGame
 from avelorn.tow.phases.movement import StandAndShoot
+from avelorn.tow.schema.side import Side
 from avelorn.tow.steps import Fought
 
 
@@ -27,7 +28,7 @@ def main() -> None:
     with turn.shooting():
         pass  # both units are now locked in combat — nothing to shoot
     with turn.combat() as combat:
-        fought = combat.fight(engagement).fought.mass
+        fought = combat.fight(engagement).fought(Side.ATTACKER).mass
     won, drawn, lost = (fought.get(each, 0) for each in (Fought.WON, Fought.DRAWN, Fought.LOST))
 
     toll = volley.casualties if volley else Distribution.pure(0)

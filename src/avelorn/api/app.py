@@ -15,7 +15,7 @@ prints to the entries they address, so a caller links to a rule instead of
 deriving a slug from a printed name.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from importlib.metadata import version
 from typing import Annotated, Literal, NamedTuple
 
@@ -27,13 +27,16 @@ from avelorn.tow.coverage import Coverage, coverage
 from avelorn.tow.data import TOWRepository, default_repository
 from avelorn.tow.game import TOWGame
 from avelorn.tow.muster import Complement
+from avelorn.tow.phases.movement import HOLD, ChargeReaction, StandAndShoot
 from avelorn.tow.round import Fight as Round
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.rule import Rule
+from avelorn.tow.schema.side import Side
 from avelorn.tow.schema.weapon import Weapon
 from avelorn.tow.views import (
     FightReport,
     MusteredUnit,
+    Reacting,
     RuleSummary,
     UnitDetail,
     UnitSummary,
@@ -161,13 +164,18 @@ class Deployment(BaseModel):
 
 
 class ChargedBy(BaseModel):
-    """A charge into the round: who made it, how far it carried, which arc it struck."""
+    """A charge into the round: who made it, how far it carried, which arc it struck.
+
+    ``reaction`` is how the charged side met it: a Hold, or a Stand & Shoot
+    fired with the last missile weapon it carries.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     side: Literal["a", "b"]
     full_inches: int = Field(ge=0)
     arc: ChargeArc = ChargeArc.FRONT
+    reaction: Reacting = "hold"
 
 
 class Fight(BaseModel):
@@ -185,20 +193,24 @@ def fight(request: Fight, data: Corpus) -> FightReport:
     """Deploy two units, fight one round, and score it.
 
     One round: both sides strike in Initiative order, the Wounds tally into a
-    combat result, and the loser takes its Break test. What a round does not
-    cover is the rest of the engagement — a pursuit, a second round, and the
-    Stand & Shoot a charge would be met with, which needs the Movement phase's
-    charge sequence rather than a charge recorded on the charger.
+    combat result, and the loser takes its Break test. A charge is met with
+    the reaction its target declares: a Stand & Shoot fires before the round
+    and thins the charger, and its Wounds count toward the target's combat
+    result. What a round does not cover is the rest of the engagement -- a
+    pursuit, a second round.
 
     A side the corpus cannot field is refused before any dice are walked: an
     unknown slug is a 404, and a size, option or weapon the datasheet does not
-    allow is a 422 naming which side asked for it.
+    allow is a 422 naming which side asked for it, as is a Stand & Shoot by a
+    side that carries no missile weapon.
 
     Returns:
         The round resolved: each side's casualty distribution and Break-test
         outcomes, who won, and every rule the engine held without applying.
     """
-    return FightReport.of(*_fought(request, data))
+    engaged = _fought(request, data)
+    seat = engaged.seat
+    return FightReport.of(engaged.sides[seat], engaged.sides[seat.other], engaged.fight, seat)
 
 
 @app.post("/graph/fight", summary="Evaluate the round program a fight resolves")
@@ -208,21 +220,43 @@ def graph_fight(request: Fight, data: Corpus) -> dict[str, object]:
     Returns:
         The evaluated round program, in the lane ``/fight`` reports on.
     """
-    *_, fought = _fought(request, data)
-    return fought.evaluated.lane.to_view()
+    return _fought(request, data).fight.evaluated.lane.to_view()
 
 
-def _fought(request: Fight, data: TOWRepository) -> tuple[Contingent, Contingent, Round]:
+class _Engaged(NamedTuple):
+    """Two sides in the seats a round puts them in, the charger the attacker.
+
+    ``seat`` is the seat side a fights from, and ``stood`` the Stand & Shoot
+    the target met the charge with.
+    """
+
+    seat: Side
+    sides: Mapping[Side, Contingent]
+    fight: Round
+    stood: Fired | None
+
+
+def _fought(request: Fight, data: TOWRepository) -> _Engaged:
     game = TOWGame.assemble(data)
     a = _deploy(game, data, request.a, "side a")
     b = _deploy(game, data, request.b, "side b")
-    if request.charge is not None:
-        charged = Charge(request.charge.full_inches, request.charge.arc)
-        if request.charge.side == "a":
-            a = a.charging(charged)
-        else:
-            b = b.charging(charged)
-    return a, b, game.combat.fight(a, b)
+    charge = request.charge
+    if charge is None:
+        sides = {Side.ATTACKER: a, Side.TARGET: b}
+        return _Engaged(Side.ATTACKER, sides, game.combat.fight(a, b), None)
+    seat, charger, target, label = (
+        (Side.ATTACKER, a, b, "side b") if charge.side == "a" else (Side.TARGET, b, a, "side a")
+    )
+    engagement = game.movement.charge(charger, target, Charge(charge.full_inches, charge.arc))
+    stood = engagement.react(_reaction(charge.reaction, target, label))
+    sides = {Side.ATTACKER: engagement.a, Side.TARGET: engagement.b}
+    return _Engaged(seat, sides, game.combat.fight(engagement), stood)
+
+
+def _reaction(declared: Reacting, target: Contingent, label: str) -> ChargeReaction:
+    if declared == "hold":
+        return HOLD
+    return StandAndShoot(_default_weapon(target, label, MISSILE))
 
 
 class _Wields(NamedTuple):
