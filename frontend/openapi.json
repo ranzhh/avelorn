@@ -1208,6 +1208,9 @@
                       "$ref": "#/components/schemas/FactRef"
                     },
                     {
+                      "type": "string"
+                    },
+                    {
                       "$ref": "#/components/schemas/Bounded"
                     }
                   ]
@@ -1463,7 +1466,7 @@
         "additionalProperties": false,
         "type": "object",
         "title": "Effect",
-        "description": "One printed effect.\n\n``of`` names whose characteristic an add or set changes, since a step reads\nthe characteristics of both models at once."
+        "description": "One printed effect.\n\n``of`` names whose characteristic an add or set changes, since a step reads\nthe characteristics of both models at once. An add may add a dice roll,\nkept as its printed text as a dice X is, where the step rolls one."
       },
       "Entry": {
         "type": "string",
@@ -1809,7 +1812,7 @@
           "not_modelled"
         ],
         "title": "FightReport",
-        "description": "One round of close combat, resolved exactly.\n\nThe engine works in rationals; these are floats, because JSON has no\nother number and a caller plotting a distribution wants one. The exact\nvalues stay reachable from Python.\n\n``first_striker`` names the side Initiative put first, or is ``None`` when\nequal Initiative made the blows simultaneous -- a Great Weapon's Strike\nLast is why a higher-Initiative unit can still swing second.\n``p_charge_reaches`` is the chance the charge's Charge roll reaches its\ntarget, or ``None`` for a fight with no charge; the round is fought only\nwhen it reaches, so every other figure is conditional on it reaching.\n``not_modelled`` names the rules the round held without applying, so a\nfigure is never quietly wrong."
+        "description": "One round of close combat, resolved exactly.\n\nThe engine works in rationals; these are floats, because JSON has no\nother number and a caller plotting a distribution wants one. The exact\nvalues stay reachable from Python.\n\n``first_striker`` names the side Initiative put first, or is ``None`` when\nequal Initiative made the blows simultaneous -- a Great Weapon's Strike\nLast is why a higher-Initiative unit can still swing second.\n``p_charge_reaches`` is the chance the charge's Charge roll reaches its\ntarget, or ``None`` for a fight with no charge; the round is fought only\nwhen it reaches, so every other figure is conditional on it reaching.\n``not_modelled`` names the rules the round and the Charge roll held\nwithout applying, so a figure is never quietly wrong."
       },
       "FightSide": {
         "properties": {
@@ -2904,7 +2907,9 @@
           "fighting-ranks",
           "combat-result",
           "armour-value",
-          "ward-save"
+          "ward-save",
+          "charge-roll",
+          "maximum-charge-range"
         ],
         "title": "Quantity",
         "description": "A quantity an effect can change, in the rulebook's own modifier vocabulary.\n\nA closed, append-only enum: a member joins when an imported rule needs it.\nA profile :class:`~avelorn.tow.schema.unit.Characteristic` is the one\nquantity kept apart, a stat vocabulary used far beyond modifiers, so an\noperation's key is a Quantity or a Characteristic."

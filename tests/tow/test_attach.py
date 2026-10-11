@@ -50,11 +50,12 @@ def _evaluated(
     target: Contingent,
     distance: int = 12,
     shooter: tuple[str, str] = ("elven-archers", "Longbow"),
+    rules: Mapping[str, Rule] = REPO.rules,
 ) -> tuple[Evaluated, ...]:
     unit, weapon = shooter
     archers = _deployed(unit)
     shooting, shot = Fielding.of(archers, weapon), Fielding.of(target)
-    return _attached(shooting, shot).evaluate(
+    return _attached(shooting, shot, rules).evaluate(
         {
             "distance": distance,
             "can-shoot": True,
@@ -240,6 +241,22 @@ def test_a_grant_to_a_weapon_reaches_no_side_that_is_shot_at() -> None:
     built = _attached(_archers(), Fielding.of(_deployed("elven-spearmen")), rules)
 
     assert "target/elven-spearmen/deflect-shots" not in built.program.rules
+
+
+def test_a_dice_roll_added_where_the_step_sums_numbers_is_held() -> None:
+    """Abyssal Cloak rewritten to add a D6 to the enemy's roll to hit is held, not applied.
+
+    Roll To Hit sums its modifiers as numbers; only a step that rolls a dice add takes one.
+    """
+    printed = REPO.rules["abyssal-cloak"]
+    rolled = Effect.model_validate(
+        {"add": {"to-hit": "D6"}, "at": {"step": "roll-to-hit", "by": "the-enemy"}}
+    )
+    rules = {**REPO.rules, "abyssal-cloak": printed.model_copy(update={"effects": (rolled,)})}
+
+    lanes = _evaluated(_deployed("merwyrm"), distance=20, rules=rules)
+
+    assert all("Abyssal Cloak" in each.held for each in lanes)
 
 
 def test_each_fielding_evaluates_with_its_own_rule_nodes() -> None:

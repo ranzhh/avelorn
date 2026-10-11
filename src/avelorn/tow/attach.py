@@ -429,7 +429,8 @@ class _Fielding:
             case Operation.ADD | Operation.SET:
                 keys = tuple(effect.add or effect.set_ or {})
                 folded = {key if whose is None else (whose, key) for key in keys}
-                if not folded <= runs.get(operation, frozenset()):
+                rolled = {key if whose is None else (whose, key) for key in effect.rolled}
+                if not folded <= runs.get(operation, frozenset()) or not rolled <= spec.dice:
                     return None
             case Operation.REROLL:
                 if effect.reroll not in runs.get(operation, frozenset()):

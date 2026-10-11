@@ -11,8 +11,8 @@ from typing import Any, ClassVar, Protocol
 from avelorn.core.graph import Change, Decision, Key, Order
 from avelorn.tow.kernels import Die
 from avelorn.tow.schema.effect import Bounded, Effect, Operation, RerollOn
-from avelorn.tow.schema.quantity import Quantity
-from avelorn.tow.schema.rule import DiceQuantity, Parameter
+from avelorn.tow.schema.quantity import DiceQuantity, Quantity
+from avelorn.tow.schema.rule import Parameter
 from avelorn.tow.schema.side import Side
 from avelorn.tow.schema.unit import Characteristic, ProfileRole
 
@@ -34,7 +34,7 @@ _ORDERS = {
 
 @dataclass(frozen=True)
 class Added:
-    """An amount added to a quantity, within its printed bounds.
+    """An amount added to a quantity, a number or a dice roll, within its printed bounds.
 
     ``of`` names the side whose model's characteristic it moves, as the step's
     spec names the sides; a quantity has none. It never moves a part of a role
@@ -42,7 +42,7 @@ class Added:
     """
 
     key: Changeable
-    amount: int
+    amount: int | DiceQuantity
     maximum: int | None = None
     minimum: int | None = None
     of: Side | None = None
@@ -136,8 +136,25 @@ class Payloads:
 
         Returns:
             The sum, 0 when nothing is added.
+
+        Raises:
+            TypeError: a dice roll is added, which only :meth:`amounts` reads.
         """
-        return sum(each.amount for each in self._adds(key, of, role))
+        amounts = self.amounts(key, of, role)
+        numbers = [amount for amount in amounts if isinstance(amount, int)]
+        if len(numbers) < len(amounts):
+            raise TypeError(f"a dice roll is added to {key}, which the step sums as numbers")
+        return sum(numbers)
+
+    def amounts(
+        self, key: Changeable, of: Side | None = None, role: ProfileRole | None = None
+    ) -> tuple[int | DiceQuantity, ...]:
+        """Read each amount added to ``key``, a number or a dice roll, as :meth:`added` reads them.
+
+        Returns:
+            Every amount, in the order written.
+        """
+        return tuple(each.amount for each in self._adds(key, of, role))
 
     def bounds(
         self, key: Changeable, of: Side | None = None, role: ProfileRole | None = None
@@ -622,7 +639,7 @@ class Operated:
                         self.key, amount, written.maximum, written.minimum, self.of, self.not_on
                     )
                 return Added(
-                    self.key, self.amount(written, sources), of=self.of, not_on=self.not_on
+                    self.key, self.quantity(written, sources), of=self.of, not_on=self.not_on
                 )
             case Operation.SET if effect.set_ is not None and self.key is not None:
                 value = self.amount(effect.set_[self.key], sources)
@@ -670,6 +687,8 @@ class Operated:
         if written == "X" and self.parameter is not None:
             xs = [each.x for each in sources if each.x is not None]
             written = self.parameter.value(self.parameter.combined(xs))
+        if isinstance(written, str):
+            written = DiceQuantity.parse(written)
         if not isinstance(written, int | DiceQuantity):
             raise TypeError(f"{self.rule} reads {written!r}, which is no number or roll")
         return written
@@ -706,7 +725,8 @@ class Operated:
                     for name, bound in (("at most", maximum), ("at least", minimum))
                     if bound is not None
                 )
-                return f"{amount:+d} {key}{bounds}"
+                signed = f"+{amount}" if isinstance(amount, DiceQuantity) else f"{amount:+d}"
+                return f"{signed} {key}{bounds}"
             case Fixed(key, value, _, _):
                 return f"{key} {value}"
             case Denied():

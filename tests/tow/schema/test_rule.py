@@ -8,10 +8,10 @@ from pydantic import ValidationError
 from avelorn.core.loading import load_yaml
 from avelorn.tow.data import rule_paths
 from avelorn.tow.schema.effect import Effect
+from avelorn.tow.schema.quantity import DiceQuantity
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import (
     AmountParameter,
-    DiceQuantity,
     Parameter,
     PrintedParameter,
     Rule,

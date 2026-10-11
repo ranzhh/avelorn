@@ -504,3 +504,24 @@ def break_test(leadership: int, lost_by: int) -> BreakOdds:
         else:
             breaks += 1
     return BreakOdds(Fraction(gives, 36), Fraction(falls, 36), Fraction(breaks, 36))
+
+
+def charge_reaches(movement: int, distance: int, *, swiftstride: bool = False) -> Fraction:
+    """The chance a unit of ``movement`` rolls a charge range of ``distance`` inches or more.
+
+    Source: the-movement-phase/determine-charge-range: the higher of two D6 plus
+    Movement, at most Movement + 6; special-rules/swiftstride: a further D6 on
+    the roll, and 3 more on that maximum.
+
+    Returns:
+        The probability the charge reaches.
+    """
+    third = FACES if swiftstride else (0,)
+    maximum = movement + 6 + (3 if swiftstride else 0)
+    reached = sum(
+        1
+        for first, second in _two_dice()
+        for extra in third
+        if min(movement + max(first, second) + extra, maximum) >= distance
+    )
+    return Fraction(reached, 36 * len(third))

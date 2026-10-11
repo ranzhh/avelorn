@@ -55,8 +55,7 @@ from avelorn.tow.kernels import (
     wound_target,
 )
 from avelorn.tow.schema.effect import Operation, RerollOn
-from avelorn.tow.schema.quantity import Quantity
-from avelorn.tow.schema.rule import DiceQuantity
+from avelorn.tow.schema.quantity import DiceQuantity, Quantity
 from avelorn.tow.schema.side import Side
 from avelorn.tow.schema.step import StepKind, StepSequence
 from avelorn.tow.schema.unit import Characteristic
@@ -243,8 +242,9 @@ class Spec:
     ``runs`` names what the kernel folds of each operation a rule lands there;
     a characteristic it folds is paired with the side whose model it belongs
     to, and a deny or a multiply names nothing, since neither changes a
-    quantity. ``outcomes`` lists every value the step can output. A roll whose
-    rules change it shows its ``target`` in force and its ``printed`` target.
+    quantity. ``dice`` names what it adds that may be a dice roll; any other
+    add is a number. ``outcomes`` lists every value the step can output. A roll
+    whose rules change it shows its ``target`` in force and its ``printed`` target.
     """
 
     sequence: StepSequence
@@ -263,6 +263,7 @@ class Spec:
         default_factory=dict
     )
     runs: Mapping[Operation, frozenset[Folded]] = field(default_factory=dict)
+    dice: frozenset[Folded] = frozenset()
     outcomes: frozenset[Hashable] | None = None
 
     def __post_init__(self) -> None:
@@ -283,6 +284,8 @@ class Spec:
             raise ValueError(f"{self.name}: reads its changes exactly when it runs some")
         if CHANGED in self.reads[:-1]:
             raise ValueError(f"{self.name}: reads its changes before its last input")
+        if not self.dice <= self.runs.get(Operation.ADD, frozenset()):
+            raise ValueError(f"{self.name}: rolls a dice add onto what it does not add")
         if (self.printed is not None) != (self.kind is Kind.ROLL and CHANGED in self.reads):
             raise ValueError(f"{self.name}: shows a printed target exactly when rules change it")
         offered = (self.target, self.printed, *self.readings.values())
@@ -925,23 +928,34 @@ def _movement(charger: Fielding) -> int:
     return movement
 
 
-def determine_charge_range(charger: Fielding) -> Distribution[int]:
+def determine_charge_range(charger: Fielding, changed: tuple[Hashable, ...]) -> Distribution[int]:
     """Roll the charge range: the charger's Movement plus the higher of two D6.
 
-    A ridden unit moves at its mounts' Movement, as its riders print none. No
-    roll reaches past the maximum possible charge range, the Movement plus 6
+    A ridden unit moves at its mounts' Movement, as its riders print none. The
+    rules in force add to the roll, a number or a dice roll as Swiftstride's
+    +D6, and no roll reaches past the maximum possible charge range: the
+    Movement plus 6, and what the rules in force add to it
     (the-movement-phase/determine-charge-range).
 
     Returns:
         The charge range in inches.
     """
+    payloads = Payloads.of(changed)
     die = _rolled(DiceQuantity(sides=6))
-    return die.combine(die, max) + _movement(charger)
+    roll = die.combine(die, max)
+    for amount in payloads.amounts(Quantity.CHARGE_ROLL):
+        roll += _rolled(amount)
+    movement, highest = _movement(charger), _highest_charge_roll(payloads)
+    return roll.map(lambda result: movement + min(result, highest))
 
 
-def _charge_needed(charger: Fielding, distance: int) -> str:
+def _highest_charge_roll(payloads: Payloads) -> int:
+    return 6 + payloads.added(Quantity.MAXIMUM_CHARGE_RANGE)
+
+
+def _charge_needed(charger: Fielding, distance: int, payloads: Payloads) -> str:
     needed = distance - _movement(charger)
-    return _shown(None if needed > 6 else max(needed, 1))
+    return _shown(None if needed > _highest_charge_roll(payloads) else max(needed, 1))
 
 
 def _reaches(charge_range: int, distance: int) -> bool:
@@ -1516,9 +1530,22 @@ _SPECS = (
         name="determine-charge-range",
         kind=Kind.ROLL,
         side=Side.ATTACKER,
-        reads=(_ATTACKER,),
+        reads=(_ATTACKER, CHANGED),
         kernel=determine_charge_range,
-        target=Offered((_ATTACKER, Fact("distance")), _charge_needed, _UNITED),
+        runs={Operation.ADD: frozenset({Quantity.CHARGE_ROLL, Quantity.MAXIMUM_CHARGE_RANGE})},
+        dice=frozenset({Quantity.CHARGE_ROLL}),
+        target=Offered(
+            (_ATTACKER, Fact("distance"), CHANGED),
+            lambda charger, distance, changed: _charge_needed(
+                charger, distance, Payloads.of(changed)
+            ),
+            _UNITED,
+        ),
+        printed=Offered(
+            (_ATTACKER, Fact("distance")),
+            lambda charger, distance: _charge_needed(charger, distance, _PRINTED),
+            _UNITED,
+        ),
         readings={
             "reaches": Offered(
                 (Output("determine-charge-range"), Fact("distance")), _reaches, _UNITED

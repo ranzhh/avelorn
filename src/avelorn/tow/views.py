@@ -35,6 +35,7 @@ from avelorn.tow.contingent import Contingent
 from avelorn.tow.coverage import Site, rule_references
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.muster import Complement
+from avelorn.tow.programs import held_throughout
 from avelorn.tow.round import Fight
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.reference import RuleRef
@@ -437,8 +438,8 @@ class FightReport(BaseModel):
     ``p_charge_reaches`` is the chance the charge's Charge roll reaches its
     target, or ``None`` for a fight with no charge; the round is fought only
     when it reaches, so every other figure is conditional on it reaching.
-    ``not_modelled`` names the rules the round held without applying, so a
-    figure is never quietly wrong.
+    ``not_modelled`` names the rules the round and the Charge roll held
+    without applying, so a figure is never quietly wrong.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -476,7 +477,9 @@ class FightReport(BaseModel):
             p_charge_reaches=None if rolled is None else float(rolled.reaches),
             first_striker=None if fight.first_striker is None else first[fight.first_striker],
             margin={lead: float(mass) for lead, mass in sorted(margin.items()) if mass},
-            not_modelled=list(fight.held),
+            not_modelled=held_throughout(
+                fight.evaluated, *(() if rolled is None else (rolled.evaluated,))
+            ),
         )
 
 
