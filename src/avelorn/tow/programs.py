@@ -78,6 +78,7 @@ STATE = DATA_DIR / "tow" / "state.yaml"
 VOLLEY = DATA_DIR / "tow" / "programs" / "volley.yaml"
 ROUND = DATA_DIR / "tow" / "programs" / "round.yaml"
 STAND_AND_SHOOT = DATA_DIR / "tow" / "programs" / "stand-and-shoot.yaml"
+CHARGE = DATA_DIR / "tow" / "programs" / "charge.yaml"
 
 TYPES: Mapping[FactType, type] = MappingProxyType(
     {

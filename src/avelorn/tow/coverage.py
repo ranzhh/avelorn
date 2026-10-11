@@ -20,7 +20,7 @@ from pydantic import BaseModel, ConfigDict
 from avelorn.tow.contingent import Contingent
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.fielding import Fielding
-from avelorn.tow.programs import ROUND, STAND_AND_SHOOT, VOLLEY, load_program
+from avelorn.tow.programs import CHARGE, ROUND, STAND_AND_SHOOT, VOLLEY, load_program
 from avelorn.tow.schema.effect import Effect
 from avelorn.tow.schema.ledger import Acknowledgement, GapKind
 from avelorn.tow.schema.phase import Phase
@@ -241,9 +241,9 @@ def _program_gaps(
     """Every effect a program registers that no corpus side carries into its numbers.
 
     An effect is expected where a program has its step and every step it reads.
-    Each unit faces itself in the volley, in Stand & Shoot and in the round. An
-    effect narrowed to a program runs inside it. An effect that lands
-    on a step that cannot run it is held.
+    Each unit faces itself in the volley, in Stand & Shoot, in the charge and in
+    the round. An effect narrowed to a program runs inside it. An effect that
+    lands on a step that cannot run it is held.
 
     Yields:
         The gap's kind, ``<rule>/<sequence>/<step>``, and the rule as its site.
@@ -252,7 +252,13 @@ def _program_gaps(
     expected: set[Effected] = set()
     reached: set[Effected] = set()
     held: set[Effected] = set()
-    for path, facings in ((VOLLEY, _shooting), (STAND_AND_SHOOT, _shooting), (ROUND, _fighting)):
+    programs = (
+        (VOLLEY, _shooting),
+        (STAND_AND_SHOOT, _shooting),
+        (CHARGE, _fighting),
+        (ROUND, _fighting),
+    )
+    for path, facings in programs:
         program = load_program(path, data.rules)
         have = {spec.key for spec in program.specs}
         names = {spec.name for spec in program.specs} | {program.file.program}

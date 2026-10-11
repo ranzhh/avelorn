@@ -1,9 +1,9 @@
 """The Movement phase: charges are declared, reacted to, and moved.
 
-A charge is a Movement-phase event, and only that: :func:`charge` moves the
-charger into contact and returns the :class:`Engagement` it forms (the two
-units locked in combat). The target answers with a reaction on that
-engagement (:meth:`Engagement.react`, the-movement-phase/charge-reactions) —
+A charge is a Movement-phase event, and only that: :func:`charge` rolls the
+charger's charge range and returns the :class:`Engagement` it forms when it
+reaches (the two units locked in combat). The target answers with a reaction
+on that engagement (:meth:`Engagement.react`, the-movement-phase/charge-reactions) —
 :class:`StandAndShoot` looses the one "free" volley as the chargers close
 (:func:`~avelorn.tow.volley.stand_and_shoot`), :class:`Hold` braces, Flee is
 not modelled yet. The melee the charge sets up is **not** fought here: that is
@@ -17,6 +17,7 @@ from typing import assert_never
 from avelorn.core.errors import UnmodelledRuleError
 from avelorn.core.game import Phase
 from avelorn.tow import volley
+from avelorn.tow.charge import ChargeRoll, roll_charge
 from avelorn.tow.contingent import Charge, Contingent
 from avelorn.tow.programs import Loaded
 from avelorn.tow.volley import Volley
@@ -70,10 +71,12 @@ class Engagement:
     charge forms it, ``a`` is the charger (carrying its
     :class:`~avelorn.tow.contingent.Charge` via
     :meth:`~avelorn.tow.contingent.Contingent.charging`), ``b`` the target it
-    struck, ``program`` the Stand & Shoot program a reaction fires on, and
-    ``reaction`` the target's Stand & Shoot volley once declared, thinning
-    ``a``. ``first_round`` is true for the round a charge sets up this
-    turn — when the charge Initiative bonus and the first-round rules apply;
+    struck, ``program`` the Stand & Shoot program a reaction fires on,
+    ``rolled`` the charge's Charge roll, and ``reaction`` the target's Stand &
+    Shoot volley once declared, thinning ``a``. The engagement is the combat
+    the charge forms when it reaches, so a round fought on it is fought given
+    that it reached. ``first_round`` is true for the round a charge sets up
+    this turn — when the charge Initiative bonus and the first-round rules apply;
     :meth:`end_turn` flips it false so the combat's later rounds (next turn on)
     fight as subsequent rounds. The Combat phase fights the engagement
     (:meth:`~avelorn.tow.phases.combat.CombatPhase.fight`).
@@ -82,6 +85,7 @@ class Engagement:
     a: Contingent
     b: Contingent
     program: Loaded
+    rolled: ChargeRoll
     # True for the round a charge sets up this turn (the combat's first round);
     # end_turn() flips it false so later rounds are not the first.
     first_round: bool = False
@@ -130,20 +134,32 @@ class Engagement:
 
 
 def charge(
-    charger: Contingent, target: Contingent, move: Charge, *, program: Loaded
+    charger: Contingent,
+    target: Contingent,
+    move: Charge,
+    *,
+    program: Loaded,
+    charging: Loaded,
 ) -> Engagement:
-    """Declare and move ``charger``'s charge on ``target`` — a Movement-phase event.
+    """Declare ``charger``'s charge on ``target`` and roll its range on ``charging``.
 
-    The charger moves into contact (its movement becomes the charge); the two
-    units are now locked in combat. This resolves **no melee** — that is the
-    Combat phase (:meth:`~avelorn.tow.phases.combat.CombatPhase.fight`). The
-    target answers on the returned :class:`Engagement` (:meth:`Engagement.react`);
-    a Stand & Shoot volley there fires on ``program``.
+    The engagement is the two units locked in combat once the charge reaches
+    (its movement becomes the charge), with the chance it does. This resolves
+    **no melee** — that is the Combat phase
+    (:meth:`~avelorn.tow.phases.combat.CombatPhase.fight`). The target answers
+    on the returned :class:`Engagement` (:meth:`Engagement.react`); a Stand &
+    Shoot volley there fires on ``program``.
 
     Returns:
-        The engagement the charge formed, awaiting its reaction and its fight.
+        The engagement the charge forms, awaiting its reaction and its fight.
     """
-    return Engagement(a=charger.charging(move), b=target, program=program, first_round=True)
+    return Engagement(
+        a=charger.charging(move),
+        b=target,
+        program=program,
+        rolled=roll_charge(charging, charger, target, move),
+        first_round=True,
+    )
 
 
 @dataclass(frozen=True)
@@ -151,18 +167,20 @@ class MovementPhase(Phase):
     """The Movement phase: charges are declared, reacted to, and moved here.
 
     ``program`` is the Stand & Shoot program, loaded with the corpus rules; a
-    Stand & Shoot reaction fires on it.
+    Stand & Shoot reaction fires on it. ``charging`` is the charge program, on
+    which each charge rolls its range.
     """
 
     program: Loaded
+    charging: Loaded
 
     def charge(self, charger: Contingent, target: Contingent, move: Charge) -> Engagement:
-        """Declare a charge and move it into contact, forming an engagement.
+        """Declare a charge and roll its range, forming the engagement it makes when it reaches.
 
         The target's reaction is declared on the returned engagement
         (:meth:`Engagement.react`); the Combat phase fights it.
 
         Returns:
-            The engagement the charge formed.
+            The engagement the charge forms.
         """
-        return charge(charger, target, move, program=self.program)
+        return charge(charger, target, move, program=self.program, charging=self.charging)

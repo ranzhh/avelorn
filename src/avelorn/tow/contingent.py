@@ -143,6 +143,8 @@ class Charge:
     Both facts are read by the round a charge opens
     (:func:`~avelorn.tow.round.fight_round`): the distance sets the
     charger's Initiative bonus, and the arc its combat-result points. The
+    distance is also the one its Charge roll must reach
+    (:func:`~avelorn.tow.charge.roll_charge`). The
     arc has no default: which arc a charge struck is a fact of the move,
     not a parameter to assume.
     """

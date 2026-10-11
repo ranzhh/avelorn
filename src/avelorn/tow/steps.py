@@ -917,6 +917,37 @@ def _rank(number: int) -> str:
     return f"rank-{number}"
 
 
+def _movement(charger: Fielding) -> int:
+    moving = {_printed(part, Characteristic.MOVEMENT) for part in charger.mounts or charger.parts}
+    if len(moving) != 1:
+        raise ValueError(f"{charger.unit} moves at {sorted(moving)}, not at one Movement")
+    (movement,) = moving
+    return movement
+
+
+def determine_charge_range(charger: Fielding) -> Distribution[int]:
+    """Roll the charge range: the charger's Movement plus the higher of two D6.
+
+    A ridden unit moves at its mounts' Movement, as its riders print none. No
+    roll reaches past the maximum possible charge range, the Movement plus 6
+    (the-movement-phase/determine-charge-range).
+
+    Returns:
+        The charge range in inches.
+    """
+    die = _rolled(DiceQuantity(sides=6))
+    return die.combine(die, max) + _movement(charger)
+
+
+def _charge_needed(charger: Fielding, distance: int) -> str:
+    needed = distance - _movement(charger)
+    return _shown(None if needed > 6 else max(needed, 1))
+
+
+def _reaches(charge_range: int, distance: int) -> bool:
+    return charge_range >= distance
+
+
 def the_charge_move(inches: int) -> Distribution[int]:
     """Measure the full inches a side's charge moved this turn, 0 when it made none.
 
@@ -1479,6 +1510,20 @@ _SPECS = (
         ),
         kernel=fall_back_or_flee,
         readings={"retreat": _offer("fall-back-or-flee")},
+    ),
+    Spec(
+        sequence=StepSequence.CHARGE,
+        name="determine-charge-range",
+        kind=Kind.ROLL,
+        side=Side.ATTACKER,
+        reads=(_ATTACKER,),
+        kernel=determine_charge_range,
+        target=Offered((_ATTACKER, Fact("distance")), _charge_needed, _UNITED),
+        readings={
+            "reaches": Offered(
+                (Output("determine-charge-range"), Fact("distance")), _reaches, _UNITED
+            )
+        },
     ),
     Spec(
         sequence=StepSequence.CHARGE,

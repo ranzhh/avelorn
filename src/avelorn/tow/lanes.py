@@ -3,9 +3,9 @@
 Time runs left to right: the units, the battlefield between them, the charge
 and the reaction it met, the Stand & Shoot fired, each Initiative step in which
 a side strikes, the combat result, and each side's Break test. Every figure is
-read off the evaluated lane of the round and of the Stand & Shoot before it.
-The engine works in rationals; these are floats, and a mean is the expectation
-over every outcome.
+read off the evaluated lane of the Charge roll, of the Stand & Shoot and of the
+round. The engine works in rationals; these are floats, and a mean is the
+expectation over every outcome.
 """
 
 from collections.abc import Hashable, Iterable, Mapping
@@ -16,7 +16,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from avelorn.core.distribution import Distribution
 from avelorn.core.graph import Slot, Step, Verdict
-from avelorn.tow.contingent import Charge, ChargeArc, Contingent
+from avelorn.tow.charge import ChargeRoll
+from avelorn.tow.contingent import ChargeArc, Contingent
 from avelorn.tow.programs import At, Evaluated
 from avelorn.tow.round import Fight
 from avelorn.tow.schema.side import Side
@@ -84,11 +85,11 @@ class Battlefield(_Drawn):
 
 
 class LaneCharge(_Drawn):
-    """The charge, and the chance its roll reaches; None while the roll is not modelled."""
+    """The charge, and the chance its Charge roll reaches the target ``distance`` away."""
 
     distance: int
     arc: ChargeArc
-    reaches: float | None
+    reaches: float
     rules: list[LandedRule]
 
 
@@ -203,8 +204,10 @@ class FightLanes(_Drawn):
     ``strikes`` run in the order they are struck, Impact Hits first and Stomp
     Attacks last, and a step in which nobody strikes is left out. The
     battlefield, the charge and the reaction are None for a fight with no
-    charge, and the volley for one met with a Hold. ``not_modelled`` names the
-    rules held without applying.
+    charge, and the volley for one met with a Hold. The round is fought only
+    when the charge reaches, so every figure from the strikes on is
+    conditional on it reaching. ``not_modelled`` names the rules held without
+    applying.
     """
 
     units: PerSide[LaneUnit]
@@ -220,14 +223,19 @@ class FightLanes(_Drawn):
 
     @classmethod
     def of(
-        cls, sides: Mapping[Side, Contingent], fight: Fight, stood: Volley | None
+        cls,
+        sides: Mapping[Side, Contingent],
+        fight: Fight,
+        rolled: ChargeRoll | None,
+        stood: Volley | None,
     ) -> "FightLanes":
-        """Draw a round fought between ``sides``, after the Stand & Shoot ``stood``.
+        """Draw a round fought between ``sides``, after the charge ``rolled`` and its reaction.
+
+        ``stood`` is the Stand & Shoot the target reacted with.
 
         Returns:
             The lanes.
         """
-        charge = sides[Side.ATTACKER].movement.charge
         struck = (_strike(fight, slot, side) for slot in _slots(fight) for side in Side)
         strikes = [strike for strike in struck if strike is not None]
         return cls(
@@ -236,10 +244,10 @@ class FightLanes(_Drawn):
                 target=_unit(fight, sides[Side.TARGET], Side.TARGET),
             ),
             battlefield=None
-            if charge is None
-            else Battlefield(distance=charge.full_inches, arc=charge.arc),
-            charge=None if charge is None else _charge(fight, charge),
-            reaction=None if charge is None else _reaction(sides[Side.TARGET], stood),
+            if rolled is None
+            else Battlefield(distance=rolled.move.full_inches, arc=rolled.move.arc),
+            charge=None if rolled is None else _charge(fight, rolled),
+            reaction=None if rolled is None else _reaction(sides[Side.TARGET], stood),
             volley=None if stood is None else _volley(stood),
             strikes=strikes,
             standing=PerSide(
@@ -251,7 +259,9 @@ class FightLanes(_Drawn):
                 attacker=_break(fight, Side.ATTACKER), target=_break(fight, Side.TARGET)
             ),
             not_modelled=_not_modelled(
-                fight.evaluated, *(() if stood is None else (stood.evaluated,))
+                fight.evaluated,
+                *(() if rolled is None else (rolled.evaluated,)),
+                *(() if stood is None else (stood.evaluated,)),
             ),
         )
 
@@ -305,12 +315,16 @@ def _unit(fight: Fight, contingent: Contingent, side: Side) -> LaneUnit:
     )
 
 
-def _charge(fight: Fight, charge: Charge) -> LaneCharge:
+def _charge(fight: Fight, rolled: ChargeRoll) -> LaneCharge:
+    roll = rolled.evaluated
     return LaneCharge(
-        distance=charge.full_inches,
-        arc=charge.arc,
-        reaches=None,
-        rules=_rules(fight, "attacker/the-charge-move"),
+        distance=rolled.move.full_inches,
+        arc=rolled.move.arc,
+        reaches=float(rolled.reaches),
+        rules=[
+            *_landed(roll, roll.lane.program.steps),
+            *_rules(fight, "attacker/the-charge-move"),
+        ],
     )
 
 
