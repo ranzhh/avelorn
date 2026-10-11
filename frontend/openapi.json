@@ -1697,6 +1697,13 @@
               }
             ]
           },
+          "strikes": {
+            "items": {
+              "$ref": "#/components/schemas/Strike"
+            },
+            "type": "array",
+            "title": "Strikes"
+          },
           "standing": {
             "$ref": "#/components/schemas/PerSide_list_StandingAt__"
           },
@@ -1722,13 +1729,14 @@
           "charge",
           "reaction",
           "volley",
+          "strikes",
           "standing",
           "result",
           "breaks",
           "not_modelled"
         ],
         "title": "FightLanes",
-        "description": "A round of close combat in two lanes, the attacker's above the target's.\n\nThe battlefield, the charge and the reaction are None for a fight with no\ncharge, and the volley for one met with a Hold. ``not_modelled`` names the\nrules held without applying."
+        "description": "A round of close combat in two lanes, the attacker's above the target's.\n\n``strikes`` run in the order they are struck, Impact Hits first and Stomp\nAttacks last, and a step in which nobody strikes is left out. The\nbattlefield, the charge and the reaction are None for a fight with no\ncharge, and the volley for one met with a Hold. ``not_modelled`` names the\nrules held without applying."
       },
       "FightReport": {
         "properties": {
@@ -3285,7 +3293,7 @@
           "distribution"
         ],
         "title": "StandingAt",
-        "description": "A side's models standing: at the start, or after the volley.\n\n``after`` is None at the start and \"volley\" after the Stand & Shoot.\n``distribution[k]`` is the chance exactly ``k`` stand."
+        "description": "A side's models standing: at the start, after the volley, or after a strike.\n\n``after`` is None at the start, \"volley\" after the Stand & Shoot, and the\nslot of the enemy's strike after one. ``distribution[k]`` is the chance\nexactly ``k`` stand."
       },
       "Step": {
         "type": "string",
@@ -3371,6 +3379,94 @@
         ],
         "title": "StepSequence",
         "description": "A printed sequence, by the name an address gives it."
+      },
+      "Strike": {
+        "properties": {
+          "slot": {
+            "type": "string",
+            "title": "Slot"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "side": {
+            "$ref": "#/components/schemas/Side"
+          },
+          "attacks": {
+            "type": "number",
+            "title": "Attacks"
+          },
+          "needed": {
+            "$ref": "#/components/schemas/Needed"
+          },
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/StrikePart"
+            },
+            "type": "array",
+            "title": "Parts"
+          },
+          "unsaved": {
+            "type": "number",
+            "title": "Unsaved"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/LandedRule"
+            },
+            "type": "array",
+            "title": "Rules"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "slot",
+          "label",
+          "side",
+          "attacks",
+          "needed",
+          "parts",
+          "unsaved",
+          "rules"
+        ],
+        "title": "Strike",
+        "description": "One side striking at one Initiative step, in that side's lane.\n\n``slot`` names the step in the round program and ``label`` prints it.\nAt Impact Hits and Stomp Attacks the attacks are the hits."
+      },
+      "StrikePart": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "models": {
+            "type": "number",
+            "title": "Models"
+          },
+          "attacks": {
+            "type": "number",
+            "title": "Attacks"
+          },
+          "unsaved": {
+            "type": "number",
+            "title": "Unsaved"
+          },
+          "needed": {
+            "$ref": "#/components/schemas/Needed"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "models",
+          "attacks",
+          "unsaved",
+          "needed"
+        ],
+        "title": "StrikePart",
+        "description": "The models of one profile row striking: how many, their attacks and unsaved wounds."
       },
       "TroopType": {
         "type": "string",

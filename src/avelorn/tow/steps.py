@@ -1,6 +1,6 @@
 """Step registry."""
 
-from collections.abc import Callable, Hashable, Mapping
+from collections.abc import Callable, Hashable, Iterable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from fractions import Fraction
@@ -27,6 +27,7 @@ from avelorn.tow.contingent import ChargeArc
 from avelorn.tow.fielding import (
     Attacks,
     Fielding,
+    Fighting,
     Held,
     Hits,
     Initiatives,
@@ -496,6 +497,22 @@ def _last_unrolled(shown: str) -> tuple[bool, str]:
     return shown == NO_ROLL, shown
 
 
+def scores(needed: Iterable[Distribution[Hashable]]) -> str | None:
+    """The scores a roll needed in the worlds it was made in, joined with "or".
+
+    Returns:
+        The scores, or None when it was made in no world.
+    """
+    shown = {
+        score
+        for reading in needed
+        for value, p in reading.mass.items()
+        if p and value != _UNSHOWN
+        for score in str(value).split(" or ")
+    }
+    return " or ".join(sorted(shown, key=_last_unrolled)) if shown else None
+
+
 def _united(first: Hashable, second: Hashable) -> Hashable:
     if first == _UNSHOWN:
         return second
@@ -653,6 +670,16 @@ def _front_rank(side: Fielding, at_start: Standings, standing: Standings) -> dic
     }
 
 
+def _making(attacker: Fielding, at_start: Standings, standing: Standings) -> dict[str, int]:
+    _since(attacker, at_start, standing)
+    front = _front_rank(attacker, at_start, standing)
+    carried = {mount.rider: mount.id for mount in attacker.mounts}
+    making = {fighter.id: 0 for fighter in attacker.fighters}
+    for part in attacker.parts:
+        making[carried.get(part.id, part.id)] = front[part.id]
+    return making
+
+
 def automatic_hits(
     attacker: Fielding, at_start: Standings, standing: Standings, changed: tuple[Hashable, ...]
 ) -> Distribution[Hits]:
@@ -669,20 +696,19 @@ def automatic_hits(
     Returns:
         The hits each part makes.
     """
-    _since(attacker, at_start, standing)
     each = Distribution.pure(0)
     for per_model in Payloads.of(changed).hits():
         each = each.combine(_rolled(per_model), _COUNT.operation)
-    front = _front_rank(attacker, at_start, standing)
-    carried = {mount.rider: mount.id for mount in attacker.mounts}
-    making = {fighter.id: 0 for fighter in attacker.fighters}
-    for part in attacker.parts:
-        making[carried.get(part.id, part.id)] = front[part.id]
+    making = _making(attacker, at_start, standing)
     made = Distribution.pure(Hits(()))
     for fighter in attacker.fighters:
         theirs = each.repeat(making[fighter.id], _COUNT)
         made = made.bind(partial(_joined, fighter.id, theirs))
     return made
+
+
+def _hitting(attacker: Fielding, at_start: Standings, standing: Standings) -> Fighting:
+    return Fighting(tuple(_making(attacker, at_start, standing).items()))
 
 
 def _joined(part: str, theirs: Distribution[int], made: Hits) -> Distribution[Hits]:
@@ -964,26 +990,15 @@ def how_many_attacks(
     """
     _since(attacker, at_start, standing)
     fighting = ranks - {SUPPORTING_ATTACK}
-    deep = len(fighting)
-    if fighting != {_rank(number) for number in range(1, deep + 1)}:
+    if fighting != {_rank(number) for number in range(1, len(fighting) + 1)}:
         raise ValueError(f"{attacker.unit} fights with {_listed(ranks)}, which are not counted")
     payloads = Payloads.of(changed)
-    width = attacker.frontage
-    last = deep + int(SUPPORTING_ATTACK in ranks)
-    placed = [part for part in attacker.parts for _ in range(at_start.of(part.id).models)]
-    front, support = placed[: deep * width], placed[deep * width : last * width]
-    mounted = {mount.rider: mount for mount in attacker.mounts}
-    made: dict[str, int] = {}
-    for part in attacker.parts:
-        lost = at_start.of(part.id).models - standing.of(part.id).models
-        in_front = max(front.count(part) - lost, 0)
-        supporting = max(support.count(part) - max(lost - front.count(part), 0), 0)
-        made[part.id] = _strikes(part, initiatives, initiative, in_front, payloads) + (
-            supporting if initiatives.of(part.id) == initiative else 0
-        )
-        mount = mounted.get(part.id)
-        if mount is not None:
-            made[mount.id] = _strikes(mount, initiatives, initiative, in_front, payloads)
+    fighters = {fighter.id: fighter for fighter in attacker.fighters}
+    made = {
+        fighter: _strikes(fighters[fighter], initiatives, initiative, in_front, payloads)
+        + (supporting if initiatives.of(fighter) == initiative else 0)
+        for fighter, (in_front, supporting) in _ranked(attacker, ranks, at_start, standing).items()
+    }
     return Distribution.pure(Attacks(tuple(made.items())))
 
 
@@ -993,6 +1008,34 @@ def _strikes(
     if initiatives.of(fighter.id) != initiative:
         return 0
     return models * _moved(fighter, Characteristic.ATTACKS, payloads, Side.ATTACKER)
+
+
+def _ranked(
+    attacker: Fielding, ranks: frozenset[str], at_start: Standings, standing: Standings
+) -> dict[str, tuple[int, int]]:
+    deep = len(ranks - {SUPPORTING_ATTACK})
+    width = attacker.frontage
+    last = deep + int(SUPPORTING_ATTACK in ranks)
+    placed = [part for part in attacker.parts for _ in range(at_start.of(part.id).models)]
+    front, support = placed[: deep * width], placed[deep * width : last * width]
+    mounted = {mount.rider: mount for mount in attacker.mounts}
+    ranked: dict[str, tuple[int, int]] = {}
+    for part in attacker.parts:
+        lost = at_start.of(part.id).models - standing.of(part.id).models
+        in_front = max(front.count(part) - lost, 0)
+        supporting = max(support.count(part) - max(lost - front.count(part), 0), 0)
+        ranked[part.id] = (in_front, supporting)
+        mount = mounted.get(part.id)
+        if mount is not None:
+            ranked[mount.id] = (in_front, 0)
+    return ranked
+
+
+def _fighting(
+    attacker: Fielding, ranks: frozenset[str], at_start: Standings, standing: Standings
+) -> Fighting:
+    ranked = _ranked(attacker, ranks, at_start, standing)
+    return Fighting(tuple((fighter, sum(models)) for fighter, models in ranked.items()))
 
 
 def _since(side: Fielding, at_start: Standings, standing: Standings) -> None:
@@ -1203,6 +1246,7 @@ _SCORES = (Output("calculate-combat-result"), Output("calculate-combat-result", 
 _UNITED = Monoid[Hashable](_UNSHOWN, _united)
 _COUNT = Monoid(0)
 _UNSAVED = (Output("roll-to-wound"), Output("make-armour-saves"), Output("ward-saves"))
+_STANDINGS = (Fact("standing-at-start-of-round", Side.ATTACKER), Fact("standing", Side.ATTACKER))
 
 
 def _offer(
@@ -1490,7 +1534,11 @@ _SPECS = (
             runs={Operation.HITS: frozenset()},
             target=Offered((CHANGED,), _hits_shown, _UNITED),
             printed=Offered((), _unshown, _UNITED),
-            readings={"hits": _offer(name, _total, _COUNT)},
+            readings={
+                "hits": _offer(name, _total, _COUNT),
+                "parts": _offer(name),
+                "fighting": Offered((_ATTACKER, *_STANDINGS), _hitting, _UNITED),
+            },
         )
         for name in AUTOMATIC_HITS
     ),
@@ -1515,7 +1563,10 @@ _SPECS = (
         },
         readings={
             "attacks": _offer("how-many-attacks", _total, _COUNT),
-            "parts": _offer("how-many-attacks", str),
+            "parts": _offer("how-many-attacks"),
+            "fighting": Offered(
+                (_ATTACKER, Output("who-can-fight"), *_STANDINGS), _fighting, _UNITED
+            ),
         },
     ),
     Spec(
