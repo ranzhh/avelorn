@@ -368,7 +368,8 @@ def test_a_champion_shoots_from_the_front_rank(moved: bool, standing: int, parts
         moved=moved,
     )
 
-    assert volley.at("volley/how-many-shots").read("parts").mass == {parts: 1}
+    shot = volley.at("volley/how-many-shots").read("parts").mass
+    assert {str(shots): p for shots, p in shot.items()} == {parts: 1}
 
 
 def test_a_champion_shoots_at_its_own_ballistic_skill() -> None:

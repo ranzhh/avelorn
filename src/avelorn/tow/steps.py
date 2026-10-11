@@ -1481,7 +1481,7 @@ _SPECS = (
         kernel=how_many_shots,
         readings={
             "shots": _offer("how-many-shots", _total, _COUNT),
-            "parts": _offer("how-many-shots", str),
+            "parts": _offer("how-many-shots"),
         },
     ),
     Spec(

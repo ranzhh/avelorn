@@ -260,7 +260,7 @@
 						8} h{-width} z"
 				/>
 				<text class="title" x={x + 12} y={y + 18}>{node.title}</text>
-				<text x={x + 12} y={y + 46}>{count(strike.attacks)} attacks</text>
+				<text x={x + 12} y={y + 46}>{count(strike.attacks.mean)} attacks</text>
 				<text class="mono" x={x + 12} y={y + 65}>{rolls}</text>
 				<text class="mono" x={x + 12} y={y + 82}>{saves}</text>
 				{#if node.rows.length}

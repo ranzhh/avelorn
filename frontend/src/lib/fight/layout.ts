@@ -202,8 +202,8 @@ export function needs(needed: Needed): [string, string] {
 }
 
 export function partRow(part: Strike['parts'][number]): [string, string] {
-	const many = count(part.models) !== '1' ? ` ×${count(part.models)}` : '';
-	return [`${part.name}${many}`, `${count(part.attacks)} att → ${mean(part.unsaved)}`];
+	const many = count(part.models.mean) !== '1' ? ` ×${count(part.models.mean)}` : '';
+	return [`${part.name}${many}`, `${count(part.attacks.mean)} att → ${mean(part.unsaved.mean)}`];
 }
 
 /** Who strikes: a lone part by name, else the unit, with a row for each part. */
@@ -468,7 +468,7 @@ export function draw(lanes: FightLanes, measure: Measure): Drawing {
 			const struck = placed[other(lane)];
 			if (event?.kind !== 'pill' || event.standing === 0 || !struck) continue;
 			const standing = lanes.standing[lane];
-			const loss = standing[event.standing - 1].models - standing[event.standing].models;
+			const loss = standing[event.standing - 1].models.mean - standing[event.standing].models.mean;
 			casualties.push({ from: struck, to: placed[lane]!, lane: other(lane), loss });
 		}
 	});
@@ -621,7 +621,7 @@ export function pillText(
 	lane: Lane,
 	standing: number
 ): string {
-	const models = lanes.standing[lane][standing].models;
+	const models = lanes.standing[lane][standing].models.mean;
 	return standing === 0 ? String(models) : mean(models);
 }
 

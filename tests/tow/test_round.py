@@ -3,6 +3,7 @@
 from avelorn.core.distribution import Distribution, Probability
 from avelorn.tow.contingent import Charge, ChargeArc, Contingent
 from avelorn.tow.data import TOWRepository
+from avelorn.tow.fielding import Shots
 from avelorn.tow.programs import ROUND, STAND_AND_SHOOT, load_program
 from avelorn.tow.round import fight_round
 from avelorn.tow.schema.side import Side
@@ -173,7 +174,7 @@ def test_a_champion_stands_and_shoots_at_its_own_ballistic_skill() -> None:
 
     shots = stood.evaluated.at("stand-and-shoot/how-many-shots").read("parts").mass
     sentinel = stood.evaluated.at("stand-and-shoot/attacker/attack/sentinel/roll-to-hit")
-    assert shots == {"sentinel 1, elven-archer 4": 1}
+    assert shots == {Shots((("sentinel", 1), ("elven-archer", 4))): 1}
     assert sentinel.read("needed").mass == {"3+": 1}
     assert stood.needed("roll-to-hit") == "4+"
 

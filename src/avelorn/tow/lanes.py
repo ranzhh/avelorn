@@ -4,12 +4,13 @@ Time runs left to right: the units, the battlefield between them, the charge
 and the reaction it met, the Stand & Shoot fired, each Initiative step in which
 a side strikes, the combat result, and each side's Break test. Every figure is
 read off the evaluated lane of the Charge roll, of the Stand & Shoot and of the
-round. The engine works in rationals; these are floats, and a mean is the
-expectation over every outcome.
+round. The engine works in rationals; these are floats, and a count that varies
+is drawn as its spread over every outcome.
 """
 
 from collections.abc import Hashable, Iterable, Mapping
 from fractions import Fraction
+from math import sqrt
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -18,12 +19,13 @@ from avelorn.core.distribution import Distribution
 from avelorn.core.graph import Slot, Step, Verdict
 from avelorn.tow.charge import ChargeRoll
 from avelorn.tow.contingent import ChargeArc, Contingent
+from avelorn.tow.fielding import Part
 from avelorn.tow.programs import At, Evaluated, held_throughout
 from avelorn.tow.round import Fight
 from avelorn.tow.schema.side import Side
 from avelorn.tow.schema.unit import OptionKind
 from avelorn.tow.steps import AUTOMATIC_HITS, NO_ROLL, WEAPON_CHOICE, BreakTest, Fought, scores
-from avelorn.tow.views import ChosenOption, Reacting, by_count
+from avelorn.tow.views import ChosenOption, Reacting
 from avelorn.tow.volley import Volley
 
 _ROLLS = ("roll-to-hit", "roll-to-wound", "make-armour-saves", "ward-saves")
@@ -34,6 +36,39 @@ _COMMAND = (OptionKind.CHAMPION, OptionKind.STANDARD_BEARER, OptionKind.MUSICIAN
 
 class _Drawn(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+class Spread(_Drawn):
+    """A count over every way things go: its mean, its standard deviation, and its chances.
+
+    ``distribution[k]`` is the chance the count is ``least + k``, and ``least``
+    is 0 unless the count can fall below it.
+    """
+
+    mean: float
+    sd: float
+    least: int
+    distribution: list[float]
+
+    @classmethod
+    def of(cls, counted: Distribution[Any]) -> "Spread":
+        """Spread a count's distribution.
+
+        Returns:
+            Its mean, standard deviation and chances.
+        """
+        mean = counted.expect(Fraction)
+        variance = counted.expect(lambda count: (count - mean) ** 2)
+        reached = [count for count, p in counted.mass.items() if p]
+        least = min(0, *reached)
+        return cls(
+            mean=float(mean),
+            sd=sqrt(variance),
+            least=least,
+            distribution=[
+                float(counted.mass.get(count, 0)) for count in range(least, max(reached) + 1)
+            ],
+        )
 
 
 class PerSide[T](_Drawn):
@@ -123,15 +158,24 @@ class Needed(_Drawn):
     ward: str | None
 
 
+class VolleyPart(_Drawn):
+    """The models of one profile row shooting: their shots and the wounds they leave unsaved."""
+
+    name: str
+    shots: int
+    unsaved: Spread
+
+
 class LaneVolley(_Drawn):
-    """The Stand & Shoot: the shots fired, the scores they need, the mean unsaved wounds.
+    """The Stand & Shoot: the shots fired, the scores they need, and the chargers it fells.
 
     The target shoots, so its rules are the target's and the charger's the attacker's.
     """
 
     shots: int
     needed: Needed
-    unsaved: float
+    casualties: Spread
+    parts: list[VolleyPart]
     rules: list[LandedRule]
 
 
@@ -139,9 +183,9 @@ class StrikePart(_Drawn):
     """The models of one profile row striking: how many, their attacks and unsaved wounds."""
 
     name: str
-    models: float
-    attacks: float
-    unsaved: float
+    models: Spread
+    attacks: Spread
+    unsaved: Spread
     needed: Needed
 
 
@@ -155,10 +199,10 @@ class Strike(_Drawn):
     slot: str
     label: str
     side: Side
-    attacks: float
+    attacks: Spread
     needed: Needed
     parts: list[StrikePart]
-    unsaved: float
+    unsaved: Spread
     rules: list[LandedRule]
 
 
@@ -166,13 +210,11 @@ class StandingAt(_Drawn):
     """A side's models standing: at the start, after the volley, or after a strike.
 
     ``after`` is None at the start, "volley" after the Stand & Shoot, and the
-    slot of the enemy's strike after one. ``distribution[k]`` is the chance
-    exactly ``k`` stand.
+    slot of the enemy's strike after one.
     """
 
     after: str | None
-    models: float
-    distribution: list[float]
+    models: Spread
 
 
 class CombatResult(_Drawn):
@@ -268,12 +310,12 @@ class FightLanes(_Drawn):
         )
 
 
-def _at(fight: Fight, path: str) -> At:
-    return fight.evaluated.at(f"{fight.evaluated.lane.program.name}/{path}")
+def _at(evaluated: Evaluated, path: str) -> At:
+    return evaluated.at(f"{evaluated.lane.program.name}/{path}")
 
 
 def _rules(fight: Fight, *paths: str) -> list[LandedRule]:
-    return _landed(fight.evaluated, [_at(fight, path).step for path in paths])
+    return _landed(fight.evaluated, [_at(fight.evaluated, path).step for path in paths])
 
 
 def _mean(distribution: Distribution[Any]) -> float:
@@ -282,6 +324,18 @@ def _mean(distribution: Distribution[Any]) -> float:
 
 def _each(reading: Distribution[Any], fighter: str) -> Distribution[int]:
     return reading.map(lambda counted: counted.of(fighter))
+
+
+def _summed(reading: Distribution[Any], fighters: list[str]) -> Spread:
+    return Spread.of(reading.map(lambda counted: sum(counted.of(each) for each in fighters)))
+
+
+def _rows(fighters: Iterable[Part], made: Distribution[Any]) -> dict[str, list[str]]:
+    rows: dict[str, list[str]] = {}
+    for fighter in fighters:
+        if _each(made, fighter.id).prob(lambda count: count > 0):
+            rows.setdefault(fighter.row.name, []).append(fighter.id)
+    return rows
 
 
 def _landed(evaluated: Evaluated, steps: Iterable[Step[Any]]) -> list[LandedRule]:
@@ -322,7 +376,7 @@ def _unit(fight: Fight, contingent: Contingent, side: Side) -> LaneUnit:
 
 
 def _holding(fight: Fight, contingent: Contingent, side: Side) -> list[str]:
-    (taken,) = _at(fight, f"{side}/{WEAPON_CHOICE}").read("taken").mass
+    (taken,) = _at(fight.evaluated, f"{side}/{WEAPON_CHOICE}").read("taken").mass
     loadout = contingent.loadout
     names = {piece.id: piece.name for piece in (*loadout.weapons, *loadout.armour)}
     return [names[slug] for slug in taken.option.slugs]
@@ -350,6 +404,9 @@ def _reaction(target: Contingent, stood: Volley | None) -> LaneReaction:
 
 
 def _volley(stood: Volley) -> LaneVolley:
+    shot = _at(stood.evaluated, "how-many-shots").read("parts")
+    caused = _at(stood.evaluated, "remove-casualties").read("parts")
+    (fired,) = shot.mass
     return LaneVolley(
         shots=stood.shots,
         needed=Needed(
@@ -358,7 +415,15 @@ def _volley(stood: Volley) -> LaneVolley:
             save=stood.needed("make-armour-saves"),
             ward=stood.needed("ward-saves"),
         ),
-        unsaved=_mean(stood.unsaved),
+        casualties=Spread.of(stood.casualties),
+        parts=[
+            VolleyPart(
+                name=name,
+                shots=sum(fired.of(fighter) for fighter in row),
+                unsaved=_summed(caused, row),
+            )
+            for name, row in _rows(stood.shooter.fighters, shot).items()
+        ],
         rules=[
             rule.model_copy(update={"side": rule.side.other})
             for rule in _landed(stood.evaluated, stood.evaluated.lane.program.steps)
@@ -373,22 +438,21 @@ def _slots(fight: Fight) -> list[str]:
 def _strike(fight: Fight, slot: str, side: Side) -> Strike | None:
     automatic = slot in AUTOMATIC_HITS
     counter = f"{slot}/{side}/{slot if automatic else 'how-many-attacks'}"
-    count = _at(fight, counter).read("hits" if automatic else "attacks")
+    count = _at(fight.evaluated, counter).read("hits" if automatic else "attacks")
     if not count.prob(lambda struck: struck > 0):
         return None
-    made = _at(fight, counter).read("parts")
-    fighting = _at(fight, counter).read("fighting")
-    rows: dict[str, list[str]] = {}
-    for fighter in fight.evaluated.built.fielded[side].fighters:
-        if _each(made, fighter.id).prob(lambda attacks: attacks > 0):
-            rows.setdefault(fighter.row.name, []).append(fighter.id)
+    made = _at(fight.evaluated, counter).read("parts")
+    fighting = _at(fight.evaluated, counter).read("fighting")
+    removed = _at(fight.evaluated, f"{slot}/{side.other}/remove-casualties")
+    caused = removed.read("parts")
+    rows = _rows(fight.evaluated.built.fielded[side].fighters, made)
     group = f"{slot}/{side}/attack"
     parts = [
         StrikePart(
             name=name,
-            models=sum(_mean(_each(fighting, fighter)) for fighter in row),
-            attacks=sum(_mean(_each(made, fighter)) for fighter in row),
-            unsaved=sum(_unsaved(fight, f"{group}/{fighter}") for fighter in row),
+            models=_summed(fighting, row),
+            attacks=_summed(made, row),
+            unsaved=_summed(caused, row),
             needed=_needed(fight, [f"{group}/{fighter}" for fighter in row], automatic),
         )
         for name, row in rows.items()
@@ -399,10 +463,10 @@ def _strike(fight: Fight, slot: str, side: Side) -> Strike | None:
         slot=slot,
         label=slot.replace("-", " ").title(),
         side=side,
-        attacks=_mean(count),
+        attacks=Spread.of(count),
         needed=_needed(fight, attacking, automatic),
         parts=parts,
-        unsaved=sum(part.unsaved for part in parts),
+        unsaved=Spread.of(removed.read("unsaved")),
         rules=_rules(
             fight,
             counter,
@@ -412,13 +476,11 @@ def _strike(fight: Fight, slot: str, side: Side) -> Strike | None:
     )
 
 
-def _unsaved(fight: Fight, attack: str) -> float:
-    return _mean(_at(fight, f"{attack}/ward-saves").read("unsaved"))
-
-
 def _needed(fight: Fight, attacking: list[str], automatic: bool) -> Needed:
     def needed(roll: str) -> str | None:
-        return scores(_at(fight, f"{attack}/{roll}").read("needed") for attack in attacking)
+        return scores(
+            _at(fight.evaluated, f"{attack}/{roll}").read("needed") for attack in attacking
+        )
 
     return Needed(
         hit=None if automatic else needed("roll-to-hit"),
@@ -436,7 +498,10 @@ def _standing(
     if stood is not None:
         standing.append(_stand("volley", stood.casualties.map(lambda lost: size - lost)))
     standing.extend(
-        _stand(strike.slot, _at(fight, f"{strike.slot}/{side}/remove-casualties").read("models"))
+        _stand(
+            strike.slot,
+            _at(fight.evaluated, f"{strike.slot}/{side}/remove-casualties").read("models"),
+        )
         for strike in strikes
         if strike.side is side.other
     )
@@ -444,15 +509,15 @@ def _standing(
 
 
 def _stand(after: str | None, models: Distribution[int]) -> StandingAt:
-    return StandingAt(after=after, models=_mean(models), distribution=by_count(models))
+    return StandingAt(after=after, models=Spread.of(models))
 
 
 def _result(fight: Fight) -> CombatResult:
     fought = fight.fought(Side.ATTACKER).mass
     return CombatResult(
         scores=PerSide(
-            attacker=_mean(_at(fight, "attacker/calculate-combat-result").read("score")),
-            target=_mean(_at(fight, "target/calculate-combat-result").read("score")),
+            attacker=_mean(_at(fight.evaluated, "attacker/calculate-combat-result").read("score")),
+            target=_mean(_at(fight.evaluated, "target/calculate-combat-result").read("score")),
         ),
         attacker_wins=float(fought.get(Fought.WON, 0)),
         draw=float(fought.get(Fought.DRAWN, 0)),
@@ -462,7 +527,7 @@ def _result(fight: Fight) -> CombatResult:
 
 
 def _break(fight: Fight, side: Side) -> LaneBreakTest:
-    test = _at(fight, f"{side}/break-test")
+    test = _at(fight.evaluated, f"{side}/break-test")
     settled = fight.settled(side).mass
     return LaneBreakTest(
         taken=float(test.read("test").prob(lambda result: result is not BreakTest.NOT_TAKEN)),

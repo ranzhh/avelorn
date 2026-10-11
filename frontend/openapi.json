@@ -2267,9 +2267,15 @@
           "needed": {
             "$ref": "#/components/schemas/Needed"
           },
-          "unsaved": {
-            "type": "number",
-            "title": "Unsaved"
+          "casualties": {
+            "$ref": "#/components/schemas/Spread"
+          },
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/VolleyPart"
+            },
+            "type": "array",
+            "title": "Parts"
           },
           "rules": {
             "items": {
@@ -2284,11 +2290,12 @@
         "required": [
           "shots",
           "needed",
-          "unsaved",
+          "casualties",
+          "parts",
           "rules"
         ],
         "title": "LaneVolley",
-        "description": "The Stand & Shoot: the shots fired, the scores they need, the mean unsaved wounds.\n\nThe target shoots, so its rules are the target's and the charger's the attacker's."
+        "description": "The Stand & Shoot: the shots fired, the scores they need, and the chargers it fells.\n\nThe target shoots, so its rules are the target's and the charger's the attacker's."
       },
       "Limit": {
         "properties": {
@@ -3277,6 +3284,39 @@
         "title": "Site",
         "description": "Where a gap occurs: an entry, by slug (``<unit>/<option>`` for an option)."
       },
+      "Spread": {
+        "properties": {
+          "mean": {
+            "type": "number",
+            "title": "Mean"
+          },
+          "sd": {
+            "type": "number",
+            "title": "Sd"
+          },
+          "least": {
+            "type": "integer",
+            "title": "Least"
+          },
+          "distribution": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Distribution"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mean",
+          "sd",
+          "least",
+          "distribution"
+        ],
+        "title": "Spread",
+        "description": "A count over every way things go: its mean, its standard deviation, and its chances.\n\n``distribution[k]`` is the chance the count is ``least + k``, and ``least``\nis 0 unless the count can fall below it."
+      },
       "StandingAt": {
         "properties": {
           "after": {
@@ -3291,26 +3331,17 @@
             "title": "After"
           },
           "models": {
-            "type": "number",
-            "title": "Models"
-          },
-          "distribution": {
-            "items": {
-              "type": "number"
-            },
-            "type": "array",
-            "title": "Distribution"
+            "$ref": "#/components/schemas/Spread"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
           "after",
-          "models",
-          "distribution"
+          "models"
         ],
         "title": "StandingAt",
-        "description": "A side's models standing: at the start, after the volley, or after a strike.\n\n``after`` is None at the start, \"volley\" after the Stand & Shoot, and the\nslot of the enemy's strike after one. ``distribution[k]`` is the chance\nexactly ``k`` stand."
+        "description": "A side's models standing: at the start, after the volley, or after a strike.\n\n``after`` is None at the start, \"volley\" after the Stand & Shoot, and the\nslot of the enemy's strike after one."
       },
       "Step": {
         "type": "string",
@@ -3411,8 +3442,7 @@
             "$ref": "#/components/schemas/Side"
           },
           "attacks": {
-            "type": "number",
-            "title": "Attacks"
+            "$ref": "#/components/schemas/Spread"
           },
           "needed": {
             "$ref": "#/components/schemas/Needed"
@@ -3425,8 +3455,7 @@
             "title": "Parts"
           },
           "unsaved": {
-            "type": "number",
-            "title": "Unsaved"
+            "$ref": "#/components/schemas/Spread"
           },
           "rules": {
             "items": {
@@ -3458,16 +3487,13 @@
             "title": "Name"
           },
           "models": {
-            "type": "number",
-            "title": "Models"
+            "$ref": "#/components/schemas/Spread"
           },
           "attacks": {
-            "type": "number",
-            "title": "Attacks"
+            "$ref": "#/components/schemas/Spread"
           },
           "unsaved": {
-            "type": "number",
-            "title": "Unsaved"
+            "$ref": "#/components/schemas/Spread"
           },
           "needed": {
             "$ref": "#/components/schemas/Needed"
@@ -3875,6 +3901,30 @@
         ],
         "title": "Volley",
         "description": "One unit shooting another, and what the shot has to travel through."
+      },
+      "VolleyPart": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "shots": {
+            "type": "integer",
+            "title": "Shots"
+          },
+          "unsaved": {
+            "$ref": "#/components/schemas/Spread"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "shots",
+          "unsaved"
+        ],
+        "title": "VolleyPart",
+        "description": "The models of one profile row shooting: their shots and the wounds they leave unsaved."
       },
       "VolleyReport": {
         "properties": {

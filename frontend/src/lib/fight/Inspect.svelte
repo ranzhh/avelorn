@@ -123,7 +123,11 @@
 
 	{#if shown.standing}
 		<h2>models standing</h2>
-		<Spread values={shown.standing.distribution} unit="models" mean={shown.standing.models} />
+		<Spread
+			values={shown.standing.models.distribution}
+			unit="models"
+			mean={shown.standing.models.mean}
+		/>
 	{/if}
 
 	{#if shown.chances.length}
