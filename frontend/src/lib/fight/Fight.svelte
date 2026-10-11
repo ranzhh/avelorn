@@ -6,6 +6,7 @@
 	import { redeployed, seat } from './body';
 	import type { Field } from './field';
 	import type { Lane } from './layout';
+	import { VIEWS, type View } from './odds';
 
 	interface Props {
 		lanes: FightLanes;
@@ -23,6 +24,7 @@
 
 	let open = $state<string | null>(null);
 	let editing = $state<Lane | null>(null);
+	let view = $state<View>('conditional');
 
 	function toggle(id: string) {
 		editing = null;
@@ -38,9 +40,20 @@
 <svelte:window onkeydown={(event) => event.key === 'Escape' && close()} />
 
 <div class="fight" class:stale>
+	<div class="views" role="radiogroup" aria-label="chances">
+		{#each VIEWS as each}
+			<button
+				role="radio"
+				aria-checked={view === each}
+				class:on={view === each}
+				onclick={() => (view = each)}>{each}</button
+			>
+		{/each}
+	</div>
 	<div class="stage">
 		<Lanes
 			{lanes}
+			{view}
 			charge={body.charge ?? null}
 			{field}
 			{onmove}
@@ -69,8 +82,27 @@
 
 <style>
 	.fight {
+		position: relative;
 		min-height: 24rem;
 		border: 1px solid var(--line);
+	}
+	.views {
+		position: absolute;
+		top: 4px;
+		right: 4px;
+		display: flex;
+		gap: 2px;
+	}
+	.views button {
+		height: 22px;
+		padding: 0 0.6rem;
+		font-size: 12px;
+		cursor: pointer;
+	}
+	.views button.on {
+		color: var(--on-accent);
+		background: var(--accent);
+		border-color: var(--accent);
 	}
 	.stage {
 		overflow-x: auto;

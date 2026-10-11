@@ -1,6 +1,5 @@
 <script lang="ts">
 	import Bars from '$lib/charts/Bars.svelte';
-	import { percent } from '$lib/charts/scale';
 	import { MARK, STRIKE, type Box, type Face, type Lane, type Tone } from './faces';
 
 	interface Props {
@@ -66,8 +65,9 @@
 			{#each mark.shares as [share, p], index}
 				{@const before = mark.shares.slice(0, index).reduce((sum, [, q]) => sum + q, 0)}
 				<rect class="share {share}" x={x + before * width} {y} width={p * width} {height} />
-				<rect class="share {share}" x={x + index * (width / 3)} y={y + 24} width="10" height="10" />
-				<text class="mono" x={x + 14 + index * (width / 3)} y={y + 33}>{percent(p)}</text>
+				{@const at = x + index * (width / mark.shares.length)}
+				<rect class="share {share}" x={at} y={y + 24} width="10" height="10" />
+				<text class="mono" x={at + 14} y={y + 33}>{mark.texts[index]}</text>
 			{/each}
 		{:else if mark.kind === 'rule'}
 			<rect
@@ -155,6 +155,9 @@
 	}
 	.share.draw {
 		fill: var(--neutral);
+	}
+	.share.short {
+		fill: var(--short);
 	}
 	.attacker .header,
 	.attacker .chip.held {

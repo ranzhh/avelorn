@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import type { FightLanes, Strike } from '$lib/api/client';
+import { percent } from '$lib/charts/scale';
 import princes from './fixtures/princes-charge-archers.json';
 import {
+	LANES,
 	chargeFace,
 	formation,
 	resultFace,
@@ -14,6 +16,7 @@ import {
 } from './faces';
 import { BESIDE, CROP } from './field';
 import { columns, draw, type Drawing } from './layout';
+import { VIEWS, odds } from './odds';
 
 const strike = (slot: string, side: 'attacker' | 'target') =>
 	({ slot, label: slot, side }) as Strike;
@@ -194,6 +197,28 @@ describe('a charge drawn by the chance it reaches', () => {
 	});
 });
 
+describe('a fight drawn from the start of the charge', () => {
+	it('prints the chances from the start on the Break tests and the combat result', () => {
+		const lanes = princes as FightLanes;
+		const marginal = odds(lanes, 'marginal');
+		const drawing = draw(lanes, (text) => text.length * 7, null, null, false, 'marginal');
+		const outcomes = drawing.nodes.flatMap((node) =>
+			node.kind === 'outcome' ? [[node.name, node.p]] : []
+		);
+		const shares = drawing.nodes.flatMap((node) =>
+			node.kind === 'result'
+				? node.face.marks.flatMap((mark) => (mark.kind === 'shares' ? [mark.shares] : []))
+				: []
+		);
+
+		expect(outcomes).toEqual([...marginal.outcomes.attacker, ...marginal.outcomes.target]);
+		expect(drawing.labels.map((label) => label.text)).toEqual(
+			expect.arrayContaining(LANES.map((lane) => percent(marginal.taken[lane])))
+		);
+		expect(shares).toEqual([marginal.shares]);
+	});
+});
+
 describe('the battlefield', () => {
 	it.each([false, true])("keeps the units' arrows into it apart, mapped %s", (mapped) => {
 		const drawing = draw(princes as FightLanes, (text) => text.length * 7, null, null, mapped);
@@ -354,7 +379,13 @@ describe('a charge opened', () => {
 
 describe('a combat result opened', () => {
 	it("breaks each side's score into its parts, and charts the margin by who wins", () => {
-		const face = resultFace(princes as FightLanes, (text) => text.length * 7, true);
+		const lanes = princes as FightLanes;
+		const face = resultFace(
+			lanes,
+			odds(lanes, 'conditional').shares,
+			(text) => text.length * 7,
+			true
+		);
 		const texts = face.marks.flatMap((mark) => (mark.kind === 'text' ? [mark.text] : []));
 		const charts = face.marks.flatMap((mark) => (mark.kind === 'chart' ? [mark] : []));
 		const shares = face.marks.flatMap((mark) => (mark.kind === 'shares' ? mark.shares : []));
@@ -369,5 +400,30 @@ describe('a combat result opened', () => {
 		expect(texts).toEqual(
 			expect.arrayContaining(['Rank Bonus', 'Flank or Rear', massed.name, spread(massed.points)])
 		);
+	});
+});
+
+describe('the chances printed', () => {
+	const printed = (texts: string[]) => texts.reduce((sum, text) => sum + parseFloat(text), 0);
+
+	it("prints each Break test's outcomes given it is taken, adding up to 100%", () => {
+		const drawing = draw(princes as FightLanes, (text) => text.length * 7);
+		const outcomes = drawing.nodes.flatMap((node) => (node.kind === 'outcome' ? [node] : []));
+
+		for (const lane of ['attacker', 'target']) {
+			const texts = outcomes.filter((node) => node.lane === lane).map((node) => node.text);
+			expect(printed(texts)).toBeCloseTo(100, 10);
+		}
+	});
+
+	it.each(VIEWS)('prints the combat result read %s adding up to 100%', (view) => {
+		const drawing = draw(princes as FightLanes, (text) => text.length * 7, null, null, false, view);
+		const texts = drawing.nodes.flatMap((node) =>
+			node.kind === 'result'
+				? node.face.marks.flatMap((mark) => (mark.kind === 'shares' ? mark.texts : []))
+				: []
+		);
+
+		expect(printed(texts)).toBeCloseTo(100, 10);
 	});
 });

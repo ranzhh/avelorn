@@ -1,5 +1,5 @@
 import type { FightLanes, LandedRule, LaneUnit, Needed, Spread, Strike } from '$lib/api/client';
-import { percent } from '$lib/charts/scale';
+import { percent, percents } from '$lib/charts/scale';
 
 /** A lane of the drawing: the charger's above, its target's below. */
 export type Lane = 'attacker' | 'target';
@@ -40,7 +40,7 @@ export const MARK: Record<LaneUnit['command'][number]['kind'], string> = {
 	musician: 'M'
 };
 
-export type Share = ['attacker' | 'draw' | 'target', number];
+export type Share = ['attacker' | 'draw' | 'target' | 'short', number];
 /** A colour a chart's bars take: a side's, a draw's, or grey short of a rule. */
 export type Tone = Lane | 'draw' | 'short';
 /** A colour of a chart's bars and its chance of each outcome, the layers stacked from the bottom. */
@@ -59,7 +59,7 @@ export type Mark =
 	| { kind: 'chip'; box: Box; text: string; held: boolean }
 	| { kind: 'model'; box: Box; command: LaneUnit['command'][number] | null }
 	| { kind: 'divider'; y: number }
-	| { kind: 'shares'; box: Box; shares: Share[] }
+	| { kind: 'shares'; box: Box; shares: Share[]; texts: string[] }
 	| { kind: 'rule'; x: number; y: number; rule: LandedRule }
 	| {
 			kind: 'chart';
@@ -513,15 +513,16 @@ function scoring(lanes: FightLanes, lane: Lane): [string, string][] {
 	];
 }
 
-/** The combat result: shut, each side's score and how the round goes; open, the scores in parts. */
-export function resultFace(lanes: FightLanes, measure: Measure, open: boolean): Face {
+/** The combat result: shut, each side's score and its `shares`; open, the scores in parts. */
+export function resultFace(
+	lanes: FightLanes,
+	shares: Share[],
+	measure: Measure,
+	open: boolean
+): Face {
 	const { result } = lanes;
 	const rules = open ? result.rules : [];
-	const shares: Share[] = [
-		['attacker', result.attacker_wins],
-		['draw', result.draw],
-		['target', result.target_wins]
-	];
+	const texts = percents(shares.map(([, p]) => p));
 	const pad = 2 * STRIKE.inset;
 	const parts = { attacker: scoring(lanes, 'attacker'), target: scoring(lanes, 'target') };
 	const row = ([name, value]: [string, string], index: number) =>
@@ -534,7 +535,7 @@ export function resultFace(lanes: FightLanes, measure: Measure, open: boolean): 
 		ruleWidth(rules, STRIKE.inset, measure),
 		open ? pad + 2 * column + 16 : 0,
 		...LANES.map((lane) => pad + STRIKE.inset + row(parts[lane][0], 0)),
-		pad + 3 * (18 + Math.max(...shares.map(([, p]) => measure(percent(p), 'mono'))))
+		pad + texts.length * (18 + Math.max(...texts.map((share) => measure(share, 'mono'))))
 	);
 	const marks: Mark[] = [text(STRIKE.inset, 23, 'Combat result', 'title')];
 	let y = 78;
@@ -579,7 +580,7 @@ export function resultFace(lanes: FightLanes, measure: Measure, open: boolean): 
 		});
 	}
 	const box = { x: STRIKE.inset, y, width: width - pad, height: 12 };
-	marks.push({ kind: 'shares', box, shares });
+	marks.push({ kind: 'shares', box, shares, texts });
 	const face: Face = { chrome: 'card', width, height: y + RESULT.height - 78, marks };
 	return ruled(face, rules, STRIKE.inset);
 }
