@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { page } from '$app/state';
 	import { api, type FightBody, type FightLanes, type VolleyBody } from '$lib/api/client';
 	import { battle } from '$lib/battle.svelte';
@@ -18,28 +19,47 @@
 		return program as unknown as Program;
 	}
 
-	/** Ask for the lanes of the table's last fight, posting the body it sent. */
-	async function fight(body: FightBody): Promise<FightLanes> {
-		const { data: lanes, error: refused } = await api(page.url.origin, fetch).POST('/graph/fight', {
-			body
-		});
-		if (!lanes) {
-			throw new Error(typeof refused?.detail === 'string' ? refused.detail : 'could not draw that');
-		}
-		return lanes;
-	}
-
 	const last = $derived(battle.resolved);
 	const program = $derived(last?.action === 'volley' ? volley(last.body) : null);
-	const fought = $derived(last?.action === 'fight' ? fight(last.body) : null);
+
+	let body = $derived<FightBody | null>(
+		last?.action === 'fight' ? $state.snapshot(last.body) : null
+	);
+	let lanes = $state<FightLanes | null>(null);
+	let refusal = $state('');
+	let pending = $state(false);
+	let asked = 0;
+
+	$effect(() => {
+		const sent = body;
+		if (!sent) return;
+		const ask = ++asked;
+		pending = true;
+		const wait = setTimeout(
+			async () => {
+				const { data, error: refused } = await api(page.url.origin, fetch).POST('/graph/fight', {
+					body: sent
+				});
+				if (ask !== asked) return;
+				pending = false;
+				refusal = data
+					? ''
+					: typeof refused?.detail === 'string'
+						? refused.detail
+						: 'could not draw that';
+				if (data) lanes = data;
+			},
+			untrack(() => lanes) ? 250 : 0
+		);
+		return () => clearTimeout(wait);
+	});
 </script>
 
-{#if fought}
-	{#await fought then lanes}
-		<Fight {lanes} />
-	{:catch refused}
-		<p class="refuse">{refused.message}</p>
-	{/await}
+{#if last?.action === 'fight' && body}
+	{#if refusal}<p class="refuse">{refusal}</p>{/if}
+	{#if lanes}
+		<Fight {lanes} {body} stale={pending || !!refusal} onedit={(next) => (body = next)} />
+	{/if}
 {:else if last?.action === 'volley' && program}
 	<p class="meta">
 		{last.report.shooter.name} ×{last.report.shooter.size} shoot
