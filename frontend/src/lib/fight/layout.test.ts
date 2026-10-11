@@ -92,6 +92,21 @@ describe('a formation', () => {
 			[null]
 		]);
 	});
+
+	it('keeps room for a letter in each square of a ten-wide formation', () => {
+		const target = { ...princes.units.target, size: 30, frontage: 10, ranks: 3 };
+		const lanes = {
+			...princes,
+			charge: { ...princes.charge, reaches: 1 },
+			units: { ...princes.units, target }
+		} as FightLanes;
+		const card = draw(lanes, (text) => text.length * 7).nodes.find(
+			(node) => node.kind === 'unit' && node.lane === 'target'
+		);
+		if (card?.kind !== 'unit') throw new Error('the target has no card');
+
+		expect(card.pitch - 3).toBe(12);
+	});
 });
 
 describe('a charge drawn by the chance it reaches', () => {

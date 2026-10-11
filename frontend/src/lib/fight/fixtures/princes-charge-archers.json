@@ -4,11 +4,11 @@
 			"unit": "dragon-princes",
 			"name": "Dragon Princes",
 			"size": 5,
-			"options": [{ "id": "drakemaster", "name": "Drakemaster" }],
+			"options": [],
 			"weapon": "Lance",
 			"frontage": 4,
 			"ranks": 2,
-			"command": { "champion": true, "standard": false, "musician": false },
+			"command": [{ "kind": "champion", "name": "Drakemaster" }],
 			"rules": [{ "name": "Elven Reflexes", "side": "attacker", "applied": true }]
 		},
 		"target": {
@@ -19,7 +19,7 @@
 			"weapon": "Hand Weapon",
 			"frontage": 5,
 			"ranks": 2,
-			"command": { "champion": false, "standard": false, "musician": false },
+			"command": [],
 			"rules": [
 				{ "name": "Elven Reflexes", "side": "target", "applied": true },
 				{ "name": "Press of Battle", "side": "target", "applied": true }

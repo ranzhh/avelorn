@@ -10,7 +10,7 @@ expectation over every outcome.
 
 from collections.abc import Hashable, Iterable, Mapping
 from fractions import Fraction
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -29,6 +29,7 @@ from avelorn.tow.volley import Volley
 _ROLLS = ("roll-to-hit", "roll-to-wound", "make-armour-saves", "ward-saves")
 _READYING = (WEAPON_CHOICE, "who-can-fight", "who-strikes-first")
 _SCORING = ("calculate-combat-result", "who-is-the-winner")
+_COMMAND = (OptionKind.CHAMPION, OptionKind.STANDARD_BEARER, OptionKind.MUSICIAN)
 
 
 class _Drawn(BaseModel):
@@ -51,19 +52,19 @@ class LandedRule(_Drawn):
 
 
 class Command(_Drawn):
-    """The command models a unit bought."""
+    """A command model a unit bought, by its kind and its printed name."""
 
-    champion: bool
-    standard: bool
-    musician: bool
+    kind: Literal[OptionKind.CHAMPION, OptionKind.STANDARD_BEARER, OptionKind.MUSICIAN]
+    name: str
 
 
 class LaneUnit(_Drawn):
     """A unit as it is fielded: ``frontage`` files wide and ``ranks`` deep.
 
-    ``options`` are the ones it bought, and ``command`` the command models among
-    them, which stand in its front rank. ``rules`` land on the steps it takes
-    before anyone strikes: its weapon choice, Who Can Fight, Who Strikes First.
+    ``options`` are the ones it bought besides its command models, which
+    ``command`` gives and which stand in its front rank. ``rules`` land on the
+    steps it takes before anyone strikes: its weapon choice, Who Can Fight, Who
+    Strikes First.
     """
 
     unit: str
@@ -73,7 +74,7 @@ class LaneUnit(_Drawn):
     weapon: str
     frontage: int
     ranks: int
-    command: Command
+    command: list[Command]
     rules: list[LandedRule]
 
 
@@ -297,20 +298,24 @@ def _landed(evaluated: Evaluated, steps: Iterable[Step[Any]]) -> list[LandedRule
 def _unit(fight: Fight, contingent: Contingent, side: Side) -> LaneUnit:
     unit = contingent.unit
     chosen = [option for option in unit.options if option.id in contingent.options]
-    kinds = {option.kind for option in chosen}
     return LaneUnit(
         unit=unit.id,
         name=unit.name,
         size=contingent.models,
-        options=[ChosenOption(id=option.id, name=option.name) for option in chosen],
+        options=[
+            ChosenOption(id=option.id, name=option.name)
+            for option in chosen
+            if option.kind not in _COMMAND
+        ],
         weapon=contingent.in_hand().name,
         frontage=contingent.formation.files,
         ranks=contingent.formation.ranks,
-        command=Command(
-            champion=OptionKind.CHAMPION in kinds,
-            standard=OptionKind.STANDARD_BEARER in kinds,
-            musician=OptionKind.MUSICIAN in kinds,
-        ),
+        command=[
+            Command(kind=kind, name=option.name)
+            for kind in _COMMAND
+            for option in chosen
+            if option.kind is kind
+        ],
         rules=_rules(fight, *(f"{side}/{step}" for step in _READYING)),
     )
 

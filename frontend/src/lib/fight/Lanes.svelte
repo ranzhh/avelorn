@@ -3,9 +3,9 @@
 	import type { ChargeArc, FightBody, FightLanes } from '$lib/api/client';
 	import {
 		INSET,
+		MARK,
 		OUTCOME,
 		STRIKE,
-		commanded,
 		count,
 		draw,
 		formation,
@@ -154,17 +154,24 @@
 						>{chip.text}</text
 					>
 				{/each}
-				{#each formation(unit.size, unit.frontage, commanded(unit)) as model}
+				{#each formation(unit.size, unit.frontage, unit.command) as model}
+					{@const left = x + INSET + model.file * node.pitch}
+					{@const square = top + model.rank * node.pitch}
 					<rect
 						class="model"
 						class:command={model.command}
-						x={x + INSET + model.file * node.pitch}
-						y={top + model.rank * node.pitch}
+						x={left}
+						y={square}
 						width={node.pitch - 3}
 						height={node.pitch - 3}
 					>
-						{#if model.command}<title>{model.command}</title>{/if}
+						{#if model.command}<title>{model.command.name}</title>{/if}
 					</rect>
+					{#if model.command}
+						<text class="mark" x={left + (node.pitch - 3) / 2} y={square + (node.pitch - 3) / 2}
+							>{MARK[model.command.kind]}</text
+						>
+					{/if}
 				{/each}
 				<text class="mono" x={x + width - INSET} y={top + ranks * node.pitch - 5} text-anchor="end"
 					>{unit.frontage} × {unit.ranks}</text
@@ -459,6 +466,14 @@
 	}
 	.model {
 		stroke-width: 1;
+	}
+	.mark {
+		fill: var(--on-accent);
+		font-size: 10px;
+		font-weight: 600;
+		text-anchor: middle;
+		dominant-baseline: central;
+		pointer-events: none;
 	}
 	.attacker .model {
 		fill: var(--attacker-tint);

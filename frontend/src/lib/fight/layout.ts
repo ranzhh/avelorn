@@ -22,7 +22,16 @@ export interface Box extends Point {
 
 /** Where text and controls sit inside a card, from its top left corner. */
 export const INSET = 14;
-export const UNIT = { least: 184, chips: 34, chip: 20, gap: 4, glyph: 14, pitch: 17, bottom: 14 };
+export const UNIT = {
+	least: 184,
+	chips: 34,
+	chip: 20,
+	gap: 4,
+	glyph: 14,
+	pitch: 17,
+	packed: 15,
+	bottom: 14
+};
 export const STRIKE = { least: 150, inset: 12, header: 26, rule: 92, row: 20 };
 const BATTLEFIELD = { width: 160, height: 140 };
 const CHARGE = { width: 170, height: 76 };
@@ -83,12 +92,17 @@ export interface Chip extends Box {
 	text: string;
 }
 
-export type Command = 'champion' | 'standard' | 'musician';
+/** The letter drawn in the square of a command model of each kind. */
+export const MARK: Record<LaneUnit['command'][number]['kind'], string> = {
+	champion: 'C',
+	standard_bearer: 'S',
+	musician: 'M'
+};
 
-export interface Model {
+export interface Model<T> {
 	file: number;
 	rank: number;
-	command: Command | null;
+	command: T | null;
 }
 
 /**
@@ -96,7 +110,7 @@ export interface Model {
  * of the front rank, and in the middle of the ranks behind where the front is
  * narrower than the group.
  */
-export function formation(size: number, frontage: number, command: Command[]): Model[] {
+export function formation<T>(size: number, frontage: number, command: T[]): Model<T>[] {
 	return Array.from({ length: size }, (_, index) => {
 		const rank = Math.floor(index / frontage);
 		const file = index % frontage;
@@ -104,15 +118,6 @@ export function formation(size: number, frontage: number, command: Command[]): M
 		const first = Math.floor((Math.min(frontage, size - rank * frontage) - group.length) / 2);
 		return { file, rank, command: group[file - first] ?? null };
 	});
-}
-
-export function commanded(unit: LaneUnit): Command[] {
-	const { champion, standard, musician } = unit.command;
-	return [
-		...(champion ? (['champion'] as const) : []),
-		...(standard ? (['standard'] as const) : []),
-		...(musician ? (['musician'] as const) : [])
-	];
 }
 
 export type Placed =
@@ -213,7 +218,7 @@ function unitCard(unit: LaneUnit, measure: Measure) {
 		UNIT.least,
 		2 * INSET + measure(unit.name, 'title') + 12 + measure(`×${unit.size}`, 'mono'),
 		2 * INSET + Math.max(...chipWidths),
-		2 * INSET + unit.frontage * 7 + 12 + dims
+		2 * INSET + unit.frontage * UNIT.packed + 12 + dims
 	);
 	const chips: Chip[] = [];
 	let x = INSET;
