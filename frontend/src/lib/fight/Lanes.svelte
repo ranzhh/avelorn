@@ -4,6 +4,7 @@
 	import type { ChargeArc, FightBody, FightLanes } from '$lib/api/client';
 	import Battlefield from './Battlefield.svelte';
 	import Card from './Card.svelte';
+	import type { Blocks } from './field';
 	import { INSET, type Font, type Measure } from './faces';
 	import { OUTCOME, draw, type Lane, type Placed } from './layout';
 
@@ -13,6 +14,8 @@
 		lanes: FightLanes;
 		/** The charge as last asked for, which the battlefield's inputs show while a redraw is on its way. */
 		charge: NonNullable<FightBody['charge']> | null;
+		/** The blocks the battlefield measures, where the table placed them. */
+		blocks: Blocks | null;
 		/** The node showing its whole face, if any. */
 		open: string | null;
 		/** The unit edited in place, if any, and the controls that edit it. */
@@ -24,7 +27,8 @@
 		oncharge: (change: { full_inches?: number; arc?: ChargeArc; reaction?: Reacting }) => void;
 	}
 
-	let { lanes, charge, open, editing, editor, ontoggle, onedit, oncharge }: Props = $props();
+	let { lanes, charge, blocks, open, editing, editor, ontoggle, onedit, oncharge }: Props =
+		$props();
 
 	const FONTS: Record<Font, string> = {
 		title: '600 13px system-ui, sans-serif',
@@ -41,7 +45,7 @@
 
 	let editorHeight = $state(160);
 	const drawing = $derived(
-		draw(lanes, measure, open, editing && { lane: editing, height: editorHeight })
+		draw(lanes, measure, open, editing && { lane: editing, height: editorHeight }, !!blocks)
 	);
 
 	$effect(() => {
@@ -131,7 +135,7 @@
 					</foreignObject>
 				{/if}
 			{:else if node.kind === 'battlefield' && charge}
-				<Battlefield box={node.box} {charge} open={open === node.id} {oncharge} />
+				<Battlefield box={node.box} {charge} {blocks} open={open === node.id} {oncharge} />
 			{:else if node.kind === 'reaction' && lanes.reaction}
 				{@const reaction = lanes.reaction}
 				<rect class="card" {x} {y} {width} {height} rx="8" />

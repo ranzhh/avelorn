@@ -193,6 +193,20 @@ describe('a charge drawn by the chance it reaches', () => {
 	});
 });
 
+describe('the battlefield', () => {
+	it.each([false, true])("keeps the units' arrows into it apart, mapped %s", (mapped) => {
+		const drawing = draw(princes as FightLanes, (text) => text.length * 7, null, null, mapped);
+		const field = drawing.nodes.find((node) => node.kind === 'battlefield')!.box;
+		const ends = drawing.edges.flatMap((edge) => {
+			const [x, y] = edge.d.split(' ').at(-1)!.slice(1).split(',').map(Number);
+			return x === field.x ? [y] : [];
+		});
+
+		expect(ends).toHaveLength(2);
+		expect(Math.abs(ends[0] - ends[1])).toBeGreaterThan(20);
+	});
+});
+
 describe('a fight drawn with one node open, five rules on its result and Break tests', () => {
 	const measure: Measure = (text) => text.length * 7;
 	const rules = princes.volley.rules;
