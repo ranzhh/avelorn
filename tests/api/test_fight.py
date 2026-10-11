@@ -200,3 +200,42 @@ def test_a_size_the_datasheet_forbids_is_refused(client: TestClient) -> None:
     )
     assert response.status_code == 422
     assert "side b" in response.json()["detail"]
+
+
+def test_a_stand_and_shoot_thins_the_charger_whichever_side_charges(client: TestClient) -> None:
+    """Ten Archers stand and shoot at twenty Spearmen charging them 8in.
+
+    The Spearmen lose the volley's casualties on top of the round's, and the
+    report reads the same whether they charge as side a or as side b.
+    """
+    spearmen = {"unit": "elven-spearmen", "size": 20}
+    archers = {"unit": "elven-archers", "size": 10}
+    charge = {"full_inches": 8, "reaction": "stand-and-shoot"}
+
+    held = fight(client, a=spearmen, b=archers, charge={"side": "a", "full_inches": 8})
+    stood = fight(client, a=spearmen, b=archers, charge={"side": "a", **charge})
+    mirrored = fight(client, a=archers, b=spearmen, charge={"side": "b", **charge})
+
+    assert stood["a"]["expected_casualties"] > held["a"]["expected_casualties"]
+    assert (mirrored["b"], mirrored["a"], mirrored["p_b_wins"]) == (
+        stood["a"],
+        stood["b"],
+        stood["p_a_wins"],
+    )
+
+
+def test_a_stand_and_shoot_needs_a_missile_weapon(client: TestClient) -> None:
+    """Spearmen carry nothing to shoot with, and the refusal names the side that would."""
+    response = client.post(
+        "/fight",
+        json={
+            "a": {"unit": "elven-archers", "size": 10},
+            "b": {"unit": "elven-spearmen", "size": 20},
+            "charge": {"side": "a", "full_inches": 8, "reaction": "stand-and-shoot"},
+        },
+    )
+    assert response.status_code == 422
+    assert response.json() == {
+        "detail": "side b: nothing it carries has a missile profile; "
+        "carried: Hand Weapon, Thrusting Spear"
+    }

@@ -24,6 +24,7 @@ from collections import defaultdict
 from collections.abc import Sequence
 from enum import StrEnum
 from fractions import Fraction
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -390,6 +391,9 @@ class MusteredUnit(BaseModel):
         )
 
 
+Reacting = Literal["hold", "stand-and-shoot"]
+
+
 class FightSide(BaseModel):
     """One side of a resolved round: what it fielded, what it lost, whether it held.
 
@@ -445,22 +449,23 @@ class FightReport(BaseModel):
     not_modelled: list[str]
 
     @classmethod
-    def of(cls, a: Contingent, b: Contingent, fight: Fight) -> "FightReport":
-        """Gather a resolved round into one answer, ``a`` its attacker and ``b`` its target.
+    def of(cls, a: Contingent, b: Contingent, fight: Fight, seat: Side) -> "FightReport":
+        """Gather a round into one answer, ``a`` fighting from ``seat`` and ``b`` facing it.
 
         Returns:
             The report both surfaces show.
         """
-        fought = fight.fought.mass
-        first = {Side.ATTACKER: "a", Side.TARGET: "b"}
+        fought = fight.fought(seat).mass
+        margin = fight.margin(seat).mass
+        first = {seat: "a", seat.other: "b"}
         return cls(
-            a=_side(a, fight, Side.ATTACKER),
-            b=_side(b, fight, Side.TARGET),
+            a=_side(a, fight, seat),
+            b=_side(b, fight, seat.other),
             p_a_wins=float(fought.get(Fought.WON, 0)),
             p_draw=float(fought.get(Fought.DRAWN, 0)),
             p_b_wins=float(fought.get(Fought.LOST, 0)),
             first_striker=None if fight.first_striker is None else first[fight.first_striker],
-            margin={lead: float(mass) for lead, mass in sorted(fight.margin.mass.items()) if mass},
+            margin={lead: float(mass) for lead, mass in sorted(margin.items()) if mass},
             not_modelled=list(fight.held),
         )
 

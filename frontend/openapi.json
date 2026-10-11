@@ -111,7 +111,7 @@
     "/fight": {
       "post": {
         "summary": "Resolve one round of close combat between two units",
-        "description": "Deploy two units, fight one round, and score it.\n\nOne round: both sides strike in Initiative order, the Wounds tally into a\ncombat result, and the loser takes its Break test. What a round does not\ncover is the rest of the engagement \u2014 a pursuit, a second round, and the\nStand & Shoot a charge would be met with, which needs the Movement phase's\ncharge sequence rather than a charge recorded on the charger.\n\nA side the corpus cannot field is refused before any dice are walked: an\nunknown slug is a 404, and a size, option or weapon the datasheet does not\nallow is a 422 naming which side asked for it.\n\nReturns:\n    The round resolved: each side's casualty distribution and Break-test\n    outcomes, who won, and every rule the engine held without applying.",
+        "description": "Deploy two units, fight one round, and score it.\n\nOne round: both sides strike in Initiative order, the Wounds tally into a\ncombat result, and the loser takes its Break test. A charge is met with\nthe reaction its target declares: a Stand & Shoot fires before the round\nand thins the charger, and its Wounds count toward the target's combat\nresult. What a round does not cover is the rest of the engagement -- a\npursuit, a second round.\n\nA side the corpus cannot field is refused before any dice are walked: an\nunknown slug is a 404, and a size, option or weapon the datasheet does not\nallow is a 422 naming which side asked for it, as is a Stand & Shoot by a\nside that carries no missile weapon.\n\nReturns:\n    The round resolved: each side's casualty distribution and Break-test\n    outcomes, who won, and every rule the engine held without applying.",
         "operationId": "fight_fight_post",
         "requestBody": {
           "content": {
@@ -886,6 +886,15 @@
           "arc": {
             "$ref": "#/components/schemas/ChargeArc",
             "default": "front"
+          },
+          "reaction": {
+            "type": "string",
+            "enum": [
+              "hold",
+              "stand-and-shoot"
+            ],
+            "title": "Reaction",
+            "default": "hold"
           }
         },
         "additionalProperties": false,
@@ -895,7 +904,7 @@
           "full_inches"
         ],
         "title": "ChargedBy",
-        "description": "A charge into the round: who made it, how far it carried, which arc it struck."
+        "description": "A charge into the round: who made it, how far it carried, which arc it struck.\n\n``reaction`` is how the charged side met it: a Hold, or a Stand & Shoot\nfired with the last missile weapon it carries."
       },
       "ChosenOption": {
         "properties": {
