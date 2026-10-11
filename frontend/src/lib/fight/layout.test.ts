@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import type { FightLanes, Strike } from '$lib/api/client';
 import princes from './fixtures/princes-charge-archers.json';
-import { columns, draw, formation, type Drawing, type Measure } from './layout';
+import { formation, type Measure } from './faces';
+import { columns, draw, type Drawing } from './layout';
 
 const strike = (slot: string, side: 'attacker' | 'target') =>
 	({ slot, label: slot, side }) as Strike;
@@ -104,8 +105,9 @@ describe('a formation', () => {
 			(node) => node.kind === 'unit' && node.lane === 'target'
 		);
 		if (card?.kind !== 'unit') throw new Error('the target has no card');
+		const squares = card.face.marks.flatMap((mark) => (mark.kind === 'model' ? [mark.box] : []));
 
-		expect(card.pitch - 3).toBe(12);
+		expect(new Set(squares.map((square) => square.width))).toEqual(new Set([12]));
 	});
 });
 
@@ -126,7 +128,9 @@ describe('the chips on a unit card', () => {
 			(node) => node.kind === 'unit' && node.lane === 'target'
 		);
 		if (card?.kind !== 'unit') throw new Error('the target has no card');
-		return card.chips.map(({ text, held }) => [text, held]);
+		return card.face.marks.flatMap((mark) =>
+			mark.kind === 'chip' ? [[mark.text, mark.held]] : []
+		);
 	};
 
 	it('greys every option and highlights each piece held, one an option among them', () => {
