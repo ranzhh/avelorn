@@ -1,0 +1,43 @@
+# Source: https://tow.whfb.app/command-groups/onwards-to-victory
+id: onwards-to-victory
+name: '"Onwards to Victory!"'
+page: 201
+category: Command Groups
+paragraphs:
+  - If, once the combat result has been calculated, both sides have the exact same number of points each, the side that has
+    a musician in the front rank of one or more of its units may claim a bonus of +1 combat result point.
+  - If, however, the opposing side has a musician also, the redoubled efforts (and almighty clamour) cancel each other out
+    and neither side may claim this bonus.
+notes: >-
+  A musician counts while it stands in the front rank, for either side. The point lands where both
+  combat results are read: Who is the Winner? of each side, and the Break test of the side that loses
+  by it.
+needs: [command-group-placement, multiple-units-in-combat]
+effects:
+  - when:
+      facts:
+        - {fact: musicians, of: this-model, more-than: 0}
+        - {fact: calculate-combat-result, of: this-model, is: {fact: calculate-combat-result, of: the-enemy}}
+    unless:
+      facts: [{fact: musicians, of: the-enemy, more-than: 0}]
+    add: {combat-result: 1}
+    of: this-model
+    at: {step: who-is-the-winner, by: this-model}
+  - when:
+      facts:
+        - {fact: musicians, of: this-model, more-than: 0}
+        - {fact: calculate-combat-result, of: this-model, is: {fact: calculate-combat-result, of: the-enemy}}
+    unless:
+      facts: [{fact: musicians, of: the-enemy, more-than: 0}]
+    add: {combat-result: 1}
+    of: this-model
+    at: {step: who-is-the-winner, by: the-enemy}
+  - when:
+      facts:
+        - {fact: musicians, of: this-model, more-than: 0}
+        - {fact: calculate-combat-result, of: this-model, is: {fact: calculate-combat-result, of: the-enemy}}
+    unless:
+      facts: [{fact: musicians, of: the-enemy, more-than: 0}]
+    add: {combat-result: 1}
+    of: this-model
+    at: {step: break-test, by: the-enemy}

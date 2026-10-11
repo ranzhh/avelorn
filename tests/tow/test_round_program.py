@@ -898,7 +898,7 @@ def test_a_side_wiped_out_loses_whatever_it_scored(
     """A side's 3 against its foe's 1 wins nothing once the side is wiped out."""
     standing, enemy = (Standings((("part", Standing(each, 0)),)) for each in models)
 
-    assert who_is_the_winner(standing, enemy, 3, 1).mass == {fought: 1}
+    assert who_is_the_winner(standing, enemy, 3, 1, ()).mass == {fought: 1}
 
 
 def test_a_loser_more_than_twice_outnumbered_breaks_instead_of_falling_back() -> None:

@@ -85,11 +85,9 @@ class Coverage(BaseModel):
         return not self.stale and all(gap.reason is not None for gap in self.gaps)
 
 
-_INERT_COMMAND = {OptionKind.MUSICIAN}
-
 _PROGRAMS = (VOLLEY, STAND_AND_SHOOT, CHARGE, ROUND)
 
-_COMMAND = {OptionKind.STANDARD_BEARER}
+_COMMAND = {OptionKind.STANDARD_BEARER, OptionKind.MUSICIAN}
 
 
 def coverage(data: TOWRepository) -> Coverage:
@@ -234,9 +232,7 @@ def _scan(data: TOWRepository) -> Iterator[tuple[GapKind, str, Site]]:
         for option in unit.options:
             subject = f"{slug}/{option.name}"
             bought = Site(entry=Entry.OPTION, id=subject)
-            if option.kind in _INERT_COMMAND:
-                yield GapKind.INERT_OPTION, option.kind.value, bought
-            elif _inert(option):
+            if _inert(option):
                 yield GapKind.INERT_OPTION, subject, bought
     for slug, weapon in sorted(data.weapons.items()):
         if weapon.notes is not None:
@@ -364,8 +360,8 @@ def _inert(option: UnitOption) -> bool:
 
     An option for one named model never reaches the engine: the muster
     refuses it (#120). A champion is fielded as a part of its own, and a
-    standard bearer among the rank and file. A points budget buys magic
-    items, unmodelled (#31) and left out here.
+    standard bearer or musician among the rank and file. A points budget
+    buys magic items, unmodelled (#31) and left out here.
 
     Returns:
         True for an option that is no budget, fields no command model, and

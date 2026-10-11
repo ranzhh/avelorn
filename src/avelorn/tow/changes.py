@@ -17,7 +17,7 @@ from avelorn.tow.schema.side import Side
 from avelorn.tow.schema.unit import Characteristic, ProfileRole
 
 type Changeable = Quantity | Characteristic
-type Folded = Quantity | tuple[Side, Characteristic] | RerollOn
+type Folded = Quantity | tuple[Side, Changeable] | RerollOn
 
 _ORDERS = {
     Operation.CANCELS: Order.CANCEL,
@@ -37,8 +37,9 @@ class Added:
     """An amount ``rule`` adds to a quantity, a number or a dice roll, within its printed bounds.
 
     ``rule`` is the slug of the rule that adds it. ``of`` names the side whose
-    model's characteristic it moves, as the step's spec names the sides; a
-    quantity has none. It never moves a part of a role ``not_on`` names.
+    model's characteristic or whose combat result it moves, as the step's spec
+    names the sides; any other quantity has none. It never moves a part of a
+    role ``not_on`` names.
     """
 
     rule: str
@@ -328,6 +329,23 @@ class Equals:
 
 
 @dataclass(frozen=True)
+class Same:
+    """Two steps' outcomes, equal."""
+
+    left: Key
+    right: Key
+    consults: ClassVar[frozenset[str]] = frozenset()
+
+    @property
+    def reads(self) -> tuple[Key, ...]:
+        """The steps compared."""
+        return (self.left, self.right)
+
+    def holds(self, read: Mapping[Key, Any], out: frozenset[str]) -> bool:
+        return read[self.left] == read[self.right]
+
+
+@dataclass(frozen=True)
 class Holds:
     """A decision's option, holding every piece of equipment named."""
 
@@ -589,8 +607,8 @@ class Gate:
 class Operated:
     """One operation of a rule node at a step.
 
-    An add or a set changes one ``key``; a characteristic is the one of the
-    model on side ``of``, as the step's spec names the sides. X is the rule's
+    An add or a set changes one ``key``; a characteristic or a combat result is
+    the one of side ``of``, as the step's spec names the sides. X is the rule's
     parameter combined over the sources in force.
     """
 
