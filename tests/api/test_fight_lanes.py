@@ -47,14 +47,20 @@ def served(client: TestClient, route: str, body: dict) -> dict:
 
 @pytest.mark.parametrize("body", [PRINCES_CHARGE_DWARFS, SPEARMEN_CHARGE_ARCHERS])
 def test_the_lanes_are_the_round_the_fight_reports(client: TestClient, body: dict) -> None:
-    """The charger takes the upper lane, and the outcomes are the ones /fight reports."""
+    """The charger takes the upper lane, and every figure is the one /fight reports."""
     report = served(client, "/fight", body)
     lanes = served(client, "/graph/fight", body)
 
     charger = body["charge"]["side"]
     seats = {"attacker": charger, "target": "b" if charger == "a" else "a"}
     for seat, side in seats.items():
+        size = report[side]["size"]
         assert lanes["units"][seat]["unit"] == report[side]["unit"]
+        standing = lanes["standing"][seat][-1]["distribution"]
+        lost = report[side]["casualties"]
+        assert {left: p for left, p in enumerate(standing) if p} == pytest.approx(
+            {size - count: p for count, p in enumerate(lost) if p}
+        )
         broke = lanes["breaks"][seat]
         assert [broke["give_ground"], broke["fall_back_in_good_order"], broke["break"]] == [
             pytest.approx(report[side][outcome])
@@ -66,6 +72,49 @@ def test_the_lanes_are_the_round_the_fight_reports(client: TestClient, body: dic
         pytest.approx(report["p_draw"]),
         pytest.approx(report[f"p_{seats['target']}_wins"]),
     ]
+
+
+def test_a_strike_lists_the_parts_that_make_it(client: TestClient) -> None:
+    """Five Dragon Princes, a Drakemaster among them, charge ten Dwarf Warriors 7in into the front.
+
+    Four wide, the Drakemaster and three Princes stand in the front rank. The
+    riders strike at I5, +1 for Elven Reflexes and +3 for the charge, and the
+    steeds at I4 +3; the Dwarfs at I2. A rider hits on 3+ (WS5 against WS4)
+    and, with the Lance's S+2, wounds T4 on 3+ at AP -2, past the Dwarfs'
+    heavy armour: 4/9 of an attack goes unsaved, of the Drakemaster's three
+    and the Princes' six. A steed hits on 4+, wounds on 5+, and the Dwarf
+    saves on 5+: 1/9 of each steed's attack. A Dwarf hits on 4+ and wounds
+    on 4+; a Prince saves on 2+ in full plate, shield and barding, with a 6+
+    ward from Dragon Armour. Every other step is empty.
+    """
+    lanes = served(client, "/graph/fight", PRINCES_CHARGE_DWARFS)
+
+    struck = [
+        (
+            strike["label"],
+            strike["side"],
+            [
+                (part["name"], part["models"], part["attacks"], part["unsaved"])
+                for part in strike["parts"]
+            ],
+        )
+        for strike in lanes["strikes"][:2]
+    ]
+    assert struck == [
+        (
+            "Initiative 9",
+            "attacker",
+            [
+                ("Drakemaster", 1, 3, pytest.approx(3 * 4 / 9)),
+                ("Dragon Prince", 3, 6, pytest.approx(6 * 4 / 9)),
+            ],
+        ),
+        ("Initiative 7", "attacker", [("Barded Elven Steed", 4, 4, pytest.approx(4 / 9))]),
+    ]
+    dwarfs = lanes["strikes"][2:]
+    assert [(strike["label"], strike["side"]) for strike in dwarfs] == [("Initiative 2", "target")]
+    assert [part["name"] for part in dwarfs[0]["parts"]] == ["Veteran", "Dwarf Warrior"]
+    assert dwarfs[0]["needed"] == {"hit": "4+", "wound": "4+", "save": "2+", "ward": "6+"}
 
 
 def test_a_stand_and_shoot_thins_the_charger(client: TestClient) -> None:
