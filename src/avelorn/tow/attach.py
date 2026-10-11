@@ -56,7 +56,6 @@ from avelorn.tow.schema.effect import (
     WeaponMatch,
     When,
 )
-from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.program import DerivedFact
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import Rule
@@ -69,7 +68,6 @@ from avelorn.tow.steps import Choice, Spec, weapon_choices
 type Carried = tuple[tuple[RuleRef, Source], ...]
 type Reached = list[tuple[int, Effect, tuple[Step[Any], ...]]]
 
-_PHASES = frozenset(Phase)
 _AMENDS = frozenset({Operation.ALLOW, Operation.FORBID})
 
 
@@ -107,8 +105,8 @@ def rules_in_scope(
 ) -> Mapping[str, Carried]:
     """Every rule a holder has, with each source that gives it.
 
-    A side carries its own sources. Each side has the core rules of the phases
-    that carry graph effects. Each grant of a rule in scope is read once per
+    A side carries its own sources. Each side has the core rules that carry
+    graph effects. Each grant of a rule in scope is read once per
     holder, and gives a source whose ``via`` names the granting node. On the
     ``choosing`` sides, which choose their weapon, a grant to a weapon reaches
     each weapon carried, and once the grants settle, what a rule only weapons
@@ -597,6 +595,8 @@ class _Fielding:
                 return Measured(standing, fielding.rank_bonus)
             case DerivedFact.UNIT_STRENGTH:
                 return Measured(standing, fielding.unit_strength)
+            case DerivedFact.STANDARD_BEARERS:
+                return Measured(standing, fielding.standard_bearers)
 
     def equals(self, rule: Rule, step: Step[Any], value: Hashable) -> Equals:
         spec = self.specs[step]
@@ -675,9 +675,7 @@ def _holders(fielded: Mapping[Side, Fielding]) -> dict[Side, Holder]:
 
 
 def _core(rules: Mapping[str, Rule]) -> list[str]:
-    return sorted(
-        slug for slug, rule in rules.items() if rule.category in _PHASES and rule.effects
-    )
+    return sorted(slug for slug, rule in rules.items() if rule.core and rule.effects)
 
 
 def _grant(

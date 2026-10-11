@@ -128,6 +128,9 @@
   subject: quick-shot
   reason: Not authored yet for the Moving and Shooting -1; the Stand & Shoot distance limit it waives is not enforced.
 - kind: rule-without-effects
+  subject: quick-time
+  reason: A +1 Leadership for a unit with a musician marching near the enemy; marching is not modelled.
+- kind: rule-without-effects
   subject: regimental-unit
   reason: May be accompanied by detachments; detachments are not modelled.
   issue: 30
@@ -143,6 +146,12 @@
 - kind: rule-without-effects
   subject: steady-in-the-ranks
   reason: Resists Disruption from flank and rear charges; Disruption is not modelled.
+- kind: rule-without-effects
+  subject: steadying-rhythm
+  reason: A +1 Leadership for a fleeing unit with a musician trying to rally; rallying is not modelled.
+- kind: rule-without-effects
+  subject: trophies-of-war-command-groups
+  reason: A standard claimed as a trophy is worth Victory Points; Victory Points are not modelled.
 - kind: rule-without-effects
   subject: vanguard
   reason: A move after deployment; deployment is not modelled.
@@ -209,11 +218,7 @@
 
 - kind: inert-option
   subject: musician
-  reason: The +1 combat result on a drawn combat is not scored; its +1 Leadership to march and to rally needs movement and rallying, neither modelled.
-- kind: inert-option
-  subject: standard_bearer
-  reason: The +1 combat result for a standard is not scored.
-  issue: 28
+  reason: The +1 combat result on a drawn combat is not scored.
 - kind: inert-option
   subject: ironbreakers/Brace of Drakefire Pistols
   reason: Bought for the Ironbeard alone; mustering refuses an option for one model until a unit has parts.
@@ -278,7 +283,7 @@
   reason: Challenges are not modelled, so Multiple Wounds never counts for Overkill.
 - kind: missing-mechanic
   subject: characters
-  reason: Characters joining units are not modelled, so the clauses of Stubborn and Terror about a joined character have nothing to read, and a Swiftstride unit is never joined by a model without it.
+  reason: Characters joining units are not modelled, so the clauses of Stubborn and Terror about a joined character have nothing to read, a Swiftstride unit is never joined by a model without it, and no unit includes a Battle Standard for Standards to score.
 - kind: missing-mechanic
   subject: facings
   reason: Flank and rear facings are not modelled, so Martial Prowess's supporting attacks to the flank and rear have no combat to land in.

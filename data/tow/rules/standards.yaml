@@ -1,0 +1,22 @@
+# Source: https://tow.whfb.app/the-combat-phase/standards
+id: standards
+name: Standards
+page: 152
+category: The Combat Phase
+paragraphs:
+  - 'Warriors fight all the harder beneath the colours and symbols of their city, nation, tribe or god:'
+  - Standard
+  - If your unit includes a standard bearer, you may claim a bonus of +1 combat result point. Standard bearers are covered
+    in the Command Groups section.
+  - The Battle Standard
+  - If your unit includes a Battle Standard, you may claim an additional bonus of +1 combat result point, cumulative with
+    any bonus for a 'normal' standard. Battle Standards are covered in the Characters section.
+notes: >-
+  A standard bearer is one of the rank and file and the last of them to fall, so the bonus holds
+  while any of them stands.
+needs: [characters]
+effects:
+  - when:
+      facts: [{fact: standard-bearers, of: this-model, more-than: 0}]
+    add: {combat-result: 1}
+    at: {step: calculate-combat-result, by: this-model}

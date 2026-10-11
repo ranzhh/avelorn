@@ -13,7 +13,6 @@ from avelorn.tow.contingent import Charge, ChargeArc, Contingent, Movement
 from avelorn.tow.data import TOWRepository
 from avelorn.tow.fielding import SHIELD, Fielding, Held
 from avelorn.tow.programs import CHARGE, ROUND, STAND_AND_SHOOT, VOLLEY, Evaluated, load_program
-from avelorn.tow.schema.phase import Phase
 from avelorn.tow.schema.reference import RuleRef
 from avelorn.tow.schema.rule import Rule
 from avelorn.tow.schema.side import Side as AttackSide
@@ -21,8 +20,6 @@ from avelorn.tow.schema.weapon import Weapon
 from avelorn.tow.steps import BreakTest, Retreat
 
 REPO = TOWRepository()
-
-CHAPTERS = (Phase.SHOOTING, Phase.COMBAT)
 
 INITIATIVES = range(10, 0, -1)
 
@@ -74,7 +71,7 @@ class Side:
 
     In combat it fights with ``weapon``, and with its shield when it wears one
     unless ``shield`` is False. It has used each rule ``used`` names once this
-    game.
+    game. It buys the command models ``command`` names by option id.
     """
 
     unit: str
@@ -89,6 +86,7 @@ class Side:
     dropped: frozenset[str] = frozenset()
     shield: bool = True
     used: tuple[str, ...] = ()
+    command: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -130,7 +128,7 @@ class Scenario:
         return self._with_side(role, replace(side, rules=(*side.rules, ref)))
 
     def without(self, slug: str, role: Role | None = None) -> "Scenario":
-        """This scenario with rule ``slug`` taken off one side, or out of the chapter rules.
+        """This scenario with rule ``slug`` taken off one side, or out of the core rules.
 
         Returns:
             The changed scenario.
@@ -189,17 +187,17 @@ def resolve(scenario: Scenario) -> Outcome:
     Raises:
         ValueError: a fight or break with no ``first_round``, a kind fought in no round
             with one, a Stand & Shoot whose attacker did not charge, or a dropped
-            chapter rule that is not one.
+            core rule that is not one.
     """
     if scenario.kind in ROUNDS and scenario.first_round is None:
         raise ValueError(f"a {scenario.kind} needs first_round")
     if scenario.kind not in IN_A_ROUND and scenario.first_round is not None:
         raise ValueError(f"first_round is an input of a round, not of {scenario.kind}")
     unknown = scenario.dropped - {
-        rule.id for phase in CHAPTERS for rule in _chapter(phase).values()
+        rule.id for rule in REPO.rules.values() if rule.core and rule.effects
     }
     if unknown:
-        raise ValueError(f"not a chapter rule with effects: {sorted(unknown)}")
+        raise ValueError(f"not a core rule with effects: {sorted(unknown)}")
     attacker, defender = _field(scenario.attacker), _field(scenario.defender)
     match scenario.kind:
         case Kind.SHOOT:
@@ -454,12 +452,6 @@ def _break(outcomes: Mapping[BreakTest, Probability]) -> Break:
     )
 
 
-def _chapter(phase: Phase) -> dict[str, Rule]:
-    return {
-        rule.name: rule for rule in REPO.rules.values() if rule.category == phase and rule.effects
-    }
-
-
 def _reference(ref: Ref) -> RuleRef:
     if ref.slug not in REPO.rules:
         raise ValueError(f"no rule entry is filed as {ref.slug!r}")
@@ -526,5 +518,5 @@ def _field(side: Side) -> Contingent:
         [_weapon(weapon, side) for weapon in REPO.weapons.values()], kind="weapon"
     )
     fielded = Contingent.field(unit, side.models, data=data, frontage=side.frontage)
-    moved = fielded.after(_movement(side))
+    moved = replace(fielded, options=side.command).after(_movement(side))
     return moved.wielding(side.weapon) if side.weapon is not None else moved

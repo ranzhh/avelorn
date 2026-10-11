@@ -108,3 +108,9 @@ def test_a_rule_granted_only_by_the_graph_is_referenced_there() -> None:
     """Flaming Attacks grants Fear in the graph alone, and the Fear gap names it."""
     fear = next(gap for gap in REPORT.gaps if gap.subject == "fear")
     assert Site(entry=Entry.RULE, id="flaming-attacks") in fear.sites
+
+
+def test_a_core_rule_is_scanned_as_if_every_side_printed_it() -> None:
+    """Standards needs characters for its Battle Standard, and that gap names it."""
+    characters = next(gap for gap in REPORT.gaps if gap.subject == "characters")
+    assert Site(entry=Entry.RULE, id="standards") in characters.sites

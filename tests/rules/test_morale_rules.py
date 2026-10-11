@@ -116,6 +116,27 @@ def test_massed_infantry(
     assert resolve(scenario).margin == expected(resolve(plain).margin)
 
 
+def _beneath_a_standard(standard: bool) -> dict[int, Fraction]:
+    margin: dict[int, Fraction] = {}
+    for (felled, lost), p in EQUAL_RANKS_TRADED.items():
+        lead = felled - lost
+        held = lead + _sign(lead) - int(standard and felled < 10)
+        margin[held] = margin.get(held, Fraction(0)) + p
+    return margin
+
+
+def test_standards() -> None:
+    """Dwarfs fighting beneath a standard claim +1 combat result while any of them stands.
+
+    Ten a side in one rank; the Spearmen strike first, and wiping the Dwarfs out
+    takes the standard with them.
+    """
+    dwarfs = replace(EQUAL_RANKS.defender, command=("standard-bearer",))
+    scenario = replace(EQUAL_RANKS, defender=dwarfs)
+    assert resolve(scenario).margin == _beneath_a_standard(standard=True)
+    assert resolve(scenario.without("standards")).margin == _beneath_a_standard(standard=False)
+
+
 @pytest.mark.parametrize(
     ("printed", "plain", "leadership", "walled"),
     [

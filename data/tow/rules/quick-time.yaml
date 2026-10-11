@@ -1,0 +1,8 @@
+# Source: https://tow.whfb.app/command-groups/quick-time
+id: quick-time
+name: Quick Time
+page: 201
+category: Command Groups
+paragraphs:
+  - Should a unit that contains a musician wish to march whilst within 8" of an enemy unit, it may apply a +1 modifier to
+    its Leadership characteristic, up to a maximum of Leadership 10, when making its Leadership test.

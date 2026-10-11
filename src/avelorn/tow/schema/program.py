@@ -24,6 +24,7 @@ class DerivedFact(StrEnum):
 
     RANK_BONUS = "rank-bonus"
     UNIT_STRENGTH = "unit-strength"
+    STANDARD_BEARERS = "standard-bearers"
 
 
 class Per(StrEnum):

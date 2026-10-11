@@ -10,11 +10,13 @@ from avelorn.tow.kernels import BEST_ARMOUR_VALUE, UNARMOURED, Standing, Standin
 from avelorn.tow.schema.armour import Armour
 from avelorn.tow.schema.reference import RuleRef, slugified
 from avelorn.tow.schema.troop_type import TroopTypeProfile
-from avelorn.tow.schema.unit import Characteristic, Profile, ProfileRole, TroopType
+from avelorn.tow.schema.unit import Characteristic, OptionKind, Profile, ProfileRole, TroopType
 from avelorn.tow.schema.weapon import Weapon, WeaponProfile
 from avelorn.tow.traits import Carries
 
 SHIELD = "shield"
+
+_COMMAND = frozenset({OptionKind.STANDARD_BEARER})
 
 
 class Held(frozenset[str]):
@@ -174,13 +176,17 @@ class Unsaved(PerPart):
 
 @dataclass(frozen=True, eq=False)
 class Fielding:
-    """A side on the table, of one troop type: its parts in placement order, front to back."""
+    """A side on the table, of one troop type: its parts in placement order, front to back.
+
+    ``command`` holds the command models bought that stand among the rank and file.
+    """
 
     unit: str
     troop: TroopTypeProfile
     parts: tuple[Part, ...]
     frontage: int
     mounts: tuple[Part, ...] = ()
+    command: frozenset[OptionKind] = frozenset()
 
     def __post_init__(self) -> None:
         """Refuse a fielding that cannot stand.
@@ -319,6 +325,17 @@ class Fielding:
             for part in self.parts
         )
 
+    def standard_bearers(self, standings: Standings) -> int:
+        """The standard bearers standing: one bought stands while any of the rank and file does.
+
+        It is the last of them to fall (command-groups/standard-bearers-as-casualties).
+
+        Returns:
+            1 or 0.
+        """
+        bought = OptionKind.STANDARD_BEARER in self.command
+        return int(bought and standings.of(self.hit.id).models > 0)
+
     def _wounds(self, part: Part) -> int:
         wounds = part.characteristic(Characteristic.WOUNDS)
         if wounds is None:
@@ -349,7 +366,8 @@ class Fielding:
         """Field a contingent as its rank and file, with a champion part for each champion bought.
 
         A champion stands in the front rank, so its part is placed first
-        (command-groups/position-within-the-unit). Every part carries the unit's
+        (command-groups/position-within-the-unit). A standard bearer bought is
+        one of the rank and file. Every part carries the unit's
         equipment and rules. The armour value folds from the armour worn. A ward
         comes only from rules, so a part fielded from the corpus has none. A part
         carries the rules of its datasheet, its troop type, and the profile its
@@ -407,7 +425,8 @@ class Fielding:
             for row, count in counts
         )
         mounts = () if not combat else _mounted(contingent, parts)
-        return cls(unit.id, unit.rank_and_file, parts, contingent.frontage, mounts)
+        command = frozenset(offered[chosen].kind for chosen in contingent.options) & _COMMAND
+        return cls(unit.id, unit.rank_and_file, parts, contingent.frontage, mounts, command)
 
 
 def defender_armour(worn: Sequence[Armour]) -> int | None:
