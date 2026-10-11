@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Bars from '$lib/charts/Bars.svelte';
 	import { percent } from '$lib/charts/scale';
 	import { MARK, STRIKE, type Box, type Face, type Lane } from './faces';
 
@@ -82,6 +83,15 @@
 				y={mark.y - 9}
 				width="8"
 				height="8"
+			/>
+		{:else if mark.kind === 'chart'}
+			<Bars
+				{...mark.box}
+				least={mark.spread.least}
+				chances={mark.spread.distribution}
+				mean={mark.spread.mean}
+				fill={() => `var(--${mark.tone})`}
+				label={mark.name}
 			/>
 		{/if}
 	{/each}

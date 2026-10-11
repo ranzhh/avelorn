@@ -112,9 +112,7 @@
 		/>
 	{/each}
 	{#each drawing.labels as label}
-		<text class="label mono {label.tone ?? ''}" x={label.x} y={label.y} text-anchor={label.anchor}
-			>{label.text}</text
-		>
+		<text class="label mono" x={label.x} y={label.y} text-anchor={label.anchor}>{label.text}</text>
 	{/each}
 
 	{#each drawing.nodes as node}
@@ -267,12 +265,6 @@
 	.label {
 		font-size: 11px;
 		fill: #444;
-	}
-	.label.attacker {
-		fill: var(--attacker);
-	}
-	.label.target {
-		fill: var(--target);
 	}
 	.node {
 		cursor: pointer;
