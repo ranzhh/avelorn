@@ -13,10 +13,18 @@
 		needs,
 		signed,
 		type Font,
-		type Measure
+		type Measure,
+		type Placed
 	} from './layout';
 
-	let { lanes }: { lanes: FightLanes } = $props();
+	interface Props {
+		lanes: FightLanes;
+		selected: string | null;
+		/** A node picked, and the side of the drawing away from it, where a panel would not cover it. */
+		onselect: (id: string, away: 'left' | 'right') => void;
+	}
+
+	let { lanes, selected, onselect }: Props = $props();
 
 	const FONTS: Record<Font, string> = {
 		title: '600 13px system-ui, sans-serif',
@@ -37,6 +45,17 @@
 		{ offered: 'stand_and_shoot', value: 'stand-and-shoot', text: 'S&S', width: 52 },
 		{ offered: 'flee', value: null, text: 'Flee', width: 44 }
 	] as const;
+
+	function pick(node: Placed) {
+		const centre = node.box.x + node.box.width / 2;
+		onselect(node.id, centre > drawing.width / 2 ? 'left' : 'right');
+	}
+
+	function key(event: KeyboardEvent, node: Placed) {
+		if (event.key !== 'Enter' && event.key !== ' ') return;
+		event.preventDefault();
+		pick(node);
+	}
 </script>
 
 <svg
@@ -87,7 +106,14 @@
 
 	{#each drawing.nodes as node}
 		{@const { x, y, width, height } = node.box}
-		<g class="node {node.kind} {'lane' in node ? node.lane : ''}">
+		<g
+			class="node {node.kind} {'lane' in node ? node.lane : ''}"
+			class:on={selected === node.id}
+			role="button"
+			tabindex="0"
+			onclick={() => pick(node)}
+			onkeydown={(event) => key(event, node)}
+		>
 			{#if node.kind === 'unit'}
 				{@const unit = node.unit}
 				{@const top = y + node.glyph}
@@ -333,6 +359,10 @@
 	.label.target {
 		fill: var(--target);
 	}
+	.node {
+		cursor: pointer;
+		outline: none;
+	}
 	.card,
 	.terminal {
 		fill: var(--panel);
@@ -341,6 +371,13 @@
 	.card.short {
 		stroke: #9a9a9a;
 		stroke-dasharray: 4 3;
+	}
+	.node.on .card,
+	.node.on .terminal,
+	.node.on .pill,
+	.node:focus-visible .card {
+		stroke: var(--ink);
+		stroke-width: 2;
 	}
 	.attacker .spine,
 	.charge .spine,

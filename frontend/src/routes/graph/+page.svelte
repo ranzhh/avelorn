@@ -2,7 +2,7 @@
 	import { page } from '$app/state';
 	import { api, type FightBody, type FightLanes, type VolleyBody } from '$lib/api/client';
 	import { battle } from '$lib/battle.svelte';
-	import Lanes from '$lib/fight/Lanes.svelte';
+	import Fight from '$lib/fight/Fight.svelte';
 	import Graph from '$lib/graph/Graph.svelte';
 	import type { Program } from '$lib/graph/types';
 
@@ -36,7 +36,7 @@
 
 {#if fought}
 	{#await fought then lanes}
-		<div class="stage"><Lanes {lanes} /></div>
+		<Fight {lanes} />
 	{:catch refused}
 		<p class="refuse">{refused.message}</p>
 	{/await}
@@ -53,10 +53,3 @@
 		<p class="refuse">{refused.message}</p>
 	{/await}
 {/if}
-
-<style>
-	.stage {
-		overflow-x: auto;
-		border: 1px solid var(--line);
-	}
-</style>
