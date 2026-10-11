@@ -140,28 +140,22 @@ function total(values: number[]): number {
 	return values.reduce((sum, value) => sum + value, 0);
 }
 
-/** Whether neighbours run side by side: one step made for each side, or one group per part. */
-function alongside(a: Item, b: Item, sides: string[]): boolean {
-	const sideless = (item: Item) =>
-		pathOf(item)
-			.split('/')
-			.map((part) => (sides.includes(part) ? '' : part))
-			.join('/');
+/** Whether neighbours run side by side: one group for each part a unit attacks with. */
+function alongside(a: Item, b: Item): boolean {
 	const counter = (item: Item) =>
 		item.kind === 'block' && isRepeat(item.block) ? item.block.times : null;
-	return sideless(a) === sideless(b) || (counter(a) !== null && counter(a) === counter(b));
+	return counter(a) !== null && counter(a) === counter(b);
 }
 
-/** The items in runs that share a column, each run in side order. */
-function stages(items: Item[], sides: string[]): Item[][] {
+/** The items in runs that share a column. */
+function stages(items: Item[]): Item[][] {
 	const runs: Item[][] = [];
 	for (const item of items) {
 		const run = runs[runs.length - 1];
-		if (run && alongside(run[0], item, sides)) run.push(item);
+		if (run && alongside(run[0], item)) run.push(item);
 		else runs.push([item]);
 	}
-	const sideOf = (item: Item) => sides.findIndex((side) => pathOf(item).split('/').includes(side));
-	return runs.map((run) => run.sort((a, b) => sideOf(a) - sideOf(b)));
+	return runs;
 }
 
 /**
@@ -171,10 +165,10 @@ function stages(items: Item[], sides: string[]): Item[][] {
  * takes the next column. A run shorter than its frame is centred in it; a run
  * holding a frame keeps to whole rows.
  */
-function grid(items: Item[], open: (item: Item) => item is Group, sides: string[]) {
+function grid(items: Item[], open: (item: Item) => item is Group) {
 	const cells: Cell[] = [];
 	const span = (list: Item[]): Span => {
-		const runs = stages(list, sides).map((run) => run.map(size));
+		const runs = stages(list).map((run) => run.map(size));
 		return {
 			cols: total(runs.map((sizes) => Math.max(...sizes.map((each) => each.cols)))),
 			rows: Math.max(...runs.map((sizes) => total(sizes.map((each) => each.rows))))
@@ -182,7 +176,7 @@ function grid(items: Item[], open: (item: Item) => item is Group, sides: string[
 	};
 	const size = (item: Item): Span => (open(item) ? span(item.items) : { cols: 1, rows: 1 });
 	const put = (list: Item[], col: number, row: number, rows: number, within: Cell[]) => {
-		for (const run of stages(list, sides)) {
+		for (const run of stages(list)) {
 			const sizes = run.map(size);
 			const spare = (rows - total(sizes.map((each) => each.rows))) / 2;
 			let at = row + (run.some(open) ? Math.floor(spare) : spare);
@@ -235,9 +229,7 @@ function summaryOf(group: Group, sides: string[]): Summary[] {
 				.flatMap((step) => step.edge.readings);
 		const every = group.items.flatMap(read);
 		if (!every.length) return [];
-		const last = stages(group.items, sides).findLast((run) =>
-			run.some((item) => read(item).length)
-		);
+		const last = stages(group.items).findLast((run) => run.some((item) => read(item).length));
 		const ends = last!.map((item) => read(item).at(-1)).filter((each) => each !== undefined);
 		return [{ side, text: added(ends), every: every.map((each) => caption([each])).join(', ') }];
 	});
@@ -510,7 +502,7 @@ export function layout(program: Program, collapsed: string[], metrics = METRICS)
 	const { node, gap } = metrics;
 	const open = (item: Item): item is Group =>
 		item.kind === 'block' && !collapsed.includes(item.block.path);
-	const { cells, cols, rows } = grid(tree(program, undefined), open, program.sides);
+	const { cells, cols, rows } = grid(tree(program, undefined), open);
 	const columnOf = new Map(cells.map((cell) => [pathOf(cell.item), cell.col]));
 	const standsFor = new Map<string, string>();
 	for (const cell of cells) {

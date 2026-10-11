@@ -1,17 +1,23 @@
 <script lang="ts">
 	import Spread from '$lib/charts/Spread.svelte';
 	import { percent } from '$lib/charts/scale';
-	import type { FightLanes, LandedRule, StandingAt } from '$lib/api/client';
+	import type { FightBody, FightLanes, LandedRule, StandingAt } from '$lib/api/client';
+	import Unit from './Unit.svelte';
+	import { redeployed, seat } from './body';
 	import { other, type Lane } from './layout';
 
 	interface Props {
 		lanes: FightLanes;
+		body: FightBody;
 		/** The node open in the panel, by the id the drawing gives it. */
 		id: string;
+		/** Whether a unit's editor is open, rather than only its rules. */
+		editing: boolean;
+		onedit: (body: FightBody) => void;
 		onclose: () => void;
 	}
 
-	let { lanes, id, onclose }: Props = $props();
+	let { lanes, body, id, editing, onedit, onclose }: Props = $props();
 
 	interface Shown {
 		title: string;
@@ -83,6 +89,8 @@
 			]
 		};
 	});
+
+	const editable = $derived(id.startsWith('unit:') && editing ? (id.split(':')[1] as Lane) : null);
 </script>
 
 <aside class="inspect">
@@ -90,6 +98,17 @@
 		<h3>{shown.title}</h3>
 		<button class="btn btn-ghost btn-sm" aria-label="close" onclick={onclose}>×</button>
 	</header>
+
+	{#if editable}
+		{@const lane = editable}
+		{#key lane}
+			<Unit
+				deployment={body[seat(body, lane)]}
+				frontage={lanes.units[lane].frontage}
+				onchange={(change) => onedit(redeployed(body, lane, change))}
+			/>
+		{/key}
+	{/if}
 
 	{#if shown.rules.length}
 		<h2>rules</h2>
