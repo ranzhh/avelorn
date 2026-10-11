@@ -111,7 +111,7 @@
     "/fight": {
       "post": {
         "summary": "Resolve one round of close combat between two units",
-        "description": "Deploy two units, fight one round, and score it.\n\nOne round: both sides strike in Initiative order, the Wounds tally into a\ncombat result, and the loser takes its Break test. A charge is met with\nthe reaction its target declares: a Stand & Shoot fires before the round\nand thins the charger, and its Wounds count toward the target's combat\nresult. What a round does not cover is the rest of the engagement -- a\npursuit, a second round.\n\nA side the corpus cannot field is refused before any dice are walked: an\nunknown slug is a 404, and a size, option or weapon the datasheet does not\nallow is a 422 naming which side asked for it, as is a Stand & Shoot by a\nside that carries no missile weapon.\n\nReturns:\n    The round resolved: each side's casualty distribution and Break-test\n    outcomes, who won, and every rule the engine held without applying.",
+        "description": "Deploy two units, fight one round, and score it.\n\nOne round: both sides strike in Initiative order, the Wounds tally into a\ncombat result, and the loser takes its Break test. A charge is met with\nthe reaction its target declares: a Stand & Shoot fires before the round\nand thins the charger, and its Wounds count toward the target's combat\nresult. ``p_charge_reaches`` is the chance the Charge roll reaches the\ntarget; the round is fought only when it does, so every figure of the\nround is conditional on the charge reaching. What a round does not cover\nis the rest of the engagement -- a pursuit, a second round.\n\nA side the corpus cannot field is refused before any dice are walked: an\nunknown slug is a 404, and a size, option or weapon the datasheet does not\nallow is a 422 naming which side asked for it, as is a Stand & Shoot by a\nside that carries no missile weapon.\n\nReturns:\n    The round resolved: the chance the charge reaches, each side's\n    casualty distribution and Break-test outcomes, who won, and every rule\n    the engine held without applying.",
         "operationId": "fight_fight_post",
         "requestBody": {
           "content": {
@@ -150,7 +150,7 @@
     "/graph/fight": {
       "post": {
         "summary": "Draw the round a fight resolves in two lanes",
-        "description": "Fight the round ``/fight`` fights, and draw it in a lane for each side.\n\nThe charger takes the attacker's lane, above its target's; with no charge,\nside a does.\n\nReturns:\n    The lanes, read off the lane ``/fight`` reports on.",
+        "description": "Fight the round ``/fight`` fights, and draw it in a lane for each side.\n\nThe charger takes the attacker's lane, above its target's; with no charge,\nside a does. ``charge.reaches`` is the chance the Charge roll reaches the\ntarget, ``full_inches`` away. The Stand & Shoot is fired before the roll,\nwhatever it gives; the round is fought only when the charge reaches, so\nevery figure from the strikes on is conditional on the charge reaching.\n\nReturns:\n    The lanes, read off the lane ``/fight`` reports on.",
         "operationId": "graph_fight_graph_fight_post",
         "requestBody": {
           "content": {
@@ -921,7 +921,7 @@
           "full_inches"
         ],
         "title": "ChargedBy",
-        "description": "A charge into the round: who made it, how far it carried, which arc it struck.\n\n``reaction`` is how the charged side met it: a Hold, or a Stand & Shoot\nfired with the last missile weapon it carries."
+        "description": "A charge into the round: who made it, the inches to the enemy, which arc it struck.\n\n``reaction`` is how the charged side met it: a Hold, or a Stand & Shoot\nfired with the last missile weapon it carries."
       },
       "ChosenOption": {
         "properties": {
@@ -1736,7 +1736,7 @@
           "not_modelled"
         ],
         "title": "FightLanes",
-        "description": "A round of close combat in two lanes, the attacker's above the target's.\n\n``strikes`` run in the order they are struck, Impact Hits first and Stomp\nAttacks last, and a step in which nobody strikes is left out. The\nbattlefield, the charge and the reaction are None for a fight with no\ncharge, and the volley for one met with a Hold. ``not_modelled`` names the\nrules held without applying."
+        "description": "A round of close combat in two lanes, the attacker's above the target's.\n\n``strikes`` run in the order they are struck, Impact Hits first and Stomp\nAttacks last, and a step in which nobody strikes is left out. The\nbattlefield, the charge and the reaction are None for a fight with no\ncharge, and the volley for one met with a Hold. The round is fought only\nwhen the charge reaches, so every figure from the strikes on is\nconditional on it reaching. ``not_modelled`` names the rules held without\napplying."
       },
       "FightReport": {
         "properties": {
@@ -1757,6 +1757,17 @@
           "p_b_wins": {
             "type": "number",
             "title": "P B Wins"
+          },
+          "p_charge_reaches": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P Charge Reaches"
           },
           "first_striker": {
             "anyOf": [
@@ -1792,12 +1803,13 @@
           "p_a_wins",
           "p_draw",
           "p_b_wins",
+          "p_charge_reaches",
           "first_striker",
           "margin",
           "not_modelled"
         ],
         "title": "FightReport",
-        "description": "One round of close combat, resolved exactly.\n\nThe engine works in rationals; these are floats, because JSON has no\nother number and a caller plotting a distribution wants one. The exact\nvalues stay reachable from Python.\n\n``first_striker`` names the side Initiative put first, or is ``None`` when\nequal Initiative made the blows simultaneous -- a Great Weapon's Strike\nLast is why a higher-Initiative unit can still swing second.\n``not_modelled`` names the rules the round held without applying, so a\nfigure is never quietly wrong."
+        "description": "One round of close combat, resolved exactly.\n\nThe engine works in rationals; these are floats, because JSON has no\nother number and a caller plotting a distribution wants one. The exact\nvalues stay reachable from Python.\n\n``first_striker`` names the side Initiative put first, or is ``None`` when\nequal Initiative made the blows simultaneous -- a Great Weapon's Strike\nLast is why a higher-Initiative unit can still swing second.\n``p_charge_reaches`` is the chance the charge's Charge roll reaches its\ntarget, or ``None`` for a fight with no charge; the round is fought only\nwhen it reaches, so every other figure is conditional on it reaching.\n``not_modelled`` names the rules the round held without applying, so a\nfigure is never quietly wrong."
       },
       "FightSide": {
         "properties": {
@@ -2131,14 +2143,7 @@
             "$ref": "#/components/schemas/ChargeArc"
           },
           "reaches": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
+            "type": "number",
             "title": "Reaches"
           },
           "rules": {
@@ -2158,7 +2163,7 @@
           "rules"
         ],
         "title": "LaneCharge",
-        "description": "The charge, and the chance its roll reaches; None while the roll is not modelled."
+        "description": "The charge, and the chance its Charge roll reaches the target ``distance`` away."
       },
       "LaneReaction": {
         "properties": {

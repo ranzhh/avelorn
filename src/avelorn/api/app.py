@@ -22,6 +22,7 @@ from typing import Annotated, Literal, NamedTuple
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from avelorn.tow.charge import ChargeRoll
 from avelorn.tow.contingent import Charge, ChargeArc, Contingent, Movement
 from avelorn.tow.coverage import Coverage, coverage
 from avelorn.tow.data import TOWRepository, default_repository
@@ -165,7 +166,7 @@ class Deployment(BaseModel):
 
 
 class ChargedBy(BaseModel):
-    """A charge into the round: who made it, how far it carried, which arc it struck.
+    """A charge into the round: who made it, the inches to the enemy, which arc it struck.
 
     ``reaction`` is how the charged side met it: a Hold, or a Stand & Shoot
     fired with the last missile weapon it carries.
@@ -197,8 +198,10 @@ def fight(request: Fight, data: Corpus) -> FightReport:
     combat result, and the loser takes its Break test. A charge is met with
     the reaction its target declares: a Stand & Shoot fires before the round
     and thins the charger, and its Wounds count toward the target's combat
-    result. What a round does not cover is the rest of the engagement -- a
-    pursuit, a second round.
+    result. ``p_charge_reaches`` is the chance the Charge roll reaches the
+    target; the round is fought only when it does, so every figure of the
+    round is conditional on the charge reaching. What a round does not cover
+    is the rest of the engagement -- a pursuit, a second round.
 
     A side the corpus cannot field is refused before any dice are walked: an
     unknown slug is a 404, and a size, option or weapon the datasheet does not
@@ -206,12 +209,15 @@ def fight(request: Fight, data: Corpus) -> FightReport:
     side that carries no missile weapon.
 
     Returns:
-        The round resolved: each side's casualty distribution and Break-test
-        outcomes, who won, and every rule the engine held without applying.
+        The round resolved: the chance the charge reaches, each side's
+        casualty distribution and Break-test outcomes, who won, and every rule
+        the engine held without applying.
     """
     engaged = _fought(request, data)
     seat = engaged.seat
-    return FightReport.of(engaged.sides[seat], engaged.sides[seat.other], engaged.fight, seat)
+    return FightReport.of(
+        engaged.sides[seat], engaged.sides[seat.other], engaged.fight, seat, engaged.rolled
+    )
 
 
 @app.post("/graph/fight", summary="Draw the round a fight resolves in two lanes")
@@ -219,25 +225,29 @@ def graph_fight(request: Fight, data: Corpus) -> FightLanes:
     """Fight the round ``/fight`` fights, and draw it in a lane for each side.
 
     The charger takes the attacker's lane, above its target's; with no charge,
-    side a does.
+    side a does. ``charge.reaches`` is the chance the Charge roll reaches the
+    target, ``full_inches`` away. The Stand & Shoot is fired before the roll,
+    whatever it gives; the round is fought only when the charge reaches, so
+    every figure from the strikes on is conditional on the charge reaching.
 
     Returns:
         The lanes, read off the lane ``/fight`` reports on.
     """
     engaged = _fought(request, data)
-    return FightLanes.of(engaged.sides, engaged.fight, engaged.stood)
+    return FightLanes.of(engaged.sides, engaged.fight, engaged.rolled, engaged.stood)
 
 
 class _Engaged(NamedTuple):
     """Two sides in the seats a round puts them in, the charger the attacker.
 
-    ``seat`` is the seat side a fights from, and ``stood`` the Stand & Shoot
-    the target met the charge with.
+    ``seat`` is the seat side a fights from, ``rolled`` the charge's Charge
+    roll, and ``stood`` the Stand & Shoot the target met the charge with.
     """
 
     seat: Side
     sides: Mapping[Side, Contingent]
     fight: Round
+    rolled: ChargeRoll | None
     stood: Fired | None
 
 
@@ -248,14 +258,14 @@ def _fought(request: Fight, data: TOWRepository) -> _Engaged:
     charge = request.charge
     if charge is None:
         sides = {Side.ATTACKER: a, Side.TARGET: b}
-        return _Engaged(Side.ATTACKER, sides, game.combat.fight(a, b), None)
+        return _Engaged(Side.ATTACKER, sides, game.combat.fight(a, b), None, None)
     seat, charger, target, label = (
         (Side.ATTACKER, a, b, "side b") if charge.side == "a" else (Side.TARGET, b, a, "side a")
     )
     engagement = game.movement.charge(charger, target, Charge(charge.full_inches, charge.arc))
     stood = engagement.react(_reaction(charge.reaction, target, label))
     sides = {Side.ATTACKER: engagement.a, Side.TARGET: engagement.b}
-    return _Engaged(seat, sides, game.combat.fight(engagement), stood)
+    return _Engaged(seat, sides, game.combat.fight(engagement), engagement.rolled, stood)
 
 
 def _reaction(declared: Reacting, target: Contingent, label: str) -> ChargeReaction:

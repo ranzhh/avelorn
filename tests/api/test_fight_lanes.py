@@ -1,6 +1,7 @@
 """A round of combat drawn in two lanes, served for the body /fight resolves."""
 
 from collections.abc import Iterator
+from fractions import Fraction
 
 import pytest
 from fastapi.testclient import TestClient
@@ -43,6 +44,31 @@ def served(client: TestClient, route: str, body: dict) -> dict:
     response = client.post(route, json=body)
     assert response.status_code == 200, response.json()
     return response.json()
+
+
+@pytest.mark.parametrize(
+    ("inches", "reaches"),
+    [
+        pytest.param(7, Fraction(35, 36), id="needs-a-2"),
+        pytest.param(11, Fraction(11, 36), id="needs-a-6"),
+        pytest.param(12, Fraction(0), id="past-the-maximum"),
+    ],
+)
+def test_the_charge_reaches_on_the_higher_of_two_dice(
+    client: TestClient, inches: int, reaches: Fraction
+) -> None:
+    """Elven Spearmen move 5 and add the higher of two D6 to it.
+
+    At 7in the higher die needs a 2, failing only on two 1s: 1 - (1/6)^2. At
+    11in it needs a 6 on either die: 1 - (5/6)^2. 12in is past the maximum
+    possible charge range of 5 + 6. Both routes report the chance.
+    """
+    charge = {**SPEARMEN_CHARGE_ARCHERS["charge"], "full_inches": inches}
+    body = {**SPEARMEN_CHARGE_ARCHERS, "charge": charge}
+    report = served(client, "/fight", body)
+    lanes = served(client, "/graph/fight", body)
+
+    assert [report["p_charge_reaches"], lanes["charge"]["reaches"]] == [float(reaches)] * 2
 
 
 @pytest.mark.parametrize("body", [PRINCES_CHARGE_DWARFS, SPEARMEN_CHARGE_ARCHERS])
