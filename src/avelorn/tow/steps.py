@@ -55,8 +55,7 @@ from avelorn.tow.kernels import (
     wound_target,
 )
 from avelorn.tow.schema.effect import Operation, RerollOn
-from avelorn.tow.schema.quantity import Quantity
-from avelorn.tow.schema.rule import DiceQuantity
+from avelorn.tow.schema.quantity import DiceQuantity, Quantity
 from avelorn.tow.schema.side import Side
 from avelorn.tow.schema.step import StepKind, StepSequence
 from avelorn.tow.schema.unit import Characteristic
