@@ -36,3 +36,12 @@ export type FightSide = FightReport['a'];
 export type VolleyBody = paths['/volley']['post']['requestBody']['content']['application/json'];
 export type VolleyReport =
 	paths['/volley']['post']['responses'][200]['content']['application/json'];
+
+export type FightLanes =
+	paths['/graph/fight']['post']['responses'][200]['content']['application/json'];
+export type LaneUnit = components['schemas']['LaneUnit'];
+export type Strike = components['schemas']['Strike'];
+export type StandingAt = components['schemas']['StandingAt'];
+export type Needed = components['schemas']['Needed'];
+export type LandedRule = components['schemas']['LandedRule'];
+export type ChargeArc = components['schemas']['ChargeArc'];
