@@ -6,13 +6,13 @@
 	import Graph from '$lib/graph/Graph.svelte';
 	import type { Program } from '$lib/graph/types';
 
-	/** Ask for the program the table's last resolution ran on, posting the body it sent. */
-	async function draw(last: Resolution): Promise<Program> {
-		const client = api(page.url.origin, fetch);
-		const { data: program, error: refused } =
-			last.action === 'fight'
-				? await client.POST('/graph/fight', { body: last.body })
-				: await client.POST('/graph/volley', { body: last.body });
+	/** Ask for the program the table's last volley ran on, posting the body it sent. */
+	async function draw(last: Resolution): Promise<Program | null> {
+		if (last.action === 'fight') return null;
+		const { data: program, error: refused } = await api(page.url.origin, fetch).POST(
+			'/graph/volley',
+			{ body: last.body }
+		);
 		if (!program) {
 			throw new Error(typeof refused?.detail === 'string' ? refused.detail : 'could not draw that');
 		}
@@ -38,7 +38,7 @@
 	{#await drawing}
 		<p class="meta">drawing…</p>
 	{:then program}
-		<Graph {program} />
+		{#if program}<Graph {program} />{/if}
 	{:catch refused}
 		<p class="refuse">{refused.message}</p>
 	{/await}

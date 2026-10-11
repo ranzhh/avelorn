@@ -481,7 +481,7 @@ def _side(side: Contingent, fight: Fight, seat: Side) -> FightSide:
         initiative=fight.initiative(seat),
         rank_bonus=fight.rank_bonus(seat),
         unit_strength=fight.unit_strength(seat),
-        casualties=_listed(casualties),
+        casualties=by_count(casualties),
         expected_casualties=float(casualties.expect(Fraction)),
         gives_ground=float(settled.get(BreakTest.GIVES_GROUND, 0)),
         falls_back=float(settled.get(BreakTest.FALLS_BACK_IN_GOOD_ORDER, 0)),
@@ -570,8 +570,8 @@ class VolleyReport(BaseModel):
             armour_save=volley.needed("make-armour-saves"),
             ward_save=volley.needed("ward-saves"),
             p_unsaved=float(volley.p_unsaved),
-            wounds=_listed(volley.unsaved),
-            casualties=_listed(volley.casualties),
+            wounds=by_count(volley.unsaved),
+            casualties=by_count(volley.casualties),
             expected_wounds=float(volley.unsaved.expect(Fraction)),
             expected_casualties=float(volley.casualties.expect(Fraction)),
             panic=Panic(
@@ -586,7 +586,12 @@ class VolleyReport(BaseModel):
         )
 
 
-def _listed(distribution: Distribution[int]) -> list[float]:
+def by_count(distribution: Distribution[int]) -> list[float]:
+    """Each count's chance, from none to the most it reaches.
+
+    Returns:
+        The chance of each count, by count.
+    """
     top = max(distribution.mass, default=0)
     return [float(distribution.mass.get(count, 0)) for count in range(top + 1)]
 
