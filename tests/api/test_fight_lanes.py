@@ -250,6 +250,16 @@ def test_the_command_models_are_no_options_of_the_lane(client: TestClient) -> No
     ]
 
 
+def test_a_unit_stands_on_its_datasheet_s_bases(client: TestClient) -> None:
+    """Six Dragon Princes on 30x60mm bases charge twenty Dwarf Warriors on 25x25mm bases."""
+    units = served(client, "/graph/fight", PRINCES_CHARGE_ARMED_DWARFS)["units"]
+
+    assert [unit["base"] for unit in units.values()] == [
+        {"width_mm": 30, "depth_mm": 60},
+        {"width_mm": 25, "depth_mm": 25},
+    ]
+
+
 def test_each_champion_a_unit_buys_stands_in_its_command(client: TestClient) -> None:
     """A Ship's Company buys both its champions, the Midshipman and the Bosun.
 

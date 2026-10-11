@@ -24,7 +24,7 @@ from avelorn.tow.fielding import Part
 from avelorn.tow.programs import At, Evaluated, held_throughout
 from avelorn.tow.round import Fight
 from avelorn.tow.schema.side import Side
-from avelorn.tow.schema.unit import OptionKind
+from avelorn.tow.schema.unit import BaseSize, OptionKind
 from avelorn.tow.steps import (
     AUTOMATIC_HITS,
     NO_ROLL,
@@ -108,7 +108,8 @@ class LaneUnit(_Drawn):
     ``options`` are the ones it bought besides its command models, which
     ``command`` gives and which stand in its front rank. ``held`` names what it
     took up at its weapon choice: the weapon in hand, and the shield when it
-    uses one. ``rules`` land on the steps it takes before anyone strikes: its
+    uses one. ``base`` is each model's base, None where the datasheet prints
+    none. ``rules`` land on the steps it takes before anyone strikes: its
     weapon choice, Who Can Fight, Who Strikes First.
     """
 
@@ -120,6 +121,7 @@ class LaneUnit(_Drawn):
     frontage: int
     ranks: int
     command: list[Command]
+    base: BaseSize | None
     rules: list[LandedRule]
 
 
@@ -431,6 +433,7 @@ def _unit(fight: Fight, contingent: Contingent, side: Side) -> LaneUnit:
             for option in chosen
             if option.kind is kind
         ],
+        base=unit.base_size,
         rules=_rules(fight, *(f"{side}/{step}" for step in _READYING)),
     )
 
