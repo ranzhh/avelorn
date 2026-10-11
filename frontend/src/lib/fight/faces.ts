@@ -1,4 +1,4 @@
-import type { FightLanes, LandedRule, LaneUnit, Needed, Strike } from '$lib/api/client';
+import type { FightLanes, LandedRule, LaneUnit, Needed, Spread, Strike } from '$lib/api/client';
 import { percent } from '$lib/charts/scale';
 
 /** A lane of the drawing: the charger's above, its target's below. */
@@ -24,12 +24,14 @@ export const INSET = 14;
 export const UNIT = { least: 184, editor: 248, chips: 34, chip: 20, gap: 4, bottom: 14 };
 /** Pixels to the millimetre: a formation stands on its bases at this scale. */
 const SCALE = 0.6;
-export const STRIKE = { least: 150, inset: 12, header: 26, rule: 92, row: 20 };
+export const STRIKE = { least: 150, inset: 12, header: 26, row: 18 };
 const CHARGE = { width: 170, height: 76 };
 const RESULT = { least: 150, height: 128 };
 const BREAK = { width: 190, height: 56 };
 const PILL = { least: 50, height: 26 };
 const RULE = { row: 20, box: 11, side: 8 };
+/** A chart of a count's chances, and how wide a card must be to draw one. */
+const CHART = { height: 80, least: 220 };
 
 /** The letter drawn in the square of a command model of each kind. */
 export const MARK: Record<LaneUnit['command'][number]['kind'], string> = {
@@ -54,7 +56,14 @@ export type Mark =
 	| { kind: 'model'; box: Box; command: LaneUnit['command'][number] | null }
 	| { kind: 'divider'; y: number }
 	| { kind: 'shares'; box: Box; shares: Share[] }
-	| { kind: 'rule'; x: number; y: number; rule: LandedRule };
+	| { kind: 'rule'; x: number; y: number; rule: LandedRule }
+	| {
+			kind: 'chart';
+			name: string;
+			box: Box;
+			spread: Spread;
+			tone: Lane;
+	  };
 
 /**
  * What a card shows, and how big it is.
@@ -98,8 +107,6 @@ export function count(value: number): string {
 	return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
 }
 
-export const mean = (value: number): string => value.toFixed(2);
-
 /** The scores the rolls need, on two lines: To Hit and To Wound, then the saves. */
 export function needs(needed: Needed): [string, string] {
 	const rolls = [
@@ -114,15 +121,21 @@ export function needs(needed: Needed): [string, string] {
 	return [line(rolls), line(saves)];
 }
 
-export function partRow(part: Strike['parts'][number]): [string, string] {
-	const many = count(part.models.mean) !== '1' ? ` ×${count(part.models.mean)}` : '';
-	return [`${part.name}${many}`, `${count(part.attacks.mean)} att → ${mean(part.unsaved.mean)}`];
+/** A count over every outcome: plain when it cannot vary, else its mean ± its standard deviation. */
+export function spread({ mean, sd }: Pick<Spread, 'mean' | 'sd'>): string {
+	if (sd === 0) return count(mean);
+	const figure = (value: number) => value.toFixed(Math.abs(value) < 1 ? 2 : 1);
+	return `${figure(mean)} ± ${figure(sd)}`;
 }
 
-/** Who strikes: a lone part by name, else the unit, with a row for each part. */
-export function striker(strike: Strike, unit: string): { title: string; rows: [string, string][] } {
-	const rows = strike.parts.map(partRow);
-	return rows.length === 1 ? { title: rows[0][0], rows: [] } : { title: unit, rows };
+/** A part of a strike by name, with how many strike where that is not always one. */
+function part({ name, models }: Strike['parts'][number]): string {
+	return models.sd === 0 && models.mean === 1 ? name : `${name} ×${spread(models)}`;
+}
+
+/** Who strikes: a lone part, else the unit. */
+export function striker(strike: Strike, unit: string): string {
+	return strike.parts.length === 1 ? part(strike.parts[0]) : unit;
 }
 
 const text = (
@@ -257,41 +270,92 @@ export function chargeFace(
 	return ruled(face, rules, INSET);
 }
 
+/** Figures in columns under their heads, each row named. */
+interface Table {
+	heads: string[];
+	rows: [string, ...string[]][];
+}
+
+function tableWidth({ heads, rows }: Table, measure: Measure): number {
+	const name = Math.max(...rows.map(([first]) => measure(first, 'text')));
+	const columns = heads.map((head, index) =>
+		Math.max(measure(head, 'small'), ...rows.map((row) => measure(row[index + 1], 'mono')))
+	);
+	return name + columns.reduce((sum, column) => sum + 16 + column, 0);
+}
+
+/** The table's marks from `y` down, and the baseline of its last row. */
+function tabled({ heads, rows }: Table, width: number, y: number, measure: Measure) {
+	const marks: Mark[] = [];
+	let right = width - STRIKE.inset;
+	for (let index = heads.length - 1; index >= 0; index -= 1) {
+		const values = rows.map((row) => row[index + 1]);
+		marks.push(text(right, y, heads[index], 'small', 'end'));
+		values.forEach((value, at) =>
+			marks.push(text(right, y + (at + 1) * STRIKE.row, value, 'mono', 'end'))
+		);
+		const column = Math.max(
+			measure(heads[index], 'small'),
+			...values.map((value) => measure(value, 'mono'))
+		);
+		right -= column + 16;
+	}
+	rows.forEach(([name], at) =>
+		marks.push(text(STRIKE.inset, y + (at + 1) * STRIKE.row, name, 'text'))
+	);
+	return { marks, last: y + rows.length * STRIKE.row };
+}
+
+/** What a header card shows open: its parts, the chances of its counts, the rules on it. */
+interface Opened {
+	table: Table | null;
+	charts: [string, Spread][];
+	rules: LandedRule[];
+}
+
+/** A card under a header band: four lines shut, and its parts, charts and rules open. */
 function headed(
 	title: string,
-	first: string,
-	needed: Needed,
-	rows: [string, string][],
-	rules: LandedRule[],
+	lines: [string, string, string, string],
+	tone: Lane,
+	opened: Opened | null,
 	measure: Measure
 ): Face {
-	const lines = needs(needed);
 	const pad = 2 * STRIKE.inset;
+	const rules = opened?.rules ?? [];
+	const table = opened?.table ?? null;
 	const width = Math.max(
 		STRIKE.least,
+		opened ? CHART.least : 0,
 		ruleWidth(rules, STRIKE.inset, measure),
+		table ? pad + tableWidth(table, measure) : 0,
 		pad + measure(title, 'title'),
-		...lines.map((line) => pad + measure(line, 'mono')),
-		...rows.map(
-			([name, figures]) => pad + measure(name, 'text') + STRIKE.inset + measure(figures, 'mono')
-		)
+		...lines.map((line, index) => pad + measure(line, index % 3 ? 'mono' : 'text'))
 	);
 	const marks: Mark[] = [
 		text(STRIKE.inset, 18, title, 'title'),
-		text(STRIKE.inset, 46, first, 'text'),
-		text(STRIKE.inset, 65, lines[0], 'mono'),
-		text(STRIKE.inset, 82, lines[1], 'mono')
+		...lines.map((line, index) =>
+			text(STRIKE.inset, 46 + index * 19, line, index % 3 ? 'mono' : 'text')
+		)
 	];
-	if (rows.length) marks.push({ kind: 'divider', y: STRIKE.rule });
-	rows.forEach(([name, figures], index) => {
-		const y = STRIKE.rule + 18 + index * STRIKE.row;
-		marks.push(
-			text(STRIKE.inset, y, name, 'text'),
-			text(width - STRIKE.inset, y, figures, 'mono', 'end')
-		);
-	});
-	const height = rows.length ? STRIKE.rule + rows.length * STRIKE.row + 12 : STRIKE.rule;
-	return ruled({ chrome: 'header', width, height, marks }, rules, STRIKE.inset);
+	let y = 46 + 3 * 19 + 13;
+	if (opened) {
+		y -= 4;
+		marks.push({ kind: 'divider', y });
+		if (table) {
+			const placed = tabled(table, width, y + 16, measure);
+			marks.push(...placed.marks);
+			y = placed.last + 6;
+		}
+		for (const [name, counted] of opened.charts) {
+			marks.push(text(STRIKE.inset, y + 15, name, 'small'));
+			const box = { x: STRIKE.inset, y: y + 26, width: width - pad, height: CHART.height };
+			marks.push({ kind: 'chart', name, box, spread: counted, tone });
+			y = box.y + box.height;
+		}
+		y += 12;
+	}
+	return ruled({ chrome: 'header', width, height: y, marks }, rules, STRIKE.inset);
 }
 
 export function volleyFace(
@@ -300,25 +364,80 @@ export function volleyFace(
 	measure: Measure,
 	open: boolean
 ): Face {
-	const rules = open ? volley.rules : [];
-	return headed(shooter, `${volley.shots} shots`, volley.needed, [], rules, measure);
+	const [rolls, saves] = needs(volley.needed);
+	const lines = [
+		`${volley.shots} shots`,
+		rolls,
+		saves,
+		`${spread(volley.casualties)} casualties`
+	] as const;
+	const opened = open && {
+		table: {
+			heads: ['shots', 'unsaved'],
+			rows: volley.parts.map((part): [string, ...string[]] => [
+				part.name,
+				String(part.shots),
+				spread(part.unsaved)
+			])
+		},
+		charts: [['casualties', volley.casualties]] as [string, Spread][],
+		rules: volley.rules
+	};
+	return headed(shooter, [...lines], 'target', opened || null, measure);
 }
 
 export function strikeFace(strike: Strike, unit: string, measure: Measure, open: boolean): Face {
-	const { title, rows } = striker(strike, unit);
-	const attacks = `${count(strike.attacks.mean)} attacks`;
-	return headed(title, attacks, strike.needed, rows, open ? strike.rules : [], measure);
+	const [rolls, saves] = needs(strike.needed);
+	const lines = [
+		`${spread(strike.attacks)} attacks`,
+		rolls,
+		saves,
+		`${spread(strike.unsaved)} unsaved`
+	] as const;
+	const charts: [string, Spread][] = [['unsaved', strike.unsaved]];
+	if (strike.attacks.sd > 0) charts.push(['attacks', strike.attacks]);
+	const opened = open && {
+		table:
+			strike.parts.length > 1
+				? {
+						heads: ['attacks', 'unsaved'],
+						rows: strike.parts.map((each): [string, ...string[]] => [
+							part(each),
+							spread(each.attacks),
+							spread(each.unsaved)
+						])
+					}
+				: null,
+		charts,
+		rules: strike.rules
+	};
+	const title = striker(strike, unit);
+	return headed(title, [...lines], strike.side as Lane, opened || null, measure);
 }
 
-/** A lane's models standing: the count it fielded at the start, the mean after. */
-export function pillFace(models: number, start: boolean, measure: Measure): Face {
-	const shown = start ? String(models) : mean(models);
-	const width = Math.max(PILL.least, measure(shown, 'mono') + 24);
+/** A lane's models standing: shut, a pill of the count; open, a card charting its chances. */
+export function pillFace(models: Spread, lane: Lane, measure: Measure, open: boolean): Face {
+	const shown = spread(models);
+	if (!open) {
+		const width = Math.max(PILL.least, measure(shown, 'mono') + 24);
+		return {
+			chrome: 'pill',
+			width,
+			height: PILL.height,
+			marks: [text(width / 2, 17, shown, 'mono', 'middle')]
+		};
+	}
+	const width = Math.max(CHART.least, 3 * STRIKE.inset + measure(shown, 'mono') + 40);
+	const box = { x: STRIKE.inset, y: 34, width: width - 2 * STRIKE.inset, height: CHART.height };
 	return {
-		chrome: 'pill',
+		chrome: 'card',
 		width,
-		height: PILL.height,
-		marks: [text(width / 2, 17, shown, 'mono', 'middle')]
+		height: box.y + box.height + 12,
+		marks: [
+			text(STRIKE.inset, 20, 'models', 'small'),
+			text(width - STRIKE.inset, 20, shown, 'mono', 'end'),
+			{ kind: 'chart', name: 'models', box, spread: models, tone: lane }
+		]
 	};
 }
 
@@ -337,7 +456,7 @@ export function resultFace(lanes: FightLanes, measure: Measure, open: boolean): 
 			(lane) =>
 				3 * STRIKE.inset +
 				measure(lanes.units[lane].name, 'text') +
-				measure(mean(result.scores[lane].score.mean), 'mono')
+				measure(spread(result.scores[lane].score), 'mono')
 		),
 		2 * STRIKE.inset + 3 * (18 + Math.max(...shares.map(([, p]) => measure(percent(p), 'mono'))))
 	);
@@ -346,7 +465,7 @@ export function resultFace(lanes: FightLanes, measure: Measure, open: boolean): 
 		const y = 45 + index * 19;
 		marks.push(
 			text(STRIKE.inset, y, lanes.units[lane].name, 'text'),
-			text(width - STRIKE.inset, y, mean(result.scores[lane].score.mean), 'mono', 'end')
+			text(width - STRIKE.inset, y, spread(result.scores[lane].score), 'mono', 'end')
 		);
 	});
 	const box = { x: STRIKE.inset, y: 78, width: width - 2 * STRIKE.inset, height: 12 };

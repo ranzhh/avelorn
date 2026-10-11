@@ -4,7 +4,6 @@ import {
 	LANES,
 	breakFace,
 	chargeFace,
-	mean,
 	pillFace,
 	resultFace,
 	strikeFace,
@@ -95,7 +94,6 @@ export interface Edge {
 
 export interface Label extends Point {
 	text: string;
-	tone?: Lane;
 	anchor: 'start' | 'middle' | 'end';
 }
 
@@ -174,11 +172,8 @@ export function draw(
 	const eventFace = (lane: Lane, event: Event): Face => {
 		if (event.kind === 'volley') return volleyCard!;
 		if (event.kind === 'strike') return strikeCards[event.strike];
-		return pillFace(
-			lanes.standing[lane][event.standing].models.mean,
-			event.standing === 0,
-			measure
-		);
+		const id = `pill:${lane}:${event.standing}`;
+		return pillFace(lanes.standing[lane][event.standing].models, lane, measure, open === id);
 	};
 	const eventWidth = (lane: Lane, event: Event | null) =>
 		event ? eventFace(lane, event).width : 0;
@@ -219,7 +214,6 @@ export function draw(
 	bandTop.target = bandTop.attacker + bandHeight.attacker + MIDDLE;
 	const track = (lane: Lane) => bandTop[lane] + bandHeight[lane] / 2;
 	const between = (track('attacker') + track('target')) / 2;
-	const gapMiddle = bandTop.attacker + bandHeight.attacker + MIDDLE / 2;
 
 	const nodes: Placed[] = [];
 	const edges: Edge[] = [];
@@ -235,15 +229,16 @@ export function draw(
 		return at;
 	};
 	const reached = reaches === null ? 'reaches' : `reaches ${percent(reaches)}`;
-	let clear = 0;
+	const clear = { attacker: 0, target: 0 };
 	const opening = (each: Column) => {
 		const edge = x - trailing + OPENING;
 		const centres = LANES.map((lane) => {
 			const event = each[lane];
-			if (!event) return 0;
-			return Math.max(edge, lane === 'attacker' ? clear : 0) + eventWidth(lane, event) / 2;
+			return event ? Math.max(edge, clear[lane]) + eventWidth(lane, event) / 2 : 0;
 		});
 		x = Math.max(x, ...centres);
+		for (const lane of LANES)
+			if (each[lane]) clear[lane] = x + eventWidth(lane, each[lane]) / 2 + OPENING;
 		return x;
 	};
 
@@ -290,17 +285,18 @@ export function draw(
 		);
 		stations.attacker = [charge];
 		stations.target = [reaction];
-		if (fought) clear = charge.x + charge.width + 4 + measure(reached, 'mono') + 8;
+		if (fought) clear.attacker = charge.x + charge.width + 4 + measure(reached, 'mono') + 8;
 	}
 
-	const casualties: { from: Box; to: Box; lane: Lane; loss: number }[] = [];
+	const casualties: { from: Box; to: Box; lane: Lane }[] = [];
 	events.forEach((each) => {
 		const width = Math.max(
 			eventWidth('attacker', each.attacker),
 			eventWidth('target', each.target)
 		);
-		if (each.head && each.attacker)
-			x = Math.max(x, clear - (width - eventWidth('attacker', each.attacker)) / 2);
+		for (const lane of LANES)
+			if (each.head && each[lane])
+				x = Math.max(x, clear[lane] - (width - eventWidth(lane, each[lane])) / 2);
 		const centre = each.head ? column(width, each.head) + width / 2 : opening(each);
 		const placed: Partial<Record<Lane, Box>> = {};
 		for (const lane of LANES) {
@@ -322,13 +318,11 @@ export function draw(
 			const event = each[lane];
 			const struck = placed[other(lane)];
 			if (event?.kind !== 'pill' || event.standing === 0 || !struck) continue;
-			const standing = lanes.standing[lane];
-			const loss = standing[event.standing - 1].models.mean - standing[event.standing].models.mean;
-			casualties.push({ from: struck, to: placed[lane]!, lane: other(lane), loss });
+			casualties.push({ from: struck, to: placed[lane]!, lane: other(lane) });
 		}
 	});
 
-	for (const { from, to, lane, loss } of casualties) {
+	for (const { from, to, lane } of casualties) {
 		const down = lane === 'attacker';
 		const at = from.x + from.width / 2;
 		edges.push({
@@ -337,13 +331,6 @@ export function draw(
 				{ x: at, y: down ? to.y : to.y + to.height }
 			]),
 			tone: lane
-		});
-		labels.push({
-			x: at + 8,
-			y: gapMiddle + 4,
-			text: `−${mean(loss)}`,
-			tone: lane,
-			anchor: 'start'
 		});
 	}
 

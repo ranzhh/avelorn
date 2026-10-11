@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { FightLanes, Strike } from '$lib/api/client';
 import princes from './fixtures/princes-charge-archers.json';
-import { formation, type Box, type Measure } from './faces';
+import { formation, spread, strikeFace, type Box, type Face, type Measure } from './faces';
 import { columns, draw, type Drawing } from './layout';
 
 const strike = (slot: string, side: 'attacker' | 'target') =>
@@ -181,7 +181,7 @@ describe('a charge drawn by the chance it reaches', () => {
 			'charge',
 			'Stand & Shoot'
 		]);
-		expect(texts(never).sort()).toEqual(['falls short 100%', '−0.23']);
+		expect(texts(never)).toEqual(['falls short 100%']);
 	});
 });
 
@@ -225,5 +225,55 @@ describe('a fight drawn with one node open', () => {
 		expect(
 			drawing.nodes.filter((node) => node !== edited && overlap(node.box, edited.box))
 		).toEqual([]);
+	});
+});
+
+describe('a count on a card', () => {
+	it('reads as its mean ± its standard deviation, and plain when it cannot vary', () => {
+		expect(spread({ mean: 4.44, sd: 1.62 })).toBe('4.4 ± 1.6');
+		expect(spread({ mean: 0.228, sd: 0.472 })).toBe('0.23 ± 0.47');
+		expect(spread({ mean: 10, sd: 0 })).toBe('10');
+	});
+});
+
+describe('a strike opened', () => {
+	const measure: Measure = (text) => text.length * 7;
+	const strike = princes.strikes[0] as Strike;
+	const shown = (face: Face) =>
+		face.marks.flatMap((mark) =>
+			mark.kind === 'chart' ? [mark.name] : mark.kind === 'rule' ? [mark.rule.name] : []
+		);
+	const rules = ['Armour Bane (1)', 'Ithilmar Weapons', 'Parry'];
+
+	it('charts its unsaved wounds, its attacks where they vary, and lists the rules on it', () => {
+		const fixed = { ...strike, attacks: { ...strike.attacks, sd: 0 } };
+
+		expect(shown(strikeFace(strike, 'Dragon Princes', measure, false))).toEqual([]);
+		expect(shown(strikeFace(strike, 'Dragon Princes', measure, true))).toEqual([
+			'unsaved',
+			'attacks',
+			...rules
+		]);
+		expect(shown(strikeFace(fixed, 'Dragon Princes', measure, true))).toEqual([
+			'unsaved',
+			...rules
+		]);
+	});
+});
+
+describe('who strikes', () => {
+	const measure: Measure = (text) => text.length * 7;
+	const texts = (face: Face) =>
+		face.marks.flatMap((mark) => (mark.kind === 'text' ? [mark.text] : []));
+
+	it('counts the models of each part by their spread, a champion the volley may fell too', () => {
+		const [princely, , archers] = princes.strikes as Strike[];
+
+		expect(texts(strikeFace(archers, 'Elven Archers', measure, false))[0]).toBe(
+			'Elven Archer ×4.0 ± 1.7'
+		);
+		expect(texts(strikeFace(princely, 'Dragon Princes', measure, true))).toEqual(
+			expect.arrayContaining(['Drakemaster ×1.00 ± 0.00', 'Dragon Prince ×3.0 ± 0.15'])
+		);
 	});
 });
