@@ -94,20 +94,19 @@ describe('a formation', () => {
 		]);
 	});
 
-	it('keeps room for a letter in each square of a ten-wide formation', () => {
-		const target = { ...princes.units.target, size: 30, frontage: 10, ranks: 3 };
-		const lanes = {
-			...princes,
-			charge: { ...princes.charge, reaches: 1 },
-			units: { ...princes.units, target }
-		} as FightLanes;
-		const card = draw(lanes, (text) => text.length * 7).nodes.find(
-			(node) => node.kind === 'unit' && node.lane === 'target'
-		);
-		if (card?.kind !== 'unit') throw new Error('the target has no card');
-		const squares = card.face.marks.flatMap((mark) => (mark.kind === 'model' ? [mark.box] : []));
+	it('stands each model on its base, both units at one scale', () => {
+		const drawing = draw(princes as FightLanes, (text) => text.length * 7);
+		const scales = drawing.nodes.flatMap((node) => {
+			if (node.kind !== 'unit') return [];
+			const { width_mm, depth_mm } = princes.units[node.lane].base;
+			return node.face.marks.flatMap((mark) =>
+				mark.kind === 'model' ? [`${mark.box.width / width_mm} ${mark.box.height / depth_mm}`] : []
+			);
+		});
 
-		expect(new Set(squares.map((square) => square.width))).toEqual(new Set([12]));
+		expect(scales).toHaveLength(15);
+		expect(new Set(scales).size).toBe(1);
+		expect(scales[0].split(' ')[0]).toBe(scales[0].split(' ')[1]);
 	});
 });
 

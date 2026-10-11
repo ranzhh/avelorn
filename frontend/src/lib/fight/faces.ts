@@ -21,17 +21,9 @@ export interface Box extends Point {
 
 /** Where text and controls sit inside a card, from its top left corner. */
 export const INSET = 14;
-export const UNIT = {
-	least: 184,
-	editor: 248,
-	chips: 34,
-	chip: 20,
-	gap: 4,
-	glyph: 14,
-	pitch: 17,
-	packed: 15,
-	bottom: 14
-};
+export const UNIT = { least: 184, editor: 248, chips: 34, chip: 20, gap: 4, bottom: 14 };
+/** Pixels to the millimetre: a formation stands on its bases at this scale. */
+const SCALE = 0.6;
 export const STRIKE = { least: 150, inset: 12, header: 26, rule: 92, row: 20 };
 const CHARGE = { width: 170, height: 76 };
 const RESULT = { least: 150, height: 128 };
@@ -189,12 +181,16 @@ export function unitFace(
 	editor: number | null = null
 ): Face {
 	const rules = open ? unit.rules : [];
-	const dims = measure(`${unit.frontage} × ${unit.ranks}`, 'mono');
+	const strength = String(unit.unit_strength);
 	const chipped = [
 		...unit.options.map((option) => ({ text: option.name, held: false })),
 		...unit.held.map((held) => ({ text: held, held: true }))
 	];
 	const chipWidths = chipped.map((chip) => measure(chip.text, 'chip') + 18);
+	const base = unit.base && {
+		width: unit.base.width_mm * SCALE,
+		depth: unit.base.depth_mm * SCALE
+	};
 	const width = Math.max(
 		UNIT.least,
 		least,
@@ -202,7 +198,8 @@ export function unitFace(
 		ruleWidth(rules, INSET, measure),
 		2 * INSET + measure(unit.name, 'title') + 12 + measure(`×${unit.size}`, 'mono'),
 		2 * INSET + Math.max(...chipWidths),
-		2 * INSET + unit.frontage * UNIT.packed + 12 + dims
+		2 * INSET + unit.frontage * (base?.width ?? 0),
+		2 * INSET + measure('Unit Strength', 'small') + 12 + measure(strength, 'mono')
 	);
 	const marks: Mark[] = [
 		text(INSET, 23, unit.name, 'title'),
@@ -219,22 +216,25 @@ export function unitFace(
 		marks.push({ kind: 'chip', box, ...chip });
 		x += chipWidths[index] + UNIT.gap;
 	});
-	const pitch = Math.min(UNIT.pitch, Math.floor((width - 2 * INSET - dims - 12) / unit.frontage));
-	const top = y + UNIT.chip + UNIT.glyph;
-	const ranks = Math.ceil(unit.size / unit.frontage);
-	for (const model of formation(unit.size, unit.frontage, unit.command)) {
-		const box = {
-			x: INSET + model.file * pitch,
-			y: top + model.rank * pitch,
-			width: pitch - 3,
-			height: pitch - 3
-		};
-		marks.push({ kind: 'model', box, command: model.command });
+	let bottom = chipped.length ? y + UNIT.chip : y - UNIT.gap;
+	if (base) {
+		const top = bottom + UNIT.gap + 8;
+		for (const model of formation(unit.size, unit.frontage, unit.command)) {
+			const box = {
+				x: INSET + model.file * base.width,
+				y: top + model.rank * base.depth,
+				width: base.width,
+				height: base.depth
+			};
+			marks.push({ kind: 'model', box, command: model.command });
+		}
+		bottom = top + Math.ceil(unit.size / unit.frontage) * base.depth;
 	}
 	marks.push(
-		text(width - INSET, top + ranks * pitch - 5, `${unit.frontage} × ${unit.ranks}`, 'mono', 'end')
+		text(INSET, bottom + 20, 'Unit Strength', 'small'),
+		text(width - INSET, bottom + 20, strength, 'mono', 'end')
 	);
-	const face: Face = { chrome: 'spine', width, height: top + ranks * pitch + UNIT.bottom, marks };
+	const face: Face = { chrome: 'spine', width, height: bottom + 20 + UNIT.bottom, marks };
 	return editable(ruled(face, rules, INSET), editor);
 }
 
