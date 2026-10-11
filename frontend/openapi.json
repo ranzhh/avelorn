@@ -149,8 +149,8 @@
     },
     "/graph/fight": {
       "post": {
-        "summary": "Evaluate the round program a fight resolves",
-        "description": "Fight the round ``/fight`` fights, and show the program it ran on.\n\nReturns:\n    The evaluated round program, in the lane ``/fight`` reports on.",
+        "summary": "Draw the round a fight resolves in two lanes",
+        "description": "Fight the round ``/fight`` fights, and draw it in a lane for each side.\n\nThe charger takes the attacker's lane, above its target's; with no charge,\nside a does.\n\nReturns:\n    The lanes, read off the lane ``/fight`` reports on.",
         "operationId": "graph_fight_graph_fight_post",
         "requestBody": {
           "content": {
@@ -168,9 +168,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
-                  "title": "Response Graph Fight Graph Fight Post"
+                  "$ref": "#/components/schemas/FightLanes"
                 }
               }
             }
@@ -737,6 +735,25 @@
         "title": "BaseSize",
         "description": "Base footprint of a single model, in millimetres."
       },
+      "Battlefield": {
+        "properties": {
+          "distance": {
+            "type": "integer",
+            "title": "Distance"
+          },
+          "arc": {
+            "$ref": "#/components/schemas/ChargeArc"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "distance",
+          "arc"
+        ],
+        "title": "Battlefield",
+        "description": "What lies between the units: the inches the charge covered and the arc it struck."
+      },
       "Bounded": {
         "properties": {
           "amount": {
@@ -925,6 +942,68 @@
         ],
         "title": "ChosenOption",
         "description": "An option a block bought: the id a request picks it by, and its printed name."
+      },
+      "CombatResult": {
+        "properties": {
+          "scores": {
+            "$ref": "#/components/schemas/PerSide_float_"
+          },
+          "attacker_wins": {
+            "type": "number",
+            "title": "Attacker Wins"
+          },
+          "draw": {
+            "type": "number",
+            "title": "Draw"
+          },
+          "target_wins": {
+            "type": "number",
+            "title": "Target Wins"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/LandedRule"
+            },
+            "type": "array",
+            "title": "Rules"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "scores",
+          "attacker_wins",
+          "draw",
+          "target_wins",
+          "rules"
+        ],
+        "title": "CombatResult",
+        "description": "Each side's mean combat result, and the chance of each way the round goes."
+      },
+      "Command": {
+        "properties": {
+          "champion": {
+            "type": "boolean",
+            "title": "Champion"
+          },
+          "standard": {
+            "type": "boolean",
+            "title": "Standard"
+          },
+          "musician": {
+            "type": "boolean",
+            "title": "Musician"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "champion",
+          "standard",
+          "musician"
+        ],
+        "title": "Command",
+        "description": "The command models a unit bought."
       },
       "Comparison": {
         "properties": {
@@ -1573,6 +1652,84 @@
         "title": "Fight",
         "description": "Two sides meeting in close combat, and the charge that brought them together."
       },
+      "FightLanes": {
+        "properties": {
+          "units": {
+            "$ref": "#/components/schemas/PerSide_LaneUnit_"
+          },
+          "battlefield": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Battlefield"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "charge": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LaneCharge"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reaction": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LaneReaction"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "volley": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LaneVolley"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "standing": {
+            "$ref": "#/components/schemas/PerSide_list_StandingAt__"
+          },
+          "result": {
+            "$ref": "#/components/schemas/CombatResult"
+          },
+          "breaks": {
+            "$ref": "#/components/schemas/PerSide_LaneBreakTest_"
+          },
+          "not_modelled": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Not Modelled"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "units",
+          "battlefield",
+          "charge",
+          "reaction",
+          "volley",
+          "standing",
+          "result",
+          "breaks",
+          "not_modelled"
+        ],
+        "title": "FightLanes",
+        "description": "A round of close combat in two lanes, the attacker's above the target's.\n\nThe battlefield, the charge and the reaction are None for a fight with no\ncharge, and the volley for one met with a Hold. ``not_modelled`` names the\nrules held without applying."
+      },
       "FightReport": {
         "properties": {
           "a": {
@@ -1877,6 +2034,239 @@
         "title": "Kind",
         "description": "What a printed name turns out to name.\n\nA caller following a reference needs the route as well as the slug, and the\ntwo cannot be inferred from the name: \"Daith's Reaper\" is filed both as a\nweapon and as the rule that weapon carries."
       },
+      "LandedRule": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "side": {
+            "$ref": "#/components/schemas/Side"
+          },
+          "applied": {
+            "type": "boolean",
+            "title": "Applied"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "side",
+          "applied"
+        ],
+        "title": "LandedRule",
+        "description": "A rule landing on a node's steps, whose it is, and whether it applied in any outcome."
+      },
+      "LaneBreakTest": {
+        "properties": {
+          "taken": {
+            "type": "number",
+            "title": "Taken"
+          },
+          "leadership": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Leadership"
+          },
+          "margin": {
+            "type": "number",
+            "title": "Margin"
+          },
+          "give_ground": {
+            "type": "number",
+            "title": "Give Ground"
+          },
+          "fall_back_in_good_order": {
+            "type": "number",
+            "title": "Fall Back In Good Order"
+          },
+          "break": {
+            "type": "number",
+            "title": "Break"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/LandedRule"
+            },
+            "type": "array",
+            "title": "Rules"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "taken",
+          "leadership",
+          "margin",
+          "give_ground",
+          "fall_back_in_good_order",
+          "break",
+          "rules"
+        ],
+        "title": "LaneBreakTest",
+        "description": "A side's Break test: the chance it is taken, and of each outcome over the whole round.\n\n``margin`` is the side's mean combat result less its enemy's."
+      },
+      "LaneCharge": {
+        "properties": {
+          "distance": {
+            "type": "integer",
+            "title": "Distance"
+          },
+          "arc": {
+            "$ref": "#/components/schemas/ChargeArc"
+          },
+          "reaches": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reaches"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/LandedRule"
+            },
+            "type": "array",
+            "title": "Rules"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "distance",
+          "arc",
+          "reaches",
+          "rules"
+        ],
+        "title": "LaneCharge",
+        "description": "The charge, and the chance its roll reaches; None while the roll is not modelled."
+      },
+      "LaneReaction": {
+        "properties": {
+          "chosen": {
+            "type": "string",
+            "enum": [
+              "hold",
+              "stand-and-shoot"
+            ],
+            "title": "Chosen"
+          },
+          "offered": {
+            "$ref": "#/components/schemas/Reactions"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "chosen",
+          "offered"
+        ],
+        "title": "LaneReaction",
+        "description": "The reaction the target declared, and those it could have."
+      },
+      "LaneUnit": {
+        "properties": {
+          "unit": {
+            "type": "string",
+            "title": "Unit"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/ChosenOption"
+            },
+            "type": "array",
+            "title": "Options"
+          },
+          "weapon": {
+            "type": "string",
+            "title": "Weapon"
+          },
+          "frontage": {
+            "type": "integer",
+            "title": "Frontage"
+          },
+          "ranks": {
+            "type": "integer",
+            "title": "Ranks"
+          },
+          "command": {
+            "$ref": "#/components/schemas/Command"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/LandedRule"
+            },
+            "type": "array",
+            "title": "Rules"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "unit",
+          "name",
+          "size",
+          "options",
+          "weapon",
+          "frontage",
+          "ranks",
+          "command",
+          "rules"
+        ],
+        "title": "LaneUnit",
+        "description": "A unit as it is fielded: ``frontage`` files wide and ``ranks`` deep.\n\n``options`` are the ones it bought, and ``command`` the command models among\nthem, which stand in its front rank. ``rules`` land on the steps it takes\nbefore anyone strikes: its weapon choice, Who Can Fight, Who Strikes First."
+      },
+      "LaneVolley": {
+        "properties": {
+          "shots": {
+            "type": "integer",
+            "title": "Shots"
+          },
+          "needed": {
+            "$ref": "#/components/schemas/Needed"
+          },
+          "unsaved": {
+            "type": "number",
+            "title": "Unsaved"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/LandedRule"
+            },
+            "type": "array",
+            "title": "Rules"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "shots",
+          "needed",
+          "unsaved",
+          "rules"
+        ],
+        "title": "LaneVolley",
+        "description": "The Stand & Shoot: the shots fired, the scores they need, the mean unsaved wounds.\n\nThe target shoots, so its rules are the target's and the charger's the attacker's."
+      },
       "Limit": {
         "properties": {
           "per": {
@@ -2009,6 +2399,64 @@
         ],
         "title": "MusteredUnit",
         "description": "A block of an army list: a datasheet sized and equipped, and what it costs.\n\nThe view over :class:`~avelorn.tow.muster.Complement`. It carries the\ndatasheet by slug rather than whole, because a list is read as a list --\na caller wanting the profiles follows ``unit`` to the datasheet route.\n``equipment`` and ``special_rules`` are the effective ones, the chosen\noptions' adds and removes already folded in, so a block says what the\nmodels actually carry rather than what the datasheet offered. ``weapons``\nnarrows the equipment to the weapons among it, each saying whether it can\nbe used in close combat -- what a caller naming a weapon chooses from.\n``options`` are the ones bought, in the datasheet's order. ``footprint`` is\nthe table space the block takes, at the frontage asked for or the\ndatasheet's default, which a caller drawing it needs and cannot derive\nfrom a slug."
+      },
+      "Needed": {
+        "properties": {
+          "hit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hit"
+          },
+          "wound": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wound"
+          },
+          "save": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Save"
+          },
+          "ward": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ward"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "hit",
+          "wound",
+          "save",
+          "ward"
+        ],
+        "title": "Needed",
+        "description": "The score each roll needs, scores that differ joined with \"or\".\n\n\"-\" is a roll that cannot succeed or is not made, and None a roll the step\nhas no place for, as Impact Hits roll no To Hit."
       },
       "Operation": {
         "type": "string",
@@ -2221,6 +2669,84 @@
         "title": "Panic",
         "description": "What a volley's casualties do to the target's nerve.\n\n``tests`` is the chance the unit is forced to test at all -- it lost more\nthan a quarter of the models it started the phase with, and something is\nleft to test. The four outcomes below it are unconditional and exhaust the\nspace: a unit that is never forced to test simply ``holds``."
       },
+      "PerSide_LaneBreakTest_": {
+        "properties": {
+          "attacker": {
+            "$ref": "#/components/schemas/LaneBreakTest"
+          },
+          "target": {
+            "$ref": "#/components/schemas/LaneBreakTest"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "attacker",
+          "target"
+        ],
+        "title": "PerSide[LaneBreakTest]"
+      },
+      "PerSide_LaneUnit_": {
+        "properties": {
+          "attacker": {
+            "$ref": "#/components/schemas/LaneUnit"
+          },
+          "target": {
+            "$ref": "#/components/schemas/LaneUnit"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "attacker",
+          "target"
+        ],
+        "title": "PerSide[LaneUnit]"
+      },
+      "PerSide_float_": {
+        "properties": {
+          "attacker": {
+            "type": "number",
+            "title": "Attacker"
+          },
+          "target": {
+            "type": "number",
+            "title": "Target"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "attacker",
+          "target"
+        ],
+        "title": "PerSide[float]"
+      },
+      "PerSide_list_StandingAt__": {
+        "properties": {
+          "attacker": {
+            "items": {
+              "$ref": "#/components/schemas/StandingAt"
+            },
+            "type": "array",
+            "title": "Attacker"
+          },
+          "target": {
+            "items": {
+              "$ref": "#/components/schemas/StandingAt"
+            },
+            "type": "array",
+            "title": "Target"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "attacker",
+          "target"
+        ],
+        "title": "PerSide[list[StandingAt]]"
+      },
       "Period": {
         "type": "string",
         "enum": [
@@ -2369,6 +2895,31 @@
         ],
         "title": "Quantity",
         "description": "A quantity an effect can change, in the rulebook's own modifier vocabulary.\n\nA closed, append-only enum: a member joins when an imported rule needs it.\nA profile :class:`~avelorn.tow.schema.unit.Characteristic` is the one\nquantity kept apart, a stat vocabulary used far beyond modifiers, so an\noperation's key is a Quantity or a Characteristic."
+      },
+      "Reactions": {
+        "properties": {
+          "hold": {
+            "type": "boolean",
+            "title": "Hold"
+          },
+          "stand_and_shoot": {
+            "type": "boolean",
+            "title": "Stand And Shoot"
+          },
+          "flee": {
+            "type": "boolean",
+            "title": "Flee"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "hold",
+          "stand_and_shoot",
+          "flee"
+        ],
+        "title": "Reactions",
+        "description": "Which charge reactions the target could declare; Flee is not modelled."
       },
       "Reference": {
         "properties": {
@@ -2673,6 +3224,15 @@
         "title": "SelectorValue",
         "description": "One value a selector X may take, and how the bracket prints it."
       },
+      "Side": {
+        "type": "string",
+        "enum": [
+          "attacker",
+          "target"
+        ],
+        "title": "Side",
+        "description": "A party of one attack: the attacker making it, or the target suffering it."
+      },
       "Site": {
         "properties": {
           "entry": {
@@ -2691,6 +3251,41 @@
         ],
         "title": "Site",
         "description": "Where a gap occurs: an entry, by slug (``<unit>/<option>`` for an option)."
+      },
+      "StandingAt": {
+        "properties": {
+          "after": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After"
+          },
+          "models": {
+            "type": "number",
+            "title": "Models"
+          },
+          "distribution": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Distribution"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "after",
+          "models",
+          "distribution"
+        ],
+        "title": "StandingAt",
+        "description": "A side's models standing: at the start, or after the volley.\n\n``after`` is None at the start and \"volley\" after the Stand & Shoot.\n``distribution[k]`` is the chance exactly ``k`` stand."
       },
       "Step": {
         "type": "string",
