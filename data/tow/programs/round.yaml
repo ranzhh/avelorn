@@ -38,7 +38,7 @@ items:
           - roll-to-wound
           - make-armour-saves
           - {step: ward-saves, readings: [unsaved]}
-      - {step: remove-casualties, of: [target, attacker], tallies: [attack], readings: [models]}
+      - {step: remove-casualties, of: [target, attacker], tallies: [attack], readings: [unsaved, parts, models]}
   - slots: initiative
     from: 10
     to: 1
@@ -53,7 +53,7 @@ items:
           - roll-to-wound
           - make-armour-saves
           - {step: ward-saves, readings: [unsaved]}
-      - {step: remove-casualties, of: [target, attacker], tallies: [attack], readings: [models]}
+      - {step: remove-casualties, of: [target, attacker], tallies: [attack], readings: [unsaved, parts, models]}
   - slot: stomp-attacks
     items:
       - {step: stomp-attacks, of: [attacker, target], readings: [hits, parts, fighting]}
@@ -65,7 +65,7 @@ items:
           - roll-to-wound
           - make-armour-saves
           - {step: ward-saves, readings: [unsaved]}
-      - {step: remove-casualties, of: [target, attacker], tallies: [attack], readings: [models]}
+      - {step: remove-casualties, of: [target, attacker], tallies: [attack], readings: [unsaved, parts, models]}
   - step: calculate-combat-result
     sequence: combat-result
     of: [attacker, target]

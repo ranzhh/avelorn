@@ -1,5 +1,6 @@
 """Step registry."""
 
+from collections import Counter
 from collections.abc import Callable, Hashable, Iterable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -34,6 +35,7 @@ from avelorn.tow.fielding import (
     Part,
     PerPart,
     Shots,
+    Unsaved,
 )
 from avelorn.tow.kernels import (
     HIGH_BALLISTIC_SKILL,
@@ -226,11 +228,33 @@ class Offered:
 
 @dataclass(frozen=True)
 class Counted:
-    """A per-attack count for a tally."""
+    """A per-attack count for a tally, which keeps it by the part whose attack it is."""
 
     label: str
     reads: tuple[Output, ...]
     project: Callable[..., int]
+
+    def caused(self, part: str, *values: Hashable) -> Unsaved:
+        """The count of one attack ``part`` made, from the values of ``reads``.
+
+        Returns:
+            The count, kept by the part.
+        """
+        count = self.project(*values)
+        return Unsaved(((part, count),) if count else ())
+
+
+def _pooled(first: Unsaved, second: Unsaved) -> Unsaved:
+    if not first.parts:
+        return second
+    if not second.parts:
+        return first
+    pooled = Counter(dict(first.parts))
+    pooled.update(dict(second.parts))
+    return Unsaved(tuple(sorted(pooled.items())))
+
+
+POOLED = Monoid(Unsaved(()), _pooled)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -862,8 +886,9 @@ def _rolled(by: int | DiceQuantity) -> Distribution[int]:
 
 
 def _remove_casualties(
-    target: Fielding, standing: Standings, wounds: int, changed: tuple[Hashable, ...]
+    target: Fielding, standing: Standings, unsaved: Unsaved, changed: tuple[Hashable, ...]
 ) -> Distribution[Standings]:
+    wounds = unsaved.total
     match Payloads.of(changed).multiplied():
         case ():
             return Distribution.pure(back_rank(standing, wounds, target.removal))
@@ -1411,7 +1436,8 @@ def _removing(sequence: StepSequence) -> Spec:
         writes=_TARGET_STANDING,
         counts=Counted("unsaved wounds", _UNSAVED, _unsaved),
         readings={
-            "unsaved": Offered((SUMMED,), _itself, _COUNT),
+            "unsaved": Offered((SUMMED,), _total, _COUNT),
+            "parts": Offered((SUMMED,), _itself, _UNITED),
             "models": _offer("remove-casualties", _models, _COUNT),
             "wounds-lost": _offer("remove-casualties", _wounds_lost, _COUNT),
             "standing": _offer("remove-casualties"),

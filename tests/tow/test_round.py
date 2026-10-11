@@ -176,3 +176,22 @@ def test_a_champion_stands_and_shoots_at_its_own_ballistic_skill() -> None:
     assert shots == {"sentinel 1, elven-archer 4": 1}
     assert sentinel.read("needed").mass == {"3+": 1}
     assert stood.needed("roll-to-hit") == "4+"
+
+
+def test_the_casualties_step_tallies_each_part_s_unsaved_wounds_apart() -> None:
+    """Five Dragon Princes strike ten Dwarf Warriors, a Veteran among them, before they strike.
+
+    The Veteran's blows and the four Warriors' beside him are tallied apart, so
+    each part's unsaved wounds at Remove Casualties are the ones its own attacks
+    left, whoever the Princes felled first.
+    """
+    princes = Contingent.deploy("dragon-princes", 5, ("drakemaster",), data=REPO)
+    dwarfs = Contingent.deploy("dwarf-warriors", 10, ("veteran",), data=REPO, frontage=5)
+    fought = fight_round(
+        ROUND_PROGRAM, princes.wielding("Lance"), dwarfs.wielding("Hand Weapon"), first_round=True
+    ).evaluated
+
+    tallied = fought.at("round/initiative-2/attacker/remove-casualties").read("parts")
+    for part in ("veteran", "dwarf-warrior"):
+        own = fought.at(f"round/initiative-2/target/attack/{part}/ward-saves").read("unsaved")
+        assert _mass(tallied.map(lambda unsaved, part=part: unsaved.of(part))) == _mass(own)
