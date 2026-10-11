@@ -1,10 +1,11 @@
 """A round of close combat drawn in two lanes: the charger's above, its target's below.
 
 Time runs left to right: the units, the battlefield between them, the charge
-and the reaction it met, the Stand & Shoot fired, the combat result, and each
-side's Break test. Every figure is read off the evaluated lane of the round and
-of the Stand & Shoot before it. The engine works in rationals; these are
-floats, and a mean is the expectation over every outcome.
+and the reaction it met, the Stand & Shoot fired, each Initiative step in which
+a side strikes, the combat result, and each side's Break test. Every figure is
+read off the evaluated lane of the round and of the Stand & Shoot before it.
+The engine works in rationals; these are floats, and a mean is the expectation
+over every outcome.
 """
 
 from collections.abc import Hashable, Iterable, Mapping
@@ -14,16 +15,17 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from avelorn.core.distribution import Distribution
-from avelorn.core.graph import Step, Verdict
+from avelorn.core.graph import Slot, Step, Verdict
 from avelorn.tow.contingent import Charge, ChargeArc, Contingent
 from avelorn.tow.programs import At, Evaluated
 from avelorn.tow.round import Fight
 from avelorn.tow.schema.side import Side
 from avelorn.tow.schema.unit import OptionKind
-from avelorn.tow.steps import NO_ROLL, WEAPON_CHOICE, BreakTest, Fought
+from avelorn.tow.steps import AUTOMATIC_HITS, NO_ROLL, WEAPON_CHOICE, BreakTest, Fought, scores
 from avelorn.tow.views import ChosenOption, Reacting, by_count
 from avelorn.tow.volley import Volley
 
+_ROLLS = ("roll-to-hit", "roll-to-wound", "make-armour-saves", "ward-saves")
 _READYING = (WEAPON_CHOICE, "who-can-fight", "who-strikes-first")
 _SCORING = ("calculate-combat-result", "who-is-the-winner")
 
@@ -130,11 +132,39 @@ class LaneVolley(_Drawn):
     rules: list[LandedRule]
 
 
-class StandingAt(_Drawn):
-    """A side's models standing: at the start, or after the volley.
+class StrikePart(_Drawn):
+    """The models of one profile row striking: how many, their attacks and unsaved wounds."""
 
-    ``after`` is None at the start and "volley" after the Stand & Shoot.
-    ``distribution[k]`` is the chance exactly ``k`` stand.
+    name: str
+    models: float
+    attacks: float
+    unsaved: float
+    needed: Needed
+
+
+class Strike(_Drawn):
+    """One side striking at one Initiative step, in that side's lane.
+
+    ``slot`` names the step in the round program and ``label`` prints it.
+    At Impact Hits and Stomp Attacks the attacks are the hits.
+    """
+
+    slot: str
+    label: str
+    side: Side
+    attacks: float
+    needed: Needed
+    parts: list[StrikePart]
+    unsaved: float
+    rules: list[LandedRule]
+
+
+class StandingAt(_Drawn):
+    """A side's models standing: at the start, after the volley, or after a strike.
+
+    ``after`` is None at the start, "volley" after the Stand & Shoot, and the
+    slot of the enemy's strike after one. ``distribution[k]`` is the chance
+    exactly ``k`` stand.
     """
 
     after: str | None
@@ -170,7 +200,9 @@ class LaneBreakTest(_Drawn):
 class FightLanes(_Drawn):
     """A round of close combat in two lanes, the attacker's above the target's.
 
-    The battlefield, the charge and the reaction are None for a fight with no
+    ``strikes`` run in the order they are struck, Impact Hits first and Stomp
+    Attacks last, and a step in which nobody strikes is left out. The
+    battlefield, the charge and the reaction are None for a fight with no
     charge, and the volley for one met with a Hold. ``not_modelled`` names the
     rules held without applying.
     """
@@ -180,6 +212,7 @@ class FightLanes(_Drawn):
     charge: LaneCharge | None
     reaction: LaneReaction | None
     volley: LaneVolley | None
+    strikes: list[Strike]
     standing: PerSide[list[StandingAt]]
     result: CombatResult
     breaks: PerSide[LaneBreakTest]
@@ -195,6 +228,8 @@ class FightLanes(_Drawn):
             The lanes.
         """
         charge = sides[Side.ATTACKER].movement.charge
+        struck = (_strike(fight, slot, side) for slot in _slots(fight) for side in Side)
+        strikes = [strike for strike in struck if strike is not None]
         return cls(
             units=PerSide(
                 attacker=_unit(fight, sides[Side.ATTACKER], Side.ATTACKER),
@@ -206,9 +241,10 @@ class FightLanes(_Drawn):
             charge=None if charge is None else _charge(fight, charge),
             reaction=None if charge is None else _reaction(sides[Side.TARGET], stood),
             volley=None if stood is None else _volley(stood),
+            strikes=strikes,
             standing=PerSide(
-                attacker=_standing(fight, Side.ATTACKER, stood),
-                target=_standing(fight, Side.TARGET, None),
+                attacker=_standing(fight, Side.ATTACKER, strikes, stood),
+                target=_standing(fight, Side.TARGET, strikes, None),
             ),
             result=_result(fight),
             breaks=PerSide(
@@ -230,6 +266,10 @@ def _rules(fight: Fight, *paths: str) -> list[LandedRule]:
 
 def _mean(distribution: Distribution[Any]) -> float:
     return float(distribution.expect(Fraction))
+
+
+def _each(reading: Distribution[Any], fighter: str) -> Distribution[int]:
+    return reading.map(lambda counted: counted.of(fighter))
 
 
 def _landed(evaluated: Evaluated, steps: Iterable[Step[Any]]) -> list[LandedRule]:
@@ -299,11 +339,80 @@ def _volley(stood: Volley) -> LaneVolley:
     )
 
 
-def _standing(fight: Fight, side: Side, stood: Volley | None) -> list[StandingAt]:
+def _slots(fight: Fight) -> list[str]:
+    return [block.name for block in fight.evaluated.lane.program.blocks if isinstance(block, Slot)]
+
+
+def _strike(fight: Fight, slot: str, side: Side) -> Strike | None:
+    automatic = slot in AUTOMATIC_HITS
+    counter = f"{slot}/{side}/{slot if automatic else 'how-many-attacks'}"
+    count = _at(fight, counter).read("hits" if automatic else "attacks")
+    if not count.prob(lambda struck: struck > 0):
+        return None
+    made = _at(fight, counter).read("parts")
+    fighting = _at(fight, counter).read("fighting")
+    rows: dict[str, list[str]] = {}
+    for fighter in fight.evaluated.built.fielded[side].fighters:
+        if _each(made, fighter.id).prob(lambda attacks: attacks > 0):
+            rows.setdefault(fighter.row.name, []).append(fighter.id)
+    group = f"{slot}/{side}/attack"
+    parts = [
+        StrikePart(
+            name=name,
+            models=sum(_mean(_each(fighting, fighter)) for fighter in row),
+            attacks=sum(_mean(_each(made, fighter)) for fighter in row),
+            unsaved=sum(_unsaved(fight, f"{group}/{fighter}") for fighter in row),
+            needed=_needed(fight, [f"{group}/{fighter}" for fighter in row], automatic),
+        )
+        for name, row in rows.items()
+    ]
+    attacking = [f"{group}/{fighter}" for row in rows.values() for fighter in row]
+    rolls = _ROLLS[1:] if automatic else _ROLLS
+    return Strike(
+        slot=slot,
+        label=slot.replace("-", " ").title(),
+        side=side,
+        attacks=_mean(count),
+        needed=_needed(fight, attacking, automatic),
+        parts=parts,
+        unsaved=sum(part.unsaved for part in parts),
+        rules=_rules(
+            fight,
+            counter,
+            *(f"{attack}/{roll}" for attack in attacking for roll in rolls),
+            f"{slot}/{side.other}/remove-casualties",
+        ),
+    )
+
+
+def _unsaved(fight: Fight, attack: str) -> float:
+    return _mean(_at(fight, f"{attack}/ward-saves").read("unsaved"))
+
+
+def _needed(fight: Fight, attacking: list[str], automatic: bool) -> Needed:
+    def needed(roll: str) -> str | None:
+        return scores(_at(fight, f"{attack}/{roll}").read("needed") for attack in attacking)
+
+    return Needed(
+        hit=None if automatic else needed("roll-to-hit"),
+        wound=needed("roll-to-wound"),
+        save=needed("make-armour-saves"),
+        ward=needed("ward-saves"),
+    )
+
+
+def _standing(
+    fight: Fight, side: Side, strikes: list[Strike], stood: Volley | None
+) -> list[StandingAt]:
     size = fight.fielded[side].models
     standing = [_stand(None, Distribution.pure(size))]
     if stood is not None:
         standing.append(_stand("volley", stood.casualties.map(lambda lost: size - lost)))
+    standing.extend(
+        _stand(strike.slot, _at(fight, f"{strike.slot}/{side}/remove-casualties").read("models"))
+        for strike in strikes
+        if strike.side is side.other
+    )
     return standing
 
 

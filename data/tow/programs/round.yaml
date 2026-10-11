@@ -29,7 +29,7 @@ items:
   - {step: who-strikes-first, of: [attacker, target]}
   - slot: impact-hits
     items:
-      - {step: impact-hits, of: [attacker, target], readings: [hits]}
+      - {step: impact-hits, of: [attacker, target], readings: [hits, parts, fighting]}
       - group: attack
         for: each-fighter
         of: [attacker, target]
@@ -43,7 +43,7 @@ items:
     from: 10
     to: 1
     items:
-      - {step: how-many-attacks, of: [attacker, target], readings: [attacks]}
+      - {step: how-many-attacks, of: [attacker, target], readings: [attacks, parts, fighting]}
       - group: attack
         for: each-fighter
         of: [attacker, target]
@@ -56,7 +56,7 @@ items:
       - {step: remove-casualties, of: [target, attacker], tallies: [attack], readings: [models]}
   - slot: stomp-attacks
     items:
-      - {step: stomp-attacks, of: [attacker, target], readings: [hits]}
+      - {step: stomp-attacks, of: [attacker, target], readings: [hits, parts, fighting]}
       - group: attack
         for: each-fighter
         of: [attacker, target]

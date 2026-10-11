@@ -151,6 +151,10 @@ class Hits(PerPart):
     """The automatic hits each part makes."""
 
 
+class Fighting(PerPart):
+    """The models of each part placed to fight: in the fighting ranks, or the front rank."""
+
+
 @dataclass(frozen=True, eq=False)
 class Fielding:
     """A side on the table, of one troop type: its parts in placement order, front to back."""
