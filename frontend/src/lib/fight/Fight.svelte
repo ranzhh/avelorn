@@ -1,9 +1,10 @@
 <script lang="ts">
 	import type { FightBody, FightLanes } from '$lib/api/client';
+	import type { Placed as Block } from '$lib/table';
 	import Lanes from './Lanes.svelte';
 	import Unit from './Unit.svelte';
 	import { redeployed, seat } from './body';
-	import type { Blocks } from './field';
+	import type { Field } from './field';
 	import type { Lane } from './layout';
 
 	interface Props {
@@ -12,11 +13,13 @@
 		/** Whether the drawing is older than the body: a redraw on its way, or the body refused. */
 		stale: boolean;
 		/** The blocks the table placed, which the battlefield measures; null with no table. */
-		blocks: Blocks | null;
+		field: Field | null;
 		onedit: (body: FightBody) => void;
+		/** A block dragged across the battlefield's crop. */
+		onmove: (lane: Lane, block: Block) => void;
 	}
 
-	let { lanes, body, stale, blocks, onedit }: Props = $props();
+	let { lanes, body, stale, field, onedit, onmove }: Props = $props();
 
 	let open = $state<string | null>(null);
 	let editing = $state<Lane | null>(null);
@@ -39,7 +42,8 @@
 		<Lanes
 			{lanes}
 			charge={body.charge ?? null}
-			{blocks}
+			{field}
+			{onmove}
 			{open}
 			{editing}
 			ontoggle={toggle}

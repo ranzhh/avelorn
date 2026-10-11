@@ -189,7 +189,7 @@ export function draw(
 		...LANES.map((lane) => breakCards[lane].width)
 	);
 	const charged = lanes.battlefield && chargeCard && lanes.reaction;
-	const fieldSize = battlefieldSize(mapped);
+	const fieldSize = battlefieldSize(mapped, open === 'battlefield');
 
 	const tall = (lane: Lane) =>
 		Math.max(

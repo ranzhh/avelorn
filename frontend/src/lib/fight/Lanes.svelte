@@ -2,9 +2,10 @@
 	import type { Snippet } from 'svelte';
 	import { percent } from '$lib/charts/scale';
 	import type { ChargeArc, FightBody, FightLanes } from '$lib/api/client';
+	import type { Placed as Block } from '$lib/table';
 	import Battlefield from './Battlefield.svelte';
 	import Card from './Card.svelte';
-	import type { Blocks } from './field';
+	import type { Field } from './field';
 	import { INSET, type Font, type Measure } from './faces';
 	import { OUTCOME, draw, type Lane, type Placed } from './layout';
 
@@ -15,7 +16,7 @@
 		/** The charge as last asked for, which the battlefield's inputs show while a redraw is on its way. */
 		charge: NonNullable<FightBody['charge']> | null;
 		/** The blocks the battlefield measures, where the table placed them. */
-		blocks: Blocks | null;
+		field: Field | null;
 		/** The node showing its whole face, if any. */
 		open: string | null;
 		/** The unit edited in place, if any, and the controls that edit it. */
@@ -25,9 +26,11 @@
 		/** A unit double-clicked: edit it. */
 		onedit: (lane: Lane) => void;
 		oncharge: (change: { full_inches?: number; arc?: ChargeArc; reaction?: Reacting }) => void;
+		/** A block dragged across the battlefield's crop. */
+		onmove: (lane: Lane, block: Block) => void;
 	}
 
-	let { lanes, charge, blocks, open, editing, editor, ontoggle, onedit, oncharge }: Props =
+	let { lanes, charge, field, open, editing, editor, ontoggle, onedit, oncharge, onmove }: Props =
 		$props();
 
 	const FONTS: Record<Font, string> = {
@@ -45,7 +48,7 @@
 
 	let editorHeight = $state(160);
 	const drawing = $derived(
-		draw(lanes, measure, open, editing && { lane: editing, height: editorHeight }, !!blocks)
+		draw(lanes, measure, open, editing && { lane: editing, height: editorHeight }, !!field)
 	);
 
 	$effect(() => {
@@ -58,7 +61,7 @@
 	] as const;
 
 	function click(event: MouseEvent, node: Placed) {
-		if (event.detail > 1 || (event.target as Element).closest('foreignObject')) return;
+		if (event.detail > 1 || (event.target as Element).closest('foreignObject, .crop')) return;
 		ontoggle(node.id);
 	}
 
@@ -135,7 +138,7 @@
 					</foreignObject>
 				{/if}
 			{:else if node.kind === 'battlefield' && charge}
-				<Battlefield box={node.box} {charge} {blocks} open={open === node.id} {oncharge} />
+				<Battlefield box={node.box} {charge} {field} open={open === node.id} {oncharge} {onmove} />
 			{:else if node.kind === 'reaction' && lanes.reaction}
 				{@const reaction = lanes.reaction}
 				<rect class="card" {x} {y} {width} {height} rx="8" />

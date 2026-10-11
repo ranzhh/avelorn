@@ -4,7 +4,7 @@
 	import { api, type FightBody, type FightLanes, type VolleyBody } from '$lib/api/client';
 	import { battle } from '$lib/battle.svelte';
 	import Fight from '$lib/fight/Fight.svelte';
-	import { formed, measured, seated } from '$lib/fight/field';
+	import { cropped, formed, measured, seated } from '$lib/fight/field';
 	import Graph from '$lib/graph/Graph.svelte';
 	import type { Program } from '$lib/graph/types';
 
@@ -26,28 +26,33 @@
 	let body = $derived<FightBody | null>(
 		last?.action === 'fight' ? $state.snapshot(last.body) : null
 	);
-	const blocks = $derived(
+	const seed = $derived(
 		last?.action === 'fight'
 			? seated(last.body, last.between, $state.snapshot(battle.placed))
 			: null
 	);
+	let blocks = $derived(seed);
 	let lanes = $state<FightLanes | null>(null);
 	let refusal = $state('');
 	let pending = $state(false);
 	let asked = 0;
 
-	const standing = $derived(
-		blocks &&
+	const field = $derived(
+		seed &&
+			blocks &&
 			lanes && {
-				attacker: formed(blocks.attacker, lanes.units.attacker),
-				target: formed(blocks.target, lanes.units.target)
+				blocks: {
+					attacker: formed(blocks.attacker, lanes.units.attacker),
+					target: formed(blocks.target, lanes.units.target)
+				},
+				crop: cropped(seed)
 			}
 	);
 
 	$effect(() => {
 		const charge = body?.charge;
-		if (!body || !charge || !standing) return;
-		const { full_inches, arc } = measured(standing);
+		if (!body || !charge || !field) return;
+		const { full_inches, arc } = measured(field.blocks);
 		if (charge.full_inches !== full_inches || charge.arc !== arc)
 			body = { ...body, charge: { ...charge, full_inches, arc } };
 	});
@@ -84,8 +89,9 @@
 			{lanes}
 			{body}
 			stale={pending || !!refusal}
-			blocks={standing}
+			{field}
 			onedit={(next) => (body = next)}
+			onmove={(lane, block) => blocks && (blocks = { ...blocks, [lane]: block })}
 		/>
 	{/if}
 {:else if last?.action === 'volley' && program}
