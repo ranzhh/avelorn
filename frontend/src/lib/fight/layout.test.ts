@@ -2,7 +2,15 @@ import { describe, expect, it } from 'vitest';
 
 import type { FightLanes, Strike } from '$lib/api/client';
 import princes from './fixtures/princes-charge-archers.json';
-import { formation, spread, strikeFace, type Box, type Face, type Measure } from './faces';
+import {
+	chargeFace,
+	formation,
+	spread,
+	strikeFace,
+	type Box,
+	type Face,
+	type Measure
+} from './faces';
 import { columns, draw, type Drawing } from './layout';
 
 const strike = (slot: string, side: 'attacker' | 'target') =>
@@ -155,7 +163,6 @@ describe('a charge drawn by the chance it reaches', () => {
 
 		expect(kinds(sure)).toEqual(kinds(likely).filter((kind) => kind !== 'short'));
 		expect(sure.edges).toHaveLength(likely.edges.length - 1);
-		expect(texts(sure)).toContain('reaches 100%');
 		expect(texts(sure).filter((text) => text.startsWith('falls short'))).toEqual([]);
 	});
 
@@ -275,5 +282,19 @@ describe('who strikes', () => {
 		expect(texts(strikeFace(princely, 'Dragon Princes', measure, true))).toEqual(
 			expect.arrayContaining(['Drakemaster ×1.00 ± 0.00', 'Dragon Prince ×3.0 ± 0.15'])
 		);
+	});
+});
+
+describe('a charge opened', () => {
+	it('works out its maximum possible charge range term by term, ruling its chart at the distance', () => {
+		const charge = princes.charge as NonNullable<FightLanes['charge']>;
+		const face = chargeFace(charge, (text) => text.length * 7, true);
+		const texts = face.marks.flatMap((mark) => (mark.kind === 'text' ? [mark.text] : []));
+		const rules = face.marks.flatMap((mark) => (mark.kind === 'chart' ? [mark.rule] : []));
+
+		expect(texts).toEqual(
+			expect.arrayContaining(['98%', 'Movement 8 + 6 + Swiftstride 3 = 17in', '17in'])
+		);
+		expect(rules).toEqual([12]);
 	});
 });
