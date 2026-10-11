@@ -1,7 +1,9 @@
 <script lang="ts">
 	import type { FightBody, FightLanes } from '$lib/api/client';
-	import Inspect from './Inspect.svelte';
 	import Lanes from './Lanes.svelte';
+	import Unit from './Unit.svelte';
+	import { redeployed, seat } from './body';
+	import type { Lane } from './layout';
 
 	interface Props {
 		lanes: FightLanes;
@@ -13,44 +15,52 @@
 
 	let { lanes, body, stale, onedit }: Props = $props();
 
-	let selected = $state<string | null>(null);
-	let editing = $state(false);
-	let side = $state<'left' | 'right'>('right');
+	let open = $state<string | null>(null);
+	let editing = $state<Lane | null>(null);
 
-	function select(id: string | null, away: 'left' | 'right' = side) {
-		if (id !== selected) editing = false;
-		selected = id;
-		side = away;
+	function toggle(id: string) {
+		editing = null;
+		open = open === id ? null : id;
+	}
+
+	function close() {
+		editing = null;
+		open = null;
 	}
 </script>
 
-<svelte:window onkeydown={(event) => event.key === 'Escape' && select(null)} />
+<svelte:window onkeydown={(event) => event.key === 'Escape' && close()} />
 
 <div class="fight" class:stale>
 	<div class="stage">
 		<Lanes
 			{lanes}
 			charge={body.charge ?? null}
-			{selected}
-			onselect={select}
-			onopen={(lane) => {
-				select(`unit:${lane}`, 'right');
-				editing = true;
+			{open}
+			{editing}
+			ontoggle={toggle}
+			onedit={(lane) => {
+				open = `unit:${lane}`;
+				editing = lane;
 			}}
 			oncharge={(change) =>
 				body.charge && onedit({ ...body, charge: { ...body.charge, ...change } })}
-		/>
+		>
+			{#snippet editor(lane)}
+				{#key lane}
+					<Unit
+						deployment={body[seat(body, lane)]}
+						frontage={lanes.units[lane].frontage}
+						onchange={(change) => onedit(redeployed(body, lane, change))}
+					/>
+				{/key}
+			{/snippet}
+		</Lanes>
 	</div>
-	{#if selected}
-		<div class="drawer" class:flipped={side === 'left'}>
-			<Inspect {lanes} {body} id={selected} {editing} {onedit} onclose={() => select(null)} />
-		</div>
-	{/if}
 </div>
 
 <style>
 	.fight {
-		position: relative;
 		min-height: 24rem;
 		border: 1px solid var(--line);
 	}
@@ -60,18 +70,5 @@
 	.fight.stale .stage {
 		opacity: 0.7;
 		transition: opacity 0.2s 0.15s;
-	}
-	.drawer {
-		position: absolute;
-		top: 0;
-		right: 0;
-		width: 17rem;
-		min-height: 100%;
-		max-height: calc(100dvh - 7rem);
-		display: grid;
-	}
-	.drawer.flipped {
-		right: auto;
-		left: 0;
 	}
 </style>

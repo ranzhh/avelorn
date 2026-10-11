@@ -57,6 +57,27 @@
 				<rect class="share {share}" x={x + index * (width / 3)} y={y + 24} width="10" height="10" />
 				<text class="mono" x={x + 14 + index * (width / 3)} y={y + 33}>{percent(p)}</text>
 			{/each}
+		{:else if mark.kind === 'rule'}
+			<rect
+				class="box"
+				class:applied={mark.rule.applied}
+				x={mark.x}
+				y={mark.y - 10}
+				width="11"
+				height="11"
+				rx="2"
+			/>
+			{#if mark.rule.applied}
+				<path class="tick" d="M{mark.x + 2.5},{mark.y - 4.5} l2.5,2.5 l3.8,-5" />
+			{/if}
+			<text x={mark.x + 18} y={mark.y}>{mark.rule.name}</text>
+			<rect
+				class="who {mark.rule.side}"
+				x={box.width - mark.x - 8}
+				y={mark.y - 9}
+				width="8"
+				height="8"
+			/>
 		{/if}
 	{/each}
 </g>
@@ -90,12 +111,14 @@
 	}
 	.attacker .spine,
 	.attacker .model.command,
-	.share.attacker {
+	.share.attacker,
+	.who.attacker {
 		fill: var(--attacker);
 	}
 	.target .spine,
 	.target .model.command,
-	.share.target {
+	.share.target,
+	.who.target {
 		fill: var(--target);
 	}
 	.share.draw {
@@ -148,6 +171,19 @@
 	}
 	.divider {
 		stroke: #e3e3e3;
+	}
+	.box {
+		fill: #fff;
+		stroke: #c4c4c4;
+	}
+	.box.applied {
+		fill: #a9a9a9;
+		stroke: #a9a9a9;
+	}
+	.tick {
+		fill: none;
+		stroke: #fff;
+		stroke-width: 1.6;
 	}
 	.attacker .pill {
 		stroke: var(--attacker);

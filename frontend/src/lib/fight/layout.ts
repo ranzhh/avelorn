@@ -23,7 +23,6 @@ export const other = (lane: Lane): Lane => (lane === 'attacker' ? 'target' : 'at
 const BATTLEFIELD = { width: 160, height: 140 };
 const REACTION = { width: 170, height: 80 };
 const SHORT = { width: 120, height: 36 };
-const BREAK = { width: 190 };
 export const OUTCOME = { width: 200, height: 26, step: 34, inset: 30 };
 const GAP = 40;
 const WIDE = 54;
@@ -128,24 +127,49 @@ const centred = (x: number, width: number, y: number, height: number): Box => ({
 	height
 });
 
+/** A unit edited in place, and how tall its editor stands. */
+export interface Editor {
+	lane: Lane;
+	height: number;
+}
+
 /**
  * The whole drawing: two lanes left to right, the units feeding the
  * battlefield, the charge and its reaction, each strike with its casualties,
  * the combat result across both lanes and a Break test for each side. A
  * charge that never reaches meets its reaction, and no round is fought.
+ *
+ * The node `open` shows its whole face, a unit edited in place makes room
+ * for its `editor`, and the lanes widen and deepen to hold them.
  */
-export function draw(lanes: FightLanes, measure: Measure): Drawing {
+export function draw(
+	lanes: FightLanes,
+	measure: Measure,
+	open: string | null = null,
+	editor: Editor | null = null
+): Drawing {
 	const reaches = lanes.charge?.reaches ?? null;
 	const fought = reaches !== 0;
 	const events = columns(fought ? lanes : { ...lanes, strikes: [] });
-	const unitWidth = Math.max(...LANES.map((lane) => unitFace(lanes.units[lane], measure).width));
-	const units = {
-		attacker: unitFace(lanes.units.attacker, measure, unitWidth),
-		target: unitFace(lanes.units.target, measure, unitWidth)
-	};
-	const volleyCard = lanes.volley && volleyFace(lanes.volley, lanes.units.target.name, measure);
-	const strikeCards = lanes.strikes.map((strike) =>
-		strikeFace(strike, lanes.units[strike.side as Lane].name, measure)
+	const editing = (lane: Lane) => (editor?.lane === lane ? editor.height : null);
+	const unitFaces = (least: number) => ({
+		attacker: unitFace(
+			lanes.units.attacker,
+			measure,
+			open === 'unit:attacker',
+			least,
+			editing('attacker')
+		),
+		target: unitFace(lanes.units.target, measure, open === 'unit:target', least, editing('target'))
+	});
+	const natural = unitFaces(0);
+	const unitWidth = Math.max(natural.attacker.width, natural.target.width);
+	const units = unitFaces(unitWidth);
+	const chargeCard = lanes.charge && chargeFace(lanes.charge, measure, open === 'charge');
+	const volleyCard =
+		lanes.volley && volleyFace(lanes.volley, lanes.units.target.name, measure, open === 'volley');
+	const strikeCards = lanes.strikes.map((strike, index) =>
+		strikeFace(strike, lanes.units[strike.side as Lane].name, measure, open === `strike:${index}`)
 	);
 	const eventFace = (lane: Lane, event: Event): Face => {
 		if (event.kind === 'volley') return volleyCard!;
@@ -158,23 +182,40 @@ export function draw(lanes: FightLanes, measure: Measure): Drawing {
 	};
 	const eventWidth = (lane: Lane, event: Event | null) =>
 		event ? eventFace(lane, event).width : 0;
-	const resultCard = resultFace(lanes, measure);
-	const breakWidth = Math.max(BREAK.width, OUTCOME.inset + OUTCOME.width);
+	const resultCard = resultFace(lanes, measure, open === 'result');
+	const breakCards = {
+		attacker: breakFace(lanes.breaks.attacker, measure, open === 'break:attacker'),
+		target: breakFace(lanes.breaks.target, measure, open === 'break:target')
+	};
+	const breakWidth = Math.max(
+		OUTCOME.inset + OUTCOME.width,
+		...LANES.map((lane) => breakCards[lane].width)
+	);
+	const charged = lanes.battlefield && chargeCard && lanes.reaction;
 
 	const tall = (lane: Lane) =>
 		Math.max(
 			units[lane].height,
+			charged ? (lane === 'attacker' ? chargeCard.height : REACTION.height) : 0,
+			fought ? breakCards[lane].height : 0,
 			...events.map((column) => {
 				const event = column[lane];
-				return event && event.kind !== 'pill' ? eventFace(lane, event).height : 0;
+				return event ? eventFace(lane, event).height : 0;
 			})
 		);
+	const across = Math.max(charged ? BATTLEFIELD.height : 0, fought ? resultCard.height : 0);
 	const room = fought ? 3 * OUTCOME.step : 0;
 	const bandTop = { attacker: HEAD + (fought ? room + 26 : SHORT.height + 24), target: 0 };
 	const bandHeight = {
 		attacker: Math.max(160, tall('attacker') + 28),
 		target: Math.max(160, tall('target') + 28)
 	};
+	const { attacker: upper, target: lower } = bandHeight;
+	const above = (3 * upper + lower) / 4 + MIDDLE / 2;
+	const below = (upper + 3 * lower) / 4 + MIDDLE / 2;
+	const deeper = Math.max(0, across / 2 + 14 - Math.min(above, below));
+	bandHeight.attacker += deeper;
+	bandHeight.target += deeper;
 	bandTop.target = bandTop.attacker + bandHeight.attacker + MIDDLE;
 	const track = (lane: Lane) => bandTop[lane] + bandHeight[lane] / 2;
 	const between = (track('attacker') + track('target')) / 2;
@@ -216,7 +257,7 @@ export function draw(lanes: FightLanes, measure: Measure): Drawing {
 	}
 
 	let charge: Box | null = null;
-	if (lanes.battlefield && lanes.charge && lanes.reaction) {
+	if (charged) {
 		const field = centred(
 			column(BATTLEFIELD.width, 'battlefield') + BATTLEFIELD.width / 2,
 			BATTLEFIELD.width,
@@ -224,7 +265,7 @@ export function draw(lanes: FightLanes, measure: Measure): Drawing {
 			BATTLEFIELD.height
 		);
 		nodes.push({ kind: 'battlefield', id: 'battlefield', box: field });
-		const face = chargeFace(lanes.charge);
+		const face = chargeCard;
 		const chargeX = column(face.width, 'charge', WIDE) + face.width / 2;
 		charge = centred(chargeX, face.width, track('attacker'), face.height);
 		const reaction = centred(chargeX, REACTION.width, track('target'), REACTION.height);
@@ -333,7 +374,7 @@ export function draw(lanes: FightLanes, measure: Measure): Drawing {
 			edges.push({
 				d: elbow(right(run.at(-1)!, track(lane)), left(result, entry[lane]), result.x - 20)
 			});
-			const face = breakFace(lanes.breaks[lane]);
+			const face = breakCards[lane];
 			const test = {
 				x: breakX,
 				y: track(lane) - face.height / 2,

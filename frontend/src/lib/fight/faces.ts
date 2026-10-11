@@ -1,4 +1,4 @@
-import type { FightLanes, LaneUnit, Needed, Strike } from '$lib/api/client';
+import type { FightLanes, LandedRule, LaneUnit, Needed, Strike } from '$lib/api/client';
 import { percent } from '$lib/charts/scale';
 
 /** A lane of the drawing: the charger's above, its target's below. */
@@ -23,6 +23,7 @@ export interface Box extends Point {
 export const INSET = 14;
 export const UNIT = {
 	least: 184,
+	editor: 248,
 	chips: 34,
 	chip: 20,
 	gap: 4,
@@ -36,6 +37,7 @@ const CHARGE = { width: 170, height: 76 };
 const RESULT = { least: 150, height: 128 };
 const BREAK = { width: 190, height: 56 };
 const PILL = { least: 50, height: 26 };
+const RULE = { row: 20, box: 11, side: 8 };
 
 /** The letter drawn in the square of a command model of each kind. */
 export const MARK: Record<LaneUnit['command'][number]['kind'], string> = {
@@ -59,7 +61,8 @@ export type Mark =
 	| { kind: 'chip'; box: Box; text: string; held: boolean }
 	| { kind: 'model'; box: Box; command: LaneUnit['command'][number] | null }
 	| { kind: 'divider'; y: number }
-	| { kind: 'shares'; box: Box; shares: Share[] };
+	| { kind: 'shares'; box: Box; shares: Share[] }
+	| { kind: 'rule'; x: number; y: number; rule: LandedRule };
 
 /**
  * What a card shows, and how big it is.
@@ -72,12 +75,8 @@ export interface Face {
 	width: number;
 	height: number;
 	marks: Mark[];
-}
-
-/** A chip of a unit card: an option the unit bought, or a piece it holds, highlighted. */
-export interface Chip extends Box {
-	text: string;
-	held: boolean;
+	/** Room on the card for controls drawn over it. */
+	slot?: Box;
 }
 
 export interface Model<T> {
@@ -142,8 +141,54 @@ const text = (
 	anchor: 'start' | 'middle' | 'end' = 'start'
 ): Mark => ({ kind: 'text', x, y, text: value, font, anchor });
 
-/** A unit's card, at least `least` wide so both units' cards can match. */
-export function unitFace(unit: LaneUnit, measure: Measure, least = UNIT.least): Face {
+/** How wide a card must be to list `rules`: a checkbox, the rule's name, its side's colour. */
+function ruleWidth(rules: LandedRule[], inset: number, measure: Measure): number {
+	const widths = rules.map((rule) => measure(rule.name, 'text'));
+	return Math.max(0, ...widths.map((width) => 2 * inset + RULE.box + 7 + width + 12 + RULE.side));
+}
+
+/** The face with the rules landing on it listed under it, each ticked where it applied. */
+function ruled(face: Face, rules: LandedRule[], inset: number): Face {
+	if (!rules.length) return face;
+	const top = face.height - 4;
+	const listed = rules.map((rule, index): Mark => ({
+		kind: 'rule',
+		x: inset,
+		y: top + 19 + index * RULE.row,
+		rule
+	}));
+	return {
+		...face,
+		height: top + rules.length * RULE.row + 8,
+		marks: [...face.marks, { kind: 'divider', y: top }, ...listed]
+	};
+}
+
+/** The face with room under it for controls `height` tall, as it is with none. */
+function editable(face: Face, height: number | null): Face {
+	if (height === null) return face;
+	const top = face.height - 4;
+	const slot = { x: INSET, y: top + 12, width: face.width - 2 * INSET, height };
+	return {
+		...face,
+		height: slot.y + height + 12,
+		marks: [...face.marks, { kind: 'divider', y: top }],
+		slot
+	};
+}
+
+/**
+ * A unit's card, at least `least` wide so both units' cards can match, with
+ * room for an editor `editor` tall when it is edited in place.
+ */
+export function unitFace(
+	unit: LaneUnit,
+	measure: Measure,
+	open: boolean,
+	least = 0,
+	editor: number | null = null
+): Face {
+	const rules = open ? unit.rules : [];
 	const dims = measure(`${unit.frontage} × ${unit.ranks}`, 'mono');
 	const chipped = [
 		...unit.options.map((option) => ({ text: option.name, held: false })),
@@ -151,7 +196,10 @@ export function unitFace(unit: LaneUnit, measure: Measure, least = UNIT.least): 
 	];
 	const chipWidths = chipped.map((chip) => measure(chip.text, 'chip') + 18);
 	const width = Math.max(
+		UNIT.least,
 		least,
+		editor === null ? 0 : 2 * INSET + UNIT.editor,
+		ruleWidth(rules, INSET, measure),
 		2 * INSET + measure(unit.name, 'title') + 12 + measure(`×${unit.size}`, 'mono'),
 		2 * INSET + Math.max(...chipWidths),
 		2 * INSET + unit.frontage * UNIT.packed + 12 + dims
@@ -186,19 +234,27 @@ export function unitFace(unit: LaneUnit, measure: Measure, least = UNIT.least): 
 	marks.push(
 		text(width - INSET, top + ranks * pitch - 5, `${unit.frontage} × ${unit.ranks}`, 'mono', 'end')
 	);
-	return { chrome: 'spine', width, height: top + ranks * pitch + UNIT.bottom, marks };
+	const face: Face = { chrome: 'spine', width, height: top + ranks * pitch + UNIT.bottom, marks };
+	return editable(ruled(face, rules, INSET), editor);
 }
 
-export function chargeFace(charge: NonNullable<FightLanes['charge']>): Face {
-	return {
+export function chargeFace(
+	charge: NonNullable<FightLanes['charge']>,
+	measure: Measure,
+	open: boolean
+): Face {
+	const rules = open ? charge.rules : [];
+	const face: Face = {
 		chrome: 'spine',
-		...CHARGE,
+		width: Math.max(CHARGE.width, ruleWidth(rules, INSET, measure)),
+		height: CHARGE.height,
 		marks: [
 			text(INSET, 23, 'Charge', 'title'),
 			text(INSET, 43, `${charge.distance}in · ${charge.arc}`, 'mono'),
 			text(INSET, 61, `roll ≥ ${charge.distance}in`, 'mono')
 		]
 	};
+	return ruled(face, rules, INSET);
 }
 
 function headed(
@@ -206,12 +262,14 @@ function headed(
 	first: string,
 	needed: Needed,
 	rows: [string, string][],
+	rules: LandedRule[],
 	measure: Measure
 ): Face {
 	const lines = needs(needed);
 	const pad = 2 * STRIKE.inset;
 	const width = Math.max(
 		STRIKE.least,
+		ruleWidth(rules, STRIKE.inset, measure),
 		pad + measure(title, 'title'),
 		...lines.map((line) => pad + measure(line, 'mono')),
 		...rows.map(
@@ -233,20 +291,23 @@ function headed(
 		);
 	});
 	const height = rows.length ? STRIKE.rule + rows.length * STRIKE.row + 12 : STRIKE.rule;
-	return { chrome: 'header', width, height, marks };
+	return ruled({ chrome: 'header', width, height, marks }, rules, STRIKE.inset);
 }
 
 export function volleyFace(
 	volley: NonNullable<FightLanes['volley']>,
 	shooter: string,
-	measure: Measure
-) {
-	return headed(shooter, `${volley.shots} shots`, volley.needed, [], measure);
+	measure: Measure,
+	open: boolean
+): Face {
+	const rules = open ? volley.rules : [];
+	return headed(shooter, `${volley.shots} shots`, volley.needed, [], rules, measure);
 }
 
-export function strikeFace(strike: Strike, unit: string, measure: Measure): Face {
+export function strikeFace(strike: Strike, unit: string, measure: Measure, open: boolean): Face {
 	const { title, rows } = striker(strike, unit);
-	return headed(title, `${count(strike.attacks.mean)} attacks`, strike.needed, rows, measure);
+	const attacks = `${count(strike.attacks.mean)} attacks`;
+	return headed(title, attacks, strike.needed, rows, open ? strike.rules : [], measure);
 }
 
 /** A lane's models standing: the count it fielded at the start, the mean after. */
@@ -261,8 +322,9 @@ export function pillFace(models: number, start: boolean, measure: Measure): Face
 	};
 }
 
-export function resultFace(lanes: FightLanes, measure: Measure): Face {
+export function resultFace(lanes: FightLanes, measure: Measure, open: boolean): Face {
 	const { result } = lanes;
+	const rules = open ? result.rules : [];
 	const shares: Share[] = [
 		['attacker', result.attacker_wins],
 		['draw', result.draw],
@@ -270,6 +332,7 @@ export function resultFace(lanes: FightLanes, measure: Measure): Face {
 	];
 	const width = Math.max(
 		RESULT.least,
+		ruleWidth(rules, STRIKE.inset, measure),
 		...LANES.map(
 			(lane) =>
 				3 * STRIKE.inset +
@@ -288,16 +351,23 @@ export function resultFace(lanes: FightLanes, measure: Measure): Face {
 	});
 	const box = { x: STRIKE.inset, y: 78, width: width - 2 * STRIKE.inset, height: 12 };
 	marks.push({ kind: 'shares', box, shares });
-	return { chrome: 'card', width, height: RESULT.height, marks };
+	return ruled({ chrome: 'card', width, height: RESULT.height, marks }, rules, STRIKE.inset);
 }
 
-export function breakFace(test: FightLanes['breaks']['attacker']): Face {
-	return {
+export function breakFace(
+	test: FightLanes['breaks']['attacker'],
+	measure: Measure,
+	open: boolean
+): Face {
+	const rules = open ? test.rules : [];
+	const face: Face = {
 		chrome: 'spine',
-		...BREAK,
+		width: Math.max(BREAK.width, ruleWidth(rules, INSET, measure)),
+		height: BREAK.height,
 		marks: [
 			text(INSET, 22, 'Break test', 'title'),
 			text(INSET, 43, `Ld ${test.leadership ?? '–'}`, 'mono')
 		]
 	};
+	return ruled(face, rules, INSET);
 }
