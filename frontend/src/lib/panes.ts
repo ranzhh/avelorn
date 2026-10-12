@@ -56,15 +56,15 @@ export const LABEL: Record<Subject, string> = {
 /**
  * What a pane of each subject measures, in pixels.
  *
- * Read by the component into custom properties as well as by the placement
- * below, so the rectangle that is clamped is the rectangle that is drawn. A
- * pane taller than its measure scrolls inside; it does not grow.
+ * The width is drawn as given. The height is what placement keeps on screen:
+ * the pane itself grows with what it reads, down to the window's bottom edge,
+ * and only scrolls inside past that.
  */
 export const MEASURE: Record<Subject, Size> = {
-	unit: { width: 384, height: 520 },
-	rule: { width: 320, height: 300 },
-	weapon: { width: 340, height: 340 },
-	armour: { width: 300, height: 220 }
+	unit: { width: 440, height: 520 },
+	rule: { width: 400, height: 300 },
+	weapon: { width: 400, height: 340 },
+	armour: { width: 340, height: 220 }
 };
 
 /** How wide the options a block's pane carries beside its datasheet. */

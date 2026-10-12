@@ -47,7 +47,7 @@
 <section
 	class="pane"
 	style="left: {pane.x}px; top: {pane.y}px; z-index: {100 +
-		pane.z}; --pane-w: {drawn}px; --pane-h: {placed.height}px; --aside-w: {ASIDE}px"
+		pane.z}; --pane-w: {drawn}px; --pane-h: calc(100vh - {pane.y}px - var(--space-4)); --aside-w: {ASIDE}px"
 	onpointerdowncapture={onraise}
 >
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
