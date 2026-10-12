@@ -59,7 +59,7 @@
 
 {#if pricing && unit.options?.length}
 	<h4>options</h4>
-	<table>
+	<table class="priced">
 		<tbody>
 			{#each unit.options as option}
 				<tr>

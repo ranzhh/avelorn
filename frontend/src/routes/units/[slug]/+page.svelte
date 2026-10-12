@@ -13,7 +13,9 @@
 	}
 </script>
 
-<h1>{data.unit.name}</h1>
-<Sheet unit={data.unit} onopen={open} />
+<article class="page">
+	<h1>{data.unit.name}</h1>
+	<Sheet unit={data.unit} onopen={open} />
+</article>
 
 <Panes bind:this={panes} />
