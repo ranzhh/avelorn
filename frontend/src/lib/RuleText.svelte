@@ -11,10 +11,13 @@
 <p class="meta where">
 	<span>{where}</span>
 	{#if rule.effects?.length}
-		<span class="status on" role="img" title="implemented" aria-label="implemented">✓</span>
+		<span class="status on" role="img" aria-label="implemented in the engine">
+			✓<span class="says"><b>Implemented</b> in the engine</span>
+		</span>
 	{:else}
-		<span class="status" role="img" title="not implemented yet" aria-label="not implemented yet"
-		></span>
+		<span class="status" role="img" aria-label="not implemented in the engine">
+			<span class="says"><b>Not implemented</b> in the engine</span>
+		</span>
 	{/if}
 </p>
 

@@ -532,6 +532,7 @@ svg {
 	gap: var(--space-2);
 }
 .status {
+	position: relative;
 	display: inline-grid;
 	place-items: center;
 	width: 1.25rem;
@@ -540,12 +541,34 @@ svg {
 	border-radius: 50%;
 	color: var(--faint);
 	font-size: var(--text-xs);
-	cursor: help;
 }
 .status.on {
 	border-color: var(--pos);
 	color: var(--pos);
 	font-weight: 700;
+}
+.status .says {
+	position: absolute;
+	top: calc(100% + var(--space-1));
+	right: 0;
+	z-index: 1;
+	display: none;
+	padding: var(--space-1) var(--space-2);
+	color: var(--ink);
+	background: var(--panel);
+	border: 1px solid var(--line);
+	box-shadow: 0 2px 8px rgb(0 0 0 / 0.15);
+	font-weight: 400;
+	white-space: nowrap;
+}
+.status:hover .says {
+	display: block;
+}
+.pane:has(.status.on) {
+	border-color: var(--pos);
+	box-shadow:
+		0 0 0 1px var(--pos),
+		0 4px 16px rgb(0 0 0 / 0.12);
 }
 .pane > header {
 	display: flex;
