@@ -6,6 +6,7 @@
 	let { data } = $props();
 
 	let panes = $state<Panes | null>(null);
+	let column = $state<HTMLElement | null>(null);
 
 	function open(reference: Reference) {
 		if (!reference.kind || !reference.slug) return;
@@ -13,9 +14,9 @@
 	}
 </script>
 
-<article class="page">
+<article class="page" bind:this={column}>
 	<h1>{data.unit.name}</h1>
 	<Sheet unit={data.unit} onopen={open} />
 </article>
 
-<Panes bind:this={panes} />
+<Panes bind:this={panes} beside={column} />
