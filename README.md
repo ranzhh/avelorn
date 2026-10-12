@@ -69,7 +69,19 @@ Or run both services in containers:
 make up
 ```
 
-The battle table is available at [localhost:5173/table](http://localhost:5173/table).
+The battle table is available at [localhost:5173/table](http://localhost:5173/table). Actions begin there: drag one unit onto another to charge, shoot, or resolve an already-engaged fight. The table supplies the distance and arc, while each unit's pane controls its formation and equipment.
+
+After an action has been resolved, the graph view turns it into an inspectable probability tree:
+
+![A fight graph following Dragon Princes charging Lothern Sea Guard](docs/screenshots/graph.png)
+
+Here, five Dragon Princes charge twenty-one Lothern Sea Guard from 14 inches away. The graph keeps the failed-charge branch, Stand & Shoot, casualties at each Initiative step, combat result, and both Break tests in one view. Its conditional and marginal modes show either the chance from the preceding step or the chance from the start of the action.
+
+Every node can be opened to inspect its distribution, the quantities that contribute to it, and the rules applied there:
+
+![The expanded combat-result node and its distributions](docs/screenshots/result.png)
+
+The expanded combat result shows each side's wounds and bonuses, the distribution of the final margin, and the rules included in the calculation. Changes to the units, charge reaction, or battlefield position are sent back through the engine and redraw the graph.
 
 ## The graph compiler
 
@@ -85,7 +97,7 @@ The graph core can currently:
 - attach rule nodes to the steps they land on and record whether a landing was applied, honoured, held, or inapplicable;
 - serialize an evaluated program into the shape consumed by the graph frontend.
 
-The graph frontend is available at `/graph`. It lays out steps left to right, draws groups as frames, displays readings on edges, and connects rule nodes to their landings. Every phase of the game runs on these programs: a volley, a Stand & Shoot reaction, and a round of combat are each a program loaded from YAML with the corpus rules attached.
+The graph view is available at `/graph`. It lays out steps left to right, draws groups as frames, displays readings on edges, and connects rule nodes to their landings. Every phase of the game runs on these programs: a volley, a Stand & Shoot reaction, and a round of combat are each a program loaded from YAML with the corpus rules attached.
 
 ## Project shape
 
