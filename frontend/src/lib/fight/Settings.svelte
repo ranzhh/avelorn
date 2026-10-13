@@ -18,7 +18,7 @@
 
 <details class="settings">
 	<summary aria-label="settings">
-		<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+		<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
 			<circle class="teeth" cx="12" cy="12" r="8" />
 			<circle class="hub" cx="12" cy="12" r="5.5" />
 		</svg>
@@ -49,6 +49,8 @@
 		top: 4px;
 		right: 4px;
 		z-index: 2;
+		padding: 0;
+		border: 0;
 	}
 	summary {
 		list-style: none;
@@ -56,13 +58,13 @@
 		height: 26px;
 		display: grid;
 		place-items: center;
-		font-size: 16px;
 		cursor: pointer;
-		border: 1px solid var(--line);
-		background: var(--bg);
 	}
 	summary svg {
 		fill: none;
+		stroke: var(--dim);
+	}
+	summary:hover svg {
 		stroke: var(--ink);
 	}
 	.teeth {
