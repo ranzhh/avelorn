@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Warn from '$lib/Warn.svelte';
 	import Readings from './Readings.svelte';
 	import {
 		FRAME,
@@ -115,6 +116,7 @@
 					<span class="who {tint(side)}"><i></i>{side}</span>
 				{/each}
 			</div>
+			<Warn notes={drawn.unmodelled.map((each) => `${each.name}, ${held(each.holder)}`)} count />
 			<div class="cluster legend">
 				{#each Object.entries(MARK) as [kind, mark]}
 					<span><span class="mark">{mark}</span>{kind}</span>
@@ -220,6 +222,7 @@
 					<div
 						class="card {tint(node.side)}"
 						class:on={is('step', placed.path)}
+						class:idle={!node.ran}
 						class:held={grip?.id === placed.path}
 						role="button"
 						tabindex="0"
@@ -243,15 +246,6 @@
 				{/each}
 			</div>
 		</div>
-
-		<footer class="unmodelled">
-			<span class="eyebrow">not modelled</span>
-			{#each drawn.unmodelled as each (each.id)}
-				<span class="entry">{each.name} <span class="meta">{held(each.holder)}</span></span>
-			{:else}
-				<span class="meta">none</span>
-			{/each}
-		</footer>
 	</div>
 
 	<aside class="explore">
@@ -274,48 +268,43 @@
 					<div class="field"><span>{option}</span></div>
 				{/each}
 			{/if}
-			<h2>changes</h2>
 			{#if node.changes.length}
+				<h2>changes</h2>
 				{#each node.changes as change}
 					<div class="field">
 						<span>{named(change.rule)}</span><span class="num">{change.text}</span>
 					</div>
 				{/each}
-			{:else}
-				<span class="meta">none</span>
 			{/if}
-			<h2>reads</h2>
-			{#each [...new Set(node.inputs)] as input (input)}
-				<button class="link path" onclick={() => choose('step', input)}>{within(input)}</button>
-			{:else}
-				<span class="meta">nothing</span>
-			{/each}
-			<h2>rules</h2>
-			{#each landed(program, node.path) as each (each.rule.id)}
-				<div class="ruled">
-					<input type="checkbox" checked={each.applied} disabled aria-label={each.rule.name} />
-					<button
-						class="link"
-						title={held(each.rule.holder)}
-						onclick={() => choose('rule', each.rule.id)}>{each.rule.name}</button
-					>
-				</div>
-			{:else}
-				<span class="meta">none</span>
-			{/each}
+			{#if node.inputs.length}
+				<h2>reads</h2>
+				{#each [...new Set(node.inputs)] as input (input)}
+					<button class="link path" onclick={() => choose('step', input)}>{within(input)}</button>
+				{/each}
+			{/if}
+			{@const ruled = landed(program, node.path)}
+			{#if ruled.length}
+				<h2>rules</h2>
+				{#each ruled as each (each.rule.id)}
+					<div class="ruled">
+						<input type="checkbox" checked={each.applied} disabled aria-label={each.rule.name} />
+						<button
+							class="link"
+							title={held(each.rule.holder)}
+							onclick={() => choose('rule', each.rule.id)}>{each.rule.name}</button
+						>
+					</div>
+				{/each}
+			{/if}
 			{#if node.kind === 'roll'}
 				<h2>{node.printed ? 'in force' : 'target'}</h2>
 				<Readings readings={[node.target]} width={STRIP} />
 			{/if}
-			<h2>edge out</h2>
-			{#if !node.ran}
-				<span class="meta">not run in this lane</span>
-			{:else if node.edge.readings.length}
+			{#if node.ran && node.edge.readings.length}
+				<h2>edge out</h2>
 				<div class="readings">
 					<Readings readings={node.edge.readings} width={STRIP} />
 				</div>
-			{:else}
-				<span class="meta">no readings</span>
 			{/if}
 		{:else if block}
 			<header>
@@ -347,7 +336,7 @@
 			</header>
 			<div class="field"><span>holder</span><span>{held(rule.holder)}</span></div>
 			<div class="field"><span>id</span><span class="path">{rule.id}</span></div>
-			<h2>lands on</h2>
+			{#if rule.landings.length}<h2>lands on</h2>{/if}
 			{#each rule.landings as landing (landing.at)}
 				<div class="ruled">
 					<input
@@ -360,8 +349,6 @@
 						>{within(landing.at)}</button
 					>
 				</div>
-			{:else}
-				<span class="meta">none</span>
 			{/each}
 			{#if granted.length}
 				<h2>grants</h2>
@@ -370,7 +357,7 @@
 				{/each}
 			{/if}
 		{:else}
-			<span class="meta">select a step or group to explore it</span>
+			<h2>node explorer</h2>
 		{/if}
 	</aside>
 </div>
@@ -390,21 +377,13 @@
 		min-width: 0;
 		min-height: 0;
 	}
-	.head,
-	.unmodelled {
-		display: flex;
+	.head {
 		flex-wrap: wrap;
-		align-items: center;
 		gap: 0.2rem 1rem;
 		padding: 0.6rem;
 		border-bottom: 1px solid #bbb;
 	}
-	.unmodelled {
-		font-size: var(--text-sm);
-	}
-	.entry {
-		white-space: nowrap;
-	}
+	.head,
 	.cluster,
 	.who,
 	.legend > span {
@@ -508,6 +487,9 @@
 		overflow: hidden;
 		font-size: inherit;
 		text-overflow: ellipsis;
+	}
+	.card.idle {
+		opacity: 0.45;
 	}
 	.card.on,
 	.frame.on {
