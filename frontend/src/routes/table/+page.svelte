@@ -390,6 +390,7 @@
 				onreform={reform}
 				ondropunit={(unit, size, x, y) => deploy(unit, size, { x, y })}
 				onedit={(id) => ((picked = id), sheet(id))}
+				onremove={remove}
 			/>
 			{#if pair}
 				<div

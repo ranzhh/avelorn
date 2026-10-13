@@ -27,8 +27,10 @@
 		onreform: (id: number, frontage: number) => void;
 		/** A datasheet dragged in from the panel and dropped on the table. */
 		ondropunit: (unit: string, size: number, x: number, y: number) => void;
-		/** A block double-clicked: open its size and options. */
+		/** A block double-clicked, or Entered from the keyboard: open its datasheet. */
 		onedit: (id: number) => void;
+		/** A focused block deleted from the keyboard. */
+		onremove: (id: number) => void;
 		/** The pair a menu is open on or was last resolved, drawn as an arrow between them. */
 		linked: { mover: number; target: number } | null;
 	}
@@ -43,6 +45,7 @@
 		onreform,
 		ondropunit,
 		onedit,
+		onremove,
 		linked
 	}: Props = $props();
 
@@ -261,6 +264,16 @@
 		}
 	}
 
+	function key(event: KeyboardEvent, block: Placed) {
+		if (event.key === 'Enter' || event.key === ' ') {
+			event.preventDefault();
+			onedit(block.id);
+		} else if (event.key === 'Delete' || event.key === 'Backspace') {
+			event.preventDefault();
+			onremove(block.id);
+		}
+	}
+
 	function release() {
 		if (flight && moving) {
 			// On another block the drop is an action, so the mover stays where it
@@ -414,14 +427,18 @@
 		{#if print}
 			{@const size = span(print)}
 			{@const label = legend(block)}
-			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<g
 				class="block"
 				class:picked={block.id === picked}
 				class:origin={flight?.id === block.id && carrying}
 				class:under={over?.id === block.id}
+				role="button"
+				tabindex="0"
+				aria-label="{block.mark} {block.block.name}"
 				onpointerdown={(event) => grab(event, block)}
 				ondblclick={() => onedit(block.id)}
+				onfocus={() => onpick(block.id)}
+				onkeydown={(event) => key(event, block)}
 			>
 				<g transform="rotate({block.facing} {block.x} {block.y})">
 					<rect
