@@ -31,6 +31,7 @@
 	--on-accent: #fff;
 	--pos: #39734c;
 	--neg: #b34c45;
+	--warn: #b7791f;
 }
 
 * {
@@ -184,6 +185,42 @@ details > .body {
 summary {
 	cursor: pointer;
 }
+.dock > summary {
+	display: flex;
+	gap: var(--space-2);
+	align-items: center;
+	list-style: none;
+}
+.dock > summary::-webkit-details-marker {
+	display: none;
+}
+.dock > summary::before {
+	content: '▸';
+	color: var(--dim);
+}
+.dock[open] > summary::before {
+	content: '▾';
+}
+.dock > summary b {
+	min-width: 0;
+	overflow: hidden;
+	font-size: var(--text-sm);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.dock > summary .end {
+	display: flex;
+	gap: var(--space-2);
+	align-items: center;
+	margin-left: auto;
+}
+.badge {
+	padding: 0 0.4rem;
+	color: var(--on-accent);
+	background: var(--accent);
+	border-radius: 999px;
+	font-size: var(--text-xs);
+}
 
 .rows {
 	display: grid;
@@ -281,6 +318,27 @@ th {
 .priced .num {
 	padding-left: var(--space-5);
 	text-align: right;
+}
+
+.lost td {
+	color: var(--faint);
+}
+.lost .says {
+	right: auto;
+	left: 0;
+}
+
+.matchup {
+	display: flex;
+	gap: var(--space-3);
+	align-items: center;
+	margin-bottom: var(--space-3);
+	font-size: var(--text-sm);
+}
+
+.flavour {
+	color: var(--dim);
+	font-style: italic;
 }
 
 .page {
@@ -425,12 +483,39 @@ svg {
 	transform: translate(-50%, var(--space-2));
 	white-space: nowrap;
 }
+.dimmed {
+	position: relative;
+	display: grid;
+}
+.menu .dimmed .says {
+	top: 50%;
+	right: auto;
+	left: calc(100% + var(--space-3));
+	transform: translateY(-50%);
+}
+.dimmed > button:disabled {
+	color: var(--faint);
+	background: var(--sunken);
+	border-color: var(--line);
+	cursor: not-allowed;
+}
 .menu.above {
 	transform: translate(-50%, calc(-100% - var(--space-2)));
 }
 .menu .head {
+	display: flex;
+	gap: var(--space-2);
+	align-items: center;
+	justify-content: space-between;
 	font: var(--text-xs) / 1.5 var(--font-mono);
 	color: var(--dim);
+}
+.menu .shut {
+	padding: 0 var(--space-1);
+	border: 0;
+	background: transparent;
+	color: var(--dim);
+	cursor: pointer;
 }
 .carried {
 	position: absolute;
@@ -527,9 +612,13 @@ svg {
 	margin-top: var(--space-2);
 }
 .where {
+	position: relative;
 	display: flex;
-	justify-content: space-between;
 	gap: var(--space-2);
+	align-items: center;
+}
+.where > :first-child {
+	margin-right: auto;
 }
 .status {
 	position: relative;
@@ -547,7 +636,7 @@ svg {
 	color: var(--pos);
 	font-weight: 700;
 }
-.status .says {
+.says {
 	position: absolute;
 	top: calc(100% + var(--space-1));
 	right: 0;
@@ -558,11 +647,40 @@ svg {
 	background: var(--panel);
 	border: 1px solid var(--line);
 	box-shadow: 0 2px 8px rgb(0 0 0 / 0.15);
+	font-size: var(--text-xs);
 	font-weight: 400;
 	white-space: nowrap;
 }
-.status:hover .says {
+.status:hover .says,
+.warn:hover .says,
+.dimmed:hover .says {
 	display: block;
+}
+.warn {
+	position: relative;
+	display: inline-flex;
+	gap: 0.15rem;
+	align-items: center;
+	color: var(--warn);
+	font-size: var(--text-sm);
+}
+.warn .says {
+	display: none;
+	width: max-content;
+	max-width: 20rem;
+	white-space: normal;
+}
+.warn:hover .says {
+	display: grid;
+	gap: var(--space-1);
+}
+.where .warn {
+	position: static;
+}
+.where .warn .says {
+	left: 0;
+	width: auto;
+	max-width: none;
 }
 .pane:has(.status.on) {
 	border-color: var(--pos);
