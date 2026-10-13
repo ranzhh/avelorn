@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Warn from '$lib/Warn.svelte';
 	import type { Rule } from '$lib/api/client';
 
 	let { rule }: { rule: Rule } = $props();
@@ -10,6 +11,7 @@
 
 <p class="meta where">
 	<span>{where}</span>
+	<Warn notes={rule.notes ? [rule.notes] : []} />
 	{#if rule.effects?.length}
 		<span class="status on" role="img" aria-label="implemented in the engine">
 			✓<span class="says"><b>Implemented</b> in the engine</span>
@@ -21,11 +23,10 @@
 	{/if}
 </p>
 
+{#if rule.flavour}
+	<p class="text flavour">{rule.flavour}</p>
+{/if}
+
 {#each rule.paragraphs as paragraph}
 	<p class="text">{paragraph}</p>
 {/each}
-
-{#if rule.notes}
-	<h4>left out</h4>
-	<p class="meta">{rule.notes}</p>
-{/if}

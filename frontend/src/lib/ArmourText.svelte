@@ -1,8 +1,13 @@
 <script lang="ts">
+	import Warn from '$lib/Warn.svelte';
 	import type { Armour } from '$lib/api/client';
 
 	let { armour }: { armour: Armour } = $props();
 </script>
+
+{#if armour.notes}
+	<p class="meta where"><span></span><Warn notes={[armour.notes]} /></p>
+{/if}
 
 <table>
 	<tbody>
@@ -16,8 +21,3 @@
 		</tr>
 	</tbody>
 </table>
-
-{#if armour.notes}
-	<h4>not covered</h4>
-	<p class="meta">{armour.notes}</p>
-{/if}

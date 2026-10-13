@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Chips from '$lib/Chips.svelte';
+	import Warn from '$lib/Warn.svelte';
 	import type { Reference, Weapon } from '$lib/api/client';
 
 	interface Props {
@@ -17,7 +18,10 @@
 	}
 </script>
 
-{#if weapon.weapon_type}<p class="meta">{weapon.weapon_type}</p>{/if}
+<p class="meta where">
+	<span>{weapon.weapon_type ?? ''}</span>
+	<Warn notes={weapon.notes ? [weapon.notes] : []} />
+</p>
 
 <table>
 	<thead>
@@ -47,8 +51,3 @@
 		<Chips of={profile.special_rules} {onopen} />
 	{/if}
 {/each}
-
-{#if weapon.notes}
-	<h4>not covered</h4>
-	<p class="meta">{weapon.notes}</p>
-{/if}

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { page } from '$app/state';
+	import { resolve } from '$app/paths';
 	import { api, type FightBody, type FightLanes, type VolleyBody } from '$lib/api/client';
 	import { battle } from '$lib/battle.svelte';
 	import Fight from '$lib/fight/Fight.svelte';
@@ -21,6 +22,20 @@
 	}
 
 	const last = $derived(battle.resolved);
+	const matchup = $derived.by(() => {
+		if (last?.action === 'fight') {
+			const { a, b } = last.report;
+			const charge = last.body.charge;
+			const verb = charge ? 'charge' : 'fight';
+			const range = charge ? ` at ${charge.full_inches}in` : '';
+			return `${a.name} ×${a.size} ${verb} ${b.name} ×${b.size}${range}`;
+		}
+		if (last?.action === 'volley') {
+			const { shooter, target } = last.report;
+			return `${shooter.name} ×${shooter.size} shoot ${target.name} ×${target.size} at ${last.body.distance}in`;
+		}
+		return '';
+	});
 	const program = $derived(last?.action === 'volley' ? volley(last.body) : null);
 
 	let body = $derived<FightBody | null>(
@@ -82,6 +97,11 @@
 	});
 </script>
 
+<div class="matchup">
+	<a class="btn btn-sm" href={resolve('/table')}>← table</a>
+	{#if matchup}<span>{matchup}</span>{/if}
+</div>
+
 {#if last?.action === 'fight' && body}
 	{#if refusal}<p class="refuse">{refusal}</p>{/if}
 	{#if lanes}
@@ -95,10 +115,6 @@
 		/>
 	{/if}
 {:else if last?.action === 'volley' && program}
-	<p class="meta">
-		{last.report.shooter.name} ×{last.report.shooter.size} shoot
-		{last.report.target.name} ×{last.report.target.size} at {last.body.distance}in
-	</p>
 	{#await program}
 		<p class="meta">drawing…</p>
 	{:then program}

@@ -2,6 +2,7 @@
 	import { resolve } from '$app/paths';
 
 	import Muster from '$lib/Muster.svelte';
+	import Warn from '$lib/Warn.svelte';
 	import { entry } from '$lib/corpus';
 	import { readBack, type Saved } from '$lib/saved';
 	import { api, type MusteredUnit } from '$lib/api/client';
@@ -11,7 +12,7 @@
 	let { data } = $props();
 
 	let blocks = $state<MusteredUnit[]>([]);
-	let dropped = $state('');
+	let dropped = $state<Saved[]>([]);
 	let adding = $state('');
 	let addingSize = $state(1);
 	let editing = $state<number | null>(null);
@@ -28,7 +29,7 @@
 		const saved = localStorage.getItem(STORAGE_KEY);
 		readBack(saved ? JSON.parse(saved) : []).then((read) => {
 			blocks = read.blocks;
-			dropped = read.unread.map(described).join('; ');
+			dropped = read.unread;
 			loaded = true;
 		});
 	});
@@ -37,12 +38,9 @@
 		if (loaded) localStorage.setItem(STORAGE_KEY, JSON.stringify(blocks));
 	});
 
-	function described(block: Saved): string {
-		const names = block.options.map((option) =>
-			typeof option === 'string' ? option : option.name
-		);
-		return `${block.name} ×${block.size}${names.length ? ` (${names.join(', ')})` : ''}`;
-	}
+	const optionNames = (block: Saved) =>
+		block.options.map((option) => (typeof option === 'string' ? option : option.name)).join(', ') ||
+		'—';
 
 	async function muster(unit: string, size: number, options: string[]) {
 		const { data: block, error: refused } = await client().POST('/muster', {
@@ -107,16 +105,6 @@
 </script>
 
 <h1>Army list</h1>
-<p class="meta">
-	Blocks and what they cost. Nothing here checks whether the list is legal — army composition is not
-	modelled yet.
-</p>
-
-{#if dropped}
-	<p class="refuse">
-		Dropped from the saved list, as no datasheet could be read for them: {dropped}.
-	</p>
-{/if}
 
 <fieldset>
 	<legend>Add a block</legend>
@@ -145,77 +133,86 @@
 	{/if}
 </fieldset>
 
-{#if blocks.length}
-	<table>
-		<thead>
-			<tr>
-				<th>Block</th>
-				<th>Models</th>
-				<th>Options</th>
-				<th>Points</th>
-				<th></th>
+<table>
+	<thead>
+		<tr>
+			<th>Block</th>
+			<th>Models</th>
+			<th>Options</th>
+			<th>Points</th>
+			<th></th>
+		</tr>
+	</thead>
+	<tbody>
+		{#each blocks as block, at}
+			<tr class:editing={editing === at}>
+				<td>{block.name}</td>
+				<td>{block.size}</td>
+				<td class="meta">{block.options.map((option) => option.name).join(', ') || '—'}</td>
+				<td>{block.points}</td>
+				<td class="row-actions">
+					<button class="link" onclick={() => edit(at)}>
+						{editing === at ? 'close' : 'edit'}
+					</button>
+					<button class="link" onclick={() => duplicate(at)}>duplicate</button>
+					<button class="link" onclick={() => remove(at)}>remove</button>
+				</td>
 			</tr>
-		</thead>
-		<tbody>
-			{#each blocks as block, at}
-				<tr class:editing={editing === at}>
-					<td>{block.name}</td>
-					<td>{block.size}</td>
-					<td class="meta">{block.options.map((option) => option.name).join(', ') || '—'}</td>
-					<td>{block.points}</td>
-					<td class="row-actions">
-						<button class="link" onclick={() => edit(at)}>
-							{editing === at ? 'close' : 'edit'}
-						</button>
-						<button class="link" onclick={() => duplicate(at)}>duplicate</button>
-						<button class="link" onclick={() => remove(at)}>remove</button>
+			{#if editing === at}
+				<tr class="editor">
+					<td colspan="5">
+						{#key at}
+							<Muster
+								unit={block.unit}
+								size={block.size}
+								options={block.options.map((option) => option.id)}
+								submitLabel="Save"
+								{refusal}
+								onsubmit={(size, options) => save(at, size, options)}
+								oncancel={() => (editing = null)}
+							/>
+						{/key}
+
+						<dl class="loadout">
+							<dt>Carries</dt>
+							<dd>{block.equipment.join(', ') || '—'}</dd>
+							<dt>Rules</dt>
+							<dd>
+								{#each block.special_rules as rule, index}
+									{#if index}<span aria-hidden="true">, </span>{/if}
+									{#if rule.slug}
+										<a href={resolve('/rules/[slug]', { slug: rule.slug })}>{rule.name}</a>
+									{:else}
+										<span class="unmodelled" title="not modelled by the engine">{rule.name}</span>
+									{/if}
+								{/each}
+							</dd>
+						</dl>
 					</td>
 				</tr>
-				{#if editing === at}
-					<tr class="editor">
-						<td colspan="5">
-							{#key at}
-								<Muster
-									unit={block.unit}
-									size={block.size}
-									options={block.options.map((option) => option.id)}
-									submitLabel="Save"
-									{refusal}
-									onsubmit={(size, options) => save(at, size, options)}
-									oncancel={() => (editing = null)}
-								/>
-							{/key}
-
-							<dl class="loadout">
-								<dt>Carries</dt>
-								<dd>{block.equipment.join(', ') || '—'}</dd>
-								<dt>Rules</dt>
-								<dd>
-									{#each block.special_rules as rule, index}
-										{#if index}<span aria-hidden="true">, </span>{/if}
-										{#if rule.slug}
-											<a href={resolve('/rules/[slug]', { slug: rule.slug })}>{rule.name}</a>
-										{:else}
-											<span class="unmodelled" title="not modelled by the engine">{rule.name}</span>
-										{/if}
-									{/each}
-								</dd>
-							</dl>
-						</td>
-					</tr>
-				{/if}
-			{/each}
-		</tbody>
-		<tfoot>
-			<tr>
-				<th>Total</th>
-				<th>{models}</th>
-				<th></th>
-				<th>{total}</th>
-				<th></th>
+			{/if}
+		{/each}
+		{#each dropped as block, at}
+			<tr class="lost">
+				<td>{block.name} <Warn notes={[`no datasheet for ${block.unit}`]} /></td>
+				<td>{block.size}</td>
+				<td class="meta">{optionNames(block)}</td>
+				<td>–</td>
+				<td class="row-actions">
+					<button class="link" onclick={() => (dropped = dropped.filter((_, i) => i !== at))}>
+						remove
+					</button>
+				</td>
 			</tr>
-		</tfoot>
-	</table>
-{:else}
-	<p class="meta">No blocks yet.</p>
-{/if}
+		{/each}
+	</tbody>
+	<tfoot>
+		<tr>
+			<th>Total</th>
+			<th>{models}</th>
+			<th></th>
+			<th>{total}</th>
+			<th></th>
+		</tr>
+	</tfoot>
+</table>
