@@ -68,11 +68,19 @@
 		charge: null,
 		shots: null
 	});
+	/** Whether the mover's rank and file shoot at least as well as they fight. */
+	let aims = $state(false);
 	$effect(() => {
 		const open = pair;
 		reach = { charge: null, shots: null };
+		aims = false;
 		if (!open) return;
 		let live = true;
+		entry('unit', open.mover.block.unit).then((sheet) => {
+			const line = sheet?.profiles.find((profile) => profile.role === 'rank-and-file');
+			const { WS, BS } = line?.characteristics ?? {};
+			if (live) aims = WS != null && BS != null && BS >= WS;
+		});
 		const client = api(window.location.origin, fetch);
 		client
 			.POST('/fight', {
@@ -112,6 +120,7 @@
 	const blocked = $derived(
 		!pair?.shoots ? 'no missile weapon' : reach.shots === 0 ? 'out of range' : ''
 	);
+	const leads = $derived(!blocked && (aims || short) ? 'shoot' : 'charge');
 
 	const notes = $derived([
 		...new Set([...(fight?.not_modelled ?? []), ...(volley?.not_modelled ?? [])])
@@ -318,9 +327,14 @@
 		});
 	}
 
-	/** Focus the reaction a charge is met with unless told otherwise, so Enter declares it. */
+	/** Focus the menu's likeliest choice, so Enter makes it. */
 	function focused(node: HTMLButtonElement, on: boolean) {
 		if (on) node.focus();
+		return {
+			update(now: boolean) {
+				if (now) node.focus();
+			}
+		};
 	}
 
 	function remove(id: number) {
@@ -439,6 +453,7 @@
 							<button
 								class="btn btn-sm btn-primary"
 								disabled={short}
+								use:focused={leads === 'charge'}
 								onclick={() => (reacting = true)}
 							>
 								charge
@@ -446,7 +461,12 @@
 							{#if short}<span class="says">out of charge range</span>{/if}
 						</span>
 						<span class="dimmed">
-							<button class="btn btn-sm" disabled={!!blocked} onclick={loose}>shoot</button>
+							<button
+								class="btn btn-sm"
+								disabled={!!blocked}
+								use:focused={leads === 'shoot'}
+								onclick={loose}>shoot</button
+							>
 							{#if blocked}<span class="says">{blocked}</span>{/if}
 						</span>
 						{#if pair.inches === 0}
