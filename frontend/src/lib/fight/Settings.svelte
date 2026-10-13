@@ -89,7 +89,7 @@
 		gap: 6px 10px;
 		align-items: center;
 		padding: 8px 10px;
-		background: var(--bg);
+		background: var(--panel);
 		border: 1px solid var(--line);
 		box-shadow: 0 2px 8px rgb(0 0 0 / 0.12);
 		white-space: nowrap;
