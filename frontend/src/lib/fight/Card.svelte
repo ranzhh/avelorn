@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Bars from '$lib/charts/Bars.svelte';
-	import { MARK, STRIKE, type Box, type Face, type Lane, type Tone } from './faces';
+	import { percent } from '$lib/charts/scale';
+	import { MARK, STRIKE, pieces, type Box, type Face, type Lane, type Tone } from './faces';
 
 	interface Props {
 		face: Face;
@@ -94,6 +95,46 @@
 			{@const { x, y, width, height } = mark.box}
 			<rect class="track" {x} {y} {width} {height} rx="2" />
 			<rect class="met" {x} {y} width={mark.p * width} {height} rx="2" />
+		{:else if mark.kind === 'strip'}
+			{@const { x, y, width, height } = mark.box}
+			{#each pieces(mark.least, mark.layers) as piece}
+				{@const at = x + piece.from * width}
+				{@const wide = piece.p * width}
+				<rect
+					class="piece"
+					x={at}
+					{y}
+					width={wide}
+					{height}
+					fill={colours[piece.tone]}
+					fill-opacity={piece.shade}
+				>
+					<title
+						>{piece.tone === 'short'
+							? `falls short: ${percent(piece.p)}`
+							: `${piece.count} ${mark.unit}: ${percent(piece.p)}`}</title
+					>
+				</rect>
+				{@const label =
+					piece.tone === 'short'
+						? wide >= 64
+							? `short ${percent(piece.p)}`
+							: wide >= 34
+								? 'short'
+								: ''
+						: wide >= 11
+							? String(piece.count)
+							: ''}
+				{#if label}
+					<text
+						class="piece-text"
+						class:light={piece.tone !== 'short' && piece.shade > 0.55}
+						x={at + wide / 2}
+						y={y + height - 3}
+						text-anchor="middle">{label}</text
+					>
+				{/if}
+			{/each}
 		{:else if mark.kind === 'chart'}
 			<Bars
 				{...mark.box}
@@ -110,6 +151,13 @@
 <style>
 	text {
 		fill: var(--ink);
+	}
+	.piece-text {
+		font-size: 11px;
+		pointer-events: none;
+	}
+	.piece-text.light {
+		fill: #fff;
 	}
 	.mono {
 		font: 12px var(--font-mono);

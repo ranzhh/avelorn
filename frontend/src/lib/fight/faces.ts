@@ -70,7 +70,50 @@ export type Mark =
 			/** An outcome a rule is drawn before. */
 			rule: number | null;
 	  }
-	| { kind: 'meter'; box: Box; p: number };
+	| { kind: 'meter'; box: Box; p: number }
+	| {
+			kind: 'strip';
+			box: Box;
+			least: number;
+			/** The chances laid end to end, layer by layer, each count a darker shade of its layer's colour. */
+			layers: Layer[];
+			unit: string;
+	  };
+
+/** A count drawn shut as one strip of its chances, named by what it counts. */
+export interface Stripped {
+	least: number;
+	layers: Layer[];
+	unit: string;
+}
+
+/** One piece of a strip: a count of one layer, where along the strip it starts and how dark it is drawn. */
+export interface Piece {
+	tone: Tone;
+	count: number;
+	p: number;
+	from: number;
+	shade: number;
+}
+
+/** A strip's pieces end to end, each layer's counts from the least, the higher counts darker. */
+export function pieces(least: number, layers: Layer[]): Piece[] {
+	const drawn: Piece[] = [];
+	let from = 0;
+	for (const [tone, chances] of layers) {
+		const counts = chances.flatMap((p, k) => (p > 0 ? [k] : []));
+		const [low, high] = [Math.min(...counts), Math.max(...counts)];
+		for (const k of counts) {
+			const shade = tone === 'short' || high === low ? 1 : 0.2 + (0.8 * (k - low)) / (high - low);
+			drawn.push({ tone, count: least + k, p: chances[k], from, shade });
+			from += chances[k];
+		}
+	}
+	return drawn;
+}
+
+/** How wide a shut card's strip is drawn, before the name beside it. */
+const STRIP = { width: 120, height: 14, gap: 6 };
 
 /**
  * What a card shows, and how big it is.
@@ -401,8 +444,8 @@ function tabled({ heads, rows }: Table, width: number, y: number, measure: Measu
 }
 
 /** What a header card shows open: its parts, the chances of its counts, the rules on it. */
-/** A chart on an opened card: its name, its count, and the layers it is drawn in when not its side's colour alone. */
-type Charted = [string, Spread] | [string, Spread, Layer[]];
+/** A chart on an opened card: its name, its count, and the layers it is drawn in. */
+type Charted = [string, Spread, Layer[]];
 
 interface Opened {
 	table: Table | null;
@@ -414,9 +457,9 @@ interface Opened {
 function headed(
 	title: string,
 	lines: [string, string, string, string],
-	tone: Lane,
 	opened: Opened | null,
-	measure: Measure
+	measure: Measure,
+	strip: Stripped | null = null
 ): Face {
 	const pad = 2 * STRIKE.inset;
 	const rules = opened?.rules ?? [];
@@ -427,14 +470,28 @@ function headed(
 		ruleWidth(rules, STRIKE.inset, measure),
 		table ? pad + tableWidth(table, measure) : 0,
 		pad + measure(title, 'title'),
+		strip ? pad + STRIP.width + STRIP.gap + measure(strip.unit, 'mono') : 0,
 		...lines.map((line, index) => pad + measure(line, index % 3 ? 'mono' : 'text'))
 	);
+	const shown = strip ? lines.slice(0, 3) : lines;
 	const marks: Mark[] = [
 		text(STRIKE.inset, 18, title, 'title'),
-		...lines.map((line, index) =>
+		...shown.map((line, index) =>
 			text(STRIKE.inset, 46 + index * 19, line, index % 3 ? 'mono' : 'text')
 		)
 	];
+	if (strip) {
+		const unit = measure(strip.unit, 'mono');
+		const y = 46 + 3 * 19;
+		const box = {
+			x: STRIKE.inset,
+			y: y - 11,
+			width: width - pad - STRIP.gap - unit,
+			height: STRIP.height
+		};
+		marks.push({ kind: 'strip', box, least: strip.least, layers: strip.layers, unit: strip.unit });
+		marks.push(text(width - STRIKE.inset, y, strip.unit, 'mono', 'end'));
+	}
 	let y = 46 + 3 * 19 + 13;
 	if (opened) {
 		y -= 4;
@@ -447,7 +504,7 @@ function headed(
 		for (const [name, counted, layers] of opened.charts) {
 			marks.push(text(STRIKE.inset, y + 15, name, 'small'));
 			const box = { x: STRIKE.inset, y: y + 26, width: width - pad, height: CHART.height };
-			marks.push(chart(name, box, counted, layers ?? toned(counted, tone)));
+			marks.push(chart(name, box, counted, layers));
 			y = box.y + box.height;
 		}
 		y += 12;
@@ -468,6 +525,8 @@ export function volleyFace(
 		saves,
 		`${spread(volley.casualties)} casualties`
 	] as const;
+	const layers = toned(volley.casualties, 'target');
+	const strip = { least: volley.casualties.least, layers, unit: 'casualties' };
 	const opened = open && {
 		table: {
 			heads: ['shots', 'unsaved'],
@@ -477,10 +536,10 @@ export function volleyFace(
 				spread(part.unsaved)
 			])
 		},
-		charts: [['casualties', volley.casualties]] as Charted[],
+		charts: [['casualties', volley.casualties, layers]] as Charted[],
 		rules: volley.rules
 	};
-	return headed(shooter, [...lines], 'target', opened || null, measure);
+	return headed(shooter, [...lines], opened || null, measure, strip);
 }
 
 /**
@@ -503,12 +562,13 @@ export function strikeFace(
 	] as const;
 	const lane = strike.side as Lane;
 	const counted = (name: string, fought: Spread): Charted => {
-		if (reach === null) return [name, fought];
+		if (reach === null) return [name, fought, toned(fought, lane)];
 		const { spread, layers } = reached(fought, NONE(0), reach, lane);
 		return [name, spread, layers];
 	};
 	const charts = [counted('unsaved', strike.unsaved)];
 	if (strike.attacks.sd > 0) charts.push(counted('attacks', strike.attacks));
+	const [, unsaved, layers] = charts[0];
 	const opened = open && {
 		table:
 			strike.parts.length > 1
@@ -525,7 +585,8 @@ export function strikeFace(
 		rules: strike.rules
 	};
 	const title = striker(strike, unit);
-	return headed(title, [...lines], lane, opened || null, measure);
+	const strip = { least: unsaved.least, layers, unit: 'unsaved' };
+	return headed(title, [...lines], opened || null, measure, strip);
 }
 
 /**
