@@ -46,6 +46,30 @@
 		pending = setTimeout(() => onsubmit(size, chosen), 300);
 	}
 
+	const KEYS: Partial<Record<UnitOption['kind'], string>> = {
+		champion: 'c',
+		standard_bearer: 's',
+		musician: 'm'
+	};
+
+	function key(event: KeyboardEvent) {
+		if (event.metaKey || event.ctrlKey || event.altKey) return;
+		if (event.key === 'Enter' && event.currentTarget instanceof HTMLInputElement) {
+			if (event.currentTarget.type !== 'number') return;
+			event.preventDefault();
+			clearTimeout(pending);
+			onsubmit(size, chosen);
+			return;
+		}
+		const option = offered.find((each) => KEYS[each.kind] === event.key.toLowerCase());
+		if (!option) return;
+		event.preventDefault();
+		chosen = chosen.includes(option.id)
+			? chosen.filter((id) => id !== option.id)
+			: [...chosen, option.id];
+		edited();
+	}
+
 	// A fresh datasheet means a fresh draft: the previous unit's options are not
 	// on offer, and its size is not this one's.
 	$effect(() => {
@@ -62,7 +86,14 @@
 	<label class="field">
 		<span>models</span>
 		<span class="cluster tight">
-			<input class="input" type="number" min="1" bind:value={size} oninput={edited} />
+			<input
+				class="input"
+				type="number"
+				min="1"
+				bind:value={size}
+				oninput={edited}
+				onkeydown={key}
+			/>
 			{#if allowed}<span class="pill">{allowed}</span>{/if}
 		</span>
 	</label>
@@ -71,8 +102,15 @@
 		<div class="options">
 			{#each offered as option}
 				<label class="check">
-					<input type="checkbox" value={option.id} bind:group={chosen} onchange={edited} />
+					<input
+						type="checkbox"
+						value={option.id}
+						bind:group={chosen}
+						onchange={edited}
+						onkeydown={key}
+					/>
 					<span>{option.name}</span>
+					{#if KEYS[option.kind]}<kbd>{KEYS[option.kind]}</kbd>{/if}
 					{#if cost(option)}<span class="pill">{cost(option)}</span>{/if}
 				</label>
 			{/each}
@@ -94,3 +132,13 @@
 		</div>
 	{/if}
 </div>
+
+<style>
+	kbd {
+		font: 10px var(--font-mono);
+		color: var(--dim);
+		border: 1px solid var(--line);
+		border-radius: 3px;
+		padding: 0 3px;
+	}
+</style>
