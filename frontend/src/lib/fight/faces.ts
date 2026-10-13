@@ -155,6 +155,40 @@ function toned({ least, distribution }: Spread, lane: Lane, rule: number | null 
 	];
 }
 
+/** A count no fight happened to: certainly `value`. */
+export const NONE = (value: number): Spread => ({
+	least: value,
+	distribution: [1],
+	mean: value,
+	sd: 0
+});
+
+/**
+ * A count from before the charge is rolled: `fought` as often as the charge
+ * `reach`es, `short` otherwise, drawn as two layers with the shortfall grey.
+ */
+export function reached(
+	fought: Spread,
+	short: Spread,
+	reach: number,
+	lane: Lane
+): { spread: Spread; layers: Layer[] } {
+	const least = Math.min(fought.least, short.least);
+	const length =
+		Math.max(fought.least + fought.distribution.length, short.least + short.distribution.length) -
+		least;
+	const spaced = ({ least: from, distribution }: Spread, weight: number) =>
+		Array.from({ length }, (_, k) => weight * (distribution[least + k - from] ?? 0));
+	const layers: Layer[] = [
+		['short', spaced(short, 1 - reach)],
+		[lane, spaced(fought, reach)]
+	];
+	const distribution = layers[0][1].map((p, k) => p + layers[1][1][k]);
+	const mean = distribution.reduce((sum, p, k) => sum + p * (least + k), 0);
+	const variance = distribution.reduce((sum, p, k) => sum + p * (least + k - mean) ** 2, 0);
+	return { spread: { least, distribution, mean, sd: Math.sqrt(variance) }, layers };
+}
+
 const chart = (
 	name: string,
 	box: Box,
@@ -367,9 +401,12 @@ function tabled({ heads, rows }: Table, width: number, y: number, measure: Measu
 }
 
 /** What a header card shows open: its parts, the chances of its counts, the rules on it. */
+/** A chart on an opened card: its name, its count, and the layers it is drawn in when not its side's colour alone. */
+type Charted = [string, Spread] | [string, Spread, Layer[]];
+
 interface Opened {
 	table: Table | null;
-	charts: [string, Spread][];
+	charts: Charted[];
 	rules: LandedRule[];
 }
 
@@ -407,10 +444,10 @@ function headed(
 			marks.push(...placed.marks);
 			y = placed.last + 6;
 		}
-		for (const [name, counted] of opened.charts) {
+		for (const [name, counted, layers] of opened.charts) {
 			marks.push(text(STRIKE.inset, y + 15, name, 'small'));
 			const box = { x: STRIKE.inset, y: y + 26, width: width - pad, height: CHART.height };
-			marks.push(chart(name, box, counted, toned(counted, tone)));
+			marks.push(chart(name, box, counted, layers ?? toned(counted, tone)));
 			y = box.y + box.height;
 		}
 		y += 12;
@@ -440,13 +477,23 @@ export function volleyFace(
 				spread(part.unsaved)
 			])
 		},
-		charts: [['casualties', volley.casualties]] as [string, Spread][],
+		charts: [['casualties', volley.casualties]] as Charted[],
 		rules: volley.rules
 	};
 	return headed(shooter, [...lines], 'target', opened || null, measure);
 }
 
-export function strikeFace(strike: Strike, unit: string, measure: Measure, open: boolean): Face {
+/**
+ * A strike's card. Given the chance the charge `reach`es, its charts count from
+ * before the roll, a charge falling short striking nothing.
+ */
+export function strikeFace(
+	strike: Strike,
+	unit: string,
+	measure: Measure,
+	open: boolean,
+	reach: number | null = null
+): Face {
 	const [rolls, saves] = needs(strike.needed);
 	const lines = [
 		`${spread(strike.attacks)} attacks`,
@@ -454,8 +501,14 @@ export function strikeFace(strike: Strike, unit: string, measure: Measure, open:
 		saves,
 		`${spread(strike.unsaved)} unsaved`
 	] as const;
-	const charts: [string, Spread][] = [['unsaved', strike.unsaved]];
-	if (strike.attacks.sd > 0) charts.push(['attacks', strike.attacks]);
+	const lane = strike.side as Lane;
+	const counted = (name: string, fought: Spread): Charted => {
+		if (reach === null) return [name, fought];
+		const { spread, layers } = reached(fought, NONE(0), reach, lane);
+		return [name, spread, layers];
+	};
+	const charts = [counted('unsaved', strike.unsaved)];
+	if (strike.attacks.sd > 0) charts.push(counted('attacks', strike.attacks));
 	const opened = open && {
 		table:
 			strike.parts.length > 1
@@ -472,11 +525,21 @@ export function strikeFace(strike: Strike, unit: string, measure: Measure, open:
 		rules: strike.rules
 	};
 	const title = striker(strike, unit);
-	return headed(title, [...lines], strike.side as Lane, opened || null, measure);
+	return headed(title, [...lines], lane, opened || null, measure);
 }
 
-/** A lane's models standing: shut, a pill of the count; open, a card charting its chances. */
-export function pillFace(models: Spread, lane: Lane, measure: Measure, open: boolean): Face {
+/**
+ * A lane's models standing: shut, a pill of the count; open, a card charting
+ * its chances. Given what stood before the round and the chance the charge
+ * reaches, the chart counts from before the roll.
+ */
+export function pillFace(
+	models: Spread,
+	lane: Lane,
+	measure: Measure,
+	open: boolean,
+	short: { before: Spread; reach: number } | null = null
+): Face {
 	const shown = spread(models);
 	if (!open) {
 		const width = Math.max(PILL.least, measure(shown, 'mono') + 24);
@@ -489,6 +552,9 @@ export function pillFace(models: Spread, lane: Lane, measure: Measure, open: boo
 	}
 	const width = Math.max(CHART.least, 3 * STRIKE.inset + measure(shown, 'mono') + 40);
 	const box = { x: STRIKE.inset, y: 34, width: width - 2 * STRIKE.inset, height: CHART.height };
+	const charted = short
+		? reached(models, short.before, short.reach, lane)
+		: { spread: models, layers: toned(models, lane) };
 	return {
 		chrome: 'card',
 		width,
@@ -496,7 +562,7 @@ export function pillFace(models: Spread, lane: Lane, measure: Measure, open: boo
 		marks: [
 			text(STRIKE.inset, 20, 'models', 'small'),
 			text(width - STRIKE.inset, 20, shown, 'mono', 'end'),
-			chart('models', box, models, toned(models, lane))
+			chart('models', box, charted.spread, charted.layers)
 		]
 	};
 }

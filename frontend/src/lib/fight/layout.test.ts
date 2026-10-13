@@ -217,6 +217,22 @@ describe('a fight drawn from the start of the charge', () => {
 		);
 		expect(shares).toEqual([marginal.shares]);
 	});
+
+	it('charts a strike opened with the charges falling short as striking nothing', () => {
+		const lanes = princes as FightLanes;
+		const reach = lanes.charge!.reaches;
+		const first = lanes.strikes[0];
+		const drawing = draw(lanes, (text) => text.length * 7, 'strike:0', null, false, 'marginal');
+		const node = drawing.nodes.find((each) => each.id === 'strike:0');
+		const unsaved = node && 'face' in node && node.face.marks.find((mark) => mark.kind === 'chart');
+		if (!unsaved || unsaved.kind !== 'chart') throw new Error('no unsaved chart');
+		const [short, fought] = unsaved.layers;
+
+		expect(unsaved.spread.least).toBe(0);
+		expect(short).toEqual(['short', [expect.closeTo(1 - reach, 10), ...short[1].slice(1).fill(0)]]);
+		expect(fought[1].reduce((sum, p) => sum + p, 0)).toBeCloseTo(reach, 10);
+		expect(unsaved.spread.mean).toBeCloseTo(reach * first.unsaved.mean, 10);
+	});
 });
 
 describe('the battlefield', () => {
