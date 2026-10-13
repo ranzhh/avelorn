@@ -17,10 +17,15 @@
 </script>
 
 <details class="settings">
-	<summary aria-label="settings">⚙</summary>
+	<summary aria-label="settings">
+		<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+			<circle class="teeth" cx="12" cy="12" r="8" />
+			<circle class="hub" cx="12" cy="12" r="5.5" />
+		</svg>
+	</summary>
 	<div class="sheet">
-		{@render group('edits', MODES, mode, (each) => (mode = each))}
-		{@render group('chances', VIEWS, view, (each) => (view = each))}
+		{@render group('mode', MODES, mode, (each) => (mode = each))}
+		{@render group('odds', VIEWS, view, (each) => (view = each))}
 	</div>
 </details>
 
@@ -55,6 +60,20 @@
 		cursor: pointer;
 		border: 1px solid var(--line);
 		background: var(--bg);
+	}
+	summary svg {
+		fill: none;
+		stroke: var(--ink);
+	}
+	.teeth {
+		stroke-width: 4;
+		stroke-dasharray: 3.1416 3.1416;
+	}
+	.hub {
+		stroke-width: 2.5;
+	}
+	.settings[open] summary svg {
+		stroke: var(--accent);
 	}
 	summary::-webkit-details-marker {
 		display: none;
