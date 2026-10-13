@@ -58,6 +58,10 @@ describe('spot', () => {
 		expect(second.y).toBeGreaterThan(first.y);
 	});
 
+	it('opens cold at the corner it is given, clear of the page beside it', () => {
+		expect(spot([], SIZE, SCREEN, undefined, { x: 760, y: 72 })).toEqual({ x: 760, y: 72 });
+	});
+
 	it('steps past a corner a sibling already took', () => {
 		const parent = pane(1, 'white-lions', 300, 72);
 		const first = spot([parent], SIZE, SCREEN, parent);

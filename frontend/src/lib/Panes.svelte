@@ -6,6 +6,7 @@
 	import WeaponText from '$lib/WeaponText.svelte';
 	import { entry } from '$lib/corpus';
 	import {
+		FIRST,
 		closed,
 		measure,
 		moved,
@@ -21,15 +22,19 @@
 	interface Props {
 		/** What a block's pane shows beside its datasheet, given the block. */
 		options?: Snippet<[number]>;
+		/** Open cold panes to the right of this, so they leave it readable. */
+		beside?: HTMLElement | null;
 	}
 
-	let { options }: Props = $props();
+	let { options, beside = null }: Props = $props();
 
 	let open = $state<Open[]>([]);
 	let nextId = 1;
 	// Entries arrive after the pane does, so a pane draws its chrome first and
 	// fills in. Keyed by "subject:slug", which is what a pane is one of.
 	let read = $state<Record<string, Unit | Rule | Weapon | Armour>>({});
+
+	const GAP = 24;
 
 	function viewport() {
 		return { width: window.innerWidth, height: window.innerHeight };
@@ -47,7 +52,10 @@
 		wanted: { subject: Subject; slug: string; title: string; block?: number },
 		from?: Open
 	) {
-		open = opened(open, { id: nextId, ...wanted }, measure(wanted), viewport(), from);
+		const first = beside
+			? { x: beside.getBoundingClientRect().right + GAP, y: FIRST.y }
+			: undefined;
+		open = opened(open, { id: nextId, ...wanted }, measure(wanted), viewport(), from, first);
 		nextId += 1;
 		const key = `${wanted.subject}:${wanted.slug}`;
 		if (read[key]) return;

@@ -56,15 +56,15 @@ export const LABEL: Record<Subject, string> = {
 /**
  * What a pane of each subject measures, in pixels.
  *
- * Read by the component into custom properties as well as by the placement
- * below, so the rectangle that is clamped is the rectangle that is drawn. A
- * pane taller than its measure scrolls inside; it does not grow.
+ * The width is drawn as given. The height is what placement keeps on screen:
+ * the pane itself grows with what it reads, down to the window's bottom edge,
+ * and only scrolls inside past that.
  */
 export const MEASURE: Record<Subject, Size> = {
-	unit: { width: 384, height: 520 },
-	rule: { width: 320, height: 300 },
-	weapon: { width: 340, height: 340 },
-	armour: { width: 300, height: 220 }
+	unit: { width: 440, height: 520 },
+	rule: { width: 400, height: 300 },
+	weapon: { width: 400, height: 340 },
+	armour: { width: 340, height: 220 }
 };
 
 /** How wide the options a block's pane carries beside its datasheet. */
@@ -86,8 +86,8 @@ export function measure(pane: Pick<Pane, 'subject' | 'block'>): Size {
 /** How far a pane opened from another sits down and right of it. */
 const CASCADE = 24;
 
-/** The corner a cold-opened pane takes, and the step between successive ones. */
-const FIRST = { x: 300, y: 72 };
+/** The corner a cold-opened pane takes unless told another, and the step between successive ones. */
+export const FIRST = { x: 300, y: 72 };
 const STEP = 28;
 
 /** A pane dragged off the top or the left is unreachable; this much stays on. */
@@ -119,19 +119,20 @@ export function clamped(
  * Where a newly opened pane lands.
  *
  * Opened from another pane it cascades off that one, so the chain of rules you
- * followed to get here reads as a stack. Opened cold it steps down from a fixed
- * corner by how many are already up, so two panes never land exactly on top of
- * each other.
+ * followed to get here reads as a stack. Opened cold it steps down from `first`
+ * by how many are already up, so two panes never land exactly on top of each
+ * other.
  */
 export function spot(
 	open: Pane[],
 	size: Size,
 	viewport: Viewport,
-	from?: Pane
+	from?: Pane,
+	first: { x: number; y: number } = FIRST
 ): { x: number; y: number } {
 	const corner = from
 		? { x: from.x + CASCADE, y: from.y + CASCADE }
-		: { x: FIRST.x + open.length * STEP, y: FIRST.y + open.length * STEP };
+		: { x: first.x + open.length * STEP, y: first.y + open.length * STEP };
 	let landing = clamped(corner.x, corner.y, size, viewport);
 	// Step past a corner already taken. Two names followed out of one datasheet
 	// cascade off the same parent, so without this the second lands exactly on
@@ -159,14 +160,15 @@ export function opened(
 	wanted: { id: number; subject: Subject; slug: string; title: string; block?: number },
 	size: Size,
 	viewport: Viewport,
-	from?: Pane
+	from?: Pane,
+	first?: { x: number; y: number }
 ): Pane[] {
 	const already = open.find(
 		(pane) =>
 			pane.subject === wanted.subject && pane.slug === wanted.slug && pane.block === wanted.block
 	);
 	if (already) return raised(open, already.id);
-	return [...open, { ...wanted, ...spot(open, size, viewport, from), z: ceiling(open) + 1 }];
+	return [...open, { ...wanted, ...spot(open, size, viewport, from, first), z: ceiling(open) + 1 }];
 }
 
 function ceiling(open: Pane[]): number {
