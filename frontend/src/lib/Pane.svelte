@@ -67,7 +67,7 @@
 				onclick={() => (showing = !showing)}
 				aria-expanded={showing}
 			>
-				options
+				edit
 			</button>
 		{/if}
 		<button class="btn btn-ghost btn-sm shut" onclick={onclose} aria-label="close">×</button>
