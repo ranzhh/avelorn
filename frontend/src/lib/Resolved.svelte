@@ -13,52 +13,6 @@
 </script>
 
 {#if fight}
-	<Outcomes
-		scheme="poles"
-		segments={[
-			{ label: fight.a.name, value: fight.p_a_wins },
-			{ label: 'draw', value: fight.p_draw },
-			{ label: fight.b.name, value: fight.p_b_wins }
-		]}
-	/>
-
-	<table class="grid">
-		<thead>
-			<tr>
-				<th></th>
-				<th class="num">{fight.a.name}</th>
-				<th class="num">{fight.b.name}</th>
-			</tr>
-		</thead>
-		<tbody>
-			<tr><td>models</td><td class="num">{fight.a.size}</td><td class="num">{fight.b.size}</td></tr>
-			<tr
-				><td>weapon</td><td class="num">{fight.a.weapon}</td><td class="num">{fight.b.weapon}</td
-				></tr
-			>
-			<tr>
-				<td>initiative</td>
-				<td class="num">{fight.a.initiative}</td>
-				<td class="num">{fight.b.initiative}</td>
-			</tr>
-			<tr>
-				<td>rank bonus</td>
-				<td class="num">+{fight.a.rank_bonus}</td>
-				<td class="num">+{fight.b.rank_bonus}</td>
-			</tr>
-			<tr>
-				<td>unit strength</td>
-				<td class="num">{fight.a.unit_strength}</td>
-				<td class="num">{fight.b.unit_strength}</td>
-			</tr>
-			<tr>
-				<td>losses, mean</td>
-				<td class="num neg">{fight.a.expected_casualties.toFixed(2)}</td>
-				<td class="num neg">{fight.b.expected_casualties.toFixed(2)}</td>
-			</tr>
-		</tbody>
-	</table>
-
 	{#each [fight.a, fight.b] as side}
 		<h3>{side.name} losses</h3>
 		<Spread values={side.casualties} unit="models lost" mean={side.expected_casualties} />
@@ -74,22 +28,6 @@
 {/if}
 
 {#if volley}
-	<table class="grid">
-		<tbody>
-			<tr><td>shots</td><td class="num">{volley.shots}</td></tr>
-			<tr><td>to hit</td><td class="num">{volley.to_hit}</td></tr>
-			<tr><td>to wound</td><td class="num">{volley.to_wound}</td></tr>
-			<tr><td>armour save</td><td class="num">{volley.armour_save}</td></tr>
-			<tr><td>ward</td><td class="num">{volley.ward_save}</td></tr>
-			<tr><td>unsaved per shot</td><td class="num">{volley.p_unsaved.toFixed(4)}</td></tr>
-			<tr><td>wounds, mean</td><td class="num">{volley.expected_wounds.toFixed(2)}</td></tr>
-			<tr>
-				<td>felled, mean</td>
-				<td class="num neg">{volley.expected_casualties.toFixed(2)}</td>
-			</tr>
-		</tbody>
-	</table>
-
 	<h3>{volley.target.name} felled</h3>
 	<Spread values={volley.casualties} unit="models felled" mean={volley.expected_casualties} />
 
