@@ -8,21 +8,22 @@
 	);
 </script>
 
-{#if where}<p class="meta">{where}</p>{/if}
+<p class="meta where">
+	<span>{where}</span>
+	{#if rule.effects?.length}
+		<span class="status on" role="img" aria-label="implemented in the engine">
+			✓<span class="says"><b>Implemented</b> in the engine</span>
+		</span>
+	{:else}
+		<span class="status" role="img" aria-label="not implemented in the engine">
+			<span class="says"><b>Not implemented</b> in the engine</span>
+		</span>
+	{/if}
+</p>
 
 {#each rule.paragraphs as paragraph}
 	<p class="text">{paragraph}</p>
 {/each}
-
-<p class="reach">
-	{#if rule.effects?.length}
-		<span class="pos">reaches the maths</span>
-		· {rule.effects.length}
-		{rule.effects.length === 1 ? 'effect' : 'effects'}
-	{:else}
-		<span class="dim">printed only, no effect the engine applies</span>
-	{/if}
-</p>
 
 {#if rule.notes}
 	<h4>left out</h4>
