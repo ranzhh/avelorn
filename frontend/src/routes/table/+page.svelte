@@ -24,6 +24,8 @@
 		type Placed
 	} from '$lib/table';
 
+	type Reacting = NonNullable<FightBody['charge']>['reaction'];
+
 	let { data } = $props();
 
 	let panes = $state<Panes | null>(null);
@@ -32,6 +34,7 @@
 	let refusal = $state('');
 	let resolving = $state('');
 	let menuWidth = $state(0);
+	let reacting = $state(false);
 
 	const fight = $derived(battle.resolved?.action === 'fight' ? battle.resolved.report : null);
 	const volley = $derived(battle.resolved?.action === 'volley' ? battle.resolved.report : null);
@@ -98,6 +101,13 @@
 		return () => (live = false);
 	});
 
+	$effect(() => {
+		void battle.asking;
+		reacting = false;
+	});
+
+	const answers = $derived(!!pair && usable(pair.target.block, 'missile').length > 0);
+
 	const short = $derived(reach.charge === 0);
 	const blocked = $derived(
 		!pair?.shoots ? 'no missile weapon' : reach.shots === 0 ? 'out of range' : ''
@@ -162,7 +172,7 @@
 		refusal = '';
 	}
 
-	async function meet(charging: boolean) {
+	async function meet(charging: boolean, reaction: Reacting = 'hold') {
 		if (!pair) return;
 		cleared();
 		resolving = 'melee';
@@ -170,9 +180,7 @@
 		const body: FightBody = {
 			a: deployment(pair.mover, 'melee'),
 			b: deployment(pair.target, 'melee'),
-			charge: charging
-				? { side: 'a', full_inches: pair.inches, arc: pair.into, reaction: 'hold' }
-				: null
+			charge: charging ? { side: 'a', full_inches: pair.inches, arc: pair.into, reaction } : null
 		};
 		const { data: report, error: refused } = await api(window.location.origin, fetch).POST(
 			'/fight',
@@ -310,6 +318,11 @@
 		});
 	}
 
+	/** Focus the reaction a charge is met with unless told otherwise, so Enter declares it. */
+	function focused(node: HTMLButtonElement, on: boolean) {
+		if (on) node.focus();
+	}
+
 	function remove(id: number) {
 		battle.remove(id);
 		panes?.forget(id);
@@ -391,18 +404,47 @@
 						<button class="shut" aria-label="close" onclick={() => (battle.asking = null)}>×</button
 						>
 					</span>
-					<span class="dimmed">
-						<button class="btn btn-sm btn-primary" disabled={short} onclick={() => meet(true)}>
-							charge
-						</button>
-						{#if short}<span class="says">out of charge range</span>{/if}
-					</span>
-					<span class="dimmed">
-						<button class="btn btn-sm" disabled={!!blocked} onclick={loose}>shoot</button>
-						{#if blocked}<span class="says">{blocked}</span>{/if}
-					</span>
-					{#if pair.inches === 0}
-						<button class="btn btn-sm" onclick={() => meet(false)}>fight, engaged</button>
+					{#if reacting}
+						<span class="cluster tight" role="group" aria-label="reaction">
+							<span class="dimmed">
+								<button
+									class="btn btn-sm"
+									class:btn-primary={answers}
+									disabled={!answers}
+									use:focused={answers}
+									onclick={() => meet(true, 'stand-and-shoot')}>S&S</button
+								>
+								{#if !answers}<span class="says">no missile weapon</span>{/if}
+							</span>
+							<button
+								class="btn btn-sm"
+								class:btn-primary={!answers}
+								use:focused={!answers}
+								onclick={() => meet(true, 'hold')}>hold</button
+							>
+							<span class="dimmed">
+								<button class="btn btn-sm" disabled>flee</button>
+								<span class="says">not implemented in the engine</span>
+							</span>
+						</span>
+					{:else}
+						<span class="dimmed">
+							<button
+								class="btn btn-sm btn-primary"
+								disabled={short}
+								onclick={() => (reacting = true)}
+							>
+								charge
+							</button>
+							{#if short}<span class="says">out of charge range</span>{/if}
+						</span>
+						<span class="dimmed">
+							<button class="btn btn-sm" disabled={!!blocked} onclick={loose}>shoot</button>
+							{#if blocked}<span class="says">{blocked}</span>{/if}
+						</span>
+						{#if pair.inches === 0}
+							<button class="btn btn-sm" onclick={() => meet(false)}>fight, engaged</button>
+						{/if}
 					{/if}
 				</div>
 			{/if}
