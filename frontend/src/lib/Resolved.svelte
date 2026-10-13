@@ -71,10 +71,6 @@
 			]}
 		/>
 	{/each}
-
-	{#if fight.first_striker}
-		<p class="note">first strike {fight.first_striker === 'a' ? fight.a.name : fight.b.name}</p>
-	{/if}
 {/if}
 
 {#if volley}
@@ -110,16 +106,4 @@
 	{#if volley.panic.reroll_from}
 		<p class="note">re-roll from {volley.panic.reroll_from}</p>
 	{/if}
-{/if}
-
-{#if fight?.not_modelled.length || volley?.not_modelled.length}
-	{@const notes = [...new Set([...(fight?.not_modelled ?? []), ...(volley?.not_modelled ?? [])])]}
-	<details>
-		<summary>{notes.length} unmodelled</summary>
-		<ul>
-			{#each notes as note}
-				<li>{note}</li>
-			{/each}
-		</ul>
-	</details>
 {/if}

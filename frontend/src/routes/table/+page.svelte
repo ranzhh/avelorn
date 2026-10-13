@@ -4,6 +4,8 @@
 	import Muster from '$lib/Muster.svelte';
 	import Panes from '$lib/Panes.svelte';
 	import Resolved from '$lib/Resolved.svelte';
+	import Warn from '$lib/Warn.svelte';
+	import { resolve } from '$app/paths';
 	import { api, type FightBody, type MusteredUnit, type VolleyBody } from '$lib/api/client';
 	import { battle } from '$lib/battle.svelte';
 	import { entry } from '$lib/corpus';
@@ -58,6 +60,53 @@
 			top: ((below ? box.bottom : box.top) / TABLE.depth) * 100
 		};
 	});
+
+	/** What the engine says the open pair can do: the chance the charge reaches, and the shots in range. */
+	let reach = $state<{ charge: number | null; shots: number | null }>({
+		charge: null,
+		shots: null
+	});
+	$effect(() => {
+		const open = pair;
+		reach = { charge: null, shots: null };
+		if (!open) return;
+		let live = true;
+		const client = api(window.location.origin, fetch);
+		client
+			.POST('/fight', {
+				body: {
+					a: deployment(open.mover, 'melee'),
+					b: deployment(open.target, 'melee'),
+					charge: { side: 'a', full_inches: open.inches, arc: open.into, reaction: 'hold' }
+				}
+			})
+			.then(({ data }) => {
+				if (live && data) reach = { ...reach, charge: data.p_charge_reaches ?? null };
+			});
+		if (open.shoots)
+			client
+				.POST('/volley', {
+					body: {
+						shooter: deployment(open.mover, 'missile'),
+						target: deployment(open.target, 'melee'),
+						distance: open.inches,
+						moved: false
+					}
+				})
+				.then(({ data }) => {
+					if (live && data) reach = { ...reach, shots: data.shots };
+				});
+		return () => (live = false);
+	});
+
+	const short = $derived(reach.charge === 0);
+	const blocked = $derived(
+		!pair?.shoots ? 'no missile weapon' : reach.shots === 0 ? 'out of range' : ''
+	);
+
+	const notes = $derived([
+		...new Set([...(fight?.not_modelled ?? []), ...(volley?.not_modelled ?? [])])
+	]);
 
 	const linked = $derived(
 		battle.asking ??
@@ -268,9 +317,13 @@
 	}
 </script>
 
+<svelte:window
+	onkeydown={(event) => event.key === 'Escape' && battle.asking && (battle.asking = null)}
+/>
+
 <div class="tabletop">
 	<aside class="left">
-		<Dock title="deploy" keep="deploy" value={`${battle.placed.length} on the table`}>
+		<Dock title="deploy" keep="deploy" count={battle.placed.length}>
 			<input class="input filter" bind:value={needle} placeholder="filter" />
 			<div class="rows">
 				{#each rows as unit (unit.id)}
@@ -328,21 +381,24 @@
 					style:left="clamp({menuWidth / 2}px, {pair.left}%, calc(100% - {menuWidth / 2}px))"
 					style:top="{pair.top}%"
 				>
-					<span class="head"
-						>{pair.mover.mark} → {pair.target.mark} · {pair.inches}in · {pair.into}</span
-					>
-					<button class="btn btn-sm btn-primary" onclick={() => meet(true)}>
-						charge {pair.inches}in
-					</button>
-					<button class="btn btn-sm" disabled={!pair.shoots} onclick={loose}>
-						{pair.shoots ? `shoot at ${pair.inches}in` : 'no missile weapon'}
-					</button>
+					<span class="head">
+						<span>{pair.mover.mark} → {pair.target.mark} · {pair.inches}in · {pair.into}</span>
+						<button class="shut" aria-label="close" onclick={() => (battle.asking = null)}>×</button
+						>
+					</span>
+					<span class="dimmed">
+						<button class="btn btn-sm btn-primary" disabled={short} onclick={() => meet(true)}>
+							charge
+						</button>
+						{#if short}<span class="says">out of charge range</span>{/if}
+					</span>
+					<span class="dimmed">
+						<button class="btn btn-sm" disabled={!!blocked} onclick={loose}>shoot</button>
+						{#if blocked}<span class="says">{blocked}</span>{/if}
+					</span>
 					{#if pair.inches === 0}
 						<button class="btn btn-sm" onclick={() => meet(false)}>fight, engaged</button>
 					{/if}
-					<button class="btn btn-ghost btn-sm" onclick={() => (battle.asking = null)}>
-						cancel
-					</button>
 				</div>
 			{/if}
 		</div>
@@ -415,6 +471,12 @@
 			keep="resolved"
 			value={resolving || (fight ? 'melee' : volley ? 'shooting' : '')}
 		>
+			{#snippet aside()}
+				<Warn {notes} count />
+				{#if fight || volley}
+					<a class="btn btn-sm" href={resolve('/graph')}>graph →</a>
+				{/if}
+			{/snippet}
 			{#if resolving}
 				<p class="pending">{resolving}…</p>
 			{:else if fight || volley}
