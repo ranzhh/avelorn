@@ -7,6 +7,7 @@ import {
 	LANES,
 	chargeFace,
 	formation,
+	pieces,
 	resultFace,
 	spread,
 	strikeFace,
@@ -16,7 +17,7 @@ import {
 } from './faces';
 import { BESIDE, CROP } from './field';
 import { columns, draw, type Drawing } from './layout';
-import { VIEWS, odds } from './odds';
+import { VIEWS, odds, type View } from './odds';
 
 const strike = (slot: string, side: 'attacker' | 'target') =>
 	({ slot, label: slot, side }) as Strike;
@@ -232,6 +233,28 @@ describe('a fight drawn from the start of the charge', () => {
 		expect(short).toEqual(['short', [expect.closeTo(1 - reach, 10), ...short[1].slice(1).fill(0)]]);
 		expect(fought[1].reduce((sum, p) => sum + p, 0)).toBeCloseTo(reach, 10);
 		expect(unsaved.spread.mean).toBeCloseTo(reach * first.unsaved.mean, 10);
+	});
+
+	it('draws a strike shut as a strip of its unsaved wounds, the charges falling short first', () => {
+		const lanes = princes as FightLanes;
+		const reach = lanes.charge!.reaches;
+		const stripped = (view: View) => {
+			const node = draw(lanes, (text) => text.length * 7, null, null, false, view).nodes.find(
+				(each) => each.id === 'strike:0'
+			);
+			const strip = node && 'face' in node && node.face.marks.find((mark) => mark.kind === 'strip');
+			if (!strip || strip.kind !== 'strip') throw new Error('no strip');
+			return pieces(strip.least, strip.layers);
+		};
+		const total = (drawn: ReturnType<typeof pieces>) =>
+			drawn.reduce((sum, each) => sum + each.p, 0);
+
+		expect(stripped('conditional').some((each) => each.tone === 'short')).toBe(false);
+		expect(total(stripped('conditional'))).toBeCloseTo(1, 10);
+		const [short, ...fought] = stripped('marginal');
+		expect(short).toMatchObject({ tone: 'short', count: 0, from: 0 });
+		expect(short.p).toBeCloseTo(1 - reach, 10);
+		expect(total(fought)).toBeCloseTo(reach, 10);
 	});
 });
 
