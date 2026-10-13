@@ -172,14 +172,31 @@ export function draw(
 	const chargeCard = lanes.charge && chargeFace(lanes.charge, measure, open === 'charge');
 	const volleyCard =
 		lanes.volley && volleyFace(lanes.volley, lanes.units.target.name, measure, open === 'volley');
+	const reach = view === 'marginal' && lanes.charge ? lanes.charge.reaches : null;
 	const strikeCards = lanes.strikes.map((strike, index) =>
-		strikeFace(strike, lanes.units[strike.side as Lane].name, measure, open === `strike:${index}`)
+		strikeFace(
+			strike,
+			lanes.units[strike.side as Lane].name,
+			measure,
+			open === `strike:${index}`,
+			reach
+		)
 	);
+	const fightsFrom = (lane: Lane) =>
+		Math.max(
+			0,
+			lanes.standing[lane].findIndex((each) => each.after === 'volley')
+		);
 	const eventFace = (lane: Lane, event: Event): Face => {
 		if (event.kind === 'volley') return volleyCard!;
 		if (event.kind === 'strike') return strikeCards[event.strike];
 		const id = `pill:${lane}:${event.standing}`;
-		return pillFace(lanes.standing[lane][event.standing].models, lane, measure, open === id);
+		const from = fightsFrom(lane);
+		const short =
+			reach !== null && event.standing > from
+				? { before: lanes.standing[lane][from].models, reach }
+				: null;
+		return pillFace(lanes.standing[lane][event.standing].models, lane, measure, open === id, short);
 	};
 	const eventWidth = (lane: Lane, event: Event | null) =>
 		event ? eventFace(lane, event).width : 0;
