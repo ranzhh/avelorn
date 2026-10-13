@@ -1,7 +1,7 @@
 <script lang="ts">
 	import BattleTable from '$lib/BattleTable.svelte';
 	import Dock from '$lib/Dock.svelte';
-	import Muster from '$lib/Muster.svelte';
+	import Block from '$lib/Block.svelte';
 	import Panes from '$lib/Panes.svelte';
 	import Resolved from '$lib/Resolved.svelte';
 	import Warn from '$lib/Warn.svelte';
@@ -38,7 +38,6 @@
 
 	const rows = $derived(listing(data.units, needle, { column: 'name', descending: false }));
 
-	const block = $derived(battle.placed.find((each) => each.id === picked) ?? null);
 	const points = $derived(battle.placed.reduce((sum, each) => sum + each.block.points, 0));
 
 	const pair = $derived.by(() => {
@@ -299,7 +298,7 @@
 		battle.amend(id, { block: costed, x, y });
 	}
 
-	/** Open a block's own pane: the datasheet it fields, with its options beside it. */
+	/** Open a block's own pane: the datasheet it fields, with what it is changed by beside it. */
 	function sheet(id: number) {
 		const standing = battle.placed.find((each) => each.id === id);
 		if (!standing) return;
@@ -313,6 +312,7 @@
 
 	function remove(id: number) {
 		battle.remove(id);
+		panes?.forget(id);
 		if (picked === id) picked = null;
 	}
 </script>
@@ -323,7 +323,12 @@
 
 <div class="tabletop">
 	<aside class="left">
-		<Dock title="deploy" keep="deploy" count={battle.placed.length}>
+		<Dock
+			title="deploy"
+			keep="deploy"
+			count={battle.placed.length}
+			value={battle.placed.length ? `${points} pts` : ''}
+		>
 			<input class="input filter" bind:value={needle} placeholder="filter" />
 			<div class="rows">
 				{#each rows as unit (unit.id)}
@@ -407,66 +412,6 @@
 
 	<aside class="right">
 		<Dock
-			title="block"
-			keep="block"
-			value={block ? `${block.block.name} ×${block.block.size}` : ''}
-		>
-			{#if block}
-				{@const print = block.block.footprint}
-				<div class="field"><span>unit</span><span>{block.block.name}</span></div>
-				<div class="field"><span>models</span><span class="num">{block.block.size}</span></div>
-				<div class="field"><span>points</span><span class="num">{block.block.points}</span></div>
-				{#if print}
-					<div class="field">
-						<span>formation</span><span class="num">{print.files}×{print.ranks}</span>
-					</div>
-					<div class="field">
-						<span>footprint</span><span class="num">{print.width_mm}×{print.depth_mm} mm</span>
-					</div>
-				{/if}
-				<div class="field"><span>facing</span><span class="num">{block.facing}°</span></div>
-				{#if usable(block.block, 'melee').length > 1}
-					<label class="field">
-						<span>melee</span>
-						<select
-							class="select"
-							value={block.melee}
-							onchange={(e) => battle.amend(block.id, { melee: e.currentTarget.value })}
-						>
-							<option value="">default</option>
-							{#each usable(block.block, 'melee') as weapon}
-								<option value={weapon.name}>{weapon.name}</option>
-							{/each}
-						</select>
-					</label>
-				{/if}
-				{#if usable(block.block, 'missile').length > 1}
-					<label class="field">
-						<span>missile</span>
-						<select
-							class="select"
-							value={block.missile}
-							onchange={(e) => battle.amend(block.id, { missile: e.currentTarget.value })}
-						>
-							<option value="">default</option>
-							{#each usable(block.block, 'missile') as weapon}
-								<option value={weapon.name}>{weapon.name}</option>
-							{/each}
-						</select>
-					</label>
-				{/if}
-				<div class="cluster acts">
-					<button class="btn btn-sm" onclick={() => sheet(block.id)}>datasheet</button>
-					<button class="btn btn-sm" onclick={() => turn(block.id, 0)}>face up</button>
-					<button class="btn btn-sm" onclick={() => remove(block.id)}>remove</button>
-				</div>
-			{:else}
-				<div class="field"><span>blocks</span><span class="num">{battle.placed.length}</span></div>
-				<div class="field"><span>points</span><span class="num">{points}</span></div>
-			{/if}
-		</Dock>
-
-		<Dock
 			title="resolved"
 			keep="resolved"
 			value={resolving || (fight ? 'melee' : volley ? 'shooting' : '')}
@@ -490,12 +435,13 @@
 	{#snippet options(id)}
 		{@const standing = battle.placed.find((each) => each.id === id)}
 		{#if standing}
-			<Muster
-				live
-				unit={standing.block.unit}
-				size={standing.block.size}
-				options={standing.block.options.map((option) => option.id)}
-				onsubmit={(size, chosen) => recost(id, size, chosen)}
+			<Block
+				{standing}
+				onrecost={(size, chosen) => recost(id, size, chosen)}
+				onamend={(change) => battle.amend(id, change)}
+				onreform={(files) => reform(id, files)}
+				onturn={(facing) => turn(id, facing)}
+				onremove={() => remove(id)}
 			/>
 		{/if}
 	{/snippet}

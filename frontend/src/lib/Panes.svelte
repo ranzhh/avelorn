@@ -20,7 +20,7 @@
 	import type { Snippet } from 'svelte';
 
 	interface Props {
-		/** What a block's pane shows beside its datasheet, given the block. */
+		/** What a block's pane shows beside its datasheet, given the block: the controls that change it. */
 		options?: Snippet<[number]>;
 		/** Open cold panes to the right of this, so they leave it readable. */
 		beside?: HTMLElement | null;
@@ -61,6 +61,11 @@
 		if (read[key]) return;
 		const found = await entry(wanted.subject, wanted.slug);
 		if (found) read[key] = found;
+	}
+
+	/** Close the pane a block owns, once the block is gone. */
+	export function forget(block: number) {
+		open = open.filter((pane) => pane.block !== block);
 	}
 
 	// A reference carries the kind as well as the slug, because a printed name
