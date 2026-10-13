@@ -342,7 +342,13 @@
 			count={battle.placed.length}
 			value={battle.placed.length ? `${points} pts` : ''}
 		>
-			<input class="input filter" bind:value={needle} placeholder="filter" />
+			<input
+				class="input filter"
+				bind:value={needle}
+				placeholder="filter"
+				onkeydown={(event) =>
+					event.key === 'Enter' && rows[0] && deploy(rows[0].id, rows[0].unit_size.min)}
+			/>
 			<div class="rows">
 				{#each rows as unit (unit.id)}
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
