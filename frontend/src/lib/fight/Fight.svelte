@@ -2,11 +2,12 @@
 	import type { FightBody, FightLanes } from '$lib/api/client';
 	import type { Placed as Block } from '$lib/table';
 	import Lanes from './Lanes.svelte';
+	import Settings, { type Mode } from './Settings.svelte';
 	import Unit from './Unit.svelte';
 	import { redeployed, seat } from './body';
 	import type { Field } from './field';
 	import type { Lane } from './layout';
-	import { VIEWS, type View } from './odds';
+	import type { View } from './odds';
 
 	interface Props {
 		lanes: FightLanes;
@@ -18,9 +19,10 @@
 		onedit: (body: FightBody) => void;
 		/** A block dragged across the battlefield's crop. */
 		onmove: (lane: Lane, block: Block) => void;
+		mode: Mode;
 	}
 
-	let { lanes, body, stale, field, onedit, onmove }: Props = $props();
+	let { lanes, body, stale, field, onedit, onmove, mode = $bindable() }: Props = $props();
 
 	let open = $state<string | null>(null);
 	let editing = $state<Lane | null>(null);
@@ -40,16 +42,7 @@
 <svelte:window onkeydown={(event) => event.key === 'Escape' && close()} />
 
 <div class="fight" class:stale>
-	<div class="views" role="radiogroup" aria-label="chances">
-		{#each VIEWS as each}
-			<button
-				role="radio"
-				aria-checked={view === each}
-				class:on={view === each}
-				onclick={() => (view = each)}>{each}</button
-			>
-		{/each}
-	</div>
+	<Settings bind:mode bind:view />
 	<div class="stage">
 		<Lanes
 			{lanes}
@@ -85,24 +78,6 @@
 		position: relative;
 		min-height: 24rem;
 		border: 1px solid var(--line);
-	}
-	.views {
-		position: absolute;
-		top: 4px;
-		right: 4px;
-		display: flex;
-		gap: 2px;
-	}
-	.views button {
-		height: 22px;
-		padding: 0 0.6rem;
-		font-size: 12px;
-		cursor: pointer;
-	}
-	.views button.on {
-		color: var(--on-accent);
-		background: var(--accent);
-		border-color: var(--accent);
 	}
 	.stage {
 		overflow-x: auto;
