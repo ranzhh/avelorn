@@ -14,6 +14,13 @@
 	let { mode = $bindable(), view = $bindable() }: Props = $props();
 
 	const MODES: Mode[] = ['preview', 'edit'];
+
+	const SAYS: Record<Mode | View, string> = {
+		preview: 'changes stay on the graph',
+		edit: "changes update the table's blocks",
+		conditional: 'each chance given the step before it happened',
+		marginal: 'each chance from the start of the charge'
+	};
 </script>
 
 <details class="settings">
@@ -33,12 +40,16 @@
 	<span class="meta">{label}</span>
 	<div class="choices" role="radiogroup" aria-label={label}>
 		{#each choices as each}
-			<button
-				role="radio"
-				aria-checked={chosen === each}
-				class:on={chosen === each}
-				onclick={() => pick(each)}>{each}</button
-			>
+			<span class="choice">
+				<button
+					role="radio"
+					aria-checked={chosen === each}
+					aria-describedby="says-{each}"
+					class:on={chosen === each}
+					onclick={() => pick(each)}>{each}</button
+				>
+				<span class="says" id="says-{each}">{SAYS[each as Mode | View]}</span>
+			</span>
 		{/each}
 	</div>
 {/snippet}
@@ -97,6 +108,17 @@
 	.choices {
 		display: flex;
 		gap: 2px;
+	}
+	.choice {
+		position: relative;
+	}
+	.choice .says {
+		width: max-content;
+		max-width: 16rem;
+		white-space: normal;
+	}
+	.choice:hover .says {
+		display: block;
 	}
 	.choices button {
 		height: 22px;
