@@ -46,6 +46,7 @@
 
 <section
 	class="pane"
+	data-pane={pane.id}
 	style="left: {pane.x}px; top: {pane.y}px; z-index: {100 +
 		pane.z}; --pane-w: {drawn}px; --pane-h: calc(100vh - {pane.y}px - var(--space-4)); --aside-w: {ASIDE}px"
 	onpointerdowncapture={onraise}

@@ -240,6 +240,20 @@ export function reformed(
 	return Math.min(Math.max(files, 1), models);
 }
 
+/**
+ * The frontage that gives a block one rank more (`by` 1) or one fewer (`by` -1).
+ *
+ * Ranks follow from files, and several frontages can share a rank count, so this
+ * is the nearest frontage whose count differs; the current one where none does.
+ */
+export function deepened(models: number, files: number, by: 1 | -1): number {
+	const ranks = Math.ceil(models / files);
+	for (let next = files - by; next >= 1 && next <= models; next -= by) {
+		if (Math.ceil(models / next) !== ranks) return next;
+	}
+	return files;
+}
+
 /** An angle snapped to the nearest `step` degrees. */
 export function snap(facing: Degrees, step = 15): Degrees {
 	return (((Math.round(facing / step) * step) % 360) + 360) % 360;

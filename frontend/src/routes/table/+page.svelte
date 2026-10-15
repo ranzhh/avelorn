@@ -6,6 +6,7 @@
 	import Resolved from '$lib/Resolved.svelte';
 	import Warn from '$lib/Warn.svelte';
 	import { resolve } from '$app/paths';
+	import { SvelteMap } from 'svelte/reactivity';
 	import { api, type FightBody, type MusteredUnit, type VolleyBody } from '$lib/api/client';
 	import { battle } from '$lib/battle.svelte';
 	import { entry } from '$lib/corpus';
@@ -68,11 +69,19 @@
 		charge: null,
 		shots: null
 	});
+	/** Whether the mover's rank and file shoot at least as well as they fight. */
+	let aims = $state(false);
 	$effect(() => {
 		const open = pair;
 		reach = { charge: null, shots: null };
+		aims = false;
 		if (!open) return;
 		let live = true;
+		entry('unit', open.mover.block.unit).then((sheet) => {
+			const line = sheet?.profiles.find((profile) => profile.role === 'rank-and-file');
+			const { WS, BS } = line?.characteristics ?? {};
+			if (live) aims = WS != null && BS != null && BS >= WS;
+		});
 		const client = api(window.location.origin, fetch);
 		client
 			.POST('/fight', {
@@ -112,6 +121,7 @@
 	const blocked = $derived(
 		!pair?.shoots ? 'no missile weapon' : reach.shots === 0 ? 'out of range' : ''
 	);
+	const leads = $derived(!blocked && (aims || short) ? 'shoot' : 'charge');
 
 	const notes = $derived([
 		...new Set([...(fight?.not_modelled ?? []), ...(volley?.not_modelled ?? [])])
@@ -281,10 +291,13 @@
 		battle.amend(id, { facing, x, y });
 	}
 
-	/** Re-form a block to a new width, asking the engine for the footprint it takes. */
+	const reforming = new SvelteMap<number, number>();
+
+	/** Re-form a block to a new width, asking the engine for the footprint it takes; a later ask wins. */
 	async function reform(id: number, frontage: number) {
 		const block = battle.placed.find((each) => each.id === id);
 		if (!block) return;
+		reforming.set(id, frontage);
 		const { data: costed, error: refused } = await api(window.location.origin, fetch).POST(
 			'/muster',
 			{
@@ -296,6 +309,8 @@
 				}
 			}
 		);
+		if (reforming.get(id) !== frontage) return;
+		reforming.delete(id);
 		if (!costed) {
 			refusal = typeof refused?.detail === 'string' ? refused.detail : 'could not re-form that';
 			return;
@@ -318,9 +333,14 @@
 		});
 	}
 
-	/** Focus the reaction a charge is met with unless told otherwise, so Enter declares it. */
+	/** Focus the menu's likeliest choice, so Enter makes it. */
 	function focused(node: HTMLButtonElement, on: boolean) {
 		if (on) node.focus();
+		return {
+			update(now: boolean) {
+				if (now) node.focus();
+			}
+		};
 	}
 
 	function remove(id: number) {
@@ -342,7 +362,13 @@
 			count={battle.placed.length}
 			value={battle.placed.length ? `${points} pts` : ''}
 		>
-			<input class="input filter" bind:value={needle} placeholder="filter" />
+			<input
+				class="input filter"
+				bind:value={needle}
+				placeholder="filter"
+				onkeydown={(event) =>
+					event.key === 'Enter' && rows[0] && deploy(rows[0].id, rows[0].unit_size.min)}
+			/>
 			<div class="rows">
 				{#each rows as unit (unit.id)}
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -390,6 +416,7 @@
 				onreform={reform}
 				ondropunit={(unit, size, x, y) => deploy(unit, size, { x, y })}
 				onedit={(id) => ((picked = id), sheet(id))}
+				onremove={remove}
 			/>
 			{#if pair}
 				<div
@@ -432,6 +459,7 @@
 							<button
 								class="btn btn-sm btn-primary"
 								disabled={short}
+								use:focused={leads === 'charge'}
 								onclick={() => (reacting = true)}
 							>
 								charge
@@ -439,7 +467,12 @@
 							{#if short}<span class="says">out of charge range</span>{/if}
 						</span>
 						<span class="dimmed">
-							<button class="btn btn-sm" disabled={!!blocked} onclick={loose}>shoot</button>
+							<button
+								class="btn btn-sm"
+								disabled={!!blocked}
+								use:focused={leads === 'shoot'}
+								onclick={loose}>shoot</button
+							>
 							{#if blocked}<span class="says">{blocked}</span>{/if}
 						</span>
 						{#if pair.inches === 0}

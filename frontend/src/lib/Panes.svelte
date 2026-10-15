@@ -5,6 +5,7 @@
 	import Sheet from '$lib/Sheet.svelte';
 	import WeaponText from '$lib/WeaponText.svelte';
 	import { entry } from '$lib/corpus';
+	import { tick } from 'svelte';
 	import {
 		FIRST,
 		closed,
@@ -57,10 +58,24 @@
 			: undefined;
 		open = opened(open, { id: nextId, ...wanted }, measure(wanted), viewport(), from, first);
 		nextId += 1;
+		if (wanted.block !== undefined) control(wanted.block);
 		const key = `${wanted.subject}:${wanted.slug}`;
 		if (read[key]) return;
 		const found = await entry(wanted.subject, wanted.slug);
 		if (found) read[key] = found;
+	}
+
+	/** Put the cursor in a block pane's first control, its text selected, so typing replaces it. */
+	async function control(block: number) {
+		const pane = open.find((each) => each.block === block);
+		if (!pane) return;
+		await tick();
+		const first = document.querySelector(
+			`[data-pane="${pane.id}"] aside :is(input, select, button)`
+		);
+		if (!(first instanceof HTMLElement)) return;
+		first.focus();
+		if (first instanceof HTMLInputElement) first.select();
 	}
 
 	/** Close the pane a block owns, once the block is gone. */

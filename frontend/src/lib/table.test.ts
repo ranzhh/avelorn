@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { MusteredUnit } from './api/client';
 import {
+	deepened,
 	angleTo,
 	arc,
 	base,
@@ -236,6 +237,24 @@ describe('base', () => {
 		const { width, depth } = base(BLOCK.footprint!);
 		expect(width).toBeCloseTo(25 / 25.4);
 		expect(depth).toBeCloseTo(25 / 25.4);
+	});
+});
+
+describe('deepened', () => {
+	it('narrows to the nearest frontage that adds a rank', () => {
+		expect(deepened(10, 5, 1)).toBe(4);
+		expect(deepened(10, 4, 1)).toBe(3);
+		expect(deepened(20, 5, 1)).toBe(4);
+	});
+
+	it('widens to the nearest frontage that drops a rank', () => {
+		expect(deepened(10, 3, -1)).toBe(4);
+		expect(deepened(10, 4, -1)).toBe(5);
+	});
+
+	it('stays put at one file or one rank', () => {
+		expect(deepened(10, 1, 1)).toBe(1);
+		expect(deepened(10, 10, -1)).toBe(10);
 	});
 });
 

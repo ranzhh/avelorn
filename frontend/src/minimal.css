@@ -388,6 +388,13 @@ svg {
 .surface .picked .footprint {
 	stroke: var(--accent);
 }
+.surface .block:focus {
+	outline: none;
+}
+.surface .block:focus-visible .footprint {
+	stroke: var(--accent);
+	stroke-width: 3px;
+}
 .surface .origin {
 	opacity: 0.4;
 }
