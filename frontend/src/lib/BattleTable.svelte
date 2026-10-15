@@ -83,9 +83,10 @@
 		);
 	}
 
-	// A foot apart, interior only: the border already draws the table's edge.
+	/** The table's squares, two feet a side, ruled inside the border that draws its edge. */
+	const SQUARE = 24;
 	const ruled = (edge: number) =>
-		[...Array(Math.floor(edge / 12) - 1).keys()].map((n) => (n + 1) * 12);
+		[...Array(Math.floor(edge / SQUARE) - 1).keys()].map((n) => (n + 1) * SQUARE);
 	const columns = ruled(TABLE.width);
 	const rows = ruled(TABLE.depth);
 
