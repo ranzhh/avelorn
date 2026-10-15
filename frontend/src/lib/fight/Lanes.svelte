@@ -4,7 +4,7 @@
 	import type { Placed as Block } from '$lib/table';
 	import Battlefield from './Battlefield.svelte';
 	import Drawn from './Drawn.svelte';
-	import type { Field } from './field';
+	import { measured, type Control, type Field } from './field';
 	import { INSET } from './faces';
 	import { draw, type Lane, type Placed } from './layout';
 	import { measurer } from './measure';
@@ -53,6 +53,26 @@
 		draw(lanes, measure, open, editing && { lane: editing, height: editorHeight }, !!field, view)
 	);
 
+	const ARCS: ChargeArc[] = ['front', 'flank', 'rear'];
+	const rows = $derived.by((): Control[] => {
+		if (field) {
+			const reading = measured(field.blocks);
+			return [
+				{ kind: 'read', name: 'distance', value: `${reading.full_inches}in` },
+				{ kind: 'read', name: 'arc struck', value: reading.arc }
+			];
+		}
+		return [
+			{ kind: 'inches', name: 'distance', value: charge?.full_inches ?? 0 },
+			{ kind: 'choice', name: 'arc struck', value: charge?.arc ?? 'front', options: ARCS }
+		];
+	});
+
+	function row(name: string, value: number | string | boolean) {
+		if (name === 'distance') oncharge({ full_inches: value as number });
+		else oncharge({ arc: value as ChargeArc });
+	}
+
 	$effect(() => {
 		if (open && !drawing.nodes.some((node) => node.id === open)) ontoggle(open);
 	});
@@ -78,7 +98,15 @@
 				<div class="editor" bind:offsetHeight={editorHeight}>{@render editor(node.lane)}</div>
 			</foreignObject>
 		{:else if node.kind === 'battlefield' && charge}
-			<Battlefield box={node.box} {charge} {field} open={open === node.id} {oncharge} {onmove} />
+			<Battlefield
+				box={node.box}
+				{rows}
+				{field}
+				open={open === node.id}
+				arcs
+				onrow={row}
+				{onmove}
+			/>
 		{:else if node.kind === 'reaction' && lanes.reaction}
 			{@const reaction = lanes.reaction}
 			<rect class="card" {x} {y} {width} {height} rx="8" />

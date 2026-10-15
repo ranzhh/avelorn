@@ -12,22 +12,13 @@
 	import { battle } from '$lib/battle.svelte';
 	import Fight from '$lib/fight/Fight.svelte';
 	import Volley from '$lib/fight/Volley.svelte';
-	import { seat } from '$lib/fight/body';
-	import { LANES } from '$lib/fight/faces';
+	import { aimed, seat, type Deployment } from '$lib/fight/body';
+	import { LANES, type Lane } from '$lib/fight/faces';
 	import { cropped, formed, measured, seated, type Blocks } from '$lib/fight/field';
 	import type { Mode } from '$lib/fight/Settings.svelte';
 	import type { Placed } from '$lib/table';
 
-	/** Ask for the lanes of the table's last volley, posting the body it sent. */
-	async function volley(body: VolleyBody): Promise<VolleyLanes> {
-		const { data, error: refused } = await api(page.url.origin, fetch).POST('/graph/volley', {
-			body
-		});
-		if (!data) {
-			throw new Error(typeof refused?.detail === 'string' ? refused.detail : 'could not draw that');
-		}
-		return data;
-	}
+	type Body = FightBody | VolleyBody;
 
 	const last = $derived(battle.resolved);
 	const matchup = $derived.by(() => {
@@ -44,18 +35,19 @@
 		}
 		return '';
 	});
-	const shot = $derived(last?.action === 'volley' ? volley(last.body) : null);
 
-	let body = $derived<FightBody | null>(
-		last?.action === 'fight' ? $state.snapshot(last.body) : null
-	);
+	let body = $derived<Body | null>(last ? $state.snapshot(last.body) : null);
+	/** The lane the first of the blocks the table resolved between stands in. */
+	const first = $derived.by((): Lane | null => {
+		if (last?.action === 'fight')
+			return seat(last.body, 'attacker') === 'a' ? 'attacker' : 'target';
+		return last ? 'attacker' : null;
+	});
 	const seed = $derived(
-		last?.action === 'fight'
-			? seated(last.body, last.between, $state.snapshot(battle.placed))
-			: null
+		last && first ? seated(last.between, $state.snapshot(battle.placed), first) : null
 	);
 	let blocks = $derived(seed);
-	let lanes = $state<FightLanes | null>(null);
+	let lanes = $state<FightLanes | VolleyLanes | null>(null);
 	let refusal = $state('');
 	let pending = $state(false);
 	let asked = 0;
@@ -70,20 +62,30 @@
 		localStorage.setItem(MODE_KEY, mode);
 	});
 
+	/** The deployment fighting or shooting from a lane, and the phase it takes its weapon for. */
+	function deployed(sent: Body, lane: Lane): { wanted: Deployment; phase: 'melee' | 'missile' } {
+		if ('shooter' in sent) {
+			const side = aimed(lane);
+			return { wanted: sent[side], phase: side === 'shooter' ? 'missile' : 'melee' };
+		}
+		return { wanted: sent[seat(sent, lane)], phase: 'melee' };
+	}
+
 	/**
 	 * Write a body the graph drew back onto the table: each block re-costed as
-	 * it is now fielded, standing where the battlefield left it, and the fight
+	 * it is now fielded, standing where the battlefield left it, and the action
 	 * resolved again so the table's result is this one.
 	 */
-	async function commit(sent: FightBody, at: Blocks | null, ask: number) {
+	async function commit(sent: Body, at: Blocks | null, ask: number) {
 		const open = battle.resolved;
-		if (open?.action !== 'fight') return;
+		if (!open || !first) return;
 		const client = api(page.url.origin, fetch);
 		const next: Placed[] = [];
-		for (const [index, side] of (['a', 'b'] as const).entries()) {
-			const standing = battle.placed.find((each) => each.id === open.between[index]);
+		for (const lane of LANES) {
+			const id = open.between[lane === first ? 0 : 1];
+			const standing = battle.placed.find((each) => each.id === id);
 			if (!standing) return;
-			const wanted = sent[side];
+			const { wanted, phase } = deployed(sent, lane);
 			const files = wanted.frontage ?? standing.block.footprint?.files ?? null;
 			const options = wanted.options ?? [];
 			const same =
@@ -98,21 +100,29 @@
 				if (!costed) return;
 				block = costed;
 			}
-			const lane = LANES.find((each) => seat(sent, each) === side)!;
 			const where = at?.[lane] ?? standing;
 			next.push({
 				...standing,
 				block,
-				melee: wanted.weapon ?? '',
+				[phase]: wanted.weapon ?? '',
 				x: where.x,
 				y: where.y,
 				facing: where.facing
 			});
 		}
-		const { data: report } = await client.POST('/fight', { body: sent });
-		if (!report || ask !== asked) return;
-		battle.placed = battle.placed.map((each) => next.find((one) => one.id === each.id) ?? each);
-		battle.resolved = { action: 'fight', between: open.between, body: sent, report };
+		const placed = () =>
+			battle.placed.map((each) => next.find((one) => one.id === each.id) ?? each);
+		if ('shooter' in sent) {
+			const { data: report } = await client.POST('/volley', { body: sent });
+			if (!report || ask !== asked) return;
+			battle.placed = placed();
+			battle.resolved = { action: 'volley', between: open.between, body: sent, report };
+		} else {
+			const { data: report } = await client.POST('/fight', { body: sent });
+			if (!report || ask !== asked) return;
+			battle.placed = placed();
+			battle.resolved = { action: 'fight', between: open.between, body: sent, report };
+		}
 	}
 
 	function moved(at: Blocks | null): boolean {
@@ -139,12 +149,23 @@
 	);
 
 	$effect(() => {
-		const charge = body?.charge;
-		if (!body || !charge || !field) return;
+		const sent = body;
+		if (!sent || !field) return;
 		const { full_inches, arc } = measured(field.blocks);
-		if (charge.full_inches !== full_inches || charge.arc !== arc)
-			body = { ...body, charge: { ...charge, full_inches, arc } };
+		if ('shooter' in sent) {
+			if (sent.distance !== full_inches) body = { ...sent, distance: full_inches };
+			return;
+		}
+		const charge = sent.charge;
+		if (charge && (charge.full_inches !== full_inches || charge.arc !== arc))
+			body = { ...sent, charge: { ...charge, full_inches, arc } };
 	});
+
+	async function drawn(sent: Body) {
+		const client = api(page.url.origin, fetch);
+		if ('shooter' in sent) return client.POST('/graph/volley', { body: sent });
+		return client.POST('/graph/fight', { body: sent });
+	}
 
 	$effect(() => {
 		const sent = body;
@@ -153,9 +174,7 @@
 		pending = true;
 		const wait = setTimeout(
 			async () => {
-				const { data, error: refused } = await api(page.url.origin, fetch).POST('/graph/fight', {
-					body: sent
-				});
+				const { data, error: refused } = await drawn(sent);
 				if (ask !== asked) return;
 				pending = false;
 				refusal = data
@@ -167,7 +186,7 @@
 				lanes = data;
 				const at = untrack(() => blocks);
 				const changed =
-					last?.action === 'fight' &&
+					!!last &&
 					(JSON.stringify(sent) !== JSON.stringify(last.body) || untrack(() => moved(at)));
 				if (untrack(() => mode) === 'edit' && changed) commit(sent, at, ask);
 			},
@@ -175,6 +194,8 @@
 		);
 		return () => clearTimeout(wait);
 	});
+
+	const onmove = (lane: Lane, block: Placed) => blocks && (blocks = { ...blocks, [lane]: block });
 </script>
 
 <div class="matchup">
@@ -182,9 +203,19 @@
 	{#if matchup}<span>{matchup}</span>{/if}
 </div>
 
-{#if last?.action === 'fight' && body}
-	{#if refusal}<p class="refuse">{refusal}</p>{/if}
-	{#if lanes}
+{#if refusal}<p class="refuse">{refusal}</p>{/if}
+{#if body && lanes}
+	{#if 'shooter' in body && 'panic' in lanes}
+		<Volley
+			{lanes}
+			{body}
+			stale={pending || !!refusal}
+			bind:mode
+			{field}
+			onedit={(next) => (body = next)}
+			{onmove}
+		/>
+	{:else if !('shooter' in body) && 'result' in lanes}
 		<Fight
 			{lanes}
 			{body}
@@ -192,15 +223,7 @@
 			bind:mode
 			{field}
 			onedit={(next) => (body = next)}
-			onmove={(lane, block) => blocks && (blocks = { ...blocks, [lane]: block })}
+			{onmove}
 		/>
 	{/if}
-{:else if last?.action === 'volley' && shot}
-	{#await shot}
-		<p class="meta">drawing…</p>
-	{:then lanes}
-		<Volley {lanes} />
-	{:catch refused}
-		<p class="refuse">{refused.message}</p>
-	{/await}
 {/if}

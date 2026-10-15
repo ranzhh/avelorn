@@ -1,25 +1,36 @@
 <script lang="ts">
-	import type { ChargeArc, FightBody } from '$lib/api/client';
 	import { TABLE, corners, type Placed as Block, type Point } from '$lib/table';
 	import { LANES, type Box, type Lane } from './faces';
-	import { BESIDE, CROP, measured, standable, type Field } from './field';
+	import { BESIDE, CROP, ROW, standable, type Control, type Field } from './field';
 	import { other } from './layout';
 
 	interface Props {
 		box: Box;
-		/** The charge as last asked for, which the inputs show while a redraw is on its way. */
-		charge: NonNullable<FightBody['charge']>;
-		/** The blocks as they stand, where the table placed them: the numbers are read off them. */
+		/** What the card shows and sets, row by row. */
+		rows: Control[];
+		/** The blocks as they stand, where the table placed them. */
 		field: Field | null;
 		open: boolean;
-		oncharge: (change: { full_inches?: number; arc?: ChargeArc }) => void;
+		/** Whether the crop draws the lines between the target's front, flanks and rear. */
+		arcs: boolean;
+		onrow: (name: string, value: number | string | boolean) => void;
 		/** A block dragged across the crop to stand somewhere new. */
 		onmove: (lane: Lane, block: Block) => void;
 	}
 
-	let { box, charge, field, open, oncharge, onmove }: Props = $props();
+	let { box, rows, field, open, arcs, onrow, onmove }: Props = $props();
 
-	const ARCS: ChargeArc[] = ['front', 'flank', 'rear'];
+	const cropped = $derived(open && !!field);
+	const column = $derived(
+		cropped
+			? { left: BESIDE.x, right: BESIDE.x + BESIDE.width, top: CROP.y - 6 }
+			: { left: 12, right: box.width - 12, top: 28 }
+	);
+	const tops = $derived(
+		rows.map(
+			(_, index) => column.top + rows.slice(0, index).reduce((sum, row) => sum + ROW[row.kind], 0)
+		)
+	);
 	const feet = (edge: number) => Array.from({ length: edge / 12 - 1 }, (_, n) => (n + 1) * 12);
 
 	const outline = (points: Point[]) => points.map(({ x, y }) => `${x},${y}`).join(' ');
@@ -39,9 +50,9 @@
 			});
 	}
 
-	function inches(event: Event & { currentTarget: HTMLInputElement }) {
+	function inches(name: string, event: Event & { currentTarget: HTMLInputElement }) {
 		const value = event.currentTarget.valueAsNumber;
-		if (Number.isInteger(value) && value >= 0) oncharge({ full_inches: value });
+		if (Number.isInteger(value) && value >= 0) onrow(name, value);
 	}
 
 	let frame = $state<SVGSVGElement | null>(null);
@@ -71,90 +82,96 @@
 <g class="field" class:open transform="translate({box.x},{box.y})">
 	<rect class="card" width={box.width} height={box.height} rx="8" />
 	<text class="title" x="12" y="23">Battlefield</text>
-	{#if field}
-		{@const reading = measured(field.blocks)}
-		{@const rows = open
-			? { left: BESIDE.x, right: BESIDE.x + BESIDE.width, top: CROP.y + 12 }
-			: { left: 12, right: box.width - 12, top: 47 }}
-		<text class="small" x={rows.left} y={rows.top}>distance</text>
-		<text class="mono" x={rows.right} y={rows.top} text-anchor="end">{reading.full_inches}in</text>
-		<text class="small" x={rows.left} y={rows.top + 19}>arc struck</text>
-		<text class="mono" x={rows.right} y={rows.top + 19} text-anchor="end">{reading.arc}</text>
-		{#if open}
-			{@const { crop, blocks } = field}
-			<svg
-				bind:this={frame}
-				class="crop"
-				x={CROP.x}
-				y={CROP.y}
-				width={CROP.width}
-				height={CROP.height}
-				viewBox="{crop.x} {crop.y} {crop.width} {crop.height}"
-			>
-				<rect class="off" x={crop.x} y={crop.y} width={crop.width} height={crop.height} />
-				<rect class="cloth" width={TABLE.width} height={TABLE.depth} />
-				{#each feet(TABLE.width) as x}<line class="foot" x1={x} x2={x} y2={TABLE.depth} />{/each}
-				{#each feet(TABLE.depth) as y}<line class="foot" y1={y} x2={TABLE.width} y2={y} />{/each}
+	{#if cropped && field}
+		{@const { crop, blocks } = field}
+		<svg
+			bind:this={frame}
+			class="crop"
+			x={CROP.x}
+			y={CROP.y}
+			width={CROP.width}
+			height={CROP.height}
+			viewBox="{crop.x} {crop.y} {crop.width} {crop.height}"
+		>
+			<rect class="off" x={crop.x} y={crop.y} width={crop.width} height={crop.height} />
+			<rect class="cloth" width={TABLE.width} height={TABLE.depth} />
+			{#each feet(TABLE.width) as x}<line class="foot" x1={x} x2={x} y2={TABLE.depth} />{/each}
+			{#each feet(TABLE.depth) as y}<line class="foot" y1={y} x2={TABLE.width} y2={y} />{/each}
+			{#if arcs}
 				{#each diagonals(blocks.target) as [from, to]}
 					<line class="diagonal" x1={from.x} y1={from.y} x2={to.x} y2={to.y} />
 				{/each}
-				<line
-					class="trace"
-					x1={blocks.attacker.x}
-					y1={blocks.attacker.y}
-					x2={blocks.target.x}
-					y2={blocks.target.y}
-				/>
-				{#each LANES as lane}
-					{@const points = corners(blocks[lane])}
-					<!-- svelte-ignore a11y_no_static_element_interactions -->
-					<g
-						class="block {lane}"
-						class:held={held?.lane === lane}
-						onpointerdown={(event) => grab(event, lane, blocks[lane])}
-						onpointermove={drag}
-						onpointerup={() => (held = null)}
-						onpointercancel={() => (held = null)}
-					>
-						<polygon points={outline(points)} />
-						<line
-							class="front"
-							x1={points[3].x}
-							y1={points[3].y}
-							x2={points[0].x}
-							y2={points[0].y}
-						/>
-					</g>
-				{/each}
-			</svg>
-			<rect class="frame" x={CROP.x} y={CROP.y} width={CROP.width} height={CROP.height} />
-		{/if}
-	{:else}
-		<text class="small" x="12" y="45">distance</text>
-		<foreignObject x="12" y="51" width={box.width - 24} height="26">
-			<label class="inches">
-				<input
-					class="input"
-					type="number"
-					min="0"
-					value={charge.full_inches}
-					oninput={inches}
-					aria-label="distance"
-				/><span>in</span>
-			</label>
-		</foreignObject>
-		<text class="small" x="12" y="93">arc struck</text>
-		<foreignObject x="12" y="99" width={box.width - 24} height="26">
-			<select
-				class="select"
-				value={charge.arc}
-				onchange={(event) => oncharge({ arc: event.currentTarget.value as ChargeArc })}
-				aria-label="arc struck"
-			>
-				{#each ARCS as arc}<option value={arc}>{arc}</option>{/each}
-			</select>
-		</foreignObject>
+			{/if}
+			<line
+				class="trace"
+				x1={blocks.attacker.x}
+				y1={blocks.attacker.y}
+				x2={blocks.target.x}
+				y2={blocks.target.y}
+			/>
+			{#each LANES as lane}
+				{@const points = corners(blocks[lane])}
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<g
+					class="block {lane}"
+					class:held={held?.lane === lane}
+					onpointerdown={(event) => grab(event, lane, blocks[lane])}
+					onpointermove={drag}
+					onpointerup={() => (held = null)}
+					onpointercancel={() => (held = null)}
+				>
+					<polygon points={outline(points)} />
+					<line class="front" x1={points[3].x} y1={points[3].y} x2={points[0].x} y2={points[0].y} />
+				</g>
+			{/each}
+		</svg>
+		<rect class="frame" x={CROP.x} y={CROP.y} width={CROP.width} height={CROP.height} />
 	{/if}
+	{#each rows as row, index}
+		{@const top = tops[index]}
+		{@const { left, right } = column}
+		{#if row.kind === 'read'}
+			<text class="small" x={left} y={top + 19}>{row.name}</text>
+			<text class="mono" x={right} y={top + 19} text-anchor="end">{row.value}</text>
+		{:else if row.kind === 'inches'}
+			<text class="small" x={left} y={top + 17}>{row.name}</text>
+			<foreignObject x={left} y={top + 23} width={right - left} height="26">
+				<label class="inches">
+					<input
+						class="input"
+						type="number"
+						min="0"
+						value={row.value}
+						oninput={(event) => inches(row.name, event)}
+						aria-label={row.name}
+					/><span>in</span>
+				</label>
+			</foreignObject>
+		{:else if row.kind === 'choice'}
+			<text class="small" x={left} y={top + 17}>{row.name}</text>
+			<foreignObject x={left} y={top + 23} width={right - left} height="26">
+				<select
+					class="select"
+					value={row.value}
+					onchange={(event) => onrow(row.name, event.currentTarget.value)}
+					aria-label={row.name}
+				>
+					{#each row.options as option}<option value={option}>{option}</option>{/each}
+				</select>
+			</foreignObject>
+		{:else}
+			<text class="small" x={left} y={top + 19}>{row.name}</text>
+			<foreignObject x={right - 20} y={top + 6} width="20" height="18">
+				<input
+					class="toggle"
+					type="checkbox"
+					checked={row.value}
+					onchange={(event) => onrow(row.name, event.currentTarget.checked)}
+					aria-label={row.name}
+				/>
+			</foreignObject>
+		{/if}
+	{/each}
 </g>
 
 <style>
@@ -243,5 +260,9 @@
 	}
 	.inches input {
 		width: 5rem;
+	}
+	.toggle {
+		margin: 2px 0 0;
+		cursor: pointer;
 	}
 </style>

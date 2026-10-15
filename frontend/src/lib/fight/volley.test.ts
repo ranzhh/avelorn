@@ -22,7 +22,7 @@ describe('a volley drawn in lanes', () => {
 	});
 
 	it.each(VIEWS)('reads the Panic test outcomes %s', (view) => {
-		const outcomes = drawVolley(lanes, measure, null, view).nodes.flatMap((node) =>
+		const outcomes = drawVolley(lanes, measure, null, null, false, view).nodes.flatMap((node) =>
 			node.kind === 'outcome' ? [node.p] : []
 		);
 		const total = outcomes.reduce((sum, p) => sum + p, 0);
@@ -31,23 +31,27 @@ describe('a volley drawn in lanes', () => {
 		expect(total).toBeCloseTo(view === 'conditional' ? 1 : lanes.panic.taken);
 	});
 
-	it.each([null, 'volley', 'panic', 'unit:attacker', 'pill:target:1'])(
-		'keeps every card clear of the others with %s open',
-		(open) => {
-			const boxes = drawVolley(lanes, measure, open).nodes.map((node) => node.box);
-			const overlaps = boxes.flatMap((a, i) =>
-				boxes
-					.slice(i + 1)
-					.filter(
-						(b) =>
-							a.x < b.x + b.width &&
-							b.x < a.x + a.width &&
-							a.y < b.y + b.height &&
-							b.y < a.y + a.height
-					)
-			);
+	it.each([
+		{ open: null, editor: null, mapped: false },
+		{ open: 'volley', editor: null, mapped: false },
+		{ open: 'panic', editor: null, mapped: false },
+		{ open: 'pill:target:1', editor: null, mapped: false },
+		{ open: 'unit:target', editor: { lane: 'target', height: 220 } as const, mapped: false },
+		{ open: 'battlefield', editor: null, mapped: true }
+	])('keeps every card clear of the others with $open open', ({ open, editor, mapped }) => {
+		const boxes = drawVolley(lanes, measure, open, editor, mapped).nodes.map((node) => node.box);
+		const overlaps = boxes.flatMap((a, i) =>
+			boxes
+				.slice(i + 1)
+				.filter(
+					(b) =>
+						a.x < b.x + b.width &&
+						b.x < a.x + a.width &&
+						a.y < b.y + b.height &&
+						b.y < a.y + a.height
+				)
+		);
 
-			expect(overlaps).toEqual([]);
-		}
-	);
+		expect(overlaps).toEqual([]);
+	});
 });

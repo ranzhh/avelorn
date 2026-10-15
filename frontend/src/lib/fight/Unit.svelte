@@ -9,10 +9,12 @@
 		deployment: Deployment;
 		/** The width it fights at, when the deployment leaves it to the datasheet. */
 		frontage: number;
+		/** The phase whose weapons it may take in hand. */
+		phase?: 'melee' | 'missile';
 		onchange: (change: Partial<Deployment>) => void;
 	}
 
-	let { deployment, frontage, onchange }: Props = $props();
+	let { deployment, frontage, phase = 'melee', onchange }: Props = $props();
 
 	let weapons = $state<Wieldable[]>([]);
 
@@ -21,7 +23,7 @@
 		api(page.url.origin, fetch)
 			.POST('/muster', { body: { unit, size, options, frontage: null } })
 			.then(({ data }) => {
-				if (data) weapons = usable(data, 'melee');
+				if (data) weapons = usable(data, phase);
 			});
 	});
 
