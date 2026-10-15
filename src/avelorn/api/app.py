@@ -27,7 +27,7 @@ from avelorn.tow.contingent import Charge, ChargeArc, Contingent, Movement
 from avelorn.tow.coverage import Coverage, coverage
 from avelorn.tow.data import TOWRepository, default_repository
 from avelorn.tow.game import TOWGame
-from avelorn.tow.lanes import FightLanes
+from avelorn.tow.lanes import FightLanes, VolleyLanes
 from avelorn.tow.muster import Complement
 from avelorn.tow.phases.movement import HOLD, ChargeReaction, StandAndShoot
 from avelorn.tow.round import Fight as Round
@@ -372,15 +372,18 @@ def volley(request: Volley, data: Corpus) -> VolleyReport:
     return VolleyReport.of(*_fired(request, data))
 
 
-@app.post("/graph/volley", summary="Evaluate the volley program a volley resolves")
-def graph_volley(request: Volley, data: Corpus) -> dict[str, object]:
-    """Fire the volley ``/volley`` fires, and show the program it ran on.
+@app.post("/graph/volley", summary="Draw the volley a volley resolves in two lanes")
+def graph_volley(request: Volley, data: Corpus) -> VolleyLanes:
+    """Fire the volley ``/volley`` fires, and draw it in a lane for each side.
+
+    The shooter takes the attacker's lane, above its target's. ``panic`` is
+    the target's Panic test over the whole volley.
 
     Returns:
-        The evaluated volley program, in the lane ``/volley`` reports on.
+        The lanes, read off the lane ``/volley`` reports on.
     """
-    *_, fired = _fired(request, data)
-    return fired.evaluated.lane.to_view()
+    shooter, target, fired = _fired(request, data)
+    return VolleyLanes.of(shooter, target, fired, request.distance)
 
 
 def _fired(request: Volley, data: TOWRepository) -> tuple[Contingent, Contingent, Fired]:

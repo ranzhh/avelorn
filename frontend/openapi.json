@@ -227,8 +227,8 @@
     },
     "/graph/volley": {
       "post": {
-        "summary": "Evaluate the volley program a volley resolves",
-        "description": "Fire the volley ``/volley`` fires, and show the program it ran on.\n\nReturns:\n    The evaluated volley program, in the lane ``/volley`` reports on.",
+        "summary": "Draw the volley a volley resolves in two lanes",
+        "description": "Fire the volley ``/volley`` fires, and draw it in a lane for each side.\n\nThe shooter takes the attacker's lane, above its target's. ``panic`` is\nthe target's Panic test over the whole volley.\n\nReturns:\n    The lanes, read off the lane ``/volley`` reports on.",
         "operationId": "graph_volley_graph_volley_post",
         "requestBody": {
           "content": {
@@ -246,9 +246,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
-                  "title": "Response Graph Volley Graph Volley Post"
+                  "$ref": "#/components/schemas/VolleyLanes"
                 }
               }
             }
@@ -712,6 +710,16 @@
         "type": "object",
         "title": "AttackGate",
         "description": "What the attack is, read from the attacking fighter's sources."
+      },
+      "Band": {
+        "type": "string",
+        "enum": [
+          "short",
+          "long",
+          "out-of-range"
+        ],
+        "title": "Band",
+        "description": "Range band."
       },
       "BaseSize": {
         "properties": {
@@ -2188,6 +2196,61 @@
         "title": "LaneCharge",
         "description": "The charge, the range its Charge roll gives, and the chance it reaches the target.\n\nThe target stands ``distance`` away. ``maximum`` is the maximum possible\ncharge range term by term, and ``furthest`` the furthest the dice reach\nwithin it."
       },
+      "LanePanic": {
+        "properties": {
+          "taken": {
+            "type": "number",
+            "title": "Taken"
+          },
+          "leadership": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Leadership"
+          },
+          "passed": {
+            "type": "number",
+            "title": "Passed"
+          },
+          "falls_back_in_good_order": {
+            "type": "number",
+            "title": "Falls Back In Good Order"
+          },
+          "flees": {
+            "type": "number",
+            "title": "Flees"
+          },
+          "destroyed": {
+            "type": "number",
+            "title": "Destroyed"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/LandedRule"
+            },
+            "type": "array",
+            "title": "Rules"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "taken",
+          "leadership",
+          "passed",
+          "falls_back_in_good_order",
+          "flees",
+          "destroyed",
+          "rules"
+        ],
+        "title": "LanePanic",
+        "description": "The target's Panic test: the chance it is taken, and of each outcome over the whole volley.\n\n``passed``, ``falls_back_in_good_order`` and ``flees`` add up to ``taken``;\n``destroyed`` is the chance the volley leaves nothing to test."
+      },
       "LaneReaction": {
         "properties": {
           "chosen": {
@@ -2961,6 +3024,30 @@
         ],
         "title": "Quantity",
         "description": "A quantity an effect can change, in the rulebook's own modifier vocabulary.\n\nA closed, append-only enum: a member joins when an imported rule needs it.\nA profile :class:`~avelorn.tow.schema.unit.Characteristic` is the one\nquantity kept apart, a stat vocabulary used far beyond modifiers, so an\noperation's key is a Quantity or a Characteristic."
+      },
+      "Range": {
+        "properties": {
+          "distance": {
+            "type": "integer",
+            "title": "Distance"
+          },
+          "band": {
+            "$ref": "#/components/schemas/Band"
+          },
+          "moved": {
+            "type": "boolean",
+            "title": "Moved"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "distance",
+          "band",
+          "moved"
+        ],
+        "title": "Range",
+        "description": "The inches between a shooter and its target, their range band, and whether it moved."
       },
       "Reactions": {
         "properties": {
@@ -4015,6 +4102,40 @@
         ],
         "title": "Volley",
         "description": "One unit shooting another, and what the shot has to travel through."
+      },
+      "VolleyLanes": {
+        "properties": {
+          "units": {
+            "$ref": "#/components/schemas/PerSide_LaneUnit_"
+          },
+          "battlefield": {
+            "$ref": "#/components/schemas/Range"
+          },
+          "volley": {
+            "$ref": "#/components/schemas/LaneVolley"
+          },
+          "panic": {
+            "$ref": "#/components/schemas/LanePanic"
+          },
+          "not_modelled": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Not Modelled"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "units",
+          "battlefield",
+          "volley",
+          "panic",
+          "not_modelled"
+        ],
+        "title": "VolleyLanes",
+        "description": "A volley in two lanes, the shooter's above the target's.\n\n``not_modelled`` names the rules held without applying."
       },
       "VolleyPart": {
         "properties": {
