@@ -36,6 +36,8 @@
 		ondropunit: (unit: string, size: number, x: number, y: number) => void;
 		/** A block double-clicked, Entered from the keyboard, or its corner sheet clicked: open its datasheet. */
 		onedit: (id: number) => void;
+		/** A selected block grown or shrunk by a model from the keyboard. */
+		onresize: (id: number, by: 1 | -1) => void;
 		/** A selected block deleted from the keyboard. */
 		onremove: (id: number) => void;
 		/** The pair a menu is open on or was last resolved, drawn as an arrow between them. */
@@ -54,6 +56,7 @@
 		onreform,
 		ondropunit,
 		onedit,
+		onresize,
 		onremove,
 		linked,
 		zones = 0
@@ -341,10 +344,15 @@
 		ArrowDown: (models, files) => deepened(models, files, -1)
 	};
 
+	const RESIZE: Record<string, 1 | -1> = { '+': 1, '=': 1, '-': -1 };
+
 	function key(event: KeyboardEvent, block: Placed) {
 		if (event.key === 'Enter' || event.key === ' ') {
 			event.preventDefault();
 			onedit(block.id);
+		} else if (event.key in RESIZE && picked.length <= 1) {
+			event.preventDefault();
+			onresize(block.id, RESIZE[event.key]);
 		} else if (event.key in RESHAPE && block.block.footprint && picked.length <= 1) {
 			event.preventDefault();
 			const standing = block.block.footprint.files;
