@@ -3047,7 +3047,7 @@
           "moved"
         ],
         "title": "Range",
-        "description": "What lies between a shooter and its target: the inches, the band they fall in, and whether it moved."
+        "description": "The inches between a shooter and its target, their range band, and whether it moved."
       },
       "Reactions": {
         "properties": {
