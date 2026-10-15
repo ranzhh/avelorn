@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { UnitOption } from './api/client';
-import { byName } from './options';
+import { byName, keys } from './options';
 
 const option = (id: string, name: string, kind: UnitOption['kind']): UnitOption => ({
 	id,
@@ -26,5 +26,34 @@ describe('byName', () => {
 			{ id: 'veteran', name: 'Veteran' },
 			{ id: 'veteran-rule', name: 'Veteran' }
 		]);
+	});
+});
+
+describe('keys', () => {
+	const DRAGON_PRINCES = [
+		option('magic-items', 'Drakemaster magic items', 'other'),
+		option('drakemaster', 'Drakemaster', 'champion'),
+		option('standard-bearer', 'Standard Bearer', 'standard_bearer'),
+		option('musician', 'Musician', 'musician')
+	];
+
+	it('gives command models the first letter of their names', () => {
+		const held = keys(DRAGON_PRINCES);
+		expect(held.get('drakemaster')).toBe(0);
+		expect(held.get('standard-bearer')).toBe(0);
+		expect(held.get('musician')).toBe(0);
+	});
+
+	it('moves past letters an earlier option holds', () => {
+		expect(keys(DRAGON_PRINCES).get('magic-items')).toBe(1);
+	});
+
+	it('leaves an option without a key once its letters are all taken', () => {
+		const held = keys([
+			option('a', 'Ab', 'champion'),
+			option('b', 'Ba', 'other'),
+			option('c', 'ab', 'other')
+		]);
+		expect(held.has('c')).toBe(false);
 	});
 });
