@@ -1,10 +1,12 @@
 <script lang="ts">
+	import { SvelteMap } from 'svelte/reactivity';
 	import {
 		TABLE,
 		angleTo,
 		arc,
 		base,
 		bearing,
+		deepened,
 		legend,
 		pivot,
 		reformed,
@@ -264,6 +266,21 @@
 		}
 	}
 
+	/** The frontage last asked of each block, so a key pressed before the engine answers builds on it. */
+	const asked = new SvelteMap<number, number>();
+	$effect(() => {
+		for (const each of placed) {
+			if (asked.get(each.id) === each.block.footprint?.files) asked.delete(each.id);
+		}
+	});
+
+	const RESHAPE: Record<string, (models: number, files: number) => number> = {
+		ArrowLeft: (models, files) => Math.max(files - 1, 1),
+		ArrowRight: (models, files) => Math.min(files + 1, models),
+		ArrowUp: (models, files) => deepened(models, files, 1),
+		ArrowDown: (models, files) => deepened(models, files, -1)
+	};
+
 	function key(event: KeyboardEvent, block: Placed) {
 		if (event.key === 'Enter' || event.key === ' ') {
 			event.preventDefault();
@@ -271,6 +288,14 @@
 		} else if (event.key === 'Delete' || event.key === 'Backspace') {
 			event.preventDefault();
 			onremove(block.id);
+		} else if (event.key in RESHAPE && block.block.footprint) {
+			event.preventDefault();
+			const standing = block.block.footprint.files;
+			const from = asked.get(block.id) ?? standing;
+			const files = RESHAPE[event.key](block.block.size, from);
+			if (files === from) return;
+			asked.set(block.id, files);
+			onreform(block.id, files);
 		}
 	}
 

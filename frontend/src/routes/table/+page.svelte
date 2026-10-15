@@ -6,6 +6,7 @@
 	import Resolved from '$lib/Resolved.svelte';
 	import Warn from '$lib/Warn.svelte';
 	import { resolve } from '$app/paths';
+	import { SvelteMap } from 'svelte/reactivity';
 	import { api, type FightBody, type MusteredUnit, type VolleyBody } from '$lib/api/client';
 	import { battle } from '$lib/battle.svelte';
 	import { entry } from '$lib/corpus';
@@ -290,10 +291,13 @@
 		battle.amend(id, { facing, x, y });
 	}
 
-	/** Re-form a block to a new width, asking the engine for the footprint it takes. */
+	const reforming = new SvelteMap<number, number>();
+
+	/** Re-form a block to a new width, asking the engine for the footprint it takes; a later ask wins. */
 	async function reform(id: number, frontage: number) {
 		const block = battle.placed.find((each) => each.id === id);
 		if (!block) return;
+		reforming.set(id, frontage);
 		const { data: costed, error: refused } = await api(window.location.origin, fetch).POST(
 			'/muster',
 			{
@@ -305,6 +309,8 @@
 				}
 			}
 		);
+		if (reforming.get(id) !== frontage) return;
+		reforming.delete(id);
 		if (!costed) {
 			refusal = typeof refused?.detail === 'string' ? refused.detail : 'could not re-form that';
 			return;
