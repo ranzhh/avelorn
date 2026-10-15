@@ -4,6 +4,7 @@
 	import Block from '$lib/Block.svelte';
 	import Panes from '$lib/Panes.svelte';
 	import Resolved from '$lib/Resolved.svelte';
+	import SheetGlyph from '$lib/SheetGlyph.svelte';
 	import Warn from '$lib/Warn.svelte';
 	import { resolve } from '$app/paths';
 	import { SvelteMap } from 'svelte/reactivity';
@@ -391,9 +392,10 @@
 						<button
 							class="sheet"
 							title="datasheet"
+							aria-label="datasheet"
 							onclick={() => panes?.show({ subject: 'unit', slug: unit.id, title: unit.name })}
 						>
-							sheet
+							<svg viewBox="0 0 16 16" width="16" height="16"><SheetGlyph /></svg>
 						</button>
 					</div>
 				{/each}
