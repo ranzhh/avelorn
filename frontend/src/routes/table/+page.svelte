@@ -346,6 +346,12 @@
 		};
 	}
 
+	/** Select a block from the list, focusing it on the table so the keys that act on a block reach it. */
+	function choose(id: number) {
+		picked = id;
+		document.querySelector<SVGElement>(`.surface [data-block="${id}"]`)?.focus();
+	}
+
 	function remove(id: number) {
 		battle.remove(id);
 		panes?.forget(id);
@@ -490,6 +496,26 @@
 	</div>
 
 	<aside class="right">
+		<Dock title="units" keep="units" count={battle.placed.length}>
+			<div class="rows">
+				{#each battle.placed as standing (standing.id)}
+					<div class="row" class:on={standing.id === picked}>
+						<button class="pick" onclick={() => choose(standing.id)}>
+							<span><b class="num">{standing.mark}</b> {standing.block.name}</span>
+							<span class="cost num">×{standing.block.size} {standing.block.points} pts</span>
+						</button>
+						<button
+							class="sheet"
+							title="datasheet"
+							aria-label="datasheet"
+							onclick={() => ((picked = standing.id), sheet(standing.id))}
+						>
+							<svg viewBox="0 0 16 16" width="16" height="16"><SheetGlyph /></svg>
+						</button>
+					</div>
+				{/each}
+			</div>
+		</Dock>
 		<Dock
 			title="resolved"
 			keep="resolved"

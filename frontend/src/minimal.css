@@ -260,6 +260,9 @@ summary {
 .tabletop .sheet:hover {
 	color: var(--accent);
 }
+.tabletop .row.on {
+	background: var(--ordinal-1);
+}
 .tabletop .cost {
 	font-size: var(--text-xs);
 	white-space: nowrap;

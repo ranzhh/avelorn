@@ -472,6 +472,7 @@
 				class:under={over?.id === block.id}
 				role="button"
 				tabindex="0"
+				data-block={block.id}
 				aria-label="{block.mark} {block.block.name}"
 				onpointerdown={(event) => grab(event, block)}
 				ondblclick={() => onedit(block.id)}
