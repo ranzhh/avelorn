@@ -1,12 +1,4 @@
-import type {
-	FightLanes,
-	LandedRule,
-	LaneUnit,
-	Needed,
-	Spread,
-	Strike,
-	VolleyLanes
-} from '$lib/api/client';
+import type { FightLanes, LandedRule, LaneUnit, Needed, Spread, Strike } from '$lib/api/client';
 import { percent, percents } from '$lib/charts/scale';
 
 /** A lane of the drawing: the charger's above, its target's below. */
@@ -36,7 +28,6 @@ export const STRIKE = { least: 150, inset: 12, header: 26, row: 18 };
 const CHARGE = { width: 170, height: 55 };
 const RESULT = { least: 150, height: 128 };
 const BREAK = { width: 190, height: 56 };
-const RANGE = { width: 170, height: 96 };
 const PILL = { least: 50, height: 26 };
 const RULE = { row: 20, box: 11, side: 8 };
 /** A chart of a count's chances, and how wide a card must be to draw one. */
@@ -748,31 +739,5 @@ export function left(size: number, { least, distribution, mean, sd }: Spread): S
 		distribution: [...distribution].reverse(),
 		mean: size - mean,
 		sd
-	};
-}
-
-/** The ground between a shooter and its target: the inches, the range band, whether it moved. */
-export function rangeFace(range: VolleyLanes['battlefield'], measure: Measure): Face {
-	const rows: [string, string][] = [
-		['distance', `${range.distance}in`],
-		['range', range.band],
-		['moved', range.moved ? 'yes' : 'no']
-	];
-	const width = Math.max(
-		RANGE.width,
-		2 * INSET + measure('Battlefield', 'title'),
-		...rows.map(([name, value]) => 2 * INSET + measure(name, 'small') + 12 + measure(value, 'mono'))
-	);
-	return {
-		chrome: 'card',
-		width,
-		height: RANGE.height,
-		marks: [
-			text(INSET, 23, 'Battlefield', 'title'),
-			...rows.flatMap(([name, value], index) => [
-				text(INSET, 45 + index * 19, name, 'small'),
-				text(width - INSET, 45 + index * 19, value, 'mono', 'end')
-			])
-		]
 	};
 }

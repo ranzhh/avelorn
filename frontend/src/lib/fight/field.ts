@@ -1,4 +1,4 @@
-import type { ChargeArc, FightBody, LaneUnit } from '$lib/api/client';
+import type { ChargeArc, LaneUnit } from '$lib/api/client';
 import {
 	TABLE,
 	arc,
@@ -9,7 +9,6 @@ import {
 	within,
 	type Placed as Block
 } from '$lib/table';
-import { seat } from './body';
 import { LANES, type Box, type Lane } from './faces';
 
 /** The two blocks a fight was charged between, by the lane each fights from. */
@@ -26,20 +25,38 @@ export const CROP = { x: 12, y: 34, width: 280, height: 200, margin: 6 };
 /** The measurements beside the crop: where their column starts and how wide it is. */
 export const BESIDE = { x: CROP.x + CROP.width + 18, width: 110 };
 
+/** One row of the battlefield: a read-out, an inch count or a choice to set, or a toggle. */
+export type Control =
+	| { kind: 'read'; name: string; value: string }
+	| { kind: 'inches'; name: string; value: number }
+	| { kind: 'choice'; name: string; value: string; options: string[] }
+	| { kind: 'toggle'; name: string; value: boolean };
+
+/** How tall each kind of row stands. */
+export const ROW: Record<Control['kind'], number> = {
+	read: 19,
+	inches: 48,
+	choice: 48,
+	toggle: 22
+};
+const TOP = 28;
+
 /**
- * The battlefield's size: inputs with no table to measure, read-outs off the
- * table's blocks, and open, the crop of the table with the read-outs beside it.
+ * The battlefield's size: its rows under its title, and open on a table, the
+ * crop of the table with the rows beside it.
  */
-export function battlefieldSize(mapped: boolean, open: boolean): { width: number; height: number } {
-	if (!mapped) return { width: 160, height: 140 };
-	if (!open) return { width: 160, height: 78 };
+export function battlefieldSize(
+	rows: Control['kind'][],
+	open: boolean
+): { width: number; height: number } {
+	if (!open) return { width: 160, height: TOP + rows.reduce((sum, row) => sum + ROW[row], 0) + 12 };
 	return { width: BESIDE.x + BESIDE.width + CROP.x, height: CROP.y + CROP.height + CROP.x };
 }
 
-/** The blocks the table resolved a fight between, by lane; null when either is not on the table. */
-export function seated(body: FightBody, between: [number, number], placed: Block[]): Blocks | null {
+/** The blocks the table resolved an action between, `first` the lane of the first; null when either is gone. */
+export function seated(between: [number, number], placed: Block[], first: Lane): Blocks | null {
 	const [attacker, target] = LANES.map((lane) =>
-		placed.find((each) => each.id === between[seat(body, lane) === 'a' ? 0 : 1])
+		placed.find((each) => each.id === between[lane === first ? 0 : 1])
 	);
 	return attacker && target ? { attacker, target } : null;
 }

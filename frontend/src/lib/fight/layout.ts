@@ -80,7 +80,7 @@ export type Placed =
 			box: Box;
 			face: Face;
 	  }
-	| { kind: 'result' | 'range'; id: string; lane: null; box: Box; face: Face }
+	| { kind: 'result'; id: string; lane: null; box: Box; face: Face }
 	| { kind: 'battlefield'; id: string; box: Box }
 	| { kind: 'reaction'; id: string; box: Box }
 	| { kind: 'short'; id: string; box: Box }
@@ -220,7 +220,10 @@ export function draw(
 		...LANES.map((lane) => breakCards[lane].width)
 	);
 	const charged = lanes.battlefield && chargeCard && lanes.reaction;
-	const fieldSize = battlefieldSize(mapped, open === 'battlefield');
+	const fieldSize = battlefieldSize(
+		mapped ? ['read', 'read'] : ['inches', 'choice'],
+		mapped && open === 'battlefield'
+	);
 
 	const tall = (lane: Lane) =>
 		Math.max(

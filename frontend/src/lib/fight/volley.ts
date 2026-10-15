@@ -5,7 +5,6 @@ import {
 	NONE,
 	left as standing,
 	pillFace,
-	rangeFace,
 	testFace,
 	unitFace,
 	volleyFace,
@@ -27,9 +26,11 @@ import {
 	right,
 	type Drawing,
 	type Edge,
+	type Editor,
 	type Label,
 	type Placed
 } from './layout';
+import { battlefieldSize } from './field';
 import { panicked, type View } from './odds';
 
 const OPENING = 24;
@@ -38,21 +39,36 @@ const OPENING = 24;
  * A volley drawn as the fight is: the shooter's lane above its target's, the
  * units feeding the battlefield, the shots in the shooter's lane falling as
  * casualties into the target's, and the target's Panic test with its outcomes
- * read in `view`. The node `open` shows its whole face.
+ * read in `view`. The node `open` shows its whole face, a unit edited in place
+ * makes room for its `editor`, and a `mapped` battlefield reads its distance
+ * off the table's blocks.
  */
 export function drawVolley(
 	lanes: VolleyLanes,
 	measure: Measure,
 	open: string | null = null,
+	editor: Editor | null = null,
+	mapped = false,
 	view: View = 'conditional'
 ): Drawing {
-	const natural = LANES.map((lane) => unitFace(lanes.units[lane], measure, false).width);
-	const unitWidth = Math.max(...natural);
-	const units = {
-		attacker: unitFace(lanes.units.attacker, measure, open === 'unit:attacker', unitWidth),
-		target: unitFace(lanes.units.target, measure, open === 'unit:target', unitWidth)
-	};
-	const field = rangeFace(lanes.battlefield, measure);
+	const editing = (lane: Lane) => (editor?.lane === lane ? editor.height : null);
+	const unitFaces = (least: number) => ({
+		attacker: unitFace(
+			lanes.units.attacker,
+			measure,
+			open === 'unit:attacker',
+			least,
+			editing('attacker')
+		),
+		target: unitFace(lanes.units.target, measure, open === 'unit:target', least, editing('target'))
+	});
+	const natural = unitFaces(0);
+	const unitWidth = Math.max(natural.attacker.width, natural.target.width);
+	const units = unitFaces(unitWidth);
+	const field = battlefieldSize(
+		[mapped ? 'read' : 'inches', 'read', 'toggle'],
+		mapped && open === 'battlefield'
+	);
 	const shots = volleyFace(lanes.volley, lanes.units.attacker.name, measure, open === 'volley');
 	const size = lanes.units.target.size;
 	const before = pillFace(NONE(size), 'target', measure, open === 'pill:target:0');
@@ -111,7 +127,7 @@ export function drawVolley(
 		between,
 		field.height
 	);
-	nodes.push({ kind: 'range', id: 'battlefield', lane: null, box: ground, face: field });
+	nodes.push({ kind: 'battlefield', id: 'battlefield', box: ground });
 
 	const start = centred(
 		column(before.width, '', OPENING) + before.width / 2,
