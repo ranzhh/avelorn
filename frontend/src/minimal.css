@@ -427,6 +427,9 @@ svg {
 	text-anchor: middle;
 	dominant-baseline: central;
 }
+.surface text tspan {
+	alignment-baseline: central;
+}
 .surface .mark {
 	font-weight: 700;
 }
