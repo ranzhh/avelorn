@@ -10,7 +10,6 @@ export type Resolution =
 class Battle {
 	placed = $state<Placed[]>([]);
 	nextId = $state(1);
-	stamped = $state(0);
 	/** The pair a menu is open on: what the first could do to the second. */
 	asking = $state<{ mover: number; target: number } | null>(null);
 	resolved = $state<Resolution | null>(null);

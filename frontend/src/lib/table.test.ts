@@ -9,7 +9,7 @@ import {
 	bounds,
 	clearance,
 	corners,
-	identifier,
+	initials,
 	inside,
 	legend,
 	pivot,
@@ -43,13 +43,24 @@ function placed(x: number, y: number, facing: Degrees = 0, block = BLOCK): Place
 	return { id: 1, mark: 'A', block, x, y, facing, melee: '', missile: '' };
 }
 
-describe('identifier', () => {
-	it('names the first blocks by letter', () => {
-		expect([0, 1, 25].map(identifier)).toEqual(['A', 'B', 'Z']);
+describe('initials', () => {
+	it('takes the initials of a name up to "of"', () => {
+		expect(initials('Dragon Princes', [])).toBe('DP');
+		expect(initials('White Lions of Chrace', [])).toBe('WL');
+		expect(initials('Lothern Sea Guard', [])).toBe('LSG');
 	});
 
-	it('carries past the alphabet without repeating itself', () => {
-		expect([26, 27, 51, 52].map(identifier)).toEqual(['AA', 'AB', 'AZ', 'BA']);
+	it('reaches past "of" when one word stands before it', () => {
+		expect(initials('Swordmasters of Hoeth', [])).toBe('SH');
+	});
+
+	it('takes two letters of a one-word name', () => {
+		expect(initials('Maneaters', [])).toBe('MA');
+	});
+
+	it('numbers a second block of a kind', () => {
+		expect(initials('Dragon Princes', ['DP'])).toBe('DP2');
+		expect(initials('Dragon Princes', ['DP', 'DP2'])).toBe('DP3');
 	});
 });
 
