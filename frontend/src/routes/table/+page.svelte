@@ -12,7 +12,10 @@
 	import { resolve } from '$app/paths';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { api, type FightBody, type MusteredUnit, type VolleyBody } from '$lib/api/client';
-	import { battle } from '$lib/battle.svelte';
+	import { battle, type Resolution } from '$lib/battle.svelte';
+	import { goto } from '$app/navigation';
+	import Outcomes from '$lib/charts/Outcomes.svelte';
+	import GraphGlyph from '$lib/GraphGlyph.svelte';
 	import { entry } from '$lib/corpus';
 	import { findable } from '$lib/find';
 	import { fielded, listing } from '$lib/listing';
@@ -79,17 +82,64 @@
 		const mover = battle.placed.find((each) => each.id === open.mover);
 		const target = battle.placed.find((each) => each.id === open.target);
 		if (!mover || !target) return null;
-		const box = bounds(target);
-		const below = box.bottom / TABLE.depth < 0.6;
 		return {
 			mover,
 			target,
 			inches: Math.round(separation(mover, target)),
 			into: arc(mover, target),
 			shoots: usable(mover.block, 'missile').length > 0,
+			...anchor(target)
+		};
+	});
+
+	/** Where a card about a pair stands: below its target, or above it near the table's far edge. */
+	function anchor(target: Placed) {
+		const box = bounds(target);
+		const below = box.bottom / TABLE.depth < 0.6;
+		return {
 			below,
 			left: (target.x / TABLE.width) * 100,
 			top: ((below ? box.bottom : box.top) / TABLE.depth) * 100
+		};
+	}
+
+	/** The last resolution, until it is closed: what it came to, standing by its target. */
+	let dismissed = $state<Resolution | null>(null);
+	let resultWidth = $state(0);
+	const result = $derived.by(() => {
+		const done = battle.resolved;
+		if (!done || done === dismissed || battle.asking) return null;
+		const mover = battle.placed.find((each) => each.id === done.between[0]);
+		const target = battle.placed.find((each) => each.id === done.between[1]);
+		if (!mover || !target) return null;
+		if (done.action === 'volley') {
+			const { panic } = done.report;
+			return {
+				mover,
+				target,
+				...anchor(target),
+				scheme: 'ordinal' as const,
+				segments: [
+					{ label: 'holds', value: panic.holds },
+					{ label: 'falls back', value: panic.falls_back },
+					{ label: 'flees', value: panic.flees },
+					{ label: 'wiped out', value: panic.destroyed }
+				]
+			};
+		}
+		const { report } = done;
+		const reaches = report.p_charge_reaches ?? 1;
+		return {
+			mover,
+			target,
+			...anchor(target),
+			scheme: 'poles' as const,
+			segments: [
+				{ label: `${mover.mark} wins`, value: reaches * report.p_a_wins },
+				{ label: 'draw', value: reaches * report.p_draw },
+				{ label: `${target.mark} wins`, value: reaches * report.p_b_wins },
+				...(reaches < 1 ? [{ label: 'short', value: 1 - reaches, fill: 'var(--sunken)' }] : [])
+			]
 		};
 	});
 
@@ -409,7 +459,10 @@
 	const STEP = 3;
 
 	function keyed(event: KeyboardEvent) {
-		if (event.key === 'Escape' && battle.asking) battle.asking = null;
+		if (event.key === 'Escape') {
+			if (battle.asking) battle.asking = null;
+			else dismissed = battle.resolved;
+		}
 		if (!(event.metaKey || event.ctrlKey)) return;
 		const focus = document.activeElement;
 		if (focus instanceof HTMLInputElement || focus instanceof HTMLSelectElement) return;
@@ -534,6 +587,34 @@
 					says={{ off: 'no deployment zones', '12': '12″ in from each long edge' }}
 				/>
 			</Cog>
+			{#if result}
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<div
+					class="menu result"
+					class:above={!result.below}
+					bind:offsetWidth={resultWidth}
+					style:left="clamp({resultWidth / 2}px, {result.left}%, calc(100% - {resultWidth / 2}px))"
+					style:top="{result.top}%"
+					ondblclick={() => goto(resolve('/graph'))}
+				>
+					<span class="head">
+						<span
+							>{result.mover.mark} → {result.target.mark} · {battle.resolved?.action === 'fight'
+								? 'melee'
+								: 'shooting'}</span
+						>
+						<span class="cluster tight">
+							<a class="shut" href={resolve('/graph')} title="graph" aria-label="graph">
+								<svg viewBox="0 0 16 16" width="16" height="16"><GraphGlyph /></svg>
+							</a>
+							<button class="shut" aria-label="close" onclick={() => (dismissed = battle.resolved)}
+								>×</button
+							>
+						</span>
+					</span>
+					<Outcomes segments={result.segments} scheme={result.scheme} />
+				</div>
+			{/if}
 			{#if pair}
 				<div
 					class="menu"

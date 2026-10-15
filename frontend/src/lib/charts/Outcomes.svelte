@@ -4,6 +4,8 @@
 	export interface Segment {
 		label: string;
 		value: number;
+		/** A fill of its own, for a segment outside the scheme such as a charge falling short. */
+		fill?: string;
 	}
 
 	interface Props {
@@ -38,8 +40,8 @@
 			<div
 				class="cell"
 				style:flex="{segment.value / total} 0 0"
-				style:background={ramp[index % ramp.length]}
-				style:color={inks[index % inks.length]}
+				style:background={segment.fill ?? ramp[index % ramp.length]}
+				style:color={segment.fill ? 'var(--ink)' : inks[index % inks.length]}
 			>
 				{#if roomy(segment.value)}<span>{percent(segment.value)}</span>{/if}
 			</div>
@@ -50,7 +52,7 @@
 <div class="legend">
 	{#each segments as segment, index}
 		<span>
-			<i style="background: {ramp[index % ramp.length]}"></i>
+			<i style="background: {segment.fill ?? ramp[index % ramp.length]}"></i>
 			{segment.label}
 			<b class="num">{percent(segment.value)}</b>
 		</span>

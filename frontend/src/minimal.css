@@ -549,6 +549,10 @@ svg {
 	border-color: var(--line);
 	cursor: not-allowed;
 }
+.menu.result {
+	width: 15rem;
+	white-space: normal;
+}
 .menu.above {
 	transform: translate(-50%, calc(-100% - var(--space-2)));
 }
