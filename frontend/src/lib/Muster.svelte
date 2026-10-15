@@ -132,13 +132,3 @@
 		</div>
 	{/if}
 </div>
-
-<style>
-	kbd {
-		font: 10px var(--font-mono);
-		color: var(--dim);
-		border: 1px solid var(--line);
-		border-radius: 3px;
-		padding: 0 3px;
-	}
-</style>
