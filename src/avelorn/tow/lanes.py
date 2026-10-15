@@ -1,11 +1,12 @@
-"""A round of close combat drawn in two lanes: the charger's above, its target's below.
+"""A round of close combat or a volley drawn in two lanes: the charger's or shooter's above.
 
-Time runs left to right: the units, the battlefield between them, the charge
-and the reaction it met, the Stand & Shoot fired, each Initiative step in which
-a side strikes, the combat result, and each side's Break test. Every figure is
-read off the evaluated lane of the Charge roll, of the Stand & Shoot and of the
-round. The engine works in rationals; these are floats, and a count that varies
-is drawn as its spread over every outcome.
+Time runs left to right. A round shows the units, the battlefield between them,
+the charge and the reaction it met, the Stand & Shoot fired, each Initiative
+step in which a side strikes, the combat result, and each side's Break test. A
+volley shows the units, the range between them, the shots and the target's
+Panic test. Every figure is read off an evaluated lane. The engine works in
+rationals; these are floats, and a count that varies is drawn as its spread
+over every outcome.
 """
 
 from collections.abc import Hashable, Iterable, Mapping
@@ -29,9 +30,12 @@ from avelorn.tow.steps import (
     AUTOMATIC_HITS,
     NO_ROLL,
     WEAPON_CHOICE,
+    Band,
     BreakTest,
     Fought,
+    Retreat,
     Scored,
+    Test,
     scores,
 )
 from avelorn.tow.views import ChosenOption, Reacting
@@ -41,6 +45,7 @@ _ROLLS = ("roll-to-hit", "roll-to-wound", "make-armour-saves", "ward-saves")
 _READYING = (WEAPON_CHOICE, "who-can-fight", "who-strikes-first")
 _SCORING = ("calculate-combat-result", "who-is-the-winner")
 _COMMAND = (OptionKind.CHAMPION, OptionKind.STANDARD_BEARER, OptionKind.MUSICIAN)
+_PANIC = ("heavy-casualties", "make-panic-tests", "fall-back-or-flee")
 
 
 class _Drawn(BaseModel):
@@ -349,15 +354,15 @@ class FightLanes(_Drawn):
         strikes = [strike for strike in struck if strike is not None]
         return cls(
             units=PerSide(
-                attacker=_unit(fight, sides[Side.ATTACKER], Side.ATTACKER),
-                target=_unit(fight, sides[Side.TARGET], Side.TARGET),
+                attacker=_fighting(fight, sides[Side.ATTACKER], Side.ATTACKER),
+                target=_fighting(fight, sides[Side.TARGET], Side.TARGET),
             ),
             battlefield=None
             if rolled is None
             else Battlefield(distance=rolled.move.full_inches, arc=rolled.move.arc),
             charge=None if rolled is None else _charge(fight, rolled),
             reaction=None if rolled is None else _reaction(sides[Side.TARGET], stood),
-            volley=None if stood is None else _volley(stood),
+            volley=None if stood is None else _volley(stood, Side.TARGET),
             strikes=strikes,
             standing=PerSide(
                 attacker=_standing(fight, Side.ATTACKER, strikes, stood),
@@ -372,6 +377,69 @@ class FightLanes(_Drawn):
                 *(() if rolled is None else (rolled.evaluated,)),
                 *(() if stood is None else (stood.evaluated,)),
             ),
+        )
+
+
+class Range(_Drawn):
+    """The inches between a shooter and its target, their range band, and whether it moved."""
+
+    distance: int
+    band: Band
+    moved: bool
+
+
+class LanePanic(_Drawn):
+    """The target's Panic test: the chance it is taken, and of each outcome over the whole volley.
+
+    ``passed``, ``falls_back_in_good_order`` and ``flees`` add up to ``taken``;
+    ``destroyed`` is the chance the volley leaves nothing to test.
+    """
+
+    taken: float
+    leadership: str | None
+    passed: float
+    falls_back_in_good_order: float
+    flees: float
+    destroyed: float
+    rules: list[LandedRule]
+
+
+class VolleyLanes(_Drawn):
+    """A volley in two lanes, the shooter's above the target's.
+
+    ``not_modelled`` names the rules held without applying.
+    """
+
+    units: PerSide[LaneUnit]
+    battlefield: Range
+    volley: LaneVolley
+    panic: LanePanic
+    not_modelled: list[str]
+
+    @classmethod
+    def of(
+        cls, shooter: Contingent, target: Contingent, fired: Volley, distance: int
+    ) -> "VolleyLanes":
+        """Draw a volley ``shooter`` fired at ``target`` from ``distance`` inches.
+
+        Returns:
+            The lanes.
+        """
+        evaluated = fired.evaluated
+        (band,) = _at(evaluated, "check-range").read("band").mass
+        return cls(
+            units=PerSide(
+                attacker=_shooting(evaluated, shooter, Side.ATTACKER, [shooter.in_hand().name]),
+                target=_shooting(evaluated, target, Side.TARGET, []),
+            ),
+            battlefield=Range(
+                distance=distance,
+                band=band,
+                moved=shooter.movement.moved,
+            ),
+            volley=_volley(fired, Side.ATTACKER),
+            panic=_panic(fired),
+            not_modelled=list(fired.held),
         )
 
 
@@ -416,7 +484,9 @@ def _landed(evaluated: Evaluated, steps: Iterable[Step[Any]]) -> list[LandedRule
     return landed
 
 
-def _unit(fight: Fight, contingent: Contingent, side: Side) -> LaneUnit:
+def _unit(
+    contingent: Contingent, held: list[str], unit_strength: int, rules: list[LandedRule]
+) -> LaneUnit:
     unit = contingent.unit
     chosen = [option for option in unit.options if option.id in contingent.options]
     return LaneUnit(
@@ -428,7 +498,7 @@ def _unit(fight: Fight, contingent: Contingent, side: Side) -> LaneUnit:
             for option in chosen
             if option.kind not in _COMMAND
         ],
-        held=_holding(fight, contingent, side),
+        held=held,
         frontage=contingent.formation.files,
         ranks=contingent.formation.ranks,
         command=[
@@ -438,8 +508,17 @@ def _unit(fight: Fight, contingent: Contingent, side: Side) -> LaneUnit:
             if option.kind is kind
         ],
         base=unit.base_size,
-        unit_strength=fight.unit_strength(side),
-        rules=_rules(fight, *(f"{side}/{step}" for step in _READYING)),
+        unit_strength=unit_strength,
+        rules=rules,
+    )
+
+
+def _fighting(fight: Fight, contingent: Contingent, side: Side) -> LaneUnit:
+    return _unit(
+        contingent,
+        _holding(fight, contingent, side),
+        fight.unit_strength(side),
+        _rules(fight, *(f"{side}/{step}" for step in _READYING)),
     )
 
 
@@ -482,30 +561,31 @@ def _reaction(target: Contingent, stood: Volley | None) -> LaneReaction:
     )
 
 
-def _volley(stood: Volley) -> LaneVolley:
-    shot = _at(stood.evaluated, "how-many-shots").read("parts")
-    caused = _at(stood.evaluated, "remove-casualties").read("parts")
-    (fired,) = shot.mass
+def _volley(fired: Volley, shooter: Side) -> LaneVolley:
+    shot = _at(fired.evaluated, "how-many-shots").read("parts")
+    caused = _at(fired.evaluated, "remove-casualties").read("parts")
+    (counted,) = shot.mass
+    steps = [step for step in fired.evaluated.lane.program.steps if step.name not in _PANIC]
     return LaneVolley(
-        shots=stood.shots,
+        shots=fired.shots,
         needed=Needed(
-            hit=stood.needed("roll-to-hit"),
-            wound=stood.needed("roll-to-wound"),
-            save=stood.needed("make-armour-saves"),
-            ward=stood.needed("ward-saves"),
+            hit=fired.needed("roll-to-hit"),
+            wound=fired.needed("roll-to-wound"),
+            save=fired.needed("make-armour-saves"),
+            ward=fired.needed("ward-saves"),
         ),
-        casualties=Spread.of(stood.casualties),
+        casualties=Spread.of(fired.casualties),
         parts=[
             VolleyPart(
                 name=name,
-                shots=sum(fired.of(fighter) for fighter in row),
+                shots=sum(counted.of(fighter) for fighter in row),
                 unsaved=_summed(caused, row),
             )
-            for name, row in _rows(stood.shooter.fighters, shot).items()
+            for name, row in _rows(fired.shooter.fighters, shot).items()
         ],
         rules=[
-            rule.model_copy(update={"side": rule.side.other})
-            for rule in _landed(stood.evaluated, stood.evaluated.lane.program.steps)
+            rule if shooter is Side.ATTACKER else rule.model_copy(update={"side": rule.side.other})
+            for rule in _landed(fired.evaluated, steps)
         ],
     )
 
@@ -667,3 +747,25 @@ def _break(fight: Fight, side: Side) -> LaneBreakTest:
 def _leadership(needed: Distribution[Hashable]) -> str | None:
     shown = sorted({str(value) for value, p in needed.mass.items() if p and value != NO_ROLL})
     return " or ".join(shown) or None
+
+
+def _shooting(
+    evaluated: Evaluated, contingent: Contingent, side: Side, held: list[str]
+) -> LaneUnit:
+    fielded = evaluated.built.fielded[side]
+    strength = fielded.unit_strength(fielded.standing(contingent.models))
+    return _unit(contingent, held, strength, [])
+
+
+def _panic(fired: Volley) -> LanePanic:
+    test = _at(fired.evaluated, "make-panic-tests")
+    retreat = fired.retreat.mass
+    return LanePanic(
+        taken=float(fired.tested),
+        leadership=_leadership(test.read("needed")),
+        passed=float(test.read("test").mass.get(Test.PASSED, 0)),
+        falls_back_in_good_order=float(retreat.get(Retreat.FALLS_BACK_IN_GOOD_ORDER, 0)),
+        flees=float(retreat.get(Retreat.FLEES, 0)),
+        destroyed=float(retreat.get(Retreat.DESTROYED, 0)),
+        rules=_landed(fired.evaluated, [_at(fired.evaluated, step).step for step in _PANIC]),
+    )
