@@ -300,20 +300,46 @@
 		picked = [settled.id];
 	}
 
-	const recosting = new SvelteMap<number, number>();
+	/** What each block was last asked to become, so a change made before the engine answers builds on it. */
+	const wanted = new SvelteMap<number, { size: number; options: string[]; frontage: number }>();
+	let asks = 0;
+	const latest = new SvelteMap<number, number>();
 
-	/** Re-cost a standing block at a new size or set of options; a later ask wins. */
-	async function recost(id: number, size: number, options: string[]) {
+	/**
+	 * Ask the engine to re-cost a block with a change to its size, options or frontage.
+	 *
+	 * Every ask carries the others as last asked, frontage capped at the size, so
+	 * re-sizing keeps the formation; an answer to anything but the latest ask is dropped.
+	 */
+	async function restate(
+		id: number,
+		change: Partial<{ size: number; options: string[]; frontage: number }>
+	) {
 		const standing = battle.placed.find((each) => each.id === id);
 		if (!standing) return;
-		recosting.set(id, size);
-		const costed = await muster(standing.block.unit, size, options);
-		if (recosting.get(id) !== size) return;
-		recosting.delete(id);
+		const was = wanted.get(id) ?? {
+			size: standing.block.size,
+			options: standing.block.options.map((option) => option.id),
+			frontage: standing.block.footprint?.files ?? standing.block.size
+		};
+		const next = { ...was, ...change };
+		next.frontage = Math.min(next.frontage, next.size);
+		wanted.set(id, next);
+		asks += 1;
+		const ask = asks;
+		latest.set(id, ask);
+		const costed = await muster(standing.block.unit, next.size, next.options, next.frontage);
+		if (latest.get(id) !== ask) return;
+		wanted.delete(id);
+		latest.delete(id);
 		const now = battle.placed.find((each) => each.id === id);
 		if (!costed || !now) return;
 		const { x, y } = refit(now, costed);
 		battle.amend(id, { block: costed, x, y });
+	}
+
+	function recost(id: number, size: number, options: string[]) {
+		restate(id, { size, options });
 	}
 
 	/** Grow or shrink a block by a model, inside its datasheet's size and building on a size still being costed. */
@@ -321,7 +347,7 @@
 		const standing = battle.placed.find((each) => each.id === id);
 		const sheet = data.units.find((unit) => unit.id === standing?.block.unit);
 		if (!standing || !sheet) return;
-		const from = recosting.get(id) ?? standing.block.size;
+		const from = wanted.get(id)?.size ?? standing.block.size;
 		const size = Math.min(
 			Math.max(from + by, sheet.unit_size.min),
 			sheet.unit_size.max ?? Infinity
@@ -342,34 +368,8 @@
 		battle.amend(id, { facing, x, y });
 	}
 
-	const reforming = new SvelteMap<number, number>();
-
-	/** Re-form a block to a new width, asking the engine for the footprint it takes; a later ask wins. */
-	async function reform(id: number, frontage: number) {
-		const block = battle.placed.find((each) => each.id === id);
-		if (!block) return;
-		reforming.set(id, frontage);
-		const { data: costed, error: refused } = await api(window.location.origin, fetch).POST(
-			'/muster',
-			{
-				body: {
-					unit: block.block.unit,
-					size: block.block.size,
-					options: block.block.options.map((option) => option.id),
-					frontage
-				}
-			}
-		);
-		if (reforming.get(id) !== frontage) return;
-		reforming.delete(id);
-		if (!costed) {
-			refusal = typeof refused?.detail === 'string' ? refused.detail : 'could not re-form that';
-			return;
-		}
-		const now = battle.placed.find((each) => each.id === id);
-		if (!now) return;
-		const { x, y } = refit(now, costed);
-		battle.amend(id, { block: costed, x, y });
+	function reform(id: number, frontage: number) {
+		restate(id, { frontage });
 	}
 
 	/** Open a block's own pane: the datasheet it fields, with what it is changed by beside it. */
