@@ -34,6 +34,7 @@
 		[['⏎'], 'datasheet'],
 		[['←', '→'], 'files'],
 		[['↑', '↓'], 'ranks'],
+		[['+', '−'], 'models'],
 		[['⌫'], 'remove'],
 		[['a–z'], 'underlined option'],
 		[['esc'], 'close']
@@ -299,15 +300,38 @@
 		picked = [settled.id];
 	}
 
-	/** Re-cost a standing block at a new size or set of options. */
+	const recosting = new SvelteMap<number, number>();
+
+	/** Re-cost a standing block at a new size or set of options; a later ask wins. */
 	async function recost(id: number, size: number, options: string[]) {
 		const standing = battle.placed.find((each) => each.id === id);
 		if (!standing) return;
+		recosting.set(id, size);
 		const costed = await muster(standing.block.unit, size, options);
+		if (recosting.get(id) !== size) return;
+		recosting.delete(id);
 		const now = battle.placed.find((each) => each.id === id);
 		if (!costed || !now) return;
 		const { x, y } = refit(now, costed);
 		battle.amend(id, { block: costed, x, y });
+	}
+
+	/** Grow or shrink a block by a model, inside its datasheet's size and building on a size still being costed. */
+	function resize(id: number, by: 1 | -1) {
+		const standing = battle.placed.find((each) => each.id === id);
+		const sheet = data.units.find((unit) => unit.id === standing?.block.unit);
+		if (!standing || !sheet) return;
+		const from = recosting.get(id) ?? standing.block.size;
+		const size = Math.min(
+			Math.max(from + by, sheet.unit_size.min),
+			sheet.unit_size.max ?? Infinity
+		);
+		if (size === from) return;
+		recost(
+			id,
+			size,
+			standing.block.options.map((option) => option.id)
+		);
 	}
 
 	/** Turn a block about its centre, nudged back onto the table if a corner swings off it. */
@@ -450,6 +474,7 @@
 				onreform={reform}
 				ondropunit={(unit, size, x, y) => deploy(unit, size, { x, y })}
 				onedit={(id) => ((picked = [id]), sheet(id))}
+				onresize={resize}
 				onremove={remove}
 				zones={zones === 'off' ? 0 : Number(zones)}
 			/>
