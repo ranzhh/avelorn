@@ -16,6 +16,7 @@
 	import { goto } from '$app/navigation';
 	import Outcomes from '$lib/charts/Outcomes.svelte';
 	import GraphGlyph from '$lib/GraphGlyph.svelte';
+	import Pieces from '$lib/fight/Pieces.svelte';
 	import { entry } from '$lib/corpus';
 	import { findable } from '$lib/find';
 	import { fielded, listing } from '$lib/listing';
@@ -106,6 +107,7 @@
 	/** The last resolution, until it is closed: what it came to, standing by its target. */
 	let dismissed = $state<Resolution | null>(null);
 	let resultWidth = $state(0);
+	let felledWidth = $state(180);
 	const result = $derived.by(() => {
 		const done = battle.resolved;
 		if (!done || done === dismissed || battle.asking) return null;
@@ -113,11 +115,12 @@
 		const target = battle.placed.find((each) => each.id === done.between[1]);
 		if (!mover || !target) return null;
 		if (done.action === 'volley') {
-			const { panic } = done.report;
+			const { panic, casualties } = done.report;
 			return {
 				mover,
 				target,
 				...anchor(target),
+				casualties,
 				scheme: 'ordinal' as const,
 				segments: [
 					{ label: 'holds', value: panic.holds },
@@ -133,12 +136,13 @@
 			mover,
 			target,
 			...anchor(target),
+			casualties: null,
 			scheme: 'poles' as const,
 			segments: [
 				{ label: `${mover.mark} wins`, value: reaches * report.p_a_wins },
 				{ label: 'draw', value: reaches * report.p_draw },
 				{ label: `${target.mark} wins`, value: reaches * report.p_b_wins },
-				...(reaches < 1 ? [{ label: 'short', value: 1 - reaches, fill: 'var(--sunken)' }] : [])
+				...(reaches < 1 ? [{ label: 'short', value: 1 - reaches, fill: '#cbcbcb' }] : [])
 			]
 		};
 	});
@@ -612,6 +616,21 @@
 							>
 						</span>
 					</span>
+					{#if result.casualties}
+						<span class="felled"
+							><span class="meta">felled</span><svg
+								bind:clientWidth={felledWidth}
+								viewBox="0 0 {felledWidth} 16"
+							>
+								<Pieces
+									box={{ x: 0, y: 0, width: felledWidth, height: 16 }}
+									least={0}
+									layers={[['target', result.casualties]]}
+									unit="felled"
+								/>
+							</svg></span
+						>
+					{/if}
 					<Outcomes segments={result.segments} scheme={result.scheme} />
 				</div>
 			{/if}
