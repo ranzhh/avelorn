@@ -383,6 +383,16 @@ svg {
 .surface .cloth {
 	fill: #fff;
 }
+.surface .zone {
+	fill-opacity: 0.12;
+	pointer-events: none;
+}
+.surface .zone.near {
+	fill: var(--series-1);
+}
+.surface .zone.far {
+	fill: var(--series-2);
+}
 .surface .foot {
 	stroke: #ccc;
 }

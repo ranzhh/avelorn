@@ -1,5 +1,8 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import BattleTable from '$lib/BattleTable.svelte';
+	import Choices from '$lib/Choices.svelte';
+	import Cog from '$lib/Cog.svelte';
 	import Dock from '$lib/Dock.svelte';
 	import Block from '$lib/Block.svelte';
 	import Panes from '$lib/Panes.svelte';
@@ -35,6 +38,17 @@
 		[['c', 's', 'm'], 'champion, standard, musician'],
 		[['esc'], 'close']
 	];
+
+	const ZONES = ['off', '12'] as const;
+	const ZONED = 'avelorn:table:zones';
+	let zones = $state<(typeof ZONES)[number]>('off');
+	$effect(() => {
+		const saved = untrack(() => localStorage.getItem(ZONED));
+		if (saved === 'off' || saved === '12') zones = saved;
+	});
+	$effect(() => {
+		localStorage.setItem(ZONED, zones);
+	});
 
 	type Reacting = NonNullable<FightBody['charge']>['reaction'];
 
@@ -437,7 +451,17 @@
 				ondropunit={(unit, size, x, y) => deploy(unit, size, { x, y })}
 				onedit={(id) => ((picked = id), sheet(id))}
 				onremove={remove}
+				zones={zones === 'off' ? 0 : Number(zones)}
 			/>
+			<Cog>
+				<Choices
+					label="zones"
+					choices={ZONES}
+					bind:chosen={zones}
+					names={{ '12': '12″' }}
+					says={{ off: 'no deployment zones', '12': '12″ in from each long edge' }}
+				/>
+			</Cog>
 			{#if pair}
 				<div
 					class="menu"
