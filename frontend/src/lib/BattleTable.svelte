@@ -37,6 +37,8 @@
 		onremove: (id: number) => void;
 		/** The pair a menu is open on or was last resolved, drawn as an arrow between them. */
 		linked: { mover: number; target: number } | null;
+		/** How deep each side's deployment zone runs in from its long edge, in inches; none drawn at 0. */
+		zones?: number;
 	}
 
 	let {
@@ -50,7 +52,8 @@
 		ondropunit,
 		onedit,
 		onremove,
-		linked
+		linked,
+		zones = 0
 	}: Props = $props();
 
 	/** A datasheet being dragged in from the panel, over the table. */
@@ -368,6 +371,10 @@
 	</defs>
 
 	<rect class="cloth" x="0" y="0" width={TABLE.width} height={TABLE.depth} />
+	{#if zones}
+		<rect class="zone far" x="0" y="0" width={TABLE.width} height={zones} />
+		<rect class="zone near" x="0" y={TABLE.depth - zones} width={TABLE.width} height={zones} />
+	{/if}
 	{#each columns as inches}
 		<line class="foot" x1={inches} y1="0" x2={inches} y2={TABLE.depth} />
 	{/each}
