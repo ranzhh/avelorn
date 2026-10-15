@@ -488,6 +488,12 @@ svg {
 .surface .ghost rect {
 	fill: rgb(57 117 184 / 0.15);
 }
+.surface .sweep {
+	fill: rgb(40 100 167 / 0.08);
+	stroke: var(--accent);
+	stroke-dasharray: 4 3;
+	pointer-events: none;
+}
 .surface .halo {
 	fill: none;
 	stroke: var(--accent);

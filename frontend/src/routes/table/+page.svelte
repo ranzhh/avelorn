@@ -56,7 +56,7 @@
 
 	let panes = $state<Panes | null>(null);
 	let needle = $state('');
-	let picked = $state<number | null>(null);
+	let picked = $state<number[]>([]);
 	let refusal = $state('');
 	let resolving = $state('');
 	let menuWidth = $state(0);
@@ -296,7 +296,7 @@
 		const settled = room(wanted, battle.placed);
 		battle.placed = [...battle.placed, settled];
 		battle.nextId += 1;
-		picked = settled.id;
+		picked = [settled.id];
 	}
 
 	/** Re-cost a standing block at a new size or set of options. */
@@ -372,14 +372,14 @@
 
 	/** Select a block from the list, focusing it on the table so the keys that act on a block reach it. */
 	function choose(id: number) {
-		picked = id;
+		picked = [id];
 		document.querySelector<SVGElement>(`.surface [data-block="${id}"]`)?.focus();
 	}
 
 	function remove(id: number) {
 		battle.remove(id);
 		panes?.forget(id);
-		if (picked === id) picked = null;
+		picked = picked.filter((each) => each !== id);
 	}
 </script>
 
@@ -441,7 +441,7 @@
 				placed={battle.placed}
 				{picked}
 				{linked}
-				onpick={(id) => (picked = id)}
+				onpick={(ids) => (picked = ids)}
 				onmove={(id, x, y) => battle.amend(id, { x, y })}
 				onturn={turn}
 				ondrop={(mover, target) => {
@@ -449,7 +449,7 @@
 				}}
 				onreform={reform}
 				ondropunit={(unit, size, x, y) => deploy(unit, size, { x, y })}
-				onedit={(id) => ((picked = id), sheet(id))}
+				onedit={(id) => ((picked = [id]), sheet(id))}
 				onremove={remove}
 				zones={zones === 'off' ? 0 : Number(zones)}
 			/>
@@ -533,7 +533,7 @@
 		<Dock title="units" keep="units" count={battle.placed.length}>
 			<div class="rows">
 				{#each battle.placed as standing (standing.id)}
-					<div class="row" class:on={standing.id === picked}>
+					<div class="row" class:on={picked.includes(standing.id)}>
 						<button class="pick" onclick={() => choose(standing.id)}>
 							<span><b class="num">{standing.mark}</b> {standing.block.name}</span>
 							<span class="cost num">×{standing.block.size} {standing.block.points} pts</span>
@@ -542,7 +542,7 @@
 							class="sheet"
 							title="datasheet"
 							aria-label="datasheet"
-							onclick={() => ((picked = standing.id), sheet(standing.id))}
+							onclick={() => ((picked = [standing.id]), sheet(standing.id))}
 						>
 							<svg viewBox="0 0 16 16" width="16" height="16"><SheetGlyph /></svg>
 						</button>

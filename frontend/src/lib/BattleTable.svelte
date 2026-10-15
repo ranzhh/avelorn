@@ -15,14 +15,17 @@
 		separation,
 		snap,
 		span,
+		swept,
 		within,
-		type Placed
+		type Placed,
+		type Point
 	} from '$lib/table';
 
 	interface Props {
 		placed: Placed[];
-		picked: number | null;
-		onpick: (id: number | null) => void;
+		/** The selected blocks; one alone carries the handles that turn and re-form it. */
+		picked: number[];
+		onpick: (ids: number[]) => void;
 		onmove: (id: number, x: number, y: number) => void;
 		onturn: (id: number, facing: number) => void;
 		/** One block dropped onto another: what the first could do to the second. */
@@ -33,7 +36,7 @@
 		ondropunit: (unit: string, size: number, x: number, y: number) => void;
 		/** A block double-clicked, Entered from the keyboard, or its corner sheet clicked: open its datasheet. */
 		onedit: (id: number) => void;
-		/** A focused block deleted from the keyboard. */
+		/** A selected block deleted from the keyboard. */
 		onremove: (id: number) => void;
 		/** The pair a menu is open on or was last resolved, drawn as an arrow between them. */
 		linked: { mover: number; target: number } | null;
@@ -118,9 +121,16 @@
 	 * follows the pointer. Committing early would put the mover on top of its
 	 * target, and the gap a charge has to cover would measure zero.
 	 */
-	let flight = $state<{ id: number; grabX: number; grabY: number; x: number; y: number } | null>(
-		null
-	);
+	let flight = $state<{
+		id: number;
+		grabX: number;
+		grabY: number;
+		x: number;
+		y: number;
+		group: number[];
+	} | null>(null);
+	/** A box being dragged out over the table, selecting what it touches. */
+	let sweep = $state<{ from: Point; to: Point; adding: boolean } | null>(null);
 	/** A block being turned, how far from its facing the handle was grabbed, and off which edge. */
 	let turning = $state<{ id: number; offset: number; side: number } | null>(null);
 	/** A side edge being dragged, and the width it currently reads. */
@@ -162,7 +172,9 @@
 		};
 	});
 
-	const chosen = $derived(placed.find((each) => each.id === picked) ?? null);
+	const chosen = $derived(
+		picked.length === 1 ? (placed.find((each) => each.id === picked[0]) ?? null) : null
+	);
 	const knob = $derived(
 		chosen?.block.footprint
 			? pivot(
@@ -189,9 +201,19 @@
 		ghost && moving ? Math.hypot(ghost.x - moving.x, ghost.y - moving.y) : 0
 	);
 	const carrying = $derived(travelled > 3 * px);
-	/** The block the ghost is over, if any. */
+	/** The rest of a selection carried along with the grabbed block, where they would stand. */
+	const escorts = $derived.by(() => {
+		const out = flight;
+		if (!out || !moving || !carrying) return [];
+		const dx = out.x - moving.x;
+		const dy = out.y - moving.y;
+		return placed
+			.filter((each) => each.id !== out.id && out.group.includes(each.id))
+			.map((each) => ({ ...each, x: each.x + dx, y: each.y + dy }));
+	});
+	/** The block the ghost is over, if any; a carried selection is only moved. */
 	const over = $derived(
-		ghost && carrying
+		ghost && carrying && flight?.group.length === 1
 			? (placed.find((each) => each.id !== ghost.id && separation(ghost, each) === 0) ?? null)
 			: null
 	);
@@ -212,23 +234,39 @@
 
 	function grab(event: PointerEvent, block: Placed) {
 		event.stopPropagation();
+		if (event.shiftKey) {
+			event.preventDefault();
+			onpick(
+				picked.includes(block.id) ? picked.filter((id) => id !== block.id) : [...picked, block.id]
+			);
+			return;
+		}
 		(event.currentTarget as Element).setPointerCapture(event.pointerId);
 		const point = at(event);
+		const group = picked.includes(block.id) ? picked : [block.id];
 		trace = null;
 		flight = {
 			id: block.id,
 			grabX: point.x - block.x,
 			grabY: point.y - block.y,
 			x: block.x,
-			y: block.y
+			y: block.y,
+			group
 		};
-		onpick(block.id);
+		onpick(group);
+	}
+
+	function sweepFrom(event: PointerEvent) {
+		(event.currentTarget as Element).setPointerCapture(event.pointerId);
+		const point = at(event);
+		sweep = { from: point, to: point, adding: event.shiftKey };
+		if (!event.shiftKey) onpick([]);
 	}
 
 	function open(event: PointerEvent, block: Placed) {
 		event.stopPropagation();
 		event.preventDefault();
-		onpick(block.id);
+		onpick([block.id]);
 		onedit(block.id);
 	}
 
@@ -236,7 +274,7 @@
 		event.stopPropagation();
 		(event.currentTarget as Element).setPointerCapture(event.pointerId);
 		widening = { id: block.id, files: block.block.footprint?.files ?? 1 };
-		onpick(block.id);
+		onpick([block.id]);
 	}
 
 	function grabHandle(event: PointerEvent, block: Placed) {
@@ -247,16 +285,24 @@
 			offset: angleTo(block, at(event)) - block.facing,
 			side: knob?.side ?? 0
 		};
-		onpick(block.id);
+		onpick([block.id]);
 	}
 
 	function drag(event: PointerEvent) {
+		if (sweep) {
+			sweep = { ...sweep, to: at(event) };
+			return;
+		}
 		if (flight && moving) {
 			const point = at(event);
-			const wanted = { ...moving, x: point.x - flight.grabX, y: point.y - flight.grabY };
-			// The step is refused rather than the drag: the ghost stops against the
-			// edge instead of the pointer running away from it.
-			if (within(wanted)) flight = { ...flight, x: wanted.x, y: wanted.y };
+			const x = point.x - flight.grabX;
+			const y = point.y - flight.grabY;
+			const dx = x - moving.x;
+			const dy = y - moving.y;
+			const fits = placed
+				.filter((each) => flight!.group.includes(each.id))
+				.every((each) => within({ ...each, x: each.x + dx, y: each.y + dy }));
+			if (fits) flight = { ...flight, x, y };
 			return;
 		}
 		const turn = turning;
@@ -299,10 +345,7 @@
 		if (event.key === 'Enter' || event.key === ' ') {
 			event.preventDefault();
 			onedit(block.id);
-		} else if (event.key === 'Delete' || event.key === 'Backspace') {
-			event.preventDefault();
-			onremove(block.id);
-		} else if (event.key in RESHAPE && block.block.footprint) {
+		} else if (event.key in RESHAPE && block.block.footprint && picked.length <= 1) {
 			event.preventDefault();
 			const standing = block.block.footprint.files;
 			const from = asked.get(block.id) ?? standing;
@@ -313,8 +356,34 @@
 		}
 	}
 
+	/** Delete or Backspace removes the selection, wherever focus is but in a field. */
+	function strike(event: KeyboardEvent) {
+		if (event.key !== 'Delete' && event.key !== 'Backspace') return;
+		const focus = document.activeElement;
+		if (!picked.length || (focus !== document.body && !surface?.contains(focus))) return;
+		event.preventDefault();
+		for (const id of picked) onremove(id);
+	}
+
 	function release() {
-		if (flight && moving) {
+		const box = sweep;
+		if (box) {
+			const span = Math.hypot(box.to.x - box.from.x, box.to.y - box.from.y);
+			const touched = placed.filter((each) => swept(each, box.from, box.to)).map((each) => each.id);
+			if (span > 3 * px) {
+				onpick(box.adding ? [...new Set([...picked, ...touched])] : touched);
+			}
+			sweep = null;
+		}
+		if (flight && moving && flight.group.length > 1) {
+			if (carrying) {
+				const dx = flight.x - moving.x;
+				const dy = flight.y - moving.y;
+				for (const each of placed.filter((block) => flight!.group.includes(block.id))) {
+					onmove(each.id, each.x + dx, each.y + dy);
+				}
+			}
+		} else if (flight && moving) {
 			// On another block the drop is an action, so the mover stays where it
 			// stands and the menu measures from there. Anywhere else it is a move.
 			if (over) ondrop(moving.id, over.id);
@@ -342,10 +411,12 @@
 	}
 </script>
 
+<svelte:window onkeydown={strike} />
+
 <svg
 	bind:this={surface}
 	viewBox="0 0 {TABLE.width} {TABLE.depth}"
-	onpointerdown={() => onpick(null)}
+	onpointerdown={sweepFrom}
 	onpointermove={drag}
 	onpointerup={release}
 	onpointercancel={release}
@@ -475,8 +546,8 @@
 			)}
 			<g
 				class="block"
-				class:picked={block.id === picked}
-				class:origin={flight?.id === block.id && carrying}
+				class:picked={picked.includes(block.id)}
+				class:origin={carrying && !!flight?.group.includes(block.id)}
 				class:under={over?.id === block.id}
 				role="button"
 				tabindex="0"
@@ -484,7 +555,7 @@
 				aria-label="{block.mark} {block.block.name}"
 				onpointerdown={(event) => grab(event, block)}
 				ondblclick={() => onedit(block.id)}
-				onfocus={() => onpick(block.id)}
+				onfocus={() => picked.includes(block.id) || onpick([block.id])}
 				onkeydown={(event) => key(event, block)}
 			>
 				<g transform="rotate({block.facing} {block.x} {block.y})">
@@ -601,5 +672,30 @@
 				</text>
 			{/if}
 		{/if}
+	{/if}
+
+	{#each escorts as escort (escort.id)}
+		{@const print = escort.block.footprint}
+		{#if print}
+			{@const size = span(print)}
+			<g class="ghost" transform="rotate({escort.facing} {escort.x} {escort.y})">
+				<rect
+					x={escort.x - size.width / 2}
+					y={escort.y - size.depth / 2}
+					width={size.width}
+					height={size.depth}
+				/>
+			</g>
+		{/if}
+	{/each}
+
+	{#if sweep}
+		<rect
+			class="sweep"
+			x={Math.min(sweep.from.x, sweep.to.x)}
+			y={Math.min(sweep.from.y, sweep.to.y)}
+			width={Math.abs(sweep.to.x - sweep.from.x)}
+			height={Math.abs(sweep.to.y - sweep.from.y)}
+		/>
 	{/if}
 </svg>
