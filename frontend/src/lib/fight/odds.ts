@@ -1,4 +1,4 @@
-import type { FightLanes } from '$lib/api/client';
+import type { FightLanes, VolleyLanes } from '$lib/api/client';
 import type { Lane, Share } from './faces';
 
 /** Each chance conditional on reaching the node before it, or marginal over the whole charge. */
@@ -42,4 +42,16 @@ export function odds(lanes: FightLanes, view: View): Odds {
 		outcomes: { attacker: outcomes('attacker'), target: outcomes('target') },
 		shares
 	};
+}
+
+const PANIC = [
+	['Pass', 'passed'],
+	['Fall Back in Good Order', 'falls_back_in_good_order'],
+	['Flee', 'flees']
+] as const;
+
+/** A Panic test's outcomes: conditional, over taking it; marginal, over the whole volley. */
+export function panicked(panic: VolleyLanes['panic'], view: View): [string, number][] {
+	const over = view === 'marginal' ? 1 : panic.taken && 1 / panic.taken;
+	return PANIC.map(([name, key]) => [name, over * panic[key]]);
 }

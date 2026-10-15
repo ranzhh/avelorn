@@ -2,27 +2,31 @@
 	import { untrack } from 'svelte';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { api, type FightBody, type FightLanes, type VolleyBody } from '$lib/api/client';
+	import {
+		api,
+		type FightBody,
+		type FightLanes,
+		type VolleyBody,
+		type VolleyLanes
+	} from '$lib/api/client';
 	import { battle } from '$lib/battle.svelte';
 	import Fight from '$lib/fight/Fight.svelte';
+	import Volley from '$lib/fight/Volley.svelte';
 	import { seat } from '$lib/fight/body';
 	import { LANES } from '$lib/fight/faces';
 	import { cropped, formed, measured, seated, type Blocks } from '$lib/fight/field';
 	import type { Mode } from '$lib/fight/Settings.svelte';
 	import type { Placed } from '$lib/table';
-	import Graph from '$lib/graph/Graph.svelte';
-	import type { Program } from '$lib/graph/types';
 
-	/** Ask for the program the table's last volley ran on, posting the body it sent. */
-	async function volley(body: VolleyBody): Promise<Program> {
-		const { data: program, error: refused } = await api(page.url.origin, fetch).POST(
-			'/graph/volley',
-			{ body }
-		);
-		if (!program) {
+	/** Ask for the lanes of the table's last volley, posting the body it sent. */
+	async function volley(body: VolleyBody): Promise<VolleyLanes> {
+		const { data, error: refused } = await api(page.url.origin, fetch).POST('/graph/volley', {
+			body
+		});
+		if (!data) {
 			throw new Error(typeof refused?.detail === 'string' ? refused.detail : 'could not draw that');
 		}
-		return program as unknown as Program;
+		return data;
 	}
 
 	const last = $derived(battle.resolved);
@@ -40,7 +44,7 @@
 		}
 		return '';
 	});
-	const program = $derived(last?.action === 'volley' ? volley(last.body) : null);
+	const shot = $derived(last?.action === 'volley' ? volley(last.body) : null);
 
 	let body = $derived<FightBody | null>(
 		last?.action === 'fight' ? $state.snapshot(last.body) : null
@@ -191,11 +195,11 @@
 			onmove={(lane, block) => blocks && (blocks = { ...blocks, [lane]: block })}
 		/>
 	{/if}
-{:else if last?.action === 'volley' && program}
-	{#await program}
+{:else if last?.action === 'volley' && shot}
+	{#await shot}
 		<p class="meta">drawing…</p>
-	{:then program}
-		<Graph {program} />
+	{:then lanes}
+		<Volley {lanes} />
 	{:catch refused}
 		<p class="refuse">{refused.message}</p>
 	{/await}
