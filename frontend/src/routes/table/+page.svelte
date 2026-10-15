@@ -37,6 +37,7 @@
 		[['+', '−'], 'models'],
 		[['⌫'], 'remove'],
 		[['a–z'], 'underlined option'],
+		[['⌘', 'c', 'x', 'v'], 'copy, cut, paste'],
 		[['esc'], 'close']
 	];
 
@@ -400,6 +401,51 @@
 		document.querySelector<SVGElement>(`.surface [data-block="${id}"]`)?.focus();
 	}
 
+	/** Blocks copied or cut, and how many times they have been pasted since. */
+	let copied: Placed[] = [];
+	let pasted = 0;
+	const STEP = 3;
+
+	function keyed(event: KeyboardEvent) {
+		if (event.key === 'Escape' && battle.asking) battle.asking = null;
+		if (!(event.metaKey || event.ctrlKey)) return;
+		const focus = document.activeElement;
+		if (focus instanceof HTMLInputElement || focus instanceof HTMLSelectElement) return;
+		const key = event.key.toLowerCase();
+		if ((key === 'c' || key === 'x') && picked.length) {
+			event.preventDefault();
+			copied = battle.placed.filter((each) => picked.includes(each.id));
+			pasted = key === 'x' ? -1 : 0;
+			if (key === 'x') for (const id of [...picked]) remove(id);
+		} else if (key === 'v' && copied.length) {
+			event.preventDefault();
+			paste();
+		}
+	}
+
+	/** Put copies of the copied blocks down, a step further along for each paste, and select them. */
+	function paste() {
+		pasted += 1;
+		const shift = STEP * pasted;
+		const fresh: number[] = [];
+		for (const each of copied) {
+			const wanted: Placed = {
+				...each,
+				id: battle.nextId,
+				mark: initials(
+					each.block.name,
+					battle.placed.map((standing) => standing.mark)
+				),
+				x: each.x + shift,
+				y: each.y + shift
+			};
+			battle.placed = [...battle.placed, room(wanted, battle.placed)];
+			battle.nextId += 1;
+			fresh.push(wanted.id);
+		}
+		picked = fresh;
+	}
+
 	function remove(id: number) {
 		battle.remove(id);
 		panes?.forget(id);
@@ -407,9 +453,7 @@
 	}
 </script>
 
-<svelte:window
-	onkeydown={(event) => event.key === 'Escape' && battle.asking && (battle.asking = null)}
-/>
+<svelte:window onkeydown={keyed} />
 
 <div class="tabletop">
 	<aside class="left">
