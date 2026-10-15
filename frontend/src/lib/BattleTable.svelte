@@ -514,9 +514,9 @@
 					<SheetGlyph x={(-GLYPH * px) / 2} y={(-GLYPH * px) / 2} size={GLYPH * px} />
 				</g>
 				<text class="mark" x={block.x} y={block.y} font-size={label.size}>
-					{block.mark}{#if label.count}<tspan class="count" dx={label.size * 0.3}
-							>{block.block.size}</tspan
-						>{/if}
+					{#if label.count}<tspan class="count">{block.block.size}</tspan>{/if}<tspan
+						dx={label.count ? label.size * 0.3 : 0}>{block.mark}</tspan
+					>
 				</text>
 			</g>
 		{/if}
