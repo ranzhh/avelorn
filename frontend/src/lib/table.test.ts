@@ -55,8 +55,9 @@ describe('initials', () => {
 		expect(initials('Swordmasters of Hoeth', [])).toBe('SH');
 	});
 
-	it('takes two letters of a one-word name', () => {
-		expect(initials('Maneaters', [])).toBe('MA');
+	it('writes a one-word name as a word, a capital and a small letter', () => {
+		expect(initials('Ironbreakers', [])).toBe('Ir');
+		expect(initials('Ironbreakers', ['Ir'])).toBe('Ir2');
 	});
 
 	it('numbers a second block of a kind', () => {

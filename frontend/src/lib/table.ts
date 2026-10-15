@@ -19,18 +19,17 @@ export type Degrees = number;
  *
  * Dragon Princes stand as DP, then DP2. A name runs to "of": White Lions of Chrace
  * is WL, but Swordmasters of Hoeth, one word before it, is SH. A one-word name
- * takes its first two letters.
+ * takes its first two letters as a word does, Ironbreakers standing as Ir.
  */
 export function initials(name: string, taken: string[]): string {
 	const [before, after = ''] = name.split(/\s+of\s+/i);
 	const words = before.split(/\s+/).filter(Boolean);
-	const lead =
+	const stem =
 		words.length > 1
-			? words.map((word) => word[0])
+			? words.map((word) => word[0].toUpperCase()).join('')
 			: after
-				? [words[0][0], after[0]]
-				: [name.slice(0, 2)];
-	const stem = lead.join('').toUpperCase();
+				? `${words[0][0]}${after[0]}`.toUpperCase()
+				: `${name[0].toUpperCase()}${name.slice(1, 2).toLowerCase()}`;
 	if (!taken.includes(stem)) return stem;
 	let nth = 2;
 	while (taken.includes(`${stem}${nth}`)) nth += 1;
@@ -40,7 +39,7 @@ export function initials(name: string, taken: string[]): string {
 /** A block standing somewhere on the table, in some formation, facing some way. */
 export interface Placed {
 	id: number;
-	/** What the block is called on the table: A, B, C. */
+	/** What the block is called on the table: its initials, DP or Ir. */
 	mark: string;
 	block: MusteredUnit;
 	/** The centre of the rectangle, in inches from the table's top-left. */
