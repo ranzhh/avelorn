@@ -11,14 +11,16 @@
 		aside?: Snippet;
 		/** Where the open state is remembered. */
 		keep: string;
+		/** Starts folded until the viewer opens it. */
+		folded?: boolean;
 		children: Snippet;
 	}
 
-	let { title, value = '', count, keep, aside, children }: Props = $props();
+	let { title, value = '', count, keep, folded = false, aside, children }: Props = $props();
 
 	const KEY = $derived(`avelorn:dock:${keep}`);
 
-	let open = $state(true);
+	let open = $state(untrack(() => !folded));
 
 	$effect(() => {
 		const saved = untrack(() => localStorage.getItem(KEY));

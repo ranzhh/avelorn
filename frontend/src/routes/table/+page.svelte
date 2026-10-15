@@ -26,6 +26,16 @@
 		type Placed
 	} from '$lib/table';
 
+	const KEYS: [string[], string][] = [
+		[['tab'], 'next block'],
+		[['⏎'], 'datasheet'],
+		[['←', '→'], 'files'],
+		[['↑', '↓'], 'ranks'],
+		[['⌫'], 'remove'],
+		[['c', 's', 'm'], 'champion, standard, musician'],
+		[['esc'], 'close']
+	];
+
 	type Reacting = NonNullable<FightBody['charge']>['reaction'];
 
 	let { data } = $props();
@@ -532,6 +542,16 @@
 			{:else if fight || volley}
 				<Resolved {fight} {volley} />
 			{/if}
+		</Dock>
+		<Dock title="keys" keep="keys" folded>
+			<dl class="keys">
+				{#each KEYS as [keys, does]}
+					<dt>
+						{#each keys as key}<kbd>{key}</kbd>{/each}
+					</dt>
+					<dd>{does}</dd>
+				{/each}
+			</dl>
 		</Dock>
 	</aside>
 </div>
