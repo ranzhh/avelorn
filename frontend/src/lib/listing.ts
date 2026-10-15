@@ -35,14 +35,20 @@ export const sizeRange = (size: { min: number; max?: number | null }): string =>
  * Whether a datasheet answers to `needle`.
  *
  * One box over everything a listing shows, so a term is not silently scoped to
- * the name: the troop type and the armies fielding it match too.
+ * the name: the troop type and the armies fielding it match too. Each word
+ * typed has to match somewhere, and an army's slug reads as words, so "high
+ * elf" finds what high-elf-realms fields.
  */
 export function matches(unit: UnitSummary, needle: string): boolean {
-	const term = needle.trim().toLowerCase();
-	if (!term) return true;
-	return [unit.name, unit.troop_type, ...unit.armies].some((field) =>
-		field.toLowerCase().includes(term)
+	const words = (text: string) =>
+		text
+			.toLowerCase()
+			.split(/[\s_-]+/)
+			.filter(Boolean);
+	const fields = [unit.name, unit.troop_type, ...unit.armies].map((field) =>
+		words(field).join(' ')
 	);
+	return words(needle).every((word) => fields.some((field) => field.includes(word)));
 }
 
 function key(unit: UnitSummary, column: Column): string | number {

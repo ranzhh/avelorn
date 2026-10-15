@@ -40,6 +40,16 @@ describe('matches', () => {
 		expect(matches(CORPUS[0], 'dwarfen')).toBe(false);
 	});
 
+	it('reads an army slug as words', () => {
+		expect(matches(CORPUS[0], 'high elf')).toBe(true);
+		expect(matches(CORPUS[0], 'high-elf')).toBe(true);
+	});
+
+	it('wants every word typed to match somewhere', () => {
+		expect(matches(CORPUS[0], 'elf archers')).toBe(true);
+		expect(matches(CORPUS[0], 'elf cavalry')).toBe(false);
+	});
+
 	it('ignores case and surrounding space', () => {
 		expect(matches(CORPUS[0], '  ELVEN ')).toBe(true);
 	});
