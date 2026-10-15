@@ -378,7 +378,6 @@ class _Fielding:
         return Contribution(
             operation=operation,
             options=partial(_named, frozenset(named), gate),
-            text=f"{operation} {', '.join(sorted(named))}",
             inputs=gate.reads,
         )
 
@@ -397,7 +396,6 @@ class _Fielding:
         return Contribution(
             operation=GraphOperation.FORBID,
             options=partial(_named, named, gate),
-            text=f"{GraphOperation.FORBID} {', '.join(sorted(map(str, named)))}",
             inputs=gate.reads,
         )
 
