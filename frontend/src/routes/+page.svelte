@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 
+	import { findable } from '$lib/find';
 	import { fielded, listing, reorder, sizeRange, type Column, type Order } from '$lib/listing';
 
 	let { data } = $props();
@@ -20,7 +21,7 @@
 </script>
 
 <div class="head">
-	<input class="input" bind:value={needle} placeholder="filter" />
+	<input class="input" bind:value={needle} placeholder="filter" use:findable />
 	<span class="meta num">{rows.length}/{data.units.length}</span>
 </div>
 
