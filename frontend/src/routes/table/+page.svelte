@@ -14,6 +14,7 @@
 	import { api, type FightBody, type MusteredUnit, type VolleyBody } from '$lib/api/client';
 	import { battle } from '$lib/battle.svelte';
 	import { entry } from '$lib/corpus';
+	import { findable } from '$lib/find';
 	import { fielded, listing } from '$lib/listing';
 	import {
 		TABLE,
@@ -30,6 +31,7 @@
 	} from '$lib/table';
 
 	const KEYS: [string[], string][] = [
+		[['f'], 'find a unit'],
 		[['tab'], 'next block'],
 		[['⏎'], 'datasheet'],
 		[['←', '→'], 'files'],
@@ -467,6 +469,7 @@
 				class="input filter"
 				bind:value={needle}
 				placeholder="filter"
+				use:findable
 				onkeydown={(event) =>
 					event.key === 'Enter' && rows[0] && deploy(rows[0].id, rows[0].unit_size.min)}
 			/>
