@@ -43,6 +43,7 @@
 	function edited() {
 		if (!live) return;
 		clearTimeout(pending);
+		if (!Number.isInteger(size) || size < 1) return;
 		pending = setTimeout(() => onsubmit(size, chosen), 300);
 	}
 
