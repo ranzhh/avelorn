@@ -30,27 +30,29 @@ describe('byName', () => {
 });
 
 describe('keys', () => {
-	const DRAGON_PRINCES = [
-		option('magic-items', 'Drakemaster magic items', 'other'),
-		option('drakemaster', 'Drakemaster', 'champion'),
+	const ELVEN_ARCHERS = [
+		option('sentinel', 'Sentinel', 'champion'),
 		option('standard-bearer', 'Standard Bearer', 'standard_bearer'),
-		option('musician', 'Musician', 'musician')
+		option('musician', 'Musician', 'musician'),
+		option('magic-standard', 'Magic standard', 'magic_standard'),
+		option('shields', 'Shields', 'equipment')
 	];
 
-	it('gives command models the first letter of their names', () => {
-		const held = keys(DRAGON_PRINCES);
-		expect(held.get('drakemaster')).toBe(0);
-		expect(held.get('standard-bearer')).toBe(0);
-		expect(held.get('musician')).toBe(0);
+	it('gives command models their own letters whatever they are called', () => {
+		const held = keys(ELVEN_ARCHERS);
+		expect(held.get('sentinel')).toEqual({ letter: 'c', at: -1, hint: 'Champion' });
+		expect(held.get('standard-bearer')).toEqual({ letter: 's', at: 0 });
+		expect(held.get('musician')).toEqual({ letter: 'm', at: 0 });
+		expect(held.has('magic-standard')).toBe(false);
 	});
 
-	it('moves past letters an earlier option holds', () => {
-		expect(keys(DRAGON_PRINCES).get('magic-items')).toBe(1);
+	it('gives every other option a letter none of them holds', () => {
+		expect(keys(ELVEN_ARCHERS).get('shields')).toEqual({ letter: 'h', at: 1 });
 	});
 
 	it('leaves an option without a key once its letters are all taken', () => {
 		const held = keys([
-			option('a', 'Ab', 'champion'),
+			option('a', 'Ab', 'other'),
 			option('b', 'Ba', 'other'),
 			option('c', 'ab', 'other')
 		]);

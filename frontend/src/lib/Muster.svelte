@@ -60,9 +60,7 @@
 		}
 		if (event.key.length !== 1 || /[\d ]/.test(event.key)) return;
 		event.preventDefault();
-		const option = offered.find(
-			(each) => each.name[held.get(each.id) ?? -1]?.toLowerCase() === event.key.toLowerCase()
-		);
+		const option = offered.find((each) => held.get(each.id)?.letter === event.key.toLowerCase());
 		if (!option) return;
 		chosen = chosen.includes(option.id)
 			? chosen.filter((id) => id !== option.id)
@@ -101,6 +99,7 @@
 	{#if offered.length}
 		<div class="options">
 			{#each offered as option}
+				{@const bound = held.get(option.id)}
 				<label class="check">
 					<input
 						type="checkbox"
@@ -109,13 +108,18 @@
 						onchange={edited}
 						onkeydown={key}
 					/>
-					{#if held.has(option.id)}
-						{@const at = held.get(option.id)!}
+					{#if bound && bound.at >= 0}
 						<span
-							>{option.name.slice(0, at)}<u>{option.name[at]}</u>{option.name.slice(at + 1)}</span
+							>{option.name.slice(0, bound.at)}<u>{option.name[bound.at]}</u>{option.name.slice(
+								bound.at + 1
+							)}</span
 						>
 					{:else}
-						<span>{option.name}</span>
+						<span
+							>{option.name}{#if bound?.hint}<span class="price hint"
+									>(<u>{bound.hint[0]}</u>{bound.hint.slice(1)})</span
+								>{/if}</span
+						>
 					{/if}
 					{#if cost(option)}<span class="price">{cost(option)}</span>{/if}
 				</label>
@@ -138,3 +142,9 @@
 		</div>
 	{/if}
 </div>
+
+<style>
+	.hint {
+		margin-left: 0.3em;
+	}
+</style>
