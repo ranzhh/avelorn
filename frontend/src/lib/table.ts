@@ -147,6 +147,21 @@ function overlapping(one: Point[], two: Point[]): boolean {
 	return true;
 }
 
+/** Whether any part of a block lies inside a box drawn on the table, its corners in either order. */
+export function swept(placed: Placed, from: Point, to: Point): boolean {
+	const left = Math.min(from.x, to.x);
+	const right = Math.max(from.x, to.x);
+	const top = Math.min(from.y, to.y);
+	const bottom = Math.max(from.y, to.y);
+	const box = [
+		{ x: left, y: top },
+		{ x: right, y: top },
+		{ x: right, y: bottom },
+		{ x: left, y: bottom }
+	];
+	return overlapping(corners(placed), box);
+}
+
 function pointToSegment(point: Point, from: Point, to: Point): number {
 	const dx = to.x - from.x;
 	const dy = to.y - from.y;

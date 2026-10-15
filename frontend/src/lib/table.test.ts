@@ -18,6 +18,7 @@ import {
 	room,
 	separation,
 	snap,
+	swept,
 	within
 } from './table';
 import type { Degrees, Placed } from './table';
@@ -266,6 +267,31 @@ describe('deepened', () => {
 	it('stays put at one file or one rank', () => {
 		expect(deepened(10, 1, 1)).toBe(1);
 		expect(deepened(10, 10, -1)).toBe(10);
+	});
+});
+
+describe('swept', () => {
+	const block = placed(24, 24);
+
+	it('catches a block the box only clips', () => {
+		expect(swept(block, { x: 0, y: 0 }, { x: 24, y: 24 })).toBe(true);
+	});
+
+	it('reads the box from either pair of corners', () => {
+		expect(swept(block, { x: 30, y: 30 }, { x: 24, y: 24 })).toBe(true);
+	});
+
+	it('misses a block the box stops short of', () => {
+		expect(swept(block, { x: 0, y: 0 }, { x: 20, y: 20 })).toBe(false);
+	});
+
+	it('follows a turned block past its square', () => {
+		const above = [
+			{ x: 23, y: 20 },
+			{ x: 25, y: 21.5 }
+		] as const;
+		expect(swept(block, ...above)).toBe(false);
+		expect(swept(placed(24, 24, 45), ...above)).toBe(true);
 	});
 });
 
