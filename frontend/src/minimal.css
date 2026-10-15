@@ -295,6 +295,11 @@ summary {
 .cluster.tight {
 	gap: var(--space-1);
 }
+.price {
+	color: var(--dim);
+	font-size: var(--text-xs);
+	white-space: nowrap;
+}
 .pill.dead {
 	color: var(--faint);
 	border-style: dashed;

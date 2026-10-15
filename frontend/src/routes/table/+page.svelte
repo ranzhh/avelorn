@@ -35,7 +35,7 @@
 		[['←', '→'], 'files'],
 		[['↑', '↓'], 'ranks'],
 		[['⌫'], 'remove'],
-		[['c', 's', 'm'], 'champion, standard, musician'],
+		[['a–z'], 'underlined option'],
 		[['esc'], 'close']
 	];
 

@@ -2,7 +2,7 @@
 	import { untrack } from 'svelte';
 
 	import { entry } from '$lib/corpus';
-	import { cost } from '$lib/options';
+	import { cost, keys } from '$lib/options';
 	import { sizeRange } from '$lib/listing';
 	import type { UnitOption } from '$lib/api/client';
 
@@ -43,14 +43,11 @@
 	function edited() {
 		if (!live) return;
 		clearTimeout(pending);
+		if (!Number.isInteger(size) || size < 1) return;
 		pending = setTimeout(() => onsubmit(size, chosen), 300);
 	}
 
-	const KEYS: Partial<Record<UnitOption['kind'], string>> = {
-		champion: 'c',
-		standard_bearer: 's',
-		musician: 'm'
-	};
+	const held = $derived(keys(offered));
 
 	function key(event: KeyboardEvent) {
 		if (event.metaKey || event.ctrlKey || event.altKey) return;
@@ -61,9 +58,12 @@
 			onsubmit(size, chosen);
 			return;
 		}
-		const option = offered.find((each) => KEYS[each.kind] === event.key.toLowerCase());
-		if (!option) return;
+		if (event.key.length !== 1 || /[\d ]/.test(event.key)) return;
 		event.preventDefault();
+		const option = offered.find(
+			(each) => each.name[held.get(each.id) ?? -1]?.toLowerCase() === event.key.toLowerCase()
+		);
+		if (!option) return;
 		chosen = chosen.includes(option.id)
 			? chosen.filter((id) => id !== option.id)
 			: [...chosen, option.id];
@@ -94,7 +94,7 @@
 				oninput={edited}
 				onkeydown={key}
 			/>
-			{#if allowed}<span class="pill">{allowed}</span>{/if}
+			{#if allowed}<span class="price">{allowed}</span>{/if}
 		</span>
 	</label>
 
@@ -109,9 +109,15 @@
 						onchange={edited}
 						onkeydown={key}
 					/>
-					<span>{option.name}</span>
-					{#if KEYS[option.kind]}<kbd>{KEYS[option.kind]}</kbd>{/if}
-					{#if cost(option)}<span class="pill">{cost(option)}</span>{/if}
+					{#if held.has(option.id)}
+						{@const at = held.get(option.id)!}
+						<span
+							>{option.name.slice(0, at)}<u>{option.name[at]}</u>{option.name.slice(at + 1)}</span
+						>
+					{:else}
+						<span>{option.name}</span>
+					{/if}
+					{#if cost(option)}<span class="price">{cost(option)}</span>{/if}
 				</label>
 			{/each}
 		</div>
