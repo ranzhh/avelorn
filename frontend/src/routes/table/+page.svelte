@@ -16,7 +16,7 @@
 		TABLE,
 		arc,
 		bounds,
-		identifier,
+		initials,
 		inside,
 		refit,
 		room,
@@ -258,7 +258,10 @@
 		if (!costed) return;
 		const wanted: Placed = {
 			id: battle.nextId,
-			mark: identifier(battle.stamped),
+			mark: initials(
+				costed.name,
+				battle.placed.map((each) => each.mark)
+			),
 			block: costed,
 			x: where?.x ?? TABLE.width / 2,
 			y: where?.y ?? TABLE.depth - 6,
@@ -269,7 +272,6 @@
 		const settled = room(wanted, battle.placed);
 		battle.placed = [...battle.placed, settled];
 		battle.nextId += 1;
-		battle.stamped += 1;
 		picked = settled.id;
 	}
 

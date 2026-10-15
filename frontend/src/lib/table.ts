@@ -15,19 +15,26 @@ const MM_PER_INCH = 25.4;
 export type Degrees = number;
 
 /**
- * A short name for the nth block put on the table: A, B, ... Z, AA, AB.
+ * A short name for a block: its name's initials, numbered from the second of a kind.
  *
- * A rectangle is too small for "Elven Spearmen", and a model count does not
- * identify anything once two blocks of twenty are standing on the table.
+ * Dragon Princes stand as DP, then DP2. A name runs to "of": White Lions of Chrace
+ * is WL, but Swordmasters of Hoeth, one word before it, is SH. A one-word name
+ * takes its first two letters.
  */
-export function identifier(nth: number): string {
-	let mark = '';
-	let left = nth;
-	while (left >= 0) {
-		mark = String.fromCharCode(65 + (left % 26)) + mark;
-		left = Math.floor(left / 26) - 1;
-	}
-	return mark;
+export function initials(name: string, taken: string[]): string {
+	const [before, after = ''] = name.split(/\s+of\s+/i);
+	const words = before.split(/\s+/).filter(Boolean);
+	const lead =
+		words.length > 1
+			? words.map((word) => word[0])
+			: after
+				? [words[0][0], after[0]]
+				: [name.slice(0, 2)];
+	const stem = lead.join('').toUpperCase();
+	if (!taken.includes(stem)) return stem;
+	let nth = 2;
+	while (taken.includes(`${stem}${nth}`)) nth += 1;
+	return `${stem}${nth}`;
 }
 
 /** A block standing somewhere on the table, in some formation, facing some way. */
