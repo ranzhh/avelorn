@@ -1,11 +1,13 @@
 <script lang="ts">
 	import { SvelteMap } from 'svelte/reactivity';
+	import SheetGlyph from '$lib/SheetGlyph.svelte';
 	import {
 		TABLE,
 		angleTo,
 		arc,
 		base,
 		bearing,
+		corners,
 		deepened,
 		legend,
 		pivot,
@@ -29,7 +31,7 @@
 		onreform: (id: number, frontage: number) => void;
 		/** A datasheet dragged in from the panel and dropped on the table. */
 		ondropunit: (unit: string, size: number, x: number, y: number) => void;
-		/** A block double-clicked, or Entered from the keyboard: open its datasheet. */
+		/** A block double-clicked, Entered from the keyboard, or its corner sheet clicked: open its datasheet. */
 		onedit: (id: number) => void;
 		/** A focused block deleted from the keyboard. */
 		onremove: (id: number) => void;
@@ -103,6 +105,7 @@
 	});
 	const px = $derived(1 / perInch);
 	const KNOB = 10;
+	const GLYPH = 14;
 
 	/**
 	 * A drag in flight.
@@ -216,6 +219,13 @@
 			y: block.y
 		};
 		onpick(block.id);
+	}
+
+	function open(event: PointerEvent, block: Placed) {
+		event.stopPropagation();
+		event.preventDefault();
+		onpick(block.id);
+		onedit(block.id);
 	}
 
 	function grabEdge(event: PointerEvent, block: Placed) {
@@ -452,6 +462,9 @@
 		{#if print}
 			{@const size = span(print)}
 			{@const label = legend(block)}
+			{@const corner = corners(block).reduce((best, each) =>
+				each.x - each.y > best.x - best.y ? each : best
+			)}
 			<g
 				class="block"
 				class:picked={block.id === picked}
@@ -480,6 +493,23 @@
 						x2={block.x + size.width / 2}
 						y2={block.y - size.depth / 2}
 					/>
+				</g>
+				<g
+					class="open"
+					role="button"
+					tabindex="-1"
+					aria-label="datasheet"
+					transform="translate({corner.x} {corner.y})"
+					onpointerdown={(event) => open(event, block)}
+				>
+					<rect
+						class="reach"
+						x={-GLYPH * px * 0.75}
+						y={-GLYPH * px * 0.75}
+						width={GLYPH * px * 1.5}
+						height={GLYPH * px * 1.5}
+					/>
+					<SheetGlyph x={(-GLYPH * px) / 2} y={(-GLYPH * px) / 2} size={GLYPH * px} />
 				</g>
 				<text class="mark" x={block.x} y={block.y} font-size={label.size}>
 					{block.mark}{#if label.count}<tspan class="count" dx={label.size * 0.3}
