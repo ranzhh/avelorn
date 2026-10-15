@@ -1,0 +1,124 @@
+{
+	"units": {
+		"attacker": {
+			"unit": "elven-archers",
+			"name": "Elven Archers",
+			"size": 5,
+			"options": [],
+			"held": ["Longbow"],
+			"frontage": 5,
+			"ranks": 1,
+			"command": [],
+			"base": {
+				"width_mm": 25,
+				"depth_mm": 25
+			},
+			"unit_strength": 5,
+			"rules": []
+		},
+		"target": {
+			"unit": "chracian-woodsmen",
+			"name": "Chracian Woodsmen",
+			"size": 5,
+			"options": [],
+			"held": [],
+			"frontage": 5,
+			"ranks": 1,
+			"command": [],
+			"base": {
+				"width_mm": 25,
+				"depth_mm": 25
+			},
+			"unit_strength": 5,
+			"rules": []
+		}
+	},
+	"battlefield": {
+		"distance": 29,
+		"band": "long",
+		"moved": false
+	},
+	"volley": {
+		"shots": 5,
+		"needed": {
+			"hit": "5+",
+			"wound": "4+",
+			"save": "6+ or -",
+			"ward": "-"
+		},
+		"casualties": {
+			"mean": 0.7407407407407407,
+			"sd": 0.7943559477602673,
+			"least": 0,
+			"distribution": [
+				0.44855981016533175, 0.39005200883941893, 0.13567026394414572, 0.02359482851202534,
+				0.0020517242184369864, 7.136432064128647e-5
+			]
+		},
+		"parts": [
+			{
+				"name": "Elven Archer",
+				"shots": 5,
+				"unsaved": {
+					"mean": 0.7407407407407407,
+					"sd": 0.7943559477602673,
+					"least": 0,
+					"distribution": [
+						0.44855981016533175, 0.39005200883941893, 0.13567026394414572, 0.02359482851202534,
+						0.0020517242184369864, 7.136432064128647e-5
+					]
+				}
+			}
+		],
+		"rules": [
+			{
+				"name": "Armour Bane (1)",
+				"side": "attacker",
+				"applied": true
+			},
+			{
+				"name": "Firing at Long Range",
+				"side": "attacker",
+				"applied": true
+			},
+			{
+				"name": "Moving and Shooting",
+				"side": "attacker",
+				"applied": false
+			},
+			{
+				"name": "Volley Fire",
+				"side": "attacker",
+				"applied": true
+			},
+			{
+				"name": "Enemy Fire (Skirmishers)",
+				"side": "target",
+				"applied": true
+			}
+		]
+	},
+	"panic": {
+		"taken": 0.16131681667460804,
+		"leadership": "8",
+		"passed": 0.14886953143736975,
+		"falls_back_in_good_order": 0.01046838456359149,
+		"flees": 0.0019789006736467846,
+		"destroyed": 7.136432064128647e-5,
+		"rules": [
+			{
+				"name": "Valour of Ages",
+				"side": "target",
+				"applied": true
+			}
+		]
+	},
+	"not_modelled": [
+		"Close Order",
+		"Detachment",
+		"Move Through Cover",
+		"Skirmish Formation",
+		"Skirmishers",
+		"Vanguard"
+	]
+}

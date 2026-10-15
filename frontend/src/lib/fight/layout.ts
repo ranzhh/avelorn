@@ -2,7 +2,6 @@ import type { FightLanes } from '$lib/api/client';
 import { percent, percents } from '$lib/charts/scale';
 import {
 	LANES,
-	breakFace,
 	chargeFace,
 	pillFace,
 	resultFace,
@@ -13,6 +12,7 @@ import {
 	type Face,
 	type Lane,
 	type Measure,
+	testFace,
 	type Point
 } from './faces';
 import { battlefieldSize } from './field';
@@ -24,11 +24,11 @@ export const other = (lane: Lane): Lane => (lane === 'attacker' ? 'target' : 'at
 const REACTION = { width: 170, height: 80 };
 const SHORT = { width: 120, height: 36 };
 export const OUTCOME = { width: 200, height: 26, step: 34, inset: 30 };
-const GAP = 40;
-const WIDE = 54;
-const HEAD = 46;
-const MIDDLE = 54;
-const LEFT = 40;
+export const GAP = 40;
+export const WIDE = 54;
+export const HEAD = 46;
+export const MIDDLE = 54;
+export const LEFT = 40;
 const OPENING = 24;
 
 /** What one lane holds in one column: its own volley or strike, or a pill of its models standing. */
@@ -80,11 +80,21 @@ export type Placed =
 			box: Box;
 			face: Face;
 	  }
-	| { kind: 'result'; id: string; lane: null; box: Box; face: Face }
+	| { kind: 'result' | 'range'; id: string; lane: null; box: Box; face: Face }
 	| { kind: 'battlefield'; id: string; box: Box }
 	| { kind: 'reaction'; id: string; box: Box }
 	| { kind: 'short'; id: string; box: Box }
-	| { kind: 'outcome'; id: string; lane: Lane; box: Box; name: string; p: number; text: string };
+	| {
+			kind: 'outcome';
+			id: string;
+			lane: Lane;
+			box: Box;
+			name: string;
+			p: number;
+			text: string;
+			/** The outcome that goes worst for the lane, drawn darker. */
+			worst: boolean;
+	  };
 
 export interface Edge {
 	d: string;
@@ -108,18 +118,18 @@ export interface Drawing {
 	labels: Label[];
 }
 
-function path(points: Point[]): string {
+export function path(points: Point[]): string {
 	return points.map(({ x, y }, index) => `${index ? 'L' : 'M'}${x},${y}`).join(' ');
 }
 
 /** Out of one card's side and into another's, turning once in the gap before the second. */
-function elbow(from: Point, to: Point, turn: number): string {
+export function elbow(from: Point, to: Point, turn: number): string {
 	return path([from, { x: turn, y: from.y }, { x: turn, y: to.y }, to]);
 }
 
-const right = (box: Box, y = box.y + box.height / 2): Point => ({ x: box.x + box.width, y });
-const left = (box: Box, y = box.y + box.height / 2): Point => ({ x: box.x, y });
-const centred = (x: number, width: number, y: number, height: number): Box => ({
+export const right = (box: Box, y = box.y + box.height / 2): Point => ({ x: box.x + box.width, y });
+export const left = (box: Box, y = box.y + box.height / 2): Point => ({ x: box.x, y });
+export const centred = (x: number, width: number, y: number, height: number): Box => ({
 	x: x - width / 2,
 	y: y - height / 2,
 	width,
@@ -202,8 +212,8 @@ export function draw(
 		event ? eventFace(lane, event).width : 0;
 	const resultCard = resultFace(lanes, chances.shares, measure, open === 'result');
 	const breakCards = {
-		attacker: breakFace(lanes.breaks.attacker, measure, open === 'break:attacker'),
-		target: breakFace(lanes.breaks.target, measure, open === 'break:target')
+		attacker: testFace('Break test', lanes.breaks.attacker, measure, open === 'break:attacker'),
+		target: testFace('Break test', lanes.breaks.target, measure, open === 'break:target')
 	};
 	const breakWidth = Math.max(
 		OUTCOME.inset + OUTCOME.width,
@@ -422,7 +432,8 @@ export function draw(
 					height: OUTCOME.height
 				};
 				const text = texts[index];
-				nodes.push({ kind: 'outcome', id: `break:${lane}`, lane, box, name, p, text });
+				const worst = name === 'Break';
+				nodes.push({ kind: 'outcome', id: `break:${lane}`, lane, box, name, p, text, worst });
 				edges.push({ d: path([{ x: spine, y: box.y + box.height / 2 }, left(box)]) });
 			});
 		}
@@ -470,7 +481,7 @@ export function draw(
 }
 
 /** One head over each run of columns printed alike: both sides striking at one Initiative. */
-function merged(heads: Drawing['heads']): Drawing['heads'] {
+export function merged(heads: Drawing['heads']): Drawing['heads'] {
 	const runs: { xs: number[]; text: string }[] = [];
 	for (const head of heads) {
 		const run = runs.at(-1);

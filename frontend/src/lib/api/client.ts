@@ -39,6 +39,8 @@ export type VolleyReport =
 
 export type FightLanes =
 	paths['/graph/fight']['post']['responses'][200]['content']['application/json'];
+export type VolleyLanes =
+	paths['/graph/volley']['post']['responses'][200]['content']['application/json'];
 export type LaneUnit = components['schemas']['LaneUnit'];
 export type Strike = components['schemas']['Strike'];
 export type Spread = components['schemas']['Spread'];
